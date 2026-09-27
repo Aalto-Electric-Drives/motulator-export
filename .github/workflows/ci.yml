@@ -1,0 +1,49 @@
+name: CI
+
+# The C port of the control algorithms (motulator_plecs/c) must stay consistent with
+# motulator. The tests compile the C sources with gcc and compare the results with
+# motulator step by step. PLECS is not needed. The weekly run tests against the main
+# branch of motulator to detect breaking changes early.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+jobs:
+  pre-commit:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - uses: pre-commit/action@v3.0.1
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install PyTorch (CPU) and motulator-plecs
+      run: |
+        python -m pip install --upgrade pip
+        pip install --index-url https://download.pytorch.org/whl/cpu torch
+        pip install -e .[dev]
+    - name: Install the main branch of motulator (weekly run)
+      if: github.event_name == 'schedule'
+      run: pip install --force-reinstall --no-deps git+https://github.com/Aalto-Electric-Drives/motulator
+    - name: Type check
+      if: github.event_name != 'schedule'
+      run: pyright
+    - name: Audit the dependencies
+      if: github.event_name != 'schedule'
+      run: pip-audit --skip-editable
+    - name: Test the C port
+      run: pytest

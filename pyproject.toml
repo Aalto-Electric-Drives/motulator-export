@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "motulator-plecs"
+version = "0.1.0"
+dependencies = [
+    # Pinned to a commit of the main branch until motulator 0.8.0 is released
+    "motulator @ git+https://github.com/Aalto-Electric-Drives/motulator@12968873d0589c6c23c2975508234eb010c2919f",
+    "numpy",
+]
+requires-python = ">=3.12"
+authors = [
+    {name = "Marko Hinkkanen", email = "marko.hinkkanen@aalto.fi"}
+]
+description = "Export motulator drive and grid converter systems to PLECS"
+readme = "README.md"
+license = "MIT"
+keywords = ["control", "converter", "motor", "PLECS", "simulation"]
+classifiers = [
+  "Programming Language :: Python",
+  "Programming Language :: C",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pre-commit",
+    "pyright",
+    "pip-audit",
+    "pytest",
+]
+
+[project.urls]
+Homepage = "https://github.com/mhinkkan/motulator-plecs"
+motulator = "https://github.com/Aalto-Electric-Drives/motulator"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["motulator_plecs"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "PL"]
+ignore = ["PLR2004"]  # Ignore magic value warnings
+pylint = {max-args = 14}
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["motulator_plecs", "examples", "tests"]
+exclude = ["**/__pycache__", "**/.pytest_cache"]
+typeCheckingMode = "standard"

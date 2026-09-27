@@ -1,0 +1,1376 @@
+Plecs {
+  Name          "gfl_10kva_lcl"
+  Version       "5.0"
+  CircuitModel  "ContStateSpace"
+  StartTime     "0.0"
+  TimeSpan      "0.08"
+  Solver        "dopri"
+  MaxStep       "0.0001"
+  InitStep      "-1"
+  RelTol        "1e-6"
+  AbsTol        "-1"
+  InitializationCommands "% Generated from motulator. The parameters of the control system are in\n% the mask of the subsystem 'Grid-following control'.\nconverter.u_dc = 650.0;\nac_filter.L_fc = 0.003700874424440534;\nac_filter.L_fg = 0.003700874424440534;\nac_filter.C_f = 8.593839157387184e-06;\nac_filter.u_f0_abc = [326.5986323710904 -163.2993161855452 -163.2993161855452];\nac_source.e_g = 326.5986323710904;\nac_source.w_g = 314.1592653589793;\n"
+  Schematic {
+    Location      [0, 0; 1200, 440]
+    ZoomFactor    1
+    SliderPosition [0, 0]
+    ShowBrowser   off
+    BrowserWidth  100
+    Component {
+      Type          Step
+      Name          "p_g_ref"
+      Show          on
+      Position      [60, 20]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Time"
+        Value         "0.020050000000000002"
+        Show          off
+      }
+      Parameter {
+        Variable      "Before"
+        Value         "0.0"
+        Show          off
+      }
+      Parameter {
+        Variable      "After"
+        Value         "5000.0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DataType"
+        Value         "10"
+        Show          off
+      }
+    }
+    Component {
+      Type          Step
+      Name          "q_g_ref"
+      Show          on
+      Position      [60, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Time"
+        Value         "0.03995"
+        Show          off
+      }
+      Parameter {
+        Variable      "Before"
+        Value         "0.0"
+        Show          off
+      }
+      Parameter {
+        Variable      "After"
+        Value         "4000.0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DataType"
+        Value         "10"
+        Show          off
+      }
+    }
+    Component {
+      Type          PlecsProbe
+      Name          "i_c_abc"
+      Show          on
+      Position      [60, 100]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Probe {
+        Component     "i_ca"
+        Path          ""
+        Signals       {"Measured current"}
+      }
+      Probe {
+        Component     "i_cb"
+        Path          ""
+        Signals       {"Measured current"}
+      }
+      Probe {
+        Component     "i_cc"
+        Path          ""
+        Signals       {"Measured current"}
+      }
+    }
+    Component {
+      Type          PlecsProbe
+      Name          "u_g_line"
+      Show          on
+      Position      [60, 140]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Probe {
+        Component     "u_gab"
+        Path          ""
+        Signals       {"Measured voltage"}
+      }
+      Probe {
+        Component     "u_gbc"
+        Path          ""
+        Signals       {"Measured voltage"}
+      }
+    }
+    Component {
+      Type          PlecsProbe
+      Name          "u_dc meas."
+      Show          on
+      Position      [60, 180]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Probe {
+        Component     "u_dc"
+        Path          ""
+        Signals       {"Measured voltage"}
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "Grid-following control"
+      Show          on
+      Position      [250, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -30; 50, 30]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "Grid-following control (motulator)"
+      MaskDescription "Current-vector grid-following control with a PLL in the power-control mode. The parameters correspond to the motulator API: CurrentVectorControllerCfg. Empty parameters ([]) correspond to the defaults of motulator."
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "i_max"
+        Prompt        "Maximum current (A), peak value: i_max"
+        Type          FreeText
+        Value         "30.75914498161482"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "L"
+        Prompt        "Filter inductance (H): L"
+        Type          FreeText
+        Value         "0.003700874424440534"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "alpha_c"
+        Prompt        "Current-control bandwidth (rad/s): alpha_c"
+        Type          FreeText
+        Value         "2*pi*400"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "alpha_i"
+        Prompt        "Integral-action bandwidth (rad/s), [] = alpha_c: alpha_i"
+        Type          FreeText
+        Value         "2*pi*400"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "u_nom"
+        Prompt        "Nominal grid voltage (V), peak phase: u_nom"
+        Type          FreeText
+        Value         "326.5986323710904"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "w_nom"
+        Prompt        "Nominal grid angular frequency (rad/s): w_nom"
+        Type          FreeText
+        Value         "2*pi*50"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "alpha_pll"
+        Prompt        "PLL bandwidth (rad/s): alpha_pll"
+        Type          FreeText
+        Value         "2*pi*20"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Parameter {
+        Variable      "T_s"
+        Prompt        "Sampling period (s): T_s"
+        Type          FreeText
+        Value         "0.0001"
+        Show          off
+        Tunable       on
+        TabName       "Grid-following control (CurrentVectorControllerCfg)"
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -20]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 0]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 20]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 0]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 500, 250]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "p_g_ref"
+      Show          on
+      Position      [60, 40]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "q_g_ref"
+      Show          on
+      Position      [60, 70]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "i_c_abc"
+      Show          on
+      Position      [60, 100]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_g_line"
+      Show          on
+      Position      [60, 130]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_dc"
+      Show          on
+      Position      [60, 160]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "C-Script"
+      Show          on
+      Position      [200, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -60; 50, 60]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[1 1 3 2 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[3 4 4 3]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "i_max, L, alpha_c, alpha_i, u_nom, w_nom, alpha_pll, T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_plecs.grid. The control algorithms are in the\n * included C files. The parameters come from the mask of the subsystem. */\n#include \"../motulator_plecs/c/common.c\"\n#include \"../motulator_plecs/c/gfl_current_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\nstatic GFLControlSystem ctrl;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"i_max must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(7) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\n\n/* Configuration (CurrentVectorControllerCfg), the defaults are used for\n * empty parameters */\nGFLControllerCfg cfg = gfl_controller_cfg(P(0, 0), P(1, 0));\nif (PDIM(2) > 0) {\n    cfg.alpha_c = P(2, 0);\n}\nif (PDIM(4) > 0) {\n    cfg.u_nom = P(4, 0);\n}\nif (PDIM(5) > 0) {\n    cfg.w_nom = P(5, 0);\n}\nif (PDIM(6) > 0) {\n    cfg.alpha_pll = P(6, 0);\n}\nif (PDIM(7) > 0) {\n    cfg.T_s = P(7, 0);\n}\ncfg.alpha_i = PDIM(3) > 0 ? P(3, 0) : cfg.alpha_c;\ngfl_control_system_init(&ctrl, &cfg);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "/* Measurements and references */\ndouble i_c_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n                     InputSignal(2, 2)};\n/* Line-to-line PCC voltages u_ab and u_bc */\ndouble u_g_line[2] = {InputSignal(3, 0), InputSignal(3, 1)};\nGridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line),\n                         InputSignal(4, 0)};\ngfl_control_system_compute_output(&ctrl, &meas, InputSignal(0, 0),\n                                  InputSignal(1, 0));\n\n/* Duty ratios, delayed by the Delay block outside the subsystem */\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n}\n\n/* Monitored signals */\nOutputSignal(1, 0) = ctrl.ref.p_g;\nOutputSignal(1, 1) = ctrl.fbk.p_g;\nOutputSignal(1, 2) = ctrl.ref.q_g;\nOutputSignal(1, 3) = ctrl.fbk.q_g;\nOutputSignal(2, 0) = creal(ctrl.ref.i_c);\nOutputSignal(2, 1) = creal(ctrl.fbk.i_c);\nOutputSignal(2, 2) = cimag(ctrl.ref.i_c);\nOutputSignal(2, 3) = cimag(ctrl.fbk.i_c);\nOutputSignal(3, 0) = ctrl.fbk.u_g;\nOutputSignal(3, 1) = ctrl.fbk.w_g;\nOutputSignal(3, 2) = ctrl.fbk.theta_c;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         "gfl_control_system_update(&ctrl);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "d_abc"
+      Show          on
+      Position      [340, 85]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "6"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "p_g_ref"
+      SrcTerminal   1
+      Points        [124, 40; 124, 80]
+      DstComponent  "C-Script"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "q_g_ref"
+      SrcTerminal   1
+      Points        [108, 70; 108, 90]
+      DstComponent  "C-Script"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "i_c_abc"
+      SrcTerminal   1
+      Points        [100, 100; 100, 100]
+      DstComponent  "C-Script"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_g_line"
+      SrcTerminal   1
+      Points        [116, 130; 116, 110]
+      DstComponent  "C-Script"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_dc"
+      SrcTerminal   1
+      Points        [132, 160; 132, 120]
+      DstComponent  "C-Script"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   6
+      DstComponent  "d_abc"
+      DstTerminal   1
+    }
+      }
+      MaskProbe {
+        Name          "Duty ratios (d_abc)"
+        Probe {
+          Component     "C-Script"
+          Path          ""
+          Signals       {"Output 1"}
+        }
+      }
+      MaskProbe {
+        Name          "Power (p_g_ref, p_g, q_g_ref, q_g)"
+        Probe {
+          Component     "C-Script"
+          Path          ""
+          Signals       {"Output 2"}
+        }
+      }
+      MaskProbe {
+        Name          "Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)"
+        Probe {
+          Component     "C-Script"
+          Path          ""
+          Signals       {"Output 3"}
+        }
+      }
+      MaskProbe {
+        Name          "PLL (u_g, w_g, theta_c)"
+        Probe {
+          Component     "C-Script"
+          Path          ""
+          Signals       {"Output 4"}
+        }
+      }
+    }
+    Component {
+      Type          Delay
+      Name          "Delay"
+      Show          on
+      Position      [370, 100]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "N"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "X0"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "0.0001"
+        Show          off
+      }
+    }
+    Component {
+      Type          Reference
+      SrcComponent  "Components/Control/Modulators/Symmetrical PWM"
+      Name          "PWM"
+      Show          on
+      Position      [450, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-20, -20; 20, 20]
+      Parameter {
+        Variable      "sampling"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "fc"
+        Value         "5000.0"
+        Show          off
+      }
+      Parameter {
+        Variable      "carrier_phaseshift"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "carrier_limits"
+        Value         "[0 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "output_values"
+        Value         "[-1 1]"
+        Show          off
+      }
+      Terminal {
+        Type          Output
+        Position      [24, 0]
+        Direction     right
+      }
+      Terminal {
+        Type          Input
+        Position      [-20, 0]
+        Direction     left
+      }
+    }
+    Component {
+      Type          Reference
+      SrcComponent  "Components/Electrical/Converters/2-Level\\nConv."
+      Name          "Converter"
+      Show          on
+      Position      [620, 100]
+      Direction     down
+      Flipped       on
+      LabelPosition south
+      Frame         [-25, -25; 25, 25]
+      Terminal {
+        Type          Port
+        Position      [-30, -10]
+        Direction     left
+      }
+      Terminal {
+        Type          Port
+        Position      [-30, 0]
+        Direction     left
+      }
+      Terminal {
+        Type          Port
+        Position      [-30, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-15, -25]
+        Direction     up
+      }
+      Terminal {
+        Type          Port
+        Position      [0, -30]
+        Direction     up
+      }
+      Terminal {
+        Type          Port
+        Position      [0, 30]
+        Direction     down
+      }
+    }
+    Component {
+      Type          Voltmeter
+      Name          "u_dc"
+      Show          on
+      Position      [580, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition west
+    }
+    Component {
+      Type          DCVoltageSource
+      Name          "V_dc"
+      Show          on
+      Position      [540, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition west
+      Parameter {
+        Variable      "V"
+        Value         "converter.u_dc"
+        Show          off
+      }
+    }
+    Component {
+      Type          Ammeter
+      Name          "i_ca"
+      Show          off
+      Position      [690, 60]
+      Direction     left
+      Flipped       off
+      LabelPosition south
+    }
+    Component {
+      Type          Ammeter
+      Name          "i_cb"
+      Show          off
+      Position      [690, 100]
+      Direction     left
+      Flipped       off
+      LabelPosition south
+    }
+    Component {
+      Type          Ammeter
+      Name          "i_cc"
+      Show          off
+      Position      [690, 140]
+      Direction     left
+      Flipped       off
+      LabelPosition south
+    }
+    Component {
+      Type          Inductor
+      Name          "L_fca"
+      Show          on
+      Position      [740, 60]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "L"
+        Value         "ac_filter.L_fc"
+        Show          off
+      }
+    }
+    Component {
+      Type          Capacitor
+      Name          "C_fa"
+      Show          off
+      Position      [780, 175]
+      Direction     up
+      Flipped       off
+      LabelPosition east
+      Parameter {
+        Variable      "C"
+        Value         "ac_filter.C_f"
+        Show          off
+      }
+      Parameter {
+        Variable      "v_init"
+        Value         "ac_filter.u_f0_abc(1)"
+        Show          off
+      }
+    }
+    Component {
+      Type          Inductor
+      Name          "L_fga"
+      Show          on
+      Position      [890, 60]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "L"
+        Value         "ac_filter.L_fg"
+        Show          off
+      }
+    }
+    Component {
+      Type          ACVoltageSource
+      Name          "e_ga"
+      Show          on
+      Position      [990, 60]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "V"
+        Value         "ac_source.e_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "w"
+        Value         "ac_source.w_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "phi"
+        Value         "pi/2 - 0*2*pi/3"
+        Show          off
+      }
+    }
+    Component {
+      Type          Inductor
+      Name          "L_fcb"
+      Show          off
+      Position      [740, 100]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "L"
+        Value         "ac_filter.L_fc"
+        Show          off
+      }
+    }
+    Component {
+      Type          Capacitor
+      Name          "C_fb"
+      Show          off
+      Position      [810, 175]
+      Direction     up
+      Flipped       off
+      LabelPosition east
+      Parameter {
+        Variable      "C"
+        Value         "ac_filter.C_f"
+        Show          off
+      }
+      Parameter {
+        Variable      "v_init"
+        Value         "ac_filter.u_f0_abc(2)"
+        Show          off
+      }
+    }
+    Component {
+      Type          Inductor
+      Name          "L_fgb"
+      Show          off
+      Position      [890, 100]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "L"
+        Value         "ac_filter.L_fg"
+        Show          off
+      }
+    }
+    Component {
+      Type          ACVoltageSource
+      Name          "e_gb"
+      Show          off
+      Position      [990, 100]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "V"
+        Value         "ac_source.e_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "w"
+        Value         "ac_source.w_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "phi"
+        Value         "pi/2 - 1*2*pi/3"
+        Show          off
+      }
+    }
+    Component {
+      Type          Inductor
+      Name          "L_fcc"
+      Show          off
+      Position      [740, 140]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "L"
+        Value         "ac_filter.L_fc"
+        Show          off
+      }
+    }
+    Component {
+      Type          Capacitor
+      Name          "C_fc"
+      Show          on
+      Position      [840, 175]
+      Direction     up
+      Flipped       off
+      LabelPosition east
+      Parameter {
+        Variable      "C"
+        Value         "ac_filter.C_f"
+        Show          off
+      }
+      Parameter {
+        Variable      "v_init"
+        Value         "ac_filter.u_f0_abc(3)"
+        Show          off
+      }
+    }
+    Component {
+      Type          Inductor
+      Name          "L_fgc"
+      Show          off
+      Position      [890, 140]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "L"
+        Value         "ac_filter.L_fg"
+        Show          off
+      }
+    }
+    Component {
+      Type          ACVoltageSource
+      Name          "e_gc"
+      Show          off
+      Position      [990, 140]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "V"
+        Value         "ac_source.e_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "w"
+        Value         "ac_source.w_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "phi"
+        Value         "pi/2 - 2*2*pi/3"
+        Show          off
+      }
+    }
+    Component {
+      Type          Voltmeter
+      Name          "u_gab"
+      Show          off
+      Position      [940, 80]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+    }
+    Component {
+      Type          Voltmeter
+      Name          "u_gbc"
+      Show          off
+      Position      [940, 120]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+    }
+    Component {
+      Type          PlecsProbe
+      Name          "Powers"
+      Show          on
+      Position      [720, 300]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Probe {
+        Component     "Grid-following control"
+        Path          ""
+        Signals       {"Power (p_g_ref, p_g, q_g_ref, q_g)"}
+      }
+    }
+    Component {
+      Type          PlecsProbe
+      Name          "Converter currents"
+      Show          on
+      Position      [720, 340]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Probe {
+        Component     "L_fca"
+        Path          ""
+        Signals       {"Inductor current"}
+      }
+      Probe {
+        Component     "L_fcb"
+        Path          ""
+        Signals       {"Inductor current"}
+      }
+      Probe {
+        Component     "L_fcc"
+        Path          ""
+        Signals       {"Inductor current"}
+      }
+    }
+    Component {
+      Type          PlecsProbe
+      Name          "Voltages"
+      Show          on
+      Position      [720, 380]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Probe {
+        Component     "u_gab"
+        Path          ""
+        Signals       {"Measured voltage"}
+      }
+      Probe {
+        Component     "u_gbc"
+        Path          ""
+        Signals       {"Measured voltage"}
+      }
+    }
+    Component {
+      Type          Scope
+      Name          "Scope"
+      Show          on
+      Position      [900, 320]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Location      [100, 100; 800, 700]
+      Axes          "3"
+      TimeRange     "0"
+      ScrollingMode "1"
+      SingleTimeAxis "1"
+      Open          "0"
+      Ts            "-1"
+      SampleLimit   "0"
+      XAxisLabel    "Time (s)"
+      ShowLegend    "1"
+      Axis {
+        Name          "Power"
+        AutoScale     1
+        MinValue      0
+        MaxValue      1
+        Signals       {}
+        SignalTypes   [ ]
+        AxisLabel     "Power (W, VAr)"
+        Untangle      0
+        KeepBaseline  off
+        BaselineValue 0
+      }
+      Axis {
+        Name          "Current"
+        AutoScale     1
+        MinValue      0
+        MaxValue      1
+        Signals       {}
+        SignalTypes   [ ]
+        AxisLabel     "Current (A)"
+        Untangle      0
+        KeepBaseline  off
+        BaselineValue 0
+      }
+      Axis {
+        Name          "Voltage"
+        AutoScale     1
+        MinValue      0
+        MaxValue      1
+        Signals       {}
+        SignalTypes   [ ]
+        AxisLabel     "Line-to-line voltage (V)"
+        Untangle      0
+        KeepBaseline  off
+        BaselineValue 0
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "p_g_ref"
+      SrcTerminal   1
+      Points        [170, 20; 170, 80]
+      DstComponent  "Grid-following control"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "q_g_ref"
+      SrcTerminal   1
+      Points        [150, 60; 150, 90]
+      DstComponent  "Grid-following control"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "i_c_abc"
+      SrcTerminal   1
+      DstComponent  "Grid-following control"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_g_line"
+      SrcTerminal   1
+      Points        [160, 140; 160, 110]
+      DstComponent  "Grid-following control"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_dc meas."
+      SrcTerminal   1
+      Points        [180, 180; 180, 120]
+      DstComponent  "Grid-following control"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "Grid-following control"
+      SrcTerminal   6
+      DstComponent  "Delay"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "Delay"
+      SrcTerminal   2
+      DstComponent  "PWM"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "PWM"
+      SrcTerminal   1
+      Points        [500, 100; 500, 20; 635, 20]
+      DstComponent  "Converter"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   1
+      Points        [660, 90; 660, 60]
+      DstComponent  "i_ca"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   2
+      DstComponent  "i_cb"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   3
+      Points        [660, 110; 660, 140]
+      DstComponent  "i_cc"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "i_ca"
+      SrcTerminal   2
+      DstComponent  "L_fca"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "i_cb"
+      SrcTerminal   2
+      DstComponent  "L_fcb"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "i_cc"
+      SrcTerminal   2
+      DstComponent  "L_fcc"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "Powers"
+      SrcTerminal   1
+      Points        [760, 300; 760, 310]
+      DstComponent  "Scope"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "Converter currents"
+      SrcTerminal   1
+      Points        [770, 340; 770, 320]
+      DstComponent  "Scope"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "Voltages"
+      SrcTerminal   1
+      Points        [780, 380; 780, 330]
+      DstComponent  "Scope"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "V_dc"
+      SrcTerminal   1
+      Points        [540, 40; 580, 40]
+      Branch {
+        DstComponent  "u_dc"
+        DstTerminal   1
+      }
+      Branch {
+        Points        [620, 40]
+        DstComponent  "Converter"
+        DstTerminal   5
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "V_dc"
+      SrcTerminal   2
+      Points        [540, 160; 580, 160]
+      Branch {
+        DstComponent  "u_dc"
+        DstTerminal   2
+      }
+      Branch {
+        Points        [620, 160]
+        DstComponent  "Converter"
+        DstTerminal   6
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "L_fca"
+      SrcTerminal   2
+      Points        [780, 60]
+      Branch {
+        DstComponent  "C_fa"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "L_fga"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "L_fcb"
+      SrcTerminal   2
+      Points        [810, 100]
+      Branch {
+        DstComponent  "C_fb"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "L_fgb"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "L_fcc"
+      SrcTerminal   2
+      Points        [840, 140]
+      Branch {
+        DstComponent  "C_fc"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "L_fgc"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "C_fa"
+      SrcTerminal   2
+      Points        [780, 200; 810, 200]
+      Branch {
+        DstComponent  "C_fb"
+        DstTerminal   2
+      }
+      Branch {
+        Points        [840, 200]
+        DstComponent  "C_fc"
+        DstTerminal   2
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "L_fga"
+      SrcTerminal   2
+      Points        [940, 60]
+      Branch {
+        DstComponent  "u_gab"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "e_ga"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "L_fgb"
+      SrcTerminal   2
+      Points        [940, 100]
+      Branch {
+        DstComponent  "u_gab"
+        DstTerminal   2
+      }
+      Branch {
+        DstComponent  "u_gbc"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "e_gb"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "L_fgc"
+      SrcTerminal   2
+      Points        [940, 140]
+      Branch {
+        DstComponent  "u_gbc"
+        DstTerminal   2
+      }
+      Branch {
+        DstComponent  "e_gc"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "e_ga"
+      SrcTerminal   2
+      Points        [1030, 60; 1030, 100]
+      Branch {
+        DstComponent  "e_gb"
+        DstTerminal   2
+      }
+      Branch {
+        Points        [1030, 140]
+        DstComponent  "e_gc"
+        DstTerminal   2
+      }
+    }
+  }
+}

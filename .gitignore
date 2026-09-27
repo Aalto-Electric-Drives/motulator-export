@@ -1,0 +1,18 @@
+# Byte-compiled files
+__pycache__/
+*.pyc
+
+# Distribution
+*.egg-info/
+build/
+dist/
+
+# Environments
+.venv
+
+# PLECS autosave files and temporary models of the comparison scripts
+*.autosave
+*_tmp.plecs
+
+# macOS specific
+.DS_Store
