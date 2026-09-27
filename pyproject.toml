@@ -6,8 +6,7 @@ build-backend = "hatchling.build"
 name = "motulator-plecs"
 version = "0.1.0"
 dependencies = [
-    # Pinned to a commit of the main branch until motulator 0.8.0 is released
-    "motulator @ git+https://github.com/Aalto-Electric-Drives/motulator@12968873d0589c6c23c2975508234eb010c2919f",
+    "motulator>=0.8.0",
     "numpy",
 ]
 requires-python = ">=3.12"
@@ -37,9 +36,6 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/mhinkkan/motulator-plecs"
 motulator = "https://github.com/Aalto-Electric-Drives/motulator"
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["motulator_plecs"]

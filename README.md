@@ -18,7 +18,7 @@ pip install git+https://github.com/mhinkkan/motulator-plecs
 ```
 
 For development, clone the repository and install it in editable mode with the development tools, `pip install -e .[dev]`.
-The package depends on motulator, currently pinned to a commit of its main branch (to be replaced with motulator 0.8.0 once released).
+The package requires motulator 0.8.0 or later.
 
 ## Contents
 
