@@ -34,7 +34,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mhinkkan/motulator-plecs"
+Homepage = "https://github.com/Aalto-Electric-Drives/motulator-plecs"
 motulator = "https://github.com/Aalto-Electric-Drives/motulator"
 
 [tool.hatch.build.targets.wheel]

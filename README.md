@@ -15,7 +15,7 @@ The system model (the machine, the mechanics, the converter, the DC bus, the fil
 ## Installation
 
 ```bash
-pip install git+https://github.com/mhinkkan/motulator-plecs
+pip install git+https://github.com/Aalto-Electric-Drives/motulator-plecs
 ```
 
 The package requires motulator 0.8.0 or later.
