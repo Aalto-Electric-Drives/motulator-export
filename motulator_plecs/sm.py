@@ -56,6 +56,7 @@ from motulator.drive.utils._parameters import (
 
 from motulator_plecs._common import (
     C_DIR,
+    C_GRADNET_PARAMS,
     C_PARAMS,
     DUTY_RATIO_CODE,
     GRADNET_MAX_EMBED_DIM,
@@ -410,7 +411,7 @@ def _control_cscript_code() -> dict[str, str]:
         f'#include "{C_DIR}/sm_parameters.c"\n'
         f'#include "{C_DIR}/sm_control_loci.c"\n'
         f'#include "{C_DIR}/sm_flux_vector.c"\n'
-        "\n" + C_PARAMS + "\n"
+        "\n" + C_PARAMS + "\n" + C_GRADNET_PARAMS + "\n"
         "static VectorControlSystem ctrl;\n"
     )
     i = {m.variable: k for k, m in enumerate(MASK_PARAMS)}
@@ -497,7 +498,7 @@ def _machine_cscript_code() -> dict[str, str]:
         f'#include "{C_DIR}/common.c"\n'
         f'#include "{C_DIR}/gradnet.c"\n'
         f'#include "{C_DIR}/sm_machine.c"\n'
-        "\n" + C_PARAMS + "\n"
+        "\n" + C_PARAMS + "\n" + C_GRADNET_PARAMS + "\n"
         "static SpatialSaturatedSynchronousMachinePars par;\n"
         "\n"
         "/* Stator flux linkage in rotor coordinates */\n"

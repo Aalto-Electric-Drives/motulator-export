@@ -151,7 +151,10 @@ C_PARAMS = (
     "\n"
     "/* Parameter value, or NAN for an empty parameter (None in motulator) */\n"
     "#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n"
-    "\n"
+)
+
+# C-Script declarations for reading a GradNet from the parameters (sm.py only)
+C_GRADNET_PARAMS = (
     "/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n"
     " * in the arrays of the C port (in the start function only, returns on error) */\n"
     "#define CHECK_GRADNET(i0) \\\n"
