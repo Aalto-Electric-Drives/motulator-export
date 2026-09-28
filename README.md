@@ -5,6 +5,13 @@ The control system is ported to C and runs in a C-Script block inside a masked s
 The derived quantities, such as the gains and the lookup tables, are computed by the C code at the start of the simulation, so the PLECS model is self-contained: the parameters can be changed in the mask without Python.
 The system model (the machine, the mechanics, the converter, the DC bus, the filters, and the grid) is built from PLECS blocks as far as possible.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/pmsyrm_6kw_gn_fvc_black.png">
+  <img alt="PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control" src="examples/pmsyrm_6kw_gn_fvc.png">
+</picture>
+
+*PLECS model written by [examples/pmsyrm_6kw_gn_fvc.py](examples/pmsyrm_6kw_gn_fvc.py): the flux-vector control subsystem, the computational delay, the PWM, the converter with a stiff DC bus, the machine with a GradNet model, the mechanics, and the scope.*
+
 ## Installation
 
 ```bash
