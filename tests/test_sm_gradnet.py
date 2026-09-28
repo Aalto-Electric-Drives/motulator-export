@@ -16,8 +16,6 @@ Run from the repository root (requires gcc and PyTorch):
 
 # %%
 import ctypes
-import subprocess
-import tempfile
 from math import pi
 from pathlib import Path
 from typing import Any, cast
@@ -25,16 +23,16 @@ from typing import Any, cast
 import motulator.drive.control.sm as control
 import motulator.drive.gradnet as gn
 import numpy as np
+import pytest
 from motulator.common.utils import abc2complex
 from motulator.common.utils._utils import wrap
 from motulator.drive import model as mdl_model
 from motulator.drive import utils
 from motulator.drive.control._base import Measurements
 
-from motulator_plecs._common import C_SOURCES
 from motulator_plecs.sm import export_gradnet
+from tests.c_port import arr, compile_library, d
 
-SRC_DIR = C_SOURCES
 MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
 
 CAPI = r"""
@@ -161,24 +159,9 @@ void step(const double *i_s_abc, double u_dc, double w_M_ref, double theta_M,
 """
 
 
-def compile_library() -> ctypes.CDLL:
-    """Compile the C sources into a shared library."""
-    tmp = Path(tempfile.mkdtemp())
-    (tmp / "capi.c").write_text(CAPI)
-    lib = tmp / "libmotulator.so"
-    cmd = ["gcc", "-std=c99", "-O2", "-shared", "-fPIC", "-Wall"]
-    cmd += ["-Wno-unused-function", f"-I{SRC_DIR}", str(tmp / "capi.c")]
-    subprocess.run([*cmd, "-lm", "-o", str(lib)], check=True)
-    return ctypes.CDLL(str(lib))
-
-
-def _arr(values: Any) -> Any:
-    values = np.asarray(values, dtype=float).ravel()
-    return (ctypes.c_double * len(values))(*values)
-
-
-def _d(x: float) -> ctypes.c_double:
-    return ctypes.c_double(x)
+@pytest.fixture(scope="module")
+def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_library(CAPI, tmp_path_factory.mktemp("sm_gradnet"))
 
 
 def set_net(dll: ctypes.CDLL, g: dict[str, Any]) -> None:
@@ -187,15 +170,15 @@ def set_net(dll: ctypes.CDLL, g: dict[str, Any]) -> None:
         g["in_dim"],
         g["mu_dim"],
         len(g["b"]),
-        _arr(g["W"]),
-        _arr(g["b"]),
-        _arr(g["mu_log"]),
-        _arr(g["bias"]),
+        arr(g["W"]),
+        arr(g["b"]),
+        arr(g["mu_log"]),
+        arr(g["bias"]),
         g["activation"],
-        _d(g["beta_log"]),
+        d(g["beta_log"]),
         g["p"],
-        _d(g["in_base"]),
-        _d(g["out_base"]),
+        d(g["in_base"]),
+        d(g["out_base"]),
     )
 
 
@@ -208,29 +191,28 @@ RTOL = 1e-4  # Single-precision rounding errors of motulator are below 1e-5
 CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.pth"
 
 
-def setup() -> tuple[ctypes.CDLL, Any]:
+def setup(dll: ctypes.CDLL) -> Any:
     """Load the flux map in motulator and in the C port."""
     flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP, activation=gn.PNormGradient))
     est_par = control.SaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
     )
-    dll = compile_library()
     set_net(dll, export_gradnet(flux_map))
     out = (ctypes.c_double * 3)()
-    dll.set_par(_d(2), _d(0.63), out)
+    dll.set_par(d(2), d(0.63), out)
     print("  psi_f, L_d0, L_q0: C", np.array(out), "Python", end=" ")
     print(np.array([est_par.psi_f, est_par.L_d0, est_par.L_q0]))
-    return dll, est_par
+    return est_par
 
 
-def test_machine_model() -> None:
+def test_machine_model(dll: ctypes.CDLL) -> None:
     """Flux linkage, incremental inductances, and iterated current."""
-    dll, est_par = setup()
+    est_par = setup(dll)
     out = (ctypes.c_double * 7)()
     err_psi, err_L, err_i = 0.0, 0.0, 0.0
     for i_d in np.linspace(-20, 20, 9):
         for i_q in np.linspace(-25, 25, 11):
-            dll.eval(_d(i_d), _d(i_q), out)
+            dll.eval(d(i_d), d(i_q), out)
             i_s = i_d + 1j * i_q
             psi_py = complex(est_par.psi_s_dq(i_s))
             L_py = est_par.incr_ind_mat(i_s)
@@ -246,13 +228,13 @@ def test_machine_model() -> None:
     assert err_i < 1e-9  # Consistency of the C port
 
 
-def test_luts() -> None:
+def test_luts(dll: ctypes.CDLL) -> None:
     """Lookup tables of the reference generator."""
-    dll, est_par = setup()
+    est_par = setup(dll)
     cfg = control.FluxVectorControllerCfg(i_s_max=2 * base.i, sensorless=False)
     rg = cast(Any, control.FluxVectorController(est_par, cfg).reference_gen)
     out = (ctypes.c_double * (6 * 16))()
-    dll.luts(_d(2 * base.i), out)
+    dll.luts(d(2 * base.i), out)
     luts = np.array(out).reshape(3, 2, 16)
     for i, (f, name) in enumerate(
         [(rg.psi_s_mtpa, "psi_s_mtpa"), (rg.tau_M_cl, "tau_M_cl"), (rg.tau_M_mtpv, "")]
@@ -262,9 +244,9 @@ def test_luts() -> None:
         assert err < RTOL
 
 
-def test_control_system() -> None:
+def test_control_system(dll: ctypes.CDLL) -> None:
     """Sensored control system of the example for a sequence of measurements."""
-    dll, est_par = setup()
+    est_par = setup(dll)
     cfg = control.FluxVectorControllerCfg(
         i_s_max=2 * base.i, alpha_i=0, alpha_o=2 * pi * 8, J=0.05, sensorless=False
     )
@@ -272,9 +254,7 @@ def test_control_system() -> None:
     ctrl = control.VectorControlSystem(
         control.FluxVectorController(est_par, cfg), control.SpeedController(**speed)
     )
-    dll.init(
-        _arr([cfg.i_s_max, 0.0, 2 * pi * 8, 0.05, 0.0]), _arr(list(speed.values()))
-    )
+    dll.init(arr([cfg.i_s_max, 0.0, 2 * pi * 8, 0.05, 0.0]), arr(list(speed.values())))
 
     # Measurements: accelerating rotor, current vector in rotor coordinates
     T_s, n = cfg.T_s, 3000
@@ -300,7 +280,7 @@ def test_control_system() -> None:
         ctrl.update(ref, fbk)
         res_py[k] = [*ref.d_abc, fbk.w_M, fbk.tau_M, ref.tau_M, ref.psi_s, fbk.theta_m]
         # Same speed reference as in motulator (evaluated at the controller time)
-        dll.step(_arr(i_abc), _d(540.0), _d(ref.w_M), _d(th), out)
+        dll.step(arr(i_abc), d(540.0), d(ref.w_M), d(th), out)
         res_c[k] = np.array(out)
     names = ["d_a", "d_b", "d_c", "w_M", "tau_M", "tau_M_ref", "psi_s_ref", "theta_m"]
     dev = np.max(np.abs(res_c - res_py) / np.maximum(np.abs(res_py), 1.0), axis=1)
@@ -317,7 +297,7 @@ def test_control_system() -> None:
     assert np.all(err <= RTOL * np.maximum(scale, 1.0))
 
 
-def test_plant() -> None:
+def test_plant(dll: ctypes.CDLL) -> None:
     """Machine model with the GradNet current map with spatial harmonics."""
     current_map = gn.CurrentMapWithHarmonics(
         gn.load_gradnet(CURRENT_MAP, activation=gn.Softmax)
@@ -326,10 +306,9 @@ def test_plant() -> None:
         n_p=2, R_s=0.63, magnetic_map_fcn=current_map
     )
     machine = mdl_model.SynchronousMachine(par)
-    dll = compile_library()
     set_net(dll, export_gradnet(current_map))
     out = (ctypes.c_double * 7)()
-    dll.set_plant(_d(2), _d(0.63), 6, out)
+    dll.set_plant(d(2), d(0.63), 6, out)
     print(f"  psi_f: C {out[0]:.12f}, Python {par.psi_f:.12f}")
     assert abs(out[0] - par.psi_f) < RTOL * par.psi_f
 
@@ -340,14 +319,14 @@ def test_plant() -> None:
         theta_M, w_M = rng.uniform(-pi, pi), rng.uniform(-200, 200)
         u_s_ab = complex(rng.uniform(-300, 300), rng.uniform(-300, 300))
         dll.eval_plant(
-            _d(psi.real),
-            _d(psi.imag),
-            _d(theta_M),
-            _d(w_M),
-            _d(u_s_ab.real),
-            _d(u_s_ab.imag),
-            _d(0.0),
-            _d(0.05),
+            d(psi.real),
+            d(psi.imag),
+            d(theta_M),
+            d(w_M),
+            d(u_s_ab.real),
+            d(u_s_ab.imag),
+            d(0.0),
+            d(0.05),
             out,
         )
         # motulator
@@ -364,11 +343,3 @@ def test_plant() -> None:
     for name, e, s in zip(names, err, scale, strict=True):
         print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
     assert np.all(err <= RTOL * scale)
-
-
-# %%
-if __name__ == "__main__":
-    for test in (test_machine_model, test_luts, test_control_system, test_plant):
-        print(f"{test.__name__}:")
-        test()
-        print("  passed")

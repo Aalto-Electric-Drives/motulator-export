@@ -57,28 +57,23 @@ from motulator.drive.utils._parameters import (
 from motulator_plecs._common import (
     C_DIR,
     C_PARAMS,
+    DUTY_RATIO_CODE,
+    GRADNET_MAX_EMBED_DIM,
+    GRADNET_MAX_IN_DIM,
     MACH,
     SRC,
     ControlBlock,
     MaskParam,
     StepSignal,
-    Tap,
     _add_control_system,
     _add_converter,
     _add_dc_bus,
     _add_delay,
     _add_pwm,
-    _cscript,
-    _inner_schematic,
-    _mask,
-    _mask_probes,
-    _probe,
-    _Schematic,
-    _terminals,
     _write_model,
     cfg_assignments,
+    monitored_code,
     parameter_checks,
-    simulate_plecs,
 )
 from motulator_plecs._drive import (
     MACHINE_FRAME,
@@ -93,6 +88,17 @@ from motulator_plecs._drive import (
     mechanics_and_converter_variables,
     speed_controller_code,
     speed_ctrl_values,
+)
+from motulator_plecs._rpc import simulate_plecs
+from motulator_plecs._schematic import (
+    Tap,
+    _cscript,
+    _inner_schematic,
+    _mask,
+    _mask_probes,
+    _probe,
+    _Schematic,
+    _terminals,
 )
 
 # Monitored controller signals: mask probes of the control-system block, in the
@@ -222,7 +228,8 @@ def export_gradnet(net_map: Any) -> dict[str, Any]:
 
     Single-module GradNets with the PNormGradient or Softmax activations are
     supported, including the current map with spatial harmonics
-    (`CurrentMapWithHarmonics`).
+    (`CurrentMapWithHarmonics`). The network must fit in the arrays of the C port
+    (`GRADNET_MAX_IN_DIM` and `GRADNET_MAX_EMBED_DIM` in `c/gradnet.h`).
 
     """
     import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
@@ -231,6 +238,13 @@ def export_gradnet(net_map: Any) -> dict[str, Any]:
     if model.num_modules != 1 or model.in_dim not in (2, 4):
         raise NotImplementedError("Only single-module GradNets with 2D or 4D inputs")
     block = model.blocks[0]
+    embed_dim = len(block.b)
+    if model.in_dim > GRADNET_MAX_IN_DIM or embed_dim > GRADNET_MAX_EMBED_DIM:
+        raise NotImplementedError(
+            f"GradNet too large for the C port: embed_dim={embed_dim} (at most "
+            f"{GRADNET_MAX_EMBED_DIM}), in_dim={model.in_dim} (at most "
+            f"{GRADNET_MAX_IN_DIM})"
+        )
     act = block.act
     if isinstance(act, gn.PNormGradient):
         activation, p = 1, act.q + 1
@@ -418,6 +432,7 @@ def _control_cscript_code() -> dict[str, str]:
         "SynchronousMachinePars par;\n"
         f"if (PDIM({i_gn}) > 0) {{\n"
         "    GradNet flux_map;\n"
+        f"    CHECK_GRADNET({i_gn});\n"
         f"    READ_GRADNET(flux_map, {i_gn});\n"
         "    par = saturated_synchronous_machine_pars(\n"
         f"        P({i['n_p']}, 0), P({i['R_s']}, 0), &flux_map);\n"
@@ -463,17 +478,8 @@ def _control_cscript_code() -> dict[str, str]:
         "                     InputSignal(3, 0)};\n"
         "\n"
         "vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n"
-        "\n"
-        "/* Duty ratios, delayed by the Delay block outside the subsystem */\n"
-        "for (int k = 0; k < 3; k++) {\n"
-        "    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n"
-        "}\n"
-        "\n"
-        "/* Monitored signals */\n"
+        "\n" + DUTY_RATIO_CODE + monitored_code(CTRL_OUTPUTS, monitored)
     )
-    for i_out, names in enumerate(CTRL_OUTPUTS.values()):
-        for j, name in enumerate(names):
-            output += f"OutputSignal({i_out + 1}, {j}) = {monitored[name]};\n"
     update = "vector_control_system_update(&ctrl);\n"
     return {
         "Declarations": declarations,
@@ -500,6 +506,7 @@ def _machine_cscript_code() -> dict[str, str]:
     )
     start = (
         "GradNet current_map;\n"
+        "CHECK_GRADNET(3);\n"
         "READ_GRADNET(current_map, 3);\n"
         "par = spatial_saturated_synchronous_machine_pars(\n"
         "    P(0, 0), P(1, 0), &current_map, (int)P(2, 0));\n"
@@ -731,7 +738,7 @@ def write_model(
     Parameters
     ----------
     path : str | Path
-        Path of the model file (.plecs). The C sources are expected in the `src`
+        Path of the model file (.plecs). The C sources are expected in the `c`
         directory of the package, referred to by a path relative to the model file.
     mdl : Drive
         Continuous-time system model.
@@ -776,7 +783,7 @@ def write_model(
     # The diode bridge and its grid need space between the PWM and the DC bus
     sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
     _add_converter(sch)
-    _add_dc_bus(sch, mdl)
+    _add_dc_bus(sch, mdl.converter)
     if gradnet_plant:
         _add_gradnet_machine(sch)
     else:

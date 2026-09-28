@@ -1,12 +1,15 @@
 """
-Building blocks of the PLECS models: the schematic writer, the control-system
-block, the converter, the DC bus, and the simulation via the RPC interface.
+Building blocks of the PLECS models: the step signals, the control-system block
+and its C-Script code helpers, the converter, the DC bus, and the model file.
+
+The PLECS file format primitives are in `_schematic`, and the simulation via the
+RPC interface is in `_rpc`.
 
 """
 
 import base64
 import os
-import xmlrpc.client
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from math import isinf, pi
@@ -17,13 +20,42 @@ import numpy as np
 from motulator.common.model._converter import (
     CapacitiveDCBusConverter,
     FrequencyConverter,
+    VoltageSourceConverter,
 )
-from motulator.drive.model import Drive
+
+from motulator_plecs._schematic import (
+    Point,
+    Tap,
+    Terminal,
+    _cscript,
+    _fmt,
+    _inner_schematic,
+    _mask_probes,
+    _probe,
+    _q,
+    _Schematic,
+    _terminals,
+)
 
 # Directory of the C sources, written into the models as a path relative to the
 # model file (the placeholder C_DIR in the C-Script code)
 C_SOURCES = Path(__file__).parent / "c"
 C_DIR = "$(C_DIR)"
+
+
+def _c_define(header: str, name: str) -> int:
+    """Value of an integer #define in a C header of the port."""
+    match = re.search(
+        rf"^#define {name} (\d+)$", (C_SOURCES / header).read_text(), re.M
+    )
+    if match is None:
+        raise RuntimeError(f"{name} not found in {header}")
+    return int(match.group(1))
+
+
+# Array sizes of the GradNet structure of the C port
+GRADNET_MAX_EMBED_DIM = _c_define("gradnet.h", "GRADNET_MAX_EMBED_DIM")
+GRADNET_MAX_IN_DIM = _c_define("gradnet.h", "GRADNET_MAX_IN_DIM")
 
 
 # %%
@@ -112,263 +144,6 @@ class ControlBlock:
 
 
 # %%
-def _fmt(value: Any) -> str:
-    """Format a value for the PLECS (Octave) workspace."""
-    if value is None:
-        return "[]"
-    if isinstance(value, str):
-        return value
-    if isinstance(value, np.ndarray) and value.ndim == 2:
-        rows = "; ".join(" ".join(_fmt(v) for v in row) for row in value)
-        return f"[{rows}]"
-    if isinstance(value, (list, tuple, np.ndarray)):
-        return "[" + " ".join(_fmt(v) for v in np.asarray(value).ravel()) + "]"
-    value = float(value)
-    if isinf(value):
-        return "inf" if value > 0 else "-inf"
-    return repr(value)
-
-
-def _q(text: str) -> str:
-    """Quote a string for the PLECS file format."""
-    text = text.replace("\\", "\\\\").replace('"', '\\"')
-    return '"' + text.replace("\n", "\\n").replace("\t", "\\t") + '"'
-
-
-Point = tuple[int, int]
-Terminal = tuple[str, int]
-Tap = tuple[list[Point], list[tuple[Terminal, list[Point]]]]
-
-
-def _points(points: list[Point], indent: str) -> str:
-    if not points:
-        return ""
-    xy = "; ".join(f"{x}, {y}" for x, y in points)
-    return f"{indent}Points        [{xy}]\n"
-
-
-class _Schematic:
-    """
-    Minimal writer for the components and connections of a PLECS schematic.
-
-    Connections from the same source terminal are written as branches. The points
-    of a connection are the corner points of the wire, excluding the terminals. For
-    a branched connection, the trunk points lead from the source to the branching
-    point, and the branch points from the branching point to the destination. A bus
-    is a connection with several branching points in a row, see `bus`.
-
-    """
-
-    def __init__(self) -> None:
-        self.items: list[str] = []
-        self.connections: dict[
-            tuple[Terminal, str], list[tuple[Terminal, list[Point]]]
-        ] = {}
-        self.trunks: dict[tuple[Terminal, str], list[Point]] = {}
-        self.buses: list[tuple[Terminal, str, list[Tap]]] = []
-        self.dx = 0  # Horizontal shift of the components and points added afterwards
-
-    def _shift(self, points: list[Point] | None) -> list[Point]:
-        return [(x + self.dx, y) for x, y in points or []]
-
-    def component(
-        self,
-        typ: str,
-        name: str,
-        pos: Point,
-        params: dict[str, str] | None = None,
-        direction: str = "right",
-        flipped: bool = False,
-        extra: str = "",
-        show: bool = True,
-        label: str = "south",
-        src_component: str | None = None,
-        trailer: str = "",
-    ) -> None:
-        """Add a component."""
-        s = f"    Component {{\n      Type          {typ}\n"
-        if src_component is not None:
-            s += f"      SrcComponent  {_q(src_component)}\n"
-        s += (
-            f"      Name          {_q(name)}\n"
-            f"      Show          {'on' if show else 'off'}\n"
-            f"      Position      [{pos[0] + self.dx}, {pos[1]}]\n"
-            f"      Direction     {direction}\n"
-            f"      Flipped       {'on' if flipped else 'off'}\n"
-            f"      LabelPosition {label}\n"
-        )
-        s += extra
-        for var, val in (params or {}).items():
-            s += (
-                "      Parameter {\n"
-                f"        Variable      {_q(var)}\n"
-                f"        Value         {_q(val)}\n"
-                "        Show          off\n"
-                "      }\n"
-            )
-        self.items.append(s + trailer + "    }\n")
-
-    def connect(
-        self, src: Terminal, dst: Terminal, typ: str, points: list[Point] | None = None
-    ) -> None:
-        """Add a connection. Connections from the same source become branches."""
-        self.connections.setdefault((src, typ), []).append((dst, self._shift(points)))
-
-    def trunk(self, src: Terminal, typ: str, points: list[Point]) -> None:
-        """Set the trunk points of a branched connection."""
-        self.trunks[(src, typ)] = self._shift(points)
-
-    def bus(self, src: Terminal, typ: str, taps: list[Tap]) -> None:
-        """
-        Add a connection with several branching points (a bus).
-
-        Each tap is `(points, dsts)`: the points lead from the previous tap (or from
-        the source terminal) to the branching point, and `dsts` lists the terminals
-        branching from it, each with the points leading towards the terminal (empty
-        for a straight line). The bus continues from each tap to the next one.
-
-        """
-        taps = [
-            (self._shift(pts), [(dst, self._shift(lead)) for dst, lead in dsts])
-            for pts, dsts in taps
-        ]
-        self.buses.append((src, typ, taps))
-
-    def _bus(self, taps: list[Tap], i: int, ind: str) -> str:
-        points, dsts = taps[i]
-        if len(dsts) == 1 and i + 1 == len(taps):
-            dst, lead = dsts[0]
-            return _points(points + lead, ind) + _dst(dst, ind)
-        text = _points(points, ind)
-        for dst, lead in dsts:
-            branch = _points(lead, ind + "  ") + _dst(dst, ind + "  ")
-            text += f"{ind}Branch {{\n{branch}{ind}}}\n"
-        if i + 1 < len(taps):
-            text += f"{ind}Branch {{\n{self._bus(taps, i + 1, ind + '  ')}{ind}}}\n"
-        return text
-
-    def render(self) -> str:
-        """Render the components and connections."""
-        text = "".join(self.items)
-        for (src, typ), dsts in self.connections.items():
-            trunk = self.trunks.get((src, typ), [])
-            text += _connection(src, typ)
-            if len(dsts) == 1:
-                (dst, points) = dsts[0]
-                text += _points(trunk + points, "      ") + _dst(dst, "      ")
-            else:
-                text += _points(trunk, "      ")
-                for dst, points in dsts:
-                    branch = _points(points, "        ") + _dst(dst, "        ")
-                    text += f"      Branch {{\n{branch}      }}\n"
-            text += "    }\n"
-        for src, typ, taps in self.buses:
-            text += _connection(src, typ) + self._bus(taps, 0, "      ") + "    }\n"
-        return text
-
-    def signal(
-        self, src: Terminal, dst: Terminal, points: list[Point] | None = None
-    ) -> None:
-        """Add a signal connection."""
-        self.connect(src, dst, "Signal", points)
-
-    def wire(
-        self, src: Terminal, dst: Terminal, points: list[Point] | None = None
-    ) -> None:
-        """Add an electrical connection."""
-        self.connect(src, dst, "Wire", points)
-
-
-def _connection(src: Terminal, typ: str) -> str:
-    return (
-        "    Connection {\n"
-        f"      Type          {typ}\n"
-        f"      SrcComponent  {_q(src[0])}\n"
-        f"      SrcTerminal   {src[1]}\n"
-    )
-
-
-def _dst(dst: Terminal, ind: str) -> str:
-    return f"{ind}DstComponent  {_q(dst[0])}\n{ind}DstTerminal   {dst[1]}\n"
-
-
-def _probe(component: str, signals: list[str], path: str = "") -> str:
-    sig = ", ".join(_q(s) for s in signals)
-    return (
-        "      Probe {\n"
-        f"        Component     {_q(component)}\n"
-        f"        Path          {_q(path)}\n"
-        f"        Signals       {{{sig}}}\n"
-        "      }\n"
-    )
-
-
-def _scope(axes: list[tuple[str, str]]) -> str:
-    extra = (
-        "      Location      [100, 100; 800, 700]\n"
-        f'      Axes          "{len(axes)}"\n'
-        '      TimeRange     "0"\n'
-        '      ScrollingMode "1"\n'
-        '      SingleTimeAxis "1"\n'
-        '      Open          "0"\n'
-        '      Ts            "-1"\n'
-        '      SampleLimit   "0"\n'
-        '      XAxisLabel    "Time (s)"\n'
-        '      ShowLegend    "1"\n'
-    )
-    for name, label in axes:
-        extra += (
-            "      Axis {\n"
-            f"        Name          {_q(name)}\n"
-            "        AutoScale     1\n"
-            "        MinValue      0\n"
-            "        MaxValue      1\n"
-            "        Signals       {}\n"
-            "        SignalTypes   [ ]\n"
-            f"        AxisLabel     {_q(label)}\n"
-            "        Untangle      0\n"
-            "        KeepBaseline  off\n"
-            "        BaselineValue 0\n"
-            "      }\n"
-        )
-    return extra
-
-
-def _cscript(
-    code: dict[str, str],
-    num_inputs: str,
-    num_outputs: str,
-    parameters: str,
-    ts: str,
-    num_disc_states: int = 0,
-    num_cont_states: int = 0,
-    feedthrough: str = "1",
-) -> dict[str, str]:
-    """Parameters of a C-Script block."""
-    return {
-        "DialogGeometry": "",
-        "NumInputs": num_inputs,
-        "NumOutputs": num_outputs,
-        "NumContStates": str(num_cont_states),
-        "NumDiscStates": str(num_disc_states),
-        "NumZCSignals": "0",
-        "DirectFeedthrough": feedthrough,
-        "Ts": ts,
-        "Parameters": parameters,
-        "LangStandard": "2",
-        "GnuExtensions": "2",
-        "RuntimeCheck": "2",
-        "Declarations": code.get("Declarations", ""),
-        "StartFcn": code.get("StartFcn", ""),
-        "OutputFcn": code.get("OutputFcn", ""),
-        "UpdateFcn": code.get("UpdateFcn", ""),
-        "DerivativeFcn": code.get("DerivativeFcn", ""),
-        "TerminateFcn": "",
-        "StoreCustomStateFcn": "",
-        "RestoreCustomStateFcn": "",
-    }
-
-
 # Common C-Script declarations
 C_PARAMS = (
     "#define P(i, j) ParamRealData(i, j)\n"
@@ -376,6 +151,19 @@ C_PARAMS = (
     "\n"
     "/* Parameter value, or NAN for an empty parameter (None in motulator) */\n"
     "#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n"
+    "\n"
+    "/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n"
+    " * in the arrays of the C port (in the start function only, returns on error) */\n"
+    "#define CHECK_GRADNET(i0) \\\n"
+    "    do { \\\n"
+    "        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n"
+    "            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n"
+    '            SetErrorMessage("GradNet too large: in_dim must be at most " \\\n'
+    f'                            "{GRADNET_MAX_IN_DIM} and embed_dim at most " \\\n'
+    f'                            "{GRADNET_MAX_EMBED_DIM}."); \\\n'
+    "            return; \\\n"
+    "        } \\\n"
+    "    } while (0)\n"
     "\n"
     "/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n"
     "#define READ_GRADNET(net, i0) \\\n"
@@ -401,6 +189,15 @@ C_PARAMS = (
     "    } while (0)\n"
 )
 
+# C code writing the duty ratios to the first output of the C-Script
+DUTY_RATIO_CODE = (
+    "/* Duty ratios, delayed by the Delay block outside the subsystem */\n"
+    "for (int k = 0; k < 3; k++) {\n"
+    "    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n"
+    "}\n"
+    "\n"
+)
+
 
 def parameter_checks(mask_params: list[MaskParam]) -> str:
     """C code checking that the required mask parameters are scalars."""
@@ -423,6 +220,29 @@ def cfg_assignments(mask_params: list[MaskParam]) -> str:
     )
 
 
+def monitored_code(
+    outputs: dict[str, list[str]],
+    monitored: dict[str, str],
+    comment: str = "Monitored signals",
+    prelude: str = "",
+) -> str:
+    """
+    C code writing the monitored signals to the other outputs of the C-Script.
+
+    The code starts with the comment, followed by the prelude (e.g., a coordinate
+    transformation used in the expressions of `monitored`) and the assignments.
+
+    """
+    return f"/* {comment} */\n{prelude}" + "".join(
+        f"OutputSignal({i_out + 1}, {j}) = {monitored[name]};\n"
+        for i_out, names in enumerate(outputs.values())
+        for j, name in enumerate(names)
+    )
+
+
+# %%
+# Layout of the schematic (x to the right, y downwards): the control system is on
+# the left, the converter and the machine on the right, and the scope at the bottom.
 # Positions of the control system (inputs at x - 50, output at x + 54), the
 # converter, and the machine (all centered at the same height), and the DC rails
 # and the riser of the converter control signal
@@ -455,61 +275,6 @@ def _jogs(
     for rank, k in enumerate(order):
         x[k] = x0 + step * rank
     return x
-
-
-def _terminals(terminals: list[tuple[str, int, int, str]]) -> str:
-    """Terminals of a component: (type, x, y, direction)."""
-    return "".join(
-        "      Terminal {\n"
-        f"        Type          {typ}\n"
-        f"        Position      [{x}, {y}]\n"
-        f"        Direction     {d}\n"
-        "      }\n"
-        for typ, x, y, d in terminals
-    )
-
-
-def _inner_schematic(sub: _Schematic, size: Point) -> str:
-    """Schematic block of a subsystem."""
-    return (
-        "      Schematic {\n"
-        f"        Location      [0, 0; {size[0]}, {size[1]}]\n"
-        "        ZoomFactor    1\n"
-        "        SliderPosition [0, 0]\n"
-        "        ShowBrowser   off\n"
-        "        BrowserWidth  100\n" + sub.render() + "      }\n"
-    )
-
-
-def _mask_probes(probes: list[tuple[str, str, str]]) -> str:
-    """Probe signals of a masked subsystem: (name, component, signal)."""
-    return "".join(
-        "      MaskProbe {\n"
-        f"        Name          {_q(name)}\n"
-        "        Probe {\n"
-        f"          Component     {_q(comp)}\n"
-        '          Path          ""\n'
-        f"          Signals       {{{_q(signal)}}}\n"
-        "        }\n"
-        "      }\n"
-        for name, comp, signal in probes
-    )
-
-
-def _mask(mask_type: str, description: str, display: str) -> str:
-    """Mask of a subsystem, including the motulator label in the icon."""
-    return (
-        '      SampleTime    "-1"\n'
-        '      CodeGenDiscretizationMethod "2"\n'
-        '      CodeGenTarget "Generic"\n'
-        f"      MaskType      {_q(mask_type)}\n"
-        f"      MaskDescription {_q(description)}\n"
-        '      MaskDisplayLang "2"\n'
-        f"      MaskDisplay   {_q(display)}\n"
-        "      MaskIconFrame off\n"
-        "      MaskIconOpaque off\n"
-        "      MaskIconRotates on\n"
-    )
 
 
 # Converter: phases a, b, and c on the right, the gate input on the top, and the DC
@@ -585,14 +350,13 @@ def _add_converter(sch: _Schematic) -> None:
     sch.signal(("PWM", 1), ("Converter", 4), [(x, CS[1]), (x, 20), (CONV[0] + 15, 20)])
 
 
-def _add_dc_bus(sch: _Schematic, mdl: Drive) -> None:
+def _add_dc_bus(sch: _Schematic, conv: VoltageSourceConverter) -> None:
     """
     Add the DC bus: a stiff voltage, a capacitor, or a diode bridge and LC.
 
     The circuits are not grounded (as in motulator, there is no zero sequence).
 
     """
-    conv = mdl.converter
     x_c, y_c = CONV
     sch.component("Voltmeter", "u_dc", (580, y_c), direction="up", label="west")
     if isinstance(conv, FrequencyConverter):
@@ -681,6 +445,7 @@ def _add_diode_bridge(sch: _Schematic) -> None:
     sch.bus(("Converter", 6), "Wire", taps)
 
 
+# %%
 def _step(sig: StepSignal) -> dict[str, str]:
     """Parameters of a Step block; several steps as vectors, to be summed."""
     if np.isscalar(sig.time):
@@ -695,8 +460,6 @@ def _step(sig: StepSignal) -> dict[str, str]:
     return {k: _fmt(v) for k, v in params.items()} | {"DataType": "10"}
 
 
-# Layout of the schematic (x to the right, y downwards). The control system is on
-# the left, the converter and the machine on the right, and the scope at the bottom.
 def _fmt_mask(value: Any) -> str:
     """Format a mask value, writing multiples of 2*pi as in motulator."""
     if isinstance(value, float) and value > 0 and not isinf(value):
@@ -839,6 +602,14 @@ def _add_ctrl_output(sch: _Schematic, block: ControlBlock) -> None:
     sch.signal(("Controller signals", 1), ("ctrl", 1))
 
 
+# %%
+# Output ports of the model for scripted simulations
+OUTPUT_TERMINALS = "".join(
+    f'  Terminal {{\n    Type          Output\n    Index         "{k}"\n  }}\n'
+    for k in (1, 2)
+)
+
+
 def _write_model(
     path: Path,
     block: ControlBlock,
@@ -882,70 +653,3 @@ def _write_model(
         c_dir = C_SOURCES.as_posix()
     path.write_text(text.replace(C_DIR, c_dir))
     return path
-
-
-# %%
-# Output ports of the model for scripted simulations
-OUTPUT_TERMINALS = "".join(
-    f'  Terminal {{\n    Type          Output\n    Index         "{k}"\n  }}\n'
-    for k in (1, 2)
-)
-
-
-def simulate_plecs(
-    path: str | Path,
-    t_eval: np.ndarray,
-    model_vars: dict[str, float] | None = None,
-    url: str = "http://localhost:1080/RPC2",
-    mdl_outputs: list[str] | None = None,
-    ctrl_outputs: list[str] | None = None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """
-    Simulate the PLECS model via the XML-RPC interface of PLECS Standalone.
-
-    Parameters
-    ----------
-    path : str | Path
-        Path of the model file.
-    t_eval : ndarray
-        Output times (s).
-    model_vars : dict[str, float], optional
-        Workspace variables to be overridden.
-    url : str, optional
-        URL of the RPC interface, defaults to "http://localhost:1080/RPC2".
-    mdl_outputs, ctrl_outputs : list[str]
-        Names of the signals in the output ports "mdl" and "ctrl".
-
-    Returns
-    -------
-    mdl : dict[str, ndarray]
-        System-model signals and the time "t".
-    ctrl : dict[str, ndarray]
-        Controller signals and the time "t".
-
-    """
-    path = Path(path).resolve()
-    server = xmlrpc.client.ServerProxy(url)
-    # Close the model first, since loading a model that is already open (e.g., in
-    # the PLECS window) does not reload it from the file
-    try:
-        server.plecs.close(path.stem)
-    except xmlrpc.client.Fault:
-        pass
-    server.plecs.load(str(path))
-    opts: dict[str, Any] = {"SolverOpts": {"OutputTimes": [float(t) for t in t_eval]}}
-    if model_vars:
-        opts["ModelVars"] = model_vars
-    try:
-        res: Any = server.plecs.simulate(path.stem, opts)
-    finally:
-        server.plecs.close(path.stem)
-    t = np.array(res["Time"])
-    values = np.array(res["Values"])
-    mdl_names, ctrl_names = mdl_outputs or [], ctrl_outputs or []
-    n_mdl = len(mdl_names)
-    if values.shape[0] != n_mdl + len(ctrl_names):
-        raise RuntimeError(f"Unexpected number of output signals: {values.shape}")
-    mdl = {"t": t, **dict(zip(mdl_names, values[:n_mdl], strict=True))}
-    ctrl = {"t": t, **dict(zip(ctrl_names, values[n_mdl:], strict=True))}
-    return mdl, ctrl

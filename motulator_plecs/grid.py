@@ -49,24 +49,23 @@ from motulator_plecs._common import (
     C_DIR,
     C_PARAMS,
     CONV,
+    DUTY_RATIO_CODE,
     ControlBlock,
     MaskParam,
     StepSignal,
-    Tap,
     _add_control_system,
     _add_converter,
     _add_ctrl_output,
     _add_dc_bus,
     _add_delay,
     _add_pwm,
-    _probe,
-    _Schematic,
-    _scope,
     _write_model,
     cfg_assignments,
+    monitored_code,
     parameter_checks,
-    simulate_plecs,
 )
+from motulator_plecs._rpc import simulate_plecs
+from motulator_plecs._schematic import Tap, _probe, _Schematic, _scope
 
 # %%
 # Grid-following control: inputs, monitored signals (mask probes), and mask parameters
@@ -207,25 +206,6 @@ def _plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
 
 
 # %%
-DUTY_RATIO_CODE = (
-    "/* Duty ratios, delayed by the Delay block outside the subsystem */\n"
-    "for (int k = 0; k < 3; k++) {\n"
-    "    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n"
-    "}\n"
-    "\n"
-    "/* Monitored signals */\n"
-)
-
-
-def _monitored_code(outputs: dict[str, list[str]], monitored: dict[str, str]) -> str:
-    """C code writing the monitored signals to the other outputs of the C-Script."""
-    return "".join(
-        f"OutputSignal({i_out + 1}, {j}) = {monitored[name]};\n"
-        for i_out, names in enumerate(outputs.values())
-        for j, name in enumerate(names)
-    )
-
-
 def _gfl_cscript_code() -> dict[str, str]:
     """Code sections of the C-Script block of grid-following control."""
     declarations = (
@@ -275,7 +255,7 @@ def _gfl_cscript_code() -> dict[str, str]:
         "w_g": "ctrl.fbk.w_g",
         "theta_c": "ctrl.fbk.theta_c",
     }
-    output += _monitored_code(GFL_OUTPUTS, monitored)
+    output += monitored_code(GFL_OUTPUTS, monitored)
     return {
         "Declarations": declarations,
         "StartFcn": start,
@@ -327,7 +307,7 @@ def _gfm_cscript_code() -> dict[str, str]:
         "i_c_q": "cimag(ctrl.fbk.i_c)",
         "theta_c": "ctrl.fbk.theta_c",
     }
-    output += _monitored_code(GFM_OUTPUTS, monitored)
+    output += monitored_code(GFM_OUTPUTS, monitored)
     return {
         "Declarations": declarations,
         "StartFcn": start,
@@ -529,9 +509,8 @@ def _add_outputs(
 ) -> None:
     """Add the scope and its probes, and optionally the output ports."""
     inductor = "L_fc" if lcl else "L_f"
-    if (
-        outputs
-    ):  # Output ports for scripted simulations: currents and controller signals
+    # Output ports for scripted simulations: currents and controller signals
+    if outputs:
         probes = _abc_probe(inductor, "Inductor current")
         if lcl:
             probes += _abc_probe("L_fg", "Inductor current")
@@ -580,7 +559,7 @@ def write_model(
     Parameters
     ----------
     path : str | Path
-        Path of the model file (.plecs). The C sources are expected in the `src`
+        Path of the model file (.plecs). The C sources are expected in the `c`
         directory of the package, referred to by a path relative to the model file.
     mdl : GridConverterSystem
         Continuous-time system model.
@@ -628,7 +607,7 @@ def write_model(
     _add_delay(sch, values["T_s"], block)
     _add_pwm(sch, values["T_s"])
     _add_converter(sch)
-    _add_dc_bus(sch, cast(Any, mdl))
+    _add_dc_bus(sch, mdl.converter)
     if lcl:
         _add_lcl_filter_and_grid(sch)
     else:

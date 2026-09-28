@@ -26,7 +26,7 @@ The package requires motulator 0.8.0 or later.
   - `sm.py`: synchronous machine drives with flux-vector control
   - `im.py`: induction machine drives with current-vector control
   - `grid.py`: grid converter systems with grid-following or grid-forming control
-  - `_common.py`, `_drive.py`: the shared building blocks
+  - `_schematic.py`, `_common.py`, `_drive.py`, `_rpc.py`: the shared building blocks (the PLECS file format, the control-system block and the converter, the drive mechanics and scope, and the RPC simulation)
   - `c/`: C port of the motulator models and control algorithms
     - `common.c`: `PIController`, `ComplexPIController`, `SpeedController`, `SpeedObserver`, `PWM`, root finding (`brentq`), and utility functions
     - `gradnet.c`: GradNet inference (`FluxMap`, `CurrentMap`, and `CurrentMapWithHarmonics`)

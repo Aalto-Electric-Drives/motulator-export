@@ -16,11 +16,8 @@ Run from the repository root (requires gcc):
 
 # %%
 import ctypes
-import subprocess
-import tempfile
 from collections.abc import Sequence
 from math import inf, pi
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -31,9 +28,7 @@ from motulator.common.control._base import ControlSystem, TimeSeries
 from motulator.common.utils import complex2abc
 from motulator.drive import model, utils
 
-from motulator_plecs._common import C_SOURCES
-
-SRC_DIR = C_SOURCES
+from tests.c_port import arr, compile_library, d
 
 CAPI = r"""
 #include "common.c"
@@ -86,24 +81,9 @@ PAR = control.InductionMachineInvGammaPars(
 SPEED_CTRL = {"J": 0.015, "alpha_s": 2 * pi * 4}
 
 
-def compile_library() -> ctypes.CDLL:
-    """Compile the C sources into a shared library."""
-    tmp = Path(tempfile.mkdtemp())
-    (tmp / "capi.c").write_text(CAPI)
-    lib = tmp / "libim.so"
-    cmd = ["gcc", "-std=c99", "-O2", "-shared", "-fPIC", "-Wall"]
-    cmd += ["-Wno-unused-function", f"-I{SRC_DIR}", str(tmp / "capi.c")]
-    subprocess.run([*cmd, "-lm", "-o", str(lib)], check=True)
-    return ctypes.CDLL(str(lib))
-
-
-def _arr(values: Any) -> Any:
-    values = np.asarray(values, dtype=float).ravel()
-    return (ctypes.c_double * len(values))(*values)
-
-
-def _d(x: float) -> ctypes.c_double:
-    return ctypes.c_double(x)
+@pytest.fixture(scope="module")
+def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_library(CAPI, tmp_path_factory.mktemp("im"))
 
 
 def build_system(sensorless: bool) -> tuple[model.Drive, control.VectorControlSystem]:
@@ -127,17 +107,19 @@ def build_system(sensorless: bool) -> tuple[model.Drive, control.VectorControlSy
 class CControlSystem(control.VectorControlSystem):
     """Control system running the C port, for closed-loop simulations."""
 
-    def __init__(self, ctrl: control.VectorControlSystem) -> None:
+    def __init__(self, ctrl: control.VectorControlSystem, dll: ctypes.CDLL) -> None:
         super().__init__(ctrl.vector_ctrl, ctrl.speed_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
         cfg = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg
         self.T_s = cfg.T_s
-        self.dll = compile_library()
-        c = [cfg.psi_s_nom, cfg.i_s_max, cfg.alpha_c, np.nan, cast(float, cfg.alpha_o)]
+        self.dll = dll
+        # The defaults (None in motulator) are resolved in C from NaN: alpha_i,
+        # alpha_o, and the speed controller alpha_i
+        c = [cfg.psi_s_nom, cfg.i_s_max, cfg.alpha_c, np.nan, np.nan]
         c += [cfg.w_s_nom, cfg.k_u, cfg.k_fw, cast(float, cfg.J), cfg.sensorless]
         c += [cfg.T_s]
         p = [PAR.n_p, PAR.R_s, PAR.R_R, PAR.L_sgm, PAR.L_M]
-        self.dll.init(_arr(p), _arr(c), _arr([*SPEED_CTRL.values(), np.nan, inf]))
+        self.dll.init(arr(p), arr(c), arr([*SPEED_CTRL.values(), np.nan, inf]))
         self.out = (ctypes.c_double * len(NAMES))()
 
     def run_control_loop(self, mdl: model.Drive) -> tuple[float, Sequence[float]]:
@@ -145,7 +127,7 @@ class CControlSystem(control.VectorControlSystem):
         w_M_ref = cast(Any, self.ext_ref.w_M)(self.t)
         i_abc = complex2abc(meas.i_c_ab)
         w_M = meas.w_M or 0.0  # Measured only in the sensored mode
-        self.dll.step(_arr(i_abc), _d(meas.u_dc), _d(w_M), _d(w_M_ref), self.out)
+        self.dll.step(arr(i_abc), d(meas.u_dc), d(w_M), d(w_M_ref), self.out)
         out = np.array(self.out)
         self.save(self.t, out=SimpleNamespace(**dict(zip(NAMES, out, strict=True))))
         self.t = (self.t + self.T_s) % 1e9
@@ -156,7 +138,7 @@ class CControlSystem(control.VectorControlSystem):
 
 
 @pytest.mark.parametrize("sensorless", [True, False])
-def test_control_system(sensorless: bool) -> None:
+def test_control_system(dll: ctypes.CDLL, sensorless: bool) -> None:
     """Closed-loop simulation of the 2.2-kW drive with motulator and with the C port."""
     mdl, ctrl = build_system(sensorless)
     res_py = model.Simulation(mdl, ctrl).simulate(t_stop=0.5)
@@ -174,7 +156,7 @@ def test_control_system(sensorless: bool) -> None:
         ]
     )
     mdl, ctrl = build_system(sensorless)
-    res_c = model.Simulation(mdl, CControlSystem(ctrl)).simulate(t_stop=0.5)
+    res_c = model.Simulation(mdl, CControlSystem(ctrl, dll)).simulate(t_stop=0.5)
     c = np.column_stack([getattr(res_c.ctrl.out, name) for name in NAMES])
     assert np.allclose(res_py.ctrl.t, res_c.ctrl.t)
     err = np.max(np.abs(c - py), axis=0)
@@ -182,11 +164,3 @@ def test_control_system(sensorless: bool) -> None:
     for name, e, s in zip(NAMES, err, scale, strict=True):
         print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
     assert np.all(err <= 1e-8 * np.maximum(scale, 1.0))
-
-
-# %%
-if __name__ == "__main__":
-    for sensorless in (True, False):
-        print(f"test_control_system (sensorless={sensorless}):")
-        test_control_system(sensorless)
-        print("  passed")

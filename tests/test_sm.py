@@ -1,10 +1,10 @@
 """
 Test the C port of the motulator control algorithms against motulator.
 
-The C sources in `src` are compiled into a shared library (requires gcc), and the
-results are compared with motulator: the root finding, the lookup tables of the
-reference generator, and the outputs of the complete control system for a sequence
-of measurements. PLECS is not needed.
+The C sources in `motulator_plecs/c` are compiled into a shared library (requires
+gcc), and the results are compared with motulator: the root finding, the lookup
+tables of the reference generator, and the outputs of the complete control system
+for a sequence of measurements. PLECS is not needed.
 
 Run from the repository root:
 
@@ -14,22 +14,18 @@ Run from the repository root:
 
 # %%
 import ctypes
-import subprocess
-import tempfile
 from math import inf, pi
-from pathlib import Path
 from typing import Any, cast
 
 import motulator.drive.control.sm as control
 import numpy as np
+import pytest
 from motulator.common.utils import abc2complex
 from motulator.drive import model
 from motulator.drive.control._base import Measurements
 from scipy.optimize import brentq
 
-from motulator_plecs._common import C_SOURCES
-
-SRC_DIR = C_SOURCES
+from tests.c_port import arr, compile_library, d
 
 CAPI = r"""
 #include "common.c"
@@ -102,36 +98,12 @@ void step(const double *i_s_abc, double u_dc, double w_M_ref, double *out)
 """
 
 
-def compile_library() -> ctypes.CDLL:
-    """Compile the C sources into a shared library."""
-    tmp = Path(tempfile.mkdtemp())
-    (tmp / "capi.c").write_text(CAPI)
-    lib = tmp / "libmotulator.so"
-    subprocess.run(
-        [
-            "gcc",
-            "-std=c99",
-            "-O2",
-            "-shared",
-            "-fPIC",
-            "-Wall",
-            "-Wno-unused-function",
-            f"-I{SRC_DIR}",
-            str(tmp / "capi.c"),
-            "-lm",
-            "-o",
-            str(lib),
-        ],
-        check=True,
-    )
-    dll = ctypes.CDLL(str(lib))
-    dll.test_brentq.restype = ctypes.c_double
-    dll.test_brentq.argtypes = [ctypes.c_double] * 3
-    return dll
-
-
-def _arr(values: Any) -> Any:
-    return (ctypes.c_double * len(values))(*values)
+@pytest.fixture(scope="module")
+def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    lib = compile_library(CAPI, tmp_path_factory.mktemp("sm"))
+    lib.test_brentq.restype = ctypes.c_double
+    lib.test_brentq.argtypes = [ctypes.c_double] * 3
+    return lib
 
 
 def none(value: float | None) -> float:
@@ -145,23 +117,21 @@ CFG: dict[str, Any] = {"i_s_max": 6.5}
 SPEED = {"J": 0.015, "alpha_s": 25.0}
 
 
-def test_brentq() -> None:
+def test_brentq(dll: ctypes.CDLL) -> None:
     """Brent's method should give the same root as SciPy."""
-    dll = compile_library()
     for c in (0.1, 0.5, 1.0, 3.0):
         root_c = dll.test_brentq(0.0, 2.0, c)
         root_py = brentq(lambda x, c=c: np.cos(x) - c * x, 0.0, 2.0)
         assert root_c == root_py, (c, root_c, root_py)
 
 
-def test_luts() -> None:
+def test_luts(dll: ctypes.CDLL) -> None:
     """The lookup tables should match those of the reference generator."""
-    dll = compile_library()
     par = model.SynchronousMachinePars(**PAR)
     fvc = control.FluxVectorController(par, control.FluxVectorControllerCfg(**CFG))
     rg = cast(Any, fvc.reference_gen)
     out = (ctypes.c_double * (6 * 16))()
-    dll.test_luts(_arr(list(PAR.values())), ctypes.c_double(CFG["i_s_max"]), out)
+    dll.test_luts(arr(list(PAR.values())), d(CFG["i_s_max"]), out)
     luts = np.array(out).reshape(3, 2, 16)
     for i, (f, name) in enumerate(
         [(rg.psi_s_mtpa, "psi_s_mtpa"), (rg.tau_M_cl, "tau_M_cl"), (rg.tau_M_mtpv, "")]
@@ -172,9 +142,8 @@ def test_luts() -> None:
         print(f"  {name or 'tau_M_mtpv'}: max error {err:.3g}")
 
 
-def test_control_system() -> None:
+def test_control_system(dll: ctypes.CDLL) -> None:
     """The control system should give the same outputs as motulator."""
-    dll = compile_library()
     par = model.SynchronousMachinePars(**PAR)
     cfg = control.FluxVectorControllerCfg(**CFG)
     ctrl = control.VectorControlSystem(
@@ -196,7 +165,7 @@ def test_control_system() -> None:
         cfg.T_s,
     ]
     s = [SPEED["J"], SPEED["alpha_s"], none(None), inf]
-    dll.init(_arr(list(PAR.values())), _arr(c), _arr(s))
+    dll.init(arr(list(PAR.values())), arr(c), arr(s))
 
     # Measurement sequence: rotating current vector with a varying amplitude
     rng = np.random.default_rng(0)
@@ -222,16 +191,9 @@ def test_control_system() -> None:
         ctrl.update(ref, fbk)
         py = [*ref.d_abc, fbk.w_M, fbk.tau_M, ref.tau_M, ref.psi_s, fbk.theta_m]
         # C port
-        dll.step(_arr(i_abc), ctypes.c_double(540.0), ctypes.c_double(w_M_ref[k]), out)
+        dll.step(arr(i_abc), d(540.0), d(w_M_ref[k]), out)
         err = np.maximum(err, np.abs(np.array(out) - np.array(py)))
     names = ["d_a", "d_b", "d_c", "w_M", "tau_M", "tau_M_ref", "psi_s_ref", "theta_m"]
     for name, e in zip(names, err, strict=True):
         assert e < 1e-9, (name, e)
     print("  max errors:", dict(zip(names, np.round(err, 16), strict=True)))
-
-
-# %%
-if __name__ == "__main__":
-    for test in (test_brentq, test_luts, test_control_system):
-        test()
-        print(f"{test.__name__}: passed")

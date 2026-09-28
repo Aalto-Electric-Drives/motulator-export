@@ -13,20 +13,16 @@ Run from the repository root (requires gcc):
 
 # %%
 import ctypes
-import subprocess
-import tempfile
 from math import pi
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
+import pytest
 from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import control, utils
 from motulator.grid.control._base import Measurements
 
-from motulator_plecs._common import C_SOURCES
-
-SRC_DIR = C_SOURCES
+from tests.c_port import arr, compile_library, d
 
 CAPI = r"""
 #include "common.c"
@@ -62,27 +58,12 @@ void step(const double *i_c_abc, const double *u_g_line, double u_dc, double p_g
 """
 
 
-def compile_library() -> ctypes.CDLL:
-    """Compile the C sources into a shared library."""
-    tmp = Path(tempfile.mkdtemp())
-    (tmp / "capi.c").write_text(CAPI)
-    lib = tmp / "libgfl.so"
-    cmd = ["gcc", "-std=c99", "-O2", "-shared", "-fPIC", "-Wall"]
-    cmd += ["-Wno-unused-function", f"-I{SRC_DIR}", str(tmp / "capi.c")]
-    subprocess.run([*cmd, "-lm", "-o", str(lib)], check=True)
-    return ctypes.CDLL(str(lib))
+@pytest.fixture(scope="module")
+def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_library(CAPI, tmp_path_factory.mktemp("gfl"))
 
 
-def _arr(values: Any) -> Any:
-    values = np.asarray(values, dtype=float).ravel()
-    return (ctypes.c_double * len(values))(*values)
-
-
-def _d(x: float) -> ctypes.c_double:
-    return ctypes.c_double(x)
-
-
-def test_control_system() -> None:
+def test_control_system(dll: ctypes.CDLL) -> None:
     """Grid-following control of the example for a sequence of measurements."""
     nom = utils.NominalValues(U=400, I=14.5, f=50, P=10e3)
     base = utils.BaseValues.from_nominal(nom)
@@ -92,10 +73,9 @@ def test_control_system() -> None:
     ctrl = control.GridConverterControlSystem(control.CurrentVectorController(cfg))
     ctrl.set_power_ref(lambda t: (t > 0.02) * 5e3)
     ctrl.set_reactive_power_ref(lambda t: (t > 0.04) * 4e3)
-    dll = compile_library()
     c = [cfg.i_max, cfg.L, cfg.alpha_c, cast(float, cfg.alpha_i), cfg.u_nom]
     c += [cfg.w_nom, cfg.alpha_pll, cfg.T_s]
-    dll.init(_arr(c))
+    dll.init(arr(c))
 
     # Measurements: grid voltage with a frequency offset and a phase jump, and a
     # current with harmonics
@@ -124,7 +104,7 @@ def test_control_system() -> None:
             ref.u_c.real,
             ref.u_c.imag,
         ]
-        dll.step(_arr(i_abc), _arr(u_line), _d(u_dc[k]), _d(ref.p_g), _d(ref.q_g), out)
+        dll.step(arr(i_abc), arr(u_line), d(u_dc[k]), d(ref.p_g), d(ref.q_g), out)
         res_c[k] = np.array(out)
     names = ["d_a", "d_b", "d_c", "theta_c", "w_g", "u_g", "u_c_d", "u_c_q"]
     err = np.max(np.abs(res_c - res_py), axis=0)
@@ -132,10 +112,3 @@ def test_control_system() -> None:
     for name, e, s in zip(names, err, scale, strict=True):
         print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
     assert np.all(err <= 1e-9 * np.maximum(scale, 1.0))
-
-
-# %%
-if __name__ == "__main__":
-    print("test_control_system:")
-    test_control_system()
-    print("  passed")

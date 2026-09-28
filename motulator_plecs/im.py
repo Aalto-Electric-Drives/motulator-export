@@ -21,13 +21,17 @@ Currently supported:
 
 """
 
+from dataclasses import fields
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import FrequencyConverter
 from motulator.drive.control._base import VectorControlSystem
-from motulator.drive.control._im_current_vector import CurrentVectorController
+from motulator.drive.control._im_current_vector import (
+    CurrentVectorController,
+    CurrentVectorControllerCfg,
+)
 from motulator.drive.model import Drive, InductionMachine
 from motulator.drive.utils._parameters import (
     InductionMachineInvGammaPars,
@@ -37,6 +41,7 @@ from motulator.drive.utils._parameters import (
 from motulator_plecs._common import (
     C_DIR,
     C_PARAMS,
+    DUTY_RATIO_CODE,
     MACH,
     ControlBlock,
     MaskParam,
@@ -46,13 +51,10 @@ from motulator_plecs._common import (
     _add_dc_bus,
     _add_delay,
     _add_pwm,
-    _probe,
-    _Schematic,
-    _terminals,
     _write_model,
     cfg_assignments,
+    monitored_code,
     parameter_checks,
-    simulate_plecs,
 )
 from motulator_plecs._drive import (
     MACHINE_FRAME,
@@ -68,6 +70,8 @@ from motulator_plecs._drive import (
     speed_controller_code,
     speed_ctrl_values,
 )
+from motulator_plecs._rpc import simulate_plecs
+from motulator_plecs._schematic import _probe, _Schematic, _terminals
 
 # Inputs of the control system and the monitored signals (mask probes)
 CTRL_INPUTS = ["w_M_ref", "i_s_abc", "u_dc", "w_M"]
@@ -163,7 +167,13 @@ def export_mask_values(
     cvc = cast(CurrentVectorController, ctrl.vector_ctrl)
     cfg, par = cvc.cfg, cast(InductionMachineInvGammaPars, cvc.reference_gen.par)
     # alpha_o is resolved in CurrentVectorControllerCfg.__post_init__
-    default = 2 * np.pi * 60 if cfg.J is None else np.pi * 60
+    default = CurrentVectorControllerCfg(
+        **{
+            f.name: getattr(cfg, f.name)
+            for f in fields(cfg)
+            if f.name not in ("alpha_o",) and f.init
+        }
+    ).alpha_o
     return {
         "n_p": par.n_p,
         "R_s": par.R_s,
@@ -252,17 +262,14 @@ def _control_cscript_code() -> dict[str, str]:
         "\n"
         "im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n"
         "\n"
-        "/* Duty ratios, delayed by the Delay block outside the subsystem */\n"
-        "for (int k = 0; k < 3; k++) {\n"
-        "    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n"
-        "}\n"
-        "\n"
-        "/* Monitored signals, the currents in estimated rotor flux coordinates */\n"
-        "double complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\n"
+        + DUTY_RATIO_CODE
+        + monitored_code(
+            CTRL_OUTPUTS,
+            monitored,
+            "Monitored signals, the currents in estimated rotor flux coordinates",
+            "double complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\n",
+        )
     )
-    for i_out, names in enumerate(CTRL_OUTPUTS.values()):
-        for j, name in enumerate(names):
-            output += f"OutputSignal({i_out + 1}, {j}) = {monitored[name]};\n"
     update = "im_vector_control_system_update(&ctrl);\n"
     return {
         "Declarations": declarations,
@@ -352,7 +359,7 @@ def write_model(
     # The diode bridge and its grid need space between the PWM and the DC bus
     sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
     _add_converter(sch)
-    _add_dc_bus(sch, mdl)
+    _add_dc_bus(sch, mdl.converter)
     _add_im(sch)
     for k in range(3):
         sch.wire(("Converter", k + 1), ("Machine", k + 1))

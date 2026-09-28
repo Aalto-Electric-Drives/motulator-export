@@ -15,10 +15,7 @@ Run from the repository root (requires gcc):
 
 # %%
 import ctypes
-import subprocess
-import tempfile
 from math import pi
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -27,9 +24,7 @@ from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import control, utils
 from motulator.grid.control._base import Measurements
 
-from motulator_plecs._common import C_SOURCES
-
-SRC_DIR = C_SOURCES
+from tests.c_port import arr, compile_library, d
 
 CAPI = r"""
 #include "common.c"
@@ -70,28 +65,13 @@ void step(const double *i_c_abc, double u_dc, double p_g_ref, double v_c_ref,
 """
 
 
-def compile_library() -> ctypes.CDLL:
-    """Compile the C sources into a shared library."""
-    tmp = Path(tempfile.mkdtemp())
-    (tmp / "capi.c").write_text(CAPI)
-    lib = tmp / "libgfm.so"
-    cmd = ["gcc", "-std=c99", "-O2", "-shared", "-fPIC", "-Wall"]
-    cmd += ["-Wno-unused-function", f"-I{SRC_DIR}", str(tmp / "capi.c")]
-    subprocess.run([*cmd, "-lm", "-o", str(lib)], check=True)
-    return ctypes.CDLL(str(lib))
-
-
-def _arr(values: Any) -> Any:
-    values = np.asarray(values, dtype=float).ravel()
-    return (ctypes.c_double * len(values))(*values)
-
-
-def _d(x: float) -> ctypes.c_double:
-    return ctypes.c_double(x)
+@pytest.fixture(scope="module")
+def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_library(CAPI, tmp_path_factory.mktemp("gfm"))
 
 
 @pytest.mark.parametrize("power_limitation", [False, True])
-def test_control_system(power_limitation: bool) -> None:
+def test_control_system(dll: ctypes.CDLL, power_limitation: bool) -> None:
     """Grid-forming control of the example for a sequence of measurements."""
     nom = utils.NominalValues(U=400, I=18, f=50, P=12.5e3)
     base = utils.BaseValues.from_nominal(nom)
@@ -113,11 +93,11 @@ def test_control_system(power_limitation: bool) -> None:
         return (t > 0.02) * nom.P - (t > 0.06) * 2 * nom.P
 
     ctrl.set_power_ref(p_g_ref)
-    dll = compile_library()
-    c = [cfg.i_max, cfg.L, cfg.R, cast(float, cfg.R_a), cast(float, cfg.k_v)]
+    # The default k_v (None in motulator) is resolved in C from NaN
+    c = [cfg.i_max, cfg.L, cfg.R, cast(float, cfg.R_a), np.nan]
     c += [cfg.alpha_o, cfg.alpha_c, cfg.u_nom, cfg.w_nom, cfg.T_s]
     c += [np.nan if cfg.i_d_max is None else cfg.i_d_max, cfg.alpha_l]
-    dll.init(_arr(c))
+    dll.init(arr(c))
 
     # Measurements: a current with a frequency offset and harmonics, and a ripple in
     # the DC-bus voltage. The PCC voltage is not used by the controller.
@@ -146,7 +126,7 @@ def test_control_system(power_limitation: bool) -> None:
             ref.i_c.real,
             ref.i_c.imag,
         ]
-        dll.step(_arr(i_abc), _d(u_dc[k]), _d(p_ref), _d(ref.v_c), out)
+        dll.step(arr(i_abc), d(u_dc[k]), d(p_ref), d(ref.v_c), out)
         res_c[k] = np.array(out)
     names = ["d_a", "d_b", "d_c", "theta_c", "p_g", "q_g", "v_c", "p_g_ref"]
     names += ["i_c_d_ref", "i_c_q_ref"]
@@ -155,11 +135,3 @@ def test_control_system(power_limitation: bool) -> None:
     for name, e, s in zip(names, err, scale, strict=True):
         print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
     assert np.all(err <= 1e-9 * np.maximum(scale, 1.0))
-
-
-# %%
-if __name__ == "__main__":
-    for power_limitation in (False, True):
-        print(f"test_control_system (power_limitation={power_limitation}):")
-        test_control_system(power_limitation)
-        print("  passed")

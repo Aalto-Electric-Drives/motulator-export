@@ -23,11 +23,9 @@ from motulator_plecs._common import (
     MaskParam,
     StepSignal,
     _add_ctrl_output,
-    _probe,
-    _Schematic,
-    _scope,
     _step,
 )
+from motulator_plecs._schematic import _probe, _Schematic, _scope
 
 # Machine signals in the output port "mdl"
 MDL_OUTPUTS = ["i_a", "i_b", "i_c", "w_M", "theta_M", "tau_M"]
