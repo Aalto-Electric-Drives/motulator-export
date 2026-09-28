@@ -15,7 +15,7 @@ Development uses a virtual environment in `.venv` (pyright is configured to use 
 
 - `motulator_plecs/sm.py`, `im.py`, and `grid.py` write PLECS models of synchronous machine drives, induction machine drives, and grid converter systems. Each provides `write_model` and `simulate`. The shared building blocks are in `_schematic.py` (the PLECS file format: the schematic writer `_Schematic`, probes, scopes, masks, and C-Script parameters), `_common.py` (the step signals, the control-system block `ControlBlock` and its C-Script code helpers, the converter, the DC bus, and the model file), `_drive.py` (the mechanics, the speed controller, and the scope), and `_rpc.py` (the simulation via the RPC interface).
 - `motulator_plecs/c/` is the C port of the motulator control algorithms, run in C-Script blocks. It follows the Python code of motulator closely, including the order of the state updates, and the tests in `tests/` compare it with motulator step by step (the C test APIs are compiled with the helpers in `tests/c_port.py`). A change in the control algorithms of motulator must be mirrored here. The tests pass NaN for the optional parameters so that the default values are resolved in C, as in motulator.
-- `examples/` contains the comparison scripts and the generated models. Regenerate the models by running the scripts after changing the writers, and check that the differences stay at the previous level.
+- `examples/` contains the comparison scripts and the generated models. Regenerate the models by running the scripts after changing the writers, and check that the differences stay at the level recorded in `examples/README.md` (update the table if they change).
 
 ## Conventions
 
