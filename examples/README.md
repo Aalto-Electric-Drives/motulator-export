@@ -2,13 +2,13 @@
 
 Each script builds a system of a motulator example, writes the PLECS model (`*.plecs` in this directory), and, if PLECS Standalone is running with the RPC interface enabled, simulates the system in both motulator and PLECS and prints the maximum differences.
 
-| Script | System |
-| --- | --- |
-| `ipmsm_2kw_fvc.py` | 2.2-kW IPMSM, sensorless flux-vector control (the README example of motulator); with `--diode`, a diode bridge with a DC-bus inductor and capacitor |
-| `pmsyrm_6kw_gn_fvc.py` | 5.6-kW PM-SyRM, GradNet models from FEM data (in `trained_models/`), sensored flux-vector control (`plot_6kw_pmsyrm_gn_fvc_fem_harm.py`) |
-| `im_2kw_cvc.py` | 2.2-kW induction machine, sensorless current-vector control (`plot_2kw_im_sat_cvc.py` with the constant-parameter machine model) |
-| `gfl_10kva_lcl.py` | 10-kVA grid converter with an LCL filter, grid-following control (`plot_10kva_lcl_gfl.py`) |
-| `gfm_13kva_do.py` | 12.5-kVA grid converter with an L filter in a weak grid, disturbance-observer-based grid-forming control (`plot_13kva_do_gfm.py`) |
+| Script                 | System                                                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ipmsm_2kw_fvc.py`     | 2.2-kW IPMSM, sensorless flux-vector control (the README example of motulator); with `--diode`, a diode bridge with a DC-bus inductor and capacitor |
+| `pmsyrm_6kw_gn_fvc.py` | 5.6-kW PM-SyRM, GradNet models from FEM data (in `trained_models/`), sensored flux-vector control (`plot_6kw_pmsyrm_gn_fvc_fem_harm.py`)            |
+| `im_2kw_cvc.py`        | 2.2-kW induction machine, sensorless current-vector control (`plot_2kw_im_sat_cvc.py` with the constant-parameter machine model)                    |
+| `gfl_10kva_lcl.py`     | 10-kVA grid converter with an LCL filter, grid-following control (`plot_10kva_lcl_gfl.py`)                                                          |
+| `gfm_13kva_do.py`      | 12.5-kVA grid converter with an L filter in a weak grid, disturbance-observer-based grid-forming control (`plot_13kva_do_gfm.py`)                   |
 
 Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.
@@ -33,14 +33,14 @@ Maximum differences (PLECS − motulator) printed by the scripts, with motulator
 motulator uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
-| Script | System model | Control system |
-| --- | --- | --- |
-| `ipmsm_2kw_fvc.py` | w_M 7.5e-6, tau_M 5.4e-6, i_s_ab 2.2e-6 | w_M 6.8e-6, tau_M 5.4e-6, tau_M_ref 5.4e-6, psi_s_ref 1.3e-8 |
-| `ipmsm_2kw_fvc.py --diode` | w_M 1.6e-6, tau_M 2.8e-6, i_s_ab 1.3e-6 | w_M 4.0e-6, tau_M 2.8e-6, tau_M_ref 3.0e-6, psi_s_ref 9.1e-9 |
-| `pmsyrm_6kw_gn_fvc.py` | w_M 3.4e-4, tau_M 2.1e-3, i_s_ab 7.0e-4 | |
-| `im_2kw_cvc.py` | w_M 7.1e-7, tau_M 2.3e-6, i_s_ab 8.3e-7 | w_M 3.9e-6, tau_M 2.6e-6, tau_M_ref 2.9e-6, psi_R 3.2e-8 |
-| `gfl_10kva_lcl.py` | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 4.0e-13, w_g 1.1e-12 |
-| `gfm_13kva_do.py` | i_c_ab 9.4e-7, i_c_a 7.5e-7 | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0 |
+| Script                     | System model                               | Control system                                               |
+| -------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| `ipmsm_2kw_fvc.py`         | w_M 7.5e-6, tau_M 5.4e-6, i_s_ab 2.2e-6    | w_M 6.8e-6, tau_M 5.4e-6, tau_M_ref 5.4e-6, psi_s_ref 1.3e-8 |
+| `ipmsm_2kw_fvc.py --diode` | w_M 1.6e-6, tau_M 2.8e-6, i_s_ab 1.3e-6    | w_M 4.0e-6, tau_M 2.8e-6, tau_M_ref 3.0e-6, psi_s_ref 9.1e-9 |
+| `pmsyrm_6kw_gn_fvc.py`     | w_M 3.4e-4, tau_M 2.1e-3, i_s_ab 7.0e-4    |                                                              |
+| `im_2kw_cvc.py`            | w_M 7.1e-7, tau_M 2.3e-6, i_s_ab 8.3e-7    | w_M 3.9e-6, tau_M 2.6e-6, tau_M_ref 2.9e-6, psi_R 3.2e-8     |
+| `gfl_10kva_lcl.py`         | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 4.0e-13, w_g 1.1e-12             |
+| `gfm_13kva_do.py`          | i_c_ab 9.4e-7, i_c_a 7.5e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
 In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 1e-4 relative), since motulator evaluates the GradNets in single precision, see [the C port](../motulator_plecs/c/README.md).
