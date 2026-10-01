@@ -37,10 +37,8 @@ A natural next step is a variant with Simscape Electrical blocks (converter, mac
 
 ## Verification status
 
-MATLAB was not available when the pilot was written, so the model has not yet been built or simulated in Simulink. What has been verified:
+The model has been built and simulated in MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2). Over the 1.2-s run, `python examples/ipmsm_2kw_fvc_simulink.py` gives the maximum differences from motulator w_M 7.0e-6, tau_M 4.9e-6, i_s_ab 2.0e-6, ctrl.w_M 5.8e-6, ctrl.tau_M_ref 4.8e-6, and ctrl.psi_s_ref 1.2e-8, which is the level of the PLECS model (cf. [examples/README.md](../../examples/README.md)).
+The simulation itself takes about 1.5 s in the normal mode (about 100 000 solver steps, mostly at the switching instants located by the zero-crossing detection) and 0.6 s in the accelerator mode, plus about 1 s of initialization.
+Most of the run time of the comparison script is the start of MATLAB, the build of the model, and the compilation of the MATLAB Function block.
 
-- **S-function**: `tests/test_simulink.py` compiles the S-function with gcc against a mock of the Simulink API (`tests/simulink_mock`) and compares its outputs with motulator step by step, in the sensorless and sensored modes (maximum differences about 1e-12). It also checks that the parameter order of the S-function matches the mask.
-- **System model**: a Python simulation that mirrors the block diagram (the same machine equations as the MATLAB Function block, the carrier of the Repeating Sequence block, the Unit Delay, and the step semantics of Simulink), with the mock-compiled S-function as the controller, agrees with motulator at the level of the PLECS model: over the 1.2-s run, the maximum differences are w_M 7.5e-6, tau_M 5.4e-6, ctrl.w_M 6.8e-6, and ctrl.tau_M_ref 5.4e-6 (cf. [examples/README.md](../../examples/README.md)).
-- **MATLAB code**: the `.m` files (including the MATLAB Function code) parse without errors in MISS_HIT (`mh_lint`).
-
-To be checked in MATLAB: the Simulink API calls of `build_sm_fvc.m` (mask dialog controls, the MATLAB Function script, block parameter names), the `mex` flags, and the agreement with motulator reached by the zero-crossing detection.
+In addition, `tests/test_simulink.py` compiles the S-function with gcc against a mock of the Simulink API (`tests/simulink_mock`) and compares its outputs with motulator step by step, in the sensorless and sensored modes (maximum differences about 1e-12). It also checks that the parameter order of the S-function matches the mask.
