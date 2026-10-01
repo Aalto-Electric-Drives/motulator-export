@@ -12,6 +12,7 @@ compiles it once per module with `compile_library` in a fixture:
 
 import ctypes
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,13 +20,19 @@ import numpy as np
 
 from motulator_plecs._common import C_SOURCES
 
+# gcc for a shared library. With MinGW-w64 on Windows, the runtime libraries are
+# linked statically, since Python does not search PATH for the dependencies of a DLL.
+GCC = ["gcc", "-std=c99", "-O2", "-shared", "-fPIC"]
+if sys.platform == "win32":
+    GCC.append("-static")
+
 
 def compile_library(capi: str, out_dir: Path) -> ctypes.CDLL:
     """Compile the C sources with the test API `capi` into a shared library."""
     src = out_dir / "capi.c"
     src.write_text(capi)
     lib = out_dir / "libcapi.so"
-    cmd = ["gcc", "-std=c99", "-O2", "-shared", "-fPIC", "-Wall"]
+    cmd = [*GCC, "-Wall"]
     cmd += ["-Wno-unused-function", f"-I{C_SOURCES}", str(src), "-lm", "-o", str(lib)]
     subprocess.run(cmd, check=True)
     return ctypes.CDLL(str(lib))

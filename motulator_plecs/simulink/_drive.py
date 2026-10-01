@@ -1,0 +1,91 @@
+"""Common parts of the Simulink export of machine drives (see `build_drive.m`)."""
+
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from motulator.common.model._converter import VoltageSourceConverter
+from motulator.drive.model import Drive
+
+from motulator_plecs._common import ControlBlock, StepSignal
+from motulator_plecs._drive import MDL_OUTPUTS
+from motulator_plecs._schematic import _fmt
+from motulator_plecs.simulink._common import (
+    _m_step,
+    scope_indices,
+    simulate,
+    write_script,
+)
+
+
+def check_supported_converter(mdl: Drive) -> None:
+    """Raise an error if the converter is not supported."""
+    if type(mdl.converter) is not VoltageSourceConverter:
+        raise NotImplementedError("Only VoltageSourceConverter supported")
+
+
+def write_drive_model(
+    path: str | Path,
+    block: ControlBlock,
+    values: dict[str, Any],
+    variables: list[tuple[str, Any]],
+    machine: str,
+    w_M_ref: StepSignal,
+    tau_L: StepSignal,
+    t_stop: float,
+) -> Path:
+    """
+    Write the S-function and the MATLAB script building the model of a drive.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path of the model (.slx).
+    block : ControlBlock
+        Control-system block.
+    values : dict[str, Any]
+        Mask parameter values of the control system.
+    variables : list[tuple[str, Any]]
+        Workspace variables of the system model.
+    machine : str
+        "sm" (synchronous machine) or "im" (induction machine).
+    w_M_ref : StepSignal
+        Speed reference (mechanical rad/s).
+    tau_L : StepSignal
+        External load torque (Nm).
+    t_stop : float
+        Simulation stop time (s).
+
+    Returns
+    -------
+    Path
+        Path of the script.
+
+    """
+    path = Path(path)
+    signals = block.signals
+    flux = [f"ctrl.{n}" for n in signals if n.startswith("psi")]
+    scope = [
+        ("Speed", ["ctrl.w_M_ref", "ctrl.w_M", "mdl.w_M"]),
+        ("Torque", ["ctrl.tau_M_ref", "ctrl.tau_M", "mdl.tau_M"]),
+        ("Current", ["mdl.i_a", "mdl.i_b", "mdl.i_c"]),
+        ("Flux", flux),
+    ]
+    init = "".join(f"{n} = {_fmt(v)};\n" for n, v in variables)
+    fields = [
+        ("init", init),
+        ("machine", machine),
+        ("w_M_ref", _m_step(w_M_ref)),
+        ("tau_L", _m_step(tau_L)),
+        ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),
+    ]
+    return write_script(
+        path, block, values, fields, "build_drive", values["T_s"], t_stop
+    )
+
+
+def simulate_drive(
+    path: str | Path, t_eval: np.ndarray, block: ControlBlock, build: bool = True
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Simulate the Simulink model of a drive, see `_common.simulate`."""
+    return simulate(path, t_eval, MDL_OUTPUTS, block.signals, build)

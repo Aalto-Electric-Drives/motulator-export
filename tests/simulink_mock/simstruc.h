@@ -15,13 +15,15 @@ typedef double real_T;
 typedef int int_T;
 
 typedef struct {
-    size_t numel;
+    size_t m; /* Rows */
+    size_t n; /* Columns */
     const double *pr;
 } mxArray;
 
-#define MOCK_MAX_PARAMS 32
+#define MOCK_MAX_PARAMS 64
 #define MOCK_MAX_PORTS 8
 #define MOCK_MAX_WIDTH 16
+#define MOCK_MAX_STATES 8
 
 typedef struct {
     int num_params; /* Expected by the S-function */
@@ -36,11 +38,16 @@ typedef struct {
     double inputs[MOCK_MAX_PORTS][MOCK_MAX_WIDTH];
     double outputs[MOCK_MAX_PORTS][MOCK_MAX_WIDTH];
     void *pwork[4];
+    int num_cont_states;
+    double x[MOCK_MAX_STATES]; /* Continuous states */
+    double dx[MOCK_MAX_STATES]; /* Their derivatives */
     double sample_time;
     double offset_time;
 } SimStruct;
 
-#define mxGetNumberOfElements(p) ((p)->numel)
+#define mxGetNumberOfElements(p) ((p)->m * (p)->n)
+#define mxGetM(p) ((p)->m)
+#define mxGetN(p) ((p)->n)
 #define mxGetPr(p) ((double *)(p)->pr)
 #define mxIsDouble(p) ((void)(p), 1)
 #define mxIsComplex(p) ((void)(p), 0)
@@ -48,6 +55,7 @@ typedef struct {
 #define SS_PRM_NOT_TUNABLE 0
 #define SS_OPTION_EXCEPTION_FREE_CODE 0
 #define UNUSED_ARG(x) (void)(x)
+#define CONTINUOUS_SAMPLE_TIME 0.0
 
 #define ssSetNumSFcnParams(S, n) ((S)->num_params = (n))
 #define ssGetNumSFcnParams(S) ((S)->num_params)
@@ -56,7 +64,9 @@ typedef struct {
 #define ssSetSFcnParamTunable(S, k, v) ((void)(k), (void)(v))
 #define ssSetErrorStatus(S, msg) ((S)->error = (msg))
 #define ssGetErrorStatus(S) ((S)->error)
-#define ssSetNumContStates(S, n) ((void)(n))
+#define ssSetNumContStates(S, n) ((S)->num_cont_states = (n))
+#define ssGetContStates(S) ((S)->x)
+#define ssGetdX(S) ((S)->dx)
 #define ssSetNumDiscStates(S, n) ((void)(n))
 #define ssSetNumInputPorts(S, n) ((S)->num_inputs = (n), 1)
 #define ssSetInputPortWidth(S, k, w) ((S)->input_width[k] = (w))

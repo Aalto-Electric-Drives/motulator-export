@@ -1,6 +1,8 @@
 /*
  * Test API of the mock Simulink engine (see simstruc.h): the S-function callbacks
  * in the order Simulink calls them, with the inputs and outputs as flat arrays.
+ * The parameters are column vectors. The callbacks that the S-function does not
+ * define are not called.
  */
 
 static SimStruct mock;
@@ -14,7 +16,8 @@ const char *sfun_start(int num_params, const int *numel, const double *values)
     mock = empty;
     mock.params_count = num_params;
     for (int k = 0; k < num_params; k++) {
-        mock_params[k].numel = (size_t)numel[k];
+        mock_params[k].m = (size_t)numel[k];
+        mock_params[k].n = 1;
         mock_params[k].pr = values;
         values += numel[k];
         mock.params[k] = &mock_params[k];
@@ -50,8 +53,34 @@ void sfun_step(const double *u, double *y)
             *y++ = mock.outputs[k][j];
         }
     }
+#ifdef MDL_UPDATE
     mdlUpdate(&mock, 0);
+#endif
 }
+
+#ifdef MDL_DERIVATIVES
+/* Continuous states: get (x != NULL) or set them, and evaluate the derivatives
+ * after mdlOutputs (call sfun_step first with the inputs) */
+void sfun_states(double *x, const double *x_set)
+{
+    for (int k = 0; k < mock.num_cont_states; k++) {
+        if (x_set != NULL) {
+            mock.x[k] = x_set[k];
+        }
+        if (x != NULL) {
+            x[k] = mock.x[k];
+        }
+    }
+}
+
+void sfun_derivatives(double *dx)
+{
+    mdlDerivatives(&mock);
+    for (int k = 0; k < mock.num_cont_states; k++) {
+        dx[k] = mock.dx[k];
+    }
+}
+#endif
 
 void sfun_terminate(void)
 {
