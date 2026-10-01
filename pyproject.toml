@@ -59,6 +59,8 @@ skip-magic-trailing-comma = true
 testpaths = ["tests"]
 
 [tool.pyright]
+venvPath = "."
+venv = ".venv"
 include = ["motulator_export", "examples", "tests"]
 exclude = ["**/__pycache__", "**/.pytest_cache"]
 typeCheckingMode = "standard"
