@@ -42,6 +42,8 @@ The written models can also be opened and simulated directly in PLECS:
 - The parameters of the system model are in the initialization commands of the model (Simulation > Simulation Parameters > Initialization), e.g., `machine`, `mechanics`, and `converter`.
 - The C-Script blocks include the C files of the package via a path relative to the model file, so a model must be regenerated if it is moved relative to the package.
 
+A pilot of the corresponding Simulink export, with the control system as a C MEX S-function, is in [motulator_plecs/simulink](motulator_plecs/simulink/README.md).
+
 See [examples/README.md](examples/README.md) for the model structure and the agreement with motulator, and [motulator_plecs/c/README.md](motulator_plecs/c/README.md) for the C port.
 
 ## Limitations
