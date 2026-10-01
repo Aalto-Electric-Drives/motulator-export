@@ -25,32 +25,53 @@ SIMULINK_SOURCES = Path(__file__).parent
 ASCII = str.maketrans({"Ω": "Ohm", "²": "^2"})
 
 
+def _m_str(text: str) -> str:
+    """MATLAB character vector, joined from its lines if it has several."""
+    if "\n" in text:
+        lines = text.rstrip("\n").split("\n")
+        items = ", ...\n    ".join(map(_m_str, lines))
+        return "strjoin({ ...\n    " + items + "}, newline)"
+    return "'" + text.replace("'", "''") + "'"
+
+
 def _m(value: Any) -> str:
     """MATLAB literal of a string, a number, or a (nested) list."""
     if isinstance(value, str):
-        if "\n" in value:
-            lines = value.rstrip("\n").split("\n")
-            return (
-                "strjoin({ ...\n    "
-                + ", ...\n    ".join(map(_m, lines))
-                + "}, newline)"
-            )
-        return "'" + value.replace("'", "''") + "'"
+        return _m_str(value)
     if isinstance(value, Sequence):
-        if all(isinstance(v, Sequence) and not isinstance(v, str) for v in value):
-            rows = "".join("    " + ", ".join(map(_m, v)) + "\n" for v in value)
-            return "{ ...\n" + rows + "    }"
-        if all(isinstance(v, str) for v in value):
+        if value and all(isinstance(v, str) for v in value):
             return "{" + ", ".join(map(_m, value)) + "}"
-        return _fmt(list(value))
+        rows = [v for v in value if isinstance(v, Sequence) and not isinstance(v, str)]
+        if not rows or len(rows) < len(value):
+            return _fmt(list(value))  # Numeric vector
+        if all(_is_numeric(r) for r in rows):
+            return "[" + "; ".join(" ".join(_fmt(x) for x in r) for r in rows) + "]"
+        cells = "".join("    " + ", ".join(map(_m, r)) + "\n" for r in rows)
+        return "{ ...\n" + cells + "    }"
     return _fmt(value)
 
 
-def _m_step(sig: StepSignal) -> list[float]:
-    """Parameters [time, before, after] of a Step block."""
-    if not np.isscalar(sig.time):
-        raise NotImplementedError("Only single steps supported")
-    return [float(sig.time), float(sig.before), float(sig.after)]  # type: ignore[arg-type]
+def _is_numeric(values: Sequence[Any]) -> bool:
+    """Whether all the values are numbers."""
+    return all(isinstance(v, (int, float, np.number)) for v in values)
+
+
+def _m_steps(sig: StepSignal) -> list[list[float]]:
+    """
+    Rows [time, before, after] of the steps of a step signal (see add_step.m).
+
+    The first row steps from `before` to the first level, and the others from zero
+    to the increments of the levels, so that the sum of the steps is the signal.
+
+    """
+    times = np.atleast_1d(sig.time)
+    levels = [sig.before, *np.atleast_1d(sig.after)]
+    rows = [[float(times[0]), float(levels[0]), float(levels[1])]]
+    rows += [
+        [float(t), 0.0, float(levels[k + 2] - levels[k + 1])]
+        for k, t in enumerate(times[1:])
+    ]
+    return rows
 
 
 def control_fields(

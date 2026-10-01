@@ -9,8 +9,8 @@ function build_drive(s)
 %     init      MATLAB code of the model workspace (machine, mechanics, converter)
 %     machine   'sm' (synchronous machine) or 'im' (induction machine)
 %     control   Control system, see blocks.add_control_system
-%     w_M_ref   Speed reference step [time, before, after]
-%     tau_L     Load torque step [time, before, after]
+%     w_M_ref   Speed reference steps [time, before, after], see blocks.add_step
+%     tau_L     Load torque steps
 %     scope     Scope signals {name, indices in [mdl; ctrl]}
 %     T_s       Sampling period (s)
 %     t_stop    Stop time (s)
@@ -52,23 +52,17 @@ y = blocks.port_y(sys, 'Machine', 'Outport', 2);
 blocks.align(sys, 'Mechanics', 'Inport', 1, y);
 
 % Sources
-add([sys '/w_M_ref'], 'built-in/Step', [90 0 120 30], ...
-    'Time', blocks.num(s.w_M_ref(1)), 'Before', blocks.num(s.w_M_ref(2)), ...
-    'After', blocks.num(s.w_M_ref(3)), 'SampleTime', '0');
+blocks.add_step([sys '/w_M_ref'], s.w_M_ref, [90 0 120 30]);
 blocks.align(sys, 'w_M_ref', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 1));
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
 blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 3));
-add([sys '/tau_L'], 'built-in/Step', [835 0 865 30], ...
-    'Time', blocks.num(s.tau_L(1)), 'Before', blocks.num(s.tau_L(2)), ...
-    'After', blocks.num(s.tau_L(3)), 'SampleTime', '0');
+blocks.add_step([sys '/tau_L'], s.tau_L, [835 0 865 30]);
 blocks.align(sys, 'tau_L', 'Outport', 1, blocks.port_y(sys, 'Mechanics', 'Inport', 2));
 
-% Machine signals [i_a i_b i_c w_M theta_M tau_M] to the output port 'mdl'
+% Machine signals [i_a i_b i_c w_M theta_M tau_M] for the output port 'mdl'
 add([sys '/Mux mdl'], 'built-in/Mux', [1060 0 1065 160], 'Inputs', '4');
 y = blocks.port_y(sys, 'Mechanics', 'Outport', 1);
 blocks.align(sys, 'Mux mdl', 'Inport', 2, y);
-add([sys '/mdl'], 'built-in/Outport', [1360 0 1390 14]);
-blocks.align(sys, 'mdl', 'Inport', 1, blocks.port_y(sys, 'Mux mdl', 'Outport', 1));
 
 % Signal flow. The current is fed back above the row, and the speed and the angle
 % below it, in lanes below the blocks.
@@ -87,7 +81,6 @@ blocks.connect(sys, 'Machine/2', 'Mechanics/1');
 blocks.connect(sys, 'tau_L/1', 'Mechanics/2');
 blocks.connect(sys, 'Mechanics/1', 'Mux mdl/2');
 blocks.connect(sys, 'Mechanics/2', 'Mux mdl/3');
-blocks.connect(sys, 'Mux mdl/1', 'mdl/1');
 blocks.route(sys, 'Machine/1', 'Mux mdl/1', 'x', 1045);
 blocks.route(sys, 'Machine/2', 'Mux mdl/4', 'x', 815);
 blocks.route(sys, 'Machine/1', [cs '/2'], 'x', 800, 'y', y_top, 'x', 60);
@@ -104,30 +97,8 @@ switch s.machine
         blocks.route(sys, 'Mechanics/1', [cs '/4'], 'x', 1010, 'y', y_w_M, 'x', 140);
 end
 
-% Scope, the signals selected from [mdl; ctrl]
-add([sys '/Mux scope'], 'built-in/Mux', [1120 0 1125 80], 'Inputs', '2');
-blocks.align(sys, 'Mux scope', 'Inport', 2, y_ctrl);
-n = size(s.scope, 1);
-add([sys '/Scope'], 'built-in/Scope', [1270 0 1300 40*n], ...
-    'NumInputPorts', num2str(n));
-blocks.align(sys, 'Scope', 'Inport', 2, blocks.port_y(sys, 'Mux scope', 'Outport', 1));
-for k = 1:n
-    sel = s.scope{k, 1};
-    add([sys '/' sel], 'built-in/Selector', [1180 0 1230 20], ...
-        'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', ...
-        'Indices', mat2str(s.scope{k, 2}), 'InputPortWidth', '-1');
-    blocks.align(sys, sel, 'Outport', 1, blocks.port_y(sys, 'Scope', 'Inport', k));
-    blocks.route(sys, 'Mux scope/1', [sel '/1'], 'x', 1150);
-    blocks.connect(sys, [sel '/1'], sprintf('Scope/%d', k));
-end
-blocks.route(sys, 'Mux mdl/1', 'Mux scope/1', 'x', 1090);
-blocks.route(sys, [cs '/2'], 'Mux scope/2', 'x', 320, 'y', y_ctrl);
-
-% Monitored signals of the control system to the output port 'ctrl'
-pos = get_param([sys '/Scope'], 'Position');
-add([sys '/ctrl'], 'built-in/Outport', [1360 0 1390 14]);
-blocks.align(sys, 'ctrl', 'Inport', 1, pos(4) + 40);
-blocks.route(sys, [cs '/2'], 'ctrl/1', 'x', 320, 'y', y_ctrl, 'x', 1100);
+% Output ports and the scope
+blocks.add_outputs(sys, cs, s.scope, 1120, y_ctrl);
 
 save_system(sys, slx);
 fprintf('Saved %s\n', slx);

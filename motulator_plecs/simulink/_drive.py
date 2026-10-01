@@ -11,7 +11,7 @@ from motulator_plecs._common import ControlBlock, StepSignal
 from motulator_plecs._drive import MDL_OUTPUTS
 from motulator_plecs._schematic import _fmt
 from motulator_plecs.simulink._common import (
-    _m_step,
+    _m_steps,
     scope_indices,
     simulate,
     write_script,
@@ -75,8 +75,8 @@ def write_drive_model(
     fields = [
         ("init", init),
         ("machine", machine),
-        ("w_M_ref", _m_step(w_M_ref)),
-        ("tau_L", _m_step(tau_L)),
+        ("w_M_ref", _m_steps(w_M_ref)),
+        ("tau_L", _m_steps(tau_L)),
         ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),
     ]
     return write_script(

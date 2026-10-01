@@ -23,14 +23,17 @@ from typing import Any, cast
 
 import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
+import motulator.grid.control as grid_control
+import motulator.grid.model as grid_model
 import numpy as np
 import pytest
 from motulator.common.control._base import ControlSystem, TimeSeries
-from motulator.common.utils import complex2abc
+from motulator.common.utils._utils import wrap
 from motulator.drive import model
 from motulator.drive.control._base import VectorControlSystem
+from motulator.grid import utils as grid_utils
 
-from motulator_plecs import im, sm
+from motulator_plecs import grid, im, sm
 from motulator_plecs._common import C_SOURCES, ControlBlock
 from motulator_plecs.simulink._sfunction import control_sfunction
 from tests.c_port import GCC, arr
@@ -59,6 +62,16 @@ def fvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 @pytest.fixture(scope="module")
 def cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(im.CVC_BLOCK, tmp_path_factory.mktemp("cvc"))
+
+
+@pytest.fixture(scope="module")
+def gfl(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(grid.GFL_BLOCK, tmp_path_factory.mktemp("gfl"))
+
+
+@pytest.fixture(scope="module")
+def gfm(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(grid.GFM_BLOCK, tmp_path_factory.mktemp("gfm"))
 
 
 def sfunction_params(block: ControlBlock, values: dict[str, Any]) -> list[Any]:
@@ -92,30 +105,35 @@ def start(dll: ctypes.CDLL, params: list[Any]) -> str | None:
     return None if err is None else err.decode()
 
 
-class SFunctionControlSystem(VectorControlSystem):
+class SFunctionControlSystem(ControlSystem):
     """Control system running the S-function, for closed-loop simulations."""
 
     def __init__(
         self,
-        ctrl: VectorControlSystem,
         dll: ctypes.CDLL,
         block: ControlBlock,
-        sensor: str,
+        T_s: float,
+        inputs: Callable[[Any, float], list[float]],
     ) -> None:
-        super().__init__(ctrl.vector_ctrl, ctrl.speed_ctrl)  # For the measurements
-        self.ext_ref = ctrl.ext_ref
-        self.T_s = cast(Any, ctrl.vector_ctrl).cfg.T_s
+        super().__init__()
         self.dll = dll
-        self.sensor = sensor  # Measured in the sensored mode: theta_M or w_M
+        self.T_s = T_s
+        self.inputs = inputs  # Inputs of the S-function from the model and the time
         self.names = ["d_a", "d_b", "d_c", *block.signals]
         self.y = (ctypes.c_double * len(self.names))()
 
-    def run_control_loop(self, mdl: model.Drive) -> tuple[float, Sequence[float]]:
-        meas = self.get_measurement(mdl)
-        w_M_ref = cast(Any, self.ext_ref.w_M)(self.t)
-        x = getattr(meas, self.sensor) or 0.0
-        u = [w_M_ref, *complex2abc(meas.i_c_ab), meas.u_dc, x]
-        self.dll.sfun_step(arr(u), self.y)
+    # The control loop is overridden, so the steps of the protocol are not used
+    def get_measurement(self, mdl: Any) -> Any:
+        raise NotImplementedError
+
+    def get_feedback(self, meas: Any) -> Any:
+        raise NotImplementedError
+
+    def compute_output(self, fbk: Any) -> Any:
+        raise NotImplementedError
+
+    def run_control_loop(self, mdl: Any) -> tuple[float, Sequence[float]]:
+        self.dll.sfun_step(arr(self.inputs(mdl, self.t)), self.y)
         out = np.array(self.y)
         self.save(
             self.t, out=SimpleNamespace(**dict(zip(self.names, out, strict=True)))
@@ -128,15 +146,21 @@ class SFunctionControlSystem(VectorControlSystem):
 
 
 def compare(
-    build: Callable[[], tuple[model.Drive, VectorControlSystem]],
-    dll: ctypes.CDLL,
-    block: ControlBlock,
-    sensor: str,
+    build: Callable[[], tuple[Any, Any]],
+    simulation: Callable[[Any, Any], Any],
+    sfun: Callable[[Any], SFunctionControlSystem],
     signals: dict[str, Callable[[Any, Any], Any]],
+    t_stop: float,
 ) -> None:
-    """Simulate with the control systems of motulator and of the S-function."""
+    """
+    Simulate with the control systems of motulator and of the S-function.
+
+    The system is built twice by `build`, and `sfun` creates the control system of
+    the S-function from the control system of motulator (for its references).
+
+    """
     mdl, ctrl = build()
-    res = model.Simulation(mdl, ctrl).simulate(t_stop=0.3)
+    res = simulation(mdl, ctrl).simulate(t_stop=t_stop)
     fbk, ref = res.ctrl.fbk, res.ctrl.ref
     py = {
         "d_a": ref.d_abc[:, 0],
@@ -145,14 +169,33 @@ def compare(
         **{name: f(fbk, ref) for name, f in signals.items()},
     }
     mdl, ctrl = build()
-    sl_ctrl = SFunctionControlSystem(ctrl, dll, block, sensor)
-    res_sl = model.Simulation(mdl, sl_ctrl).simulate(t_stop=0.3)
+    res_sl = simulation(mdl, sfun(ctrl)).simulate(t_stop=t_stop)
     assert np.allclose(res.ctrl.t, res_sl.ctrl.t)
     for name, value in py.items():
         err = np.max(np.abs(getattr(res_sl.ctrl.out, name) - value))
         scale = np.max(np.abs(value))
         print(f"  {name}: max error {err:.3g} (max value {scale:.3g})")
         assert err <= 1e-8 * max(scale, 1.0), name
+
+
+def drive_sfun(
+    dll: ctypes.CDLL, block: ControlBlock, sensor: str
+) -> Callable[[VectorControlSystem], SFunctionControlSystem]:
+    """S-function control system of a drive, with the measured angle or speed."""
+
+    def sfun(ctrl: VectorControlSystem) -> SFunctionControlSystem:
+        def inputs(mdl: model.Drive, t: float) -> list[float]:
+            mech = mdl.mechanics
+            x = wrap(mech.meas_position()) if sensor == "theta_M" else mech.meas_speed()
+            i_s_abc = mdl.machine.meas_currents()
+            u_dc = mdl.converter.meas_dc_voltage()
+            return [cast(Any, ctrl.ext_ref.w_M)(t), *i_s_abc, u_dc, x]
+
+        return SFunctionControlSystem(
+            dll, block, cast(Any, ctrl.vector_ctrl).cfg.T_s, inputs
+        )
+
+    return sfun
 
 
 # %%
@@ -203,7 +246,8 @@ def test_flux_vector_control(fvc: ctypes.CDLL, sensorless: bool) -> None:
         "psi_s_ref": lambda _, ref: ref.psi_s,
         "psi_s": lambda fbk, _: np.abs(fbk.psi_s),
     }
-    compare(build, fvc, sm.FVC_BLOCK, "theta_M", signals)
+    sfun = drive_sfun(fvc, sm.FVC_BLOCK, "theta_M")
+    compare(build, model.Simulation, sfun, signals, 0.3)
     fvc.sfun_terminate()
 
 
@@ -239,5 +283,110 @@ def test_current_vector_control(cvc: ctypes.CDLL, sensorless: bool) -> None:
         "tau_M_ref": lambda _, ref: ref.tau_M,
         "psi_R": lambda fbk, _: np.abs(fbk.psi_R),
     }
-    compare(build, cvc, im.CVC_BLOCK, "w_M", signals)
+    sfun = drive_sfun(cvc, im.CVC_BLOCK, "w_M")
+    compare(build, model.Simulation, sfun, signals, 0.3)
     cvc.sfun_terminate()
+
+
+# %%
+NOM = grid_utils.NominalValues(U=400, I=18, f=50, P=12.5e3)
+BASE = grid_utils.BaseValues.from_nominal(NOM)
+
+
+def grid_sfun(
+    dll: ctypes.CDLL, block: ControlBlock
+) -> Callable[[grid_control.GridConverterControlSystem], SFunctionControlSystem]:
+    """S-function control system of a grid converter."""
+
+    def sfun(ctrl: grid_control.GridConverterControlSystem) -> SFunctionControlSystem:
+        ext_ref = cast(Any, ctrl.ext_ref)
+
+        def inputs(mdl: grid_model.GridConverterSystem, t: float) -> list[float]:
+            i_c_abc = mdl.ac_filter.meas_currents()
+            u_dc = mdl.converter.meas_dc_voltage()
+            if block is grid.GFL_BLOCK:
+                u_g_line = mdl.ac_filter.meas_pcc_voltages()
+                return [ext_ref.p_g(t), ext_ref.q_g(t), *i_c_abc, *u_g_line, u_dc]
+            return [ext_ref.p_g(t), ext_ref.v_c, *i_c_abc, u_dc]
+
+        T_s = grid._control_block(ctrl)[1]["T_s"]
+        return SFunctionControlSystem(dll, block, T_s, inputs)
+
+    return sfun
+
+
+def test_grid_following_control(gfl: ctypes.CDLL) -> None:
+    """The S-function of grid-following control should agree with motulator."""
+
+    def build() -> tuple[Any, grid_control.GridConverterControlSystem]:
+        ac_filter = grid_model.LCLFilter(
+            L_fc=0.073 * BASE.L, L_fg=0.073 * BASE.L, C_f=0.043 * BASE.C, u_f0_ab=BASE.u
+        )
+        mdl = grid_model.GridConverterSystem(
+            grid_model.VoltageSourceConverter(u_dc=650),
+            ac_filter,
+            grid_model.ThreePhaseSource(w_g=BASE.w, e_g=BASE.u),
+        )
+        cfg = grid_control.CurrentVectorControllerCfg(
+            i_max=1.5 * BASE.i, L=0.073 * BASE.L, T_s=100e-6
+        )
+        ctrl = grid_control.GridConverterControlSystem(
+            grid_control.CurrentVectorController(cfg)
+        )
+        ctrl.set_power_ref(lambda t: (t > 0.02) * 5e3)
+        ctrl.set_reactive_power_ref(lambda t: (t > 0.04) * 4e3)
+        return mdl, ctrl
+
+    _, values = grid._control_block(build()[1])
+    assert start(gfl, sfunction_params(grid.GFL_BLOCK, values)) is None
+    signals = {
+        "p_g": lambda fbk, _: fbk.p_g,
+        "q_g": lambda fbk, _: fbk.q_g,
+        "w_g": lambda fbk, _: fbk.w_g,
+        "i_c_d_ref": lambda _, ref: ref.i_c.real,
+    }
+    sfun = grid_sfun(gfl, grid.GFL_BLOCK)
+    compare(build, grid_model.Simulation, sfun, signals, 0.06)
+    gfl.sfun_terminate()
+
+
+@pytest.mark.parametrize("power_limitation", [False, True])
+def test_grid_forming_control(gfm: ctypes.CDLL, power_limitation: bool) -> None:
+    """The S-function of grid-forming control should agree with motulator."""
+
+    def build() -> tuple[Any, grid_control.GridConverterControlSystem]:
+        ac_filter = grid_model.LFilter(
+            L_f=0.15 * BASE.L, R_f=0.05 * BASE.Z, L_g=0.74 * BASE.L
+        )
+        mdl = grid_model.GridConverterSystem(
+            grid_model.VoltageSourceConverter(u_dc=650),
+            ac_filter,
+            grid_model.ThreePhaseSource(w_g=BASE.w, e_g=BASE.u),
+        )
+        cfg = grid_control.ObserverBasedGridFormingControllerCfg(
+            i_max=1.3 * BASE.i,
+            L=0.35 * BASE.L,
+            R=0.05 * BASE.Z,
+            R_a=0.2 * BASE.Z,
+            u_nom=BASE.u,
+            w_nom=BASE.w,
+            i_d_max=0.85 * 1.3 * BASE.i if power_limitation else None,
+        )
+        ctrl = grid_control.GridConverterControlSystem(
+            grid_control.ObserverBasedGridFormingController(cfg)
+        )
+        ctrl.set_power_ref(lambda t: (t > 0.05) * NOM.P - (t > 0.15) * 2 * NOM.P)
+        ctrl.set_ac_voltage_ref(BASE.u)
+        return mdl, ctrl
+
+    _, values = grid._control_block(build()[1])
+    assert start(gfm, sfunction_params(grid.GFM_BLOCK, values)) is None
+    signals = {
+        "p_g": lambda fbk, _: fbk.p_g,
+        "q_g": lambda fbk, _: fbk.q_g,
+        "v_c": lambda fbk, _: np.abs(fbk.v_c),
+        "theta_c": lambda fbk, _: fbk.theta_c,
+    }
+    sfun = grid_sfun(gfm, grid.GFM_BLOCK)
+    compare(build, grid_model.Simulation, sfun, signals, 0.25)
+    gfm.sfun_terminate()
