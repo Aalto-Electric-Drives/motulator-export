@@ -1,8 +1,9 @@
 name: CI
 
-# The C port of the control algorithms (motulator_plecs/c) must stay consistent with
+# The C port of the control algorithms (motulator_export/c) must stay consistent with
 # motulator. The tests compile the C sources with gcc and compare the results with
-# motulator step by step. PLECS is not needed. The weekly run tests against the main
+# motulator step by step, and so do the tests of the generated Simulink S-functions
+# (with a mock of the Simulink API). Neither PLECS nor MATLAB is needed. The weekly run tests against the main
 # branch of motulator to detect breaking changes early.
 
 on:
@@ -37,7 +38,7 @@ jobs:
       uses: actions/setup-python@v7
       with:
         python-version: '3.12'
-    - name: Install PyTorch (CPU) and motulator-plecs
+    - name: Install PyTorch (CPU) and motulator-export
       run: |
         python -m pip install --upgrade pip setuptools
         pip install --index-url https://download.pytorch.org/whl/cpu torch

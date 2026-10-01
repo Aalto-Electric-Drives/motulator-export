@@ -26,7 +26,8 @@ from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import control, model, utils
 
-from motulator_plecs import StepSignal, grid, sampled_step
+from motulator_export import StepSignal, sampled_step
+from motulator_export.plecs import grid
 
 T_STOP = 1.4
 nom = utils.NominalValues(U=400, I=18, f=50, P=12.5e3)

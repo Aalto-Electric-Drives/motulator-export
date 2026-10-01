@@ -23,7 +23,7 @@ from motulator.common.model._converter import (
     VoltageSourceConverter,
 )
 
-from motulator_plecs._schematic import (
+from motulator_export.plecs._schematic import (
     Point,
     Tap,
     Terminal,
@@ -39,7 +39,7 @@ from motulator_plecs._schematic import (
 
 # Directory of the C sources, written into the models as a path relative to the
 # model file (the placeholder C_DIR in the C-Script code)
-C_SOURCES = Path(__file__).parent / "c"
+C_SOURCES = Path(__file__).parents[1] / "c"
 C_DIR = "$(C_DIR)"
 
 

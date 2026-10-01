@@ -14,5 +14,11 @@ dist/
 *.autosave
 *_tmp.plecs
 
+# Simulink models, compiled S-functions, and caches built by the generated scripts
+examples/simulink/*.slx
+*.mex*
+*.slxc
+slprj/
+
 # macOS specific
 .DS_Store
