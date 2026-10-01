@@ -15,14 +15,17 @@ MinGW-w64 (Windows), not MSVC.
 Currently supported:
 
 - Synchronous machine: `SynchronousMachinePars`, modeled in rotor coordinates with
-  the stator flux linkage as the state, as in motulator
+  the stator flux linkage as the state, as in motulator, or
+  `SpatialSaturatedSynchronousMachinePars` with a GradNet current map with spatial
+  harmonics, modeled by the C-Script code of the PLECS model in an S-function
 - Mechanical system (`MechanicalSystem` without friction)
 - Converter: carrier comparison (`pwm=True` in `Drive`) with a stiff DC bus
   (`VoltageSourceConverter`). The carrier comparison uses the zero-crossing
   detection of Simulink. The computational delay of one sampling period is a Unit
   Delay block.
-- Flux-vector control (`FluxVectorController`) with `SynchronousMachinePars` in the
-  sensorless or sensored mode, and a speed controller (`SpeedController`) in
+- Flux-vector control (`FluxVectorController`) with `SynchronousMachinePars` or
+  `SaturatedSynchronousMachinePars` with a GradNet flux map in the sensorless or
+  sensored mode, and a speed controller (`SpeedController`) in
   `VectorControlSystem`
 
 The model can be simulated from Python via the MATLAB Engine API for Python
@@ -35,7 +38,6 @@ from pathlib import Path
 import numpy as np
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.model import Drive
-from motulator.drive.utils._parameters import SynchronousMachinePars
 
 from motulator_plecs import sm
 from motulator_plecs._common import StepSignal
@@ -44,6 +46,7 @@ from motulator_plecs.simulink._drive import (
     simulate_drive,
     write_drive_model,
 )
+from motulator_plecs.simulink._sfunction import gradnet_machine_sfunction
 
 BLOCK = sm.FVC_BLOCK
 
@@ -51,8 +54,6 @@ BLOCK = sm.FVC_BLOCK
 def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
     sm._check_supported(mdl, ctrl)  # The PLECS export supports a superset
-    if type(mdl.machine.par) is not SynchronousMachinePars:
-        raise NotImplementedError("Only SynchronousMachinePars supported")
     check_supported_converter(mdl)
 
 
@@ -97,11 +98,15 @@ def write_model(
     """
     _check_supported(mdl, ctrl)
     values, flux_map = sm.export_mask_values(ctrl, speed_ctrl_args)
-    if flux_map is not None:
-        raise NotImplementedError("GradNet flux map not supported")
     variables = sm.export_plant_variables(mdl)
+    if flux_map is not None:
+        variables += [(f"est_flux_map.{f}", flux_map[f]) for f in sm.GRADNET_FIELDS]
+    if sm._has_gradnet_plant(mdl):
+        machine, sfunctions = "gn", [gradnet_machine_sfunction()]
+    else:
+        machine, sfunctions = "sm", []
     return write_drive_model(
-        path, BLOCK, values, variables, "sm", w_M_ref, tau_L, t_stop
+        path, BLOCK, values, variables, machine, w_M_ref, tau_L, t_stop, sfunctions
     )
 
 

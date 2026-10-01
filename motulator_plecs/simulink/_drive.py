@@ -1,5 +1,6 @@
 """Common parts of the Simulink export of machine drives (see `build_drive.m`)."""
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from motulator_plecs.simulink._common import (
     simulate,
     write_script,
 )
+from motulator_plecs.simulink._sfunction import SFunction
 
 
 def check_supported_converter(mdl: Drive) -> None:
@@ -33,9 +35,10 @@ def write_drive_model(
     w_M_ref: StepSignal,
     tau_L: StepSignal,
     t_stop: float,
+    sfunctions: Sequence[SFunction] = (),
 ) -> Path:
     """
-    Write the S-function and the MATLAB script building the model of a drive.
+    Write the S-functions and the MATLAB script building the model of a drive.
 
     Parameters
     ----------
@@ -48,13 +51,17 @@ def write_drive_model(
     variables : list[tuple[str, Any]]
         Workspace variables of the system model.
     machine : str
-        "sm" (synchronous machine) or "im" (induction machine).
+        "sm" (synchronous machine), "gn" (synchronous machine with a GradNet current
+        map, see `gradnet_machine_sfunction`), or "im" (induction machine).
     w_M_ref : StepSignal
         Speed reference (mechanical rad/s).
     tau_L : StepSignal
         External load torque (Nm).
     t_stop : float
         Simulation stop time (s).
+    sfunctions : Sequence[SFunction], optional
+        S-function of the machine ("gn"), whose parameters are passed to the
+        builder.
 
     Returns
     -------
@@ -79,8 +86,10 @@ def write_drive_model(
         ("tau_L", _m_steps(tau_L)),
         ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),
     ]
+    if sfunctions:
+        fields.append(("machine_params", sfunctions[0].params))
     return write_script(
-        path, block, values, fields, "build_drive", values["T_s"], t_stop
+        path, block, values, fields, "build_drive", values["T_s"], t_stop, sfunctions
     )
 
 

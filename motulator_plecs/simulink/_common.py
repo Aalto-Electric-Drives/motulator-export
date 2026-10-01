@@ -116,9 +116,10 @@ def write_script(
     builder: str,
     T_s: float,
     t_stop: float,
+    sfunctions: Sequence[SFunction] = (),
 ) -> Path:
     """
-    Write the S-function and the MATLAB script building the Simulink model.
+    Write the S-functions and the MATLAB script building the Simulink model.
 
     Parameters
     ----------
@@ -137,6 +138,9 @@ def write_script(
         Sampling period (s).
     t_stop : float
         Simulation stop time (s).
+    sfunctions : Sequence[SFunction], optional
+        Other S-functions of the model (e.g., of the system model), compiled by the
+        builder.
 
     Returns
     -------
@@ -145,7 +149,8 @@ def write_script(
 
     """
     sfun = control_sfunction(block)
-    sfun.write(path.parent)
+    for f in (sfun, *sfunctions):
+        f.write(path.parent)
     try:
         src = Path(os.path.relpath(SIMULINK_SOURCES, path.resolve().parent))
     except ValueError:  # Different drives (Windows)

@@ -28,22 +28,29 @@ import motulator.grid.model as grid_model
 import numpy as np
 import pytest
 from motulator.common.control._base import ControlSystem, TimeSeries
+from motulator.common.utils import complex2abc
 from motulator.common.utils._utils import wrap
 from motulator.drive import model
-from motulator.drive.control._base import VectorControlSystem
+from motulator.drive.control._base import Measurements, VectorControlSystem
 from motulator.grid import utils as grid_utils
 
 from motulator_plecs import grid, im, sm
 from motulator_plecs._common import C_SOURCES, ControlBlock
-from motulator_plecs.simulink._sfunction import control_sfunction
+from motulator_plecs.simulink._sfunction import (
+    SFunction,
+    control_sfunction,
+    gradnet_machine_sfunction,
+)
 from tests.c_port import GCC, arr
 
 MOCK = Path(__file__).parent / "simulink_mock"
 
 
-def compile_sfunction(block: ControlBlock, out_dir: Path) -> ctypes.CDLL:
-    """Generate the S-function of the block and compile it against the mock."""
-    src = control_sfunction(block).write(out_dir)
+def compile_sfunction(sfun: ControlBlock | SFunction, out_dir: Path) -> ctypes.CDLL:
+    """Generate the S-function (of a block) and compile it against the mock."""
+    if isinstance(sfun, ControlBlock):
+        sfun = control_sfunction(sfun)
+    src = sfun.write(out_dir)
     lib = out_dir / "libsfun.so"
     cmd = [*GCC, "-Wall", "-Werror", "-Wno-unused-function", "-DMATLAB_MEX_FILE"]
     cmd += [f"-I{MOCK}", f"-I{C_SOURCES}", str(src), "-lm", "-o", str(lib)]
@@ -74,30 +81,38 @@ def gfm(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(grid.GFM_BLOCK, tmp_path_factory.mktemp("gfm"))
 
 
-def sfunction_params(block: ControlBlock, values: dict[str, Any]) -> list[Any]:
+def sfunction_params(
+    block: ControlBlock, values: dict[str, Any], flux_map: dict[str, Any] | None = None
+) -> list[Any]:
     """
     Values of the S-function parameters (the C-Script parameters) of a block.
 
-    The values are those of the mask; without a GradNet flux map, its parameters
-    are empty.
+    The values are those of the mask, and the GradNet flux map gives the parameters
+    of the mask initialization (empty without a flux map).
 
     """
     params = block.cscript_params or [m.variable for m in block.mask_params]
     out = []
     for p in params:
         if p == "isempty(psi_s_dq_fcn)":
-            out.append(1.0)
+            out.append(float(flux_map is None))
         elif p.startswith("gn_"):
-            out.append(None)
+            out.append(None if flux_map is None else flux_map[p[3:]])
         else:
             out.append(values[p])
     return out
 
 
 def start(dll: ctypes.CDLL, params: list[Any]) -> str | None:
-    """Start the S-function with the parameters, returning the error message."""
+    """
+    Start the S-function with the parameters, returning the error message.
+
+    The parameters are passed as column vectors, the matrices in column-major order
+    as in MATLAB.
+
+    """
     arrays = [
-        np.zeros(0) if p is None else np.atleast_1d(np.asarray(p, dtype=float))
+        np.zeros(0) if p is None else np.asarray(p, dtype=float).ravel(order="F")
         for p in params
     ]
     numel = (ctypes.c_int * len(arrays))(*[a.size for a in arrays])
@@ -390,3 +405,110 @@ def test_grid_forming_control(gfm: ctypes.CDLL, power_limitation: bool) -> None:
     sfun = grid_sfun(gfm, grid.GFM_BLOCK)
     compare(build, grid_model.Simulation, sfun, signals, 0.25)
     gfm.sfun_terminate()
+
+
+# %%
+MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
+FLUX_MAP = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.pth"
+CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.pth"
+RTOL = 1e-4  # motulator evaluates the GradNets in single precision
+
+
+@pytest.fixture(scope="module")
+def gn_machine(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    path = tmp_path_factory.mktemp("gn_machine")
+    return compile_sfunction(gradnet_machine_sfunction(), path)
+
+
+def test_gradnet_flux_vector_control(fvc: ctypes.CDLL) -> None:
+    """The S-function with a GradNet flux map should agree with motulator."""
+    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
+
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP, activation=gn.PNormGradient))
+    par = sm_control.SaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
+    )
+    cfg = sm_control.FluxVectorControllerCfg(
+        i_s_max=17.6, alpha_i=0, alpha_o=2 * pi * 8, J=0.05, sensorless=False
+    )
+    speed = {"J": 0.05, "alpha_s": 2 * pi * 4}
+    ctrl = VectorControlSystem(
+        sm_control.FluxVectorController(par, cfg), sm_control.SpeedController(**speed)
+    )
+    values, g = sm.export_mask_values(ctrl, speed)
+    assert start(fvc, sfunction_params(sm.FVC_BLOCK, values, g)) is None
+
+    # Measurements: accelerating rotor, current vector in rotor coordinates
+    T_s, n = cfg.T_s, 2000
+    t = np.arange(n) * T_s
+    w_M = 100.0 * t / t[-1]
+    theta_M = np.cumsum(w_M) * T_s
+    i_s_dq = (5 + 10 * np.sin(2 * pi * 5 * t)) + 1j * (8 + 12 * np.cos(2 * pi * 3 * t))
+    i_s_ab = np.exp(1j * 2 * theta_M) * i_s_dq
+    ctrl.set_speed_ref(lambda t_: 50.0 if t_ > 0.05 else 0.0)
+    names = ["d_a", "d_b", "d_c", *sm.FVC_BLOCK.signals]
+    compared = ["d_a", "d_b", "d_c", "w_M", "tau_M_ref", "psi_s_ref", "psi_s"]
+    y = (ctypes.c_double * len(names))()
+    res_sl, res_py = np.zeros((n, 7)), np.zeros((n, 7))
+    for k in range(n):
+        th = float(wrap(theta_M[k]))
+        meas = Measurements(i_s_ab[k], 540.0, w_M[k], th)
+        fbk = cast(Any, ctrl.get_feedback(meas))
+        ref = cast(Any, ctrl.compute_output(fbk))
+        ctrl.update(ref, fbk)
+        res_py[k] = [*ref.d_abc, fbk.w_M, ref.tau_M, ref.psi_s, abs(fbk.psi_s)]
+        fvc.sfun_step(arr([ref.w_M, *complex2abc(i_s_ab[k]), 540.0, th]), y)
+        out = dict(zip(names, y, strict=True))
+        res_sl[k] = [out[name] for name in compared]
+    fvc.sfun_terminate()
+    err = np.max(np.abs(res_sl - res_py), axis=0)
+    scale = np.max(np.abs(res_py), axis=0)
+    for name, e, s in zip(compared, err, scale, strict=True):
+        print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
+    assert np.all(err <= RTOL * np.maximum(scale, 1.0))
+
+
+def test_gradnet_machine(gn_machine: ctypes.CDLL) -> None:
+    """The S-function of the GradNet machine should agree with motulator."""
+    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
+
+    current_map = gn.CurrentMapWithHarmonics(
+        gn.load_gradnet(CURRENT_MAP, activation=gn.Softmax)
+    )
+    par = model.SpatialSaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, magnetic_map_fcn=current_map
+    )
+    machine = model.SynchronousMachine(par)
+    g = sm.export_gradnet(current_map)
+    params = [2.0, 0.63, g["k"], *(g[f] for f in sm.GRADNET_FIELDS)]
+    assert start(gn_machine, params) is None
+    x = (ctypes.c_double * 2)()
+    gn_machine.sfun_states(x, None)
+    assert abs(x[0] - par.psi_f) < RTOL * par.psi_f  # Initial state
+
+    rng = np.random.default_rng(1)
+    y, dx = (ctypes.c_double * 8)(), (ctypes.c_double * 2)()
+    err, scale = np.zeros(3), np.zeros(3)
+    for _ in range(200):
+        psi = rng.uniform(-0.3, 1.0) + 1j * rng.uniform(-0.8, 0.8)
+        theta_M, w_M = rng.uniform(-pi, pi), rng.uniform(-200, 200)
+        u_s_ab = complex(rng.uniform(-300, 300), rng.uniform(-300, 300))
+        u_a, u_b, u_c = complex2abc(u_s_ab)
+        gn_machine.sfun_states(None, arr([psi.real, psi.imag]))
+        gn_machine.sfun_step(arr([-(u_a - u_c), -(u_b - u_c), theta_M, w_M]), y)
+        gn_machine.sfun_derivatives(dx)
+        # motulator
+        machine.state.psi_s_dq = psi
+        machine.state.exp_j_theta_m = np.exp(1j * 2 * theta_M)
+        machine.inp.u_s_ab, machine.inp.w_M = u_s_ab, w_M
+        machine.set_outputs(0.0)
+        d_psi = machine.rhs(0.0)[0]
+        sl = [np.array(y[2:5]), y[5], dx[0] + 1j * dx[1]]
+        py = [complex2abc(machine.out.i_s_ab), machine.out.tau_M, d_psi]
+        err = np.maximum(
+            err, [np.max(np.abs(a - b)) for a, b in zip(sl, py, strict=True)]
+        )
+        scale = np.maximum(scale, [np.max(np.abs(b)) for b in py])
+    for name, e, s in zip(["i_s_abc", "tau_M", "d_psi_s_dq"], err, scale, strict=True):
+        print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
+    assert np.all(err <= RTOL * scale)

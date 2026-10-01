@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from motulator_plecs import sm
 from motulator_plecs._common import C_DIR, ControlBlock
 
 # C-Script macros in terms of the Simulink API (the SimStruct is S in the callbacks)
@@ -200,4 +201,29 @@ def control_sfunction(block: ControlBlock) -> SFunction:
         output_widths=[3, *(len(v) for v in block.outputs.values())],
         params=[f"double({p})" for p in params],
         sample_time=variables.index("T_s"),
+    )
+
+
+def gradnet_machine_sfunction() -> SFunction:
+    """
+    S-function of the synchronous machine with a GradNet current map.
+
+    The code is that of the C-Script block of the PLECS model. The inputs are the
+    negated line-to-line voltages -u_ac and -u_bc, the rotor angle, and the rotor
+    speed, and the outputs are the phase currents a and b, the phase currents, the
+    torque, the speed, and the angle. The stator flux linkage is the continuous
+    state. The parameters are in the model workspace (`machine`).
+
+    """
+    params = ["machine.n_p", "machine.R_s", "machine.k"]
+    params += [f"machine.current_map.{f}" for f in sm.GRADNET_FIELDS]
+    return SFunction(
+        name="sfun_gradnet_machine",
+        code=sm._machine_cscript_code(),
+        input_widths=[2, 1, 1],
+        output_widths=[2, 3, 1, 1, 1],
+        params=[f"double({p})" for p in params],
+        sample_time=None,
+        num_cont_states=2,
+        feedthrough=[0, 1, 1],
     )
