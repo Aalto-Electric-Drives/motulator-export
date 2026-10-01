@@ -8,16 +8,16 @@ import numpy as np
 from motulator.common.model._converter import VoltageSourceConverter
 from motulator.drive.model import Drive
 
-from motulator_plecs._common import ControlBlock, StepSignal
-from motulator_plecs._drive import MDL_OUTPUTS
-from motulator_plecs._schematic import _fmt
-from motulator_plecs.simulink._common import (
+from motulator_export.plecs._common import ControlBlock, StepSignal
+from motulator_export.plecs._drive import MDL_OUTPUTS
+from motulator_export.plecs._schematic import _fmt
+from motulator_export.simulink._common import (
     _m_steps,
     scope_indices,
     simulate,
     write_script,
 )
-from motulator_plecs.simulink._sfunction import SFunction
+from motulator_export.simulink._sfunction import SFunction
 
 
 def check_supported_converter(mdl: Drive) -> None:

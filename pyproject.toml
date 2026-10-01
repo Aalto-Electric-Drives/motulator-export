@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "motulator-plecs"
+name = "motulator-export"
 version = "0.1.0"
 dependencies = [
     "motulator>=0.8.0",
@@ -34,11 +34,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Aalto-Electric-Drives/motulator-plecs"
+Homepage = "https://github.com/Aalto-Electric-Drives/motulator-export"
 motulator = "https://github.com/Aalto-Electric-Drives/motulator"
 
 [tool.hatch.build.targets.wheel]
-packages = ["motulator_plecs"]
+packages = ["motulator_export"]
 
 [tool.ruff]
 line-length = 88
@@ -59,6 +59,6 @@ skip-magic-trailing-comma = true
 testpaths = ["tests"]
 
 [tool.pyright]
-include = ["motulator_plecs", "examples", "tests"]
+include = ["motulator_export", "examples", "tests"]
 exclude = ["**/__pycache__", "**/.pytest_cache"]
 typeCheckingMode = "standard"

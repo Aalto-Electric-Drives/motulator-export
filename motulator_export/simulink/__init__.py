@@ -9,6 +9,6 @@ converter systems with grid-following or grid-forming control.
 
 """
 
-from motulator_plecs.simulink import grid, im, sm
+from motulator_export.simulink import grid, im, sm
 
 __all__ = ["grid", "im", "sm"]

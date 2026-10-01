@@ -2,7 +2,7 @@ function build_drive(s)
 %BUILD_DRIVE Build a Simulink model of a machine drive.
 %   BUILD_DRIVE(S) compiles the S-function of the control system, builds the model
 %   S.name, and saves it in the folder S.folder. The struct S is written by
-%   motulator_plecs.simulink, with the fields
+%   motulator_export.simulink, with the fields
 %
 %     name      Model name
 %     folder    Folder of the model, the S-function, and its compiled version

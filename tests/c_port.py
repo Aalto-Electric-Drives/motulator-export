@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from motulator_plecs._common import C_SOURCES
+from motulator_export.plecs._common import C_SOURCES
 
 # gcc for a shared library. With MinGW-w64 on Windows, the runtime libraries are
 # linked statically, since Python does not search PATH for the dependencies of a DLL.

@@ -25,8 +25,8 @@ from motulator.common.model import SolverCfg
 from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import model
 
-from motulator_plecs import sampled_step
-from motulator_plecs.simulink import grid
+from motulator_export import sampled_step
+from motulator_export.simulink import grid
 
 # %%
 if __name__ == "__main__":

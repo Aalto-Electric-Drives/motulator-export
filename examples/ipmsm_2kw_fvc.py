@@ -28,7 +28,8 @@ import numpy as np
 from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.drive import model
 
-from motulator_plecs import StepSignal, sampled_step, sm
+from motulator_export import StepSignal, sampled_step
+from motulator_export.plecs import sm
 
 T_STOP = 1.2
 W_M_REF = StepSignal(time=0.1, after=50.0)  # Speed reference (rad/s)

@@ -24,7 +24,8 @@ from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import control, model, utils
 
-from motulator_plecs import StepSignal, grid, sampled_step
+from motulator_export import StepSignal, sampled_step
+from motulator_export.plecs import grid
 
 T_STOP = 0.08
 P_G_REF = StepSignal(time=0.02, after=5e3)  # Active power reference (W)

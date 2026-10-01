@@ -1,7 +1,7 @@
 """
 Test the C port of the motulator control algorithms against motulator.
 
-The C sources in `motulator_plecs/c` are compiled into a shared library (requires
+The C sources in `motulator_export/c` are compiled into a shared library (requires
 gcc), and the results are compared with motulator: the root finding, the lookup
 tables of the reference generator, and the outputs of the complete control system
 for a sequence of measurements. PLECS is not needed.

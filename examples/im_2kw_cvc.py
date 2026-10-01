@@ -29,7 +29,8 @@ from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.common.utils import abc2complex
 from motulator.drive import model, utils
 
-from motulator_plecs import StepSignal, im, sampled_step
+from motulator_export import StepSignal, sampled_step
+from motulator_export.plecs import im
 
 T_STOP = 1.5
 nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)

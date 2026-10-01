@@ -43,4 +43,4 @@ After a change in the writers or the C port, regenerate the models by running th
 | `gfm_13kva_do.py`          | i_c_ab 9.4e-7, i_c_a 7.5e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
-In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 1e-4 relative), since motulator evaluates the GradNets in single precision, see [the C port](../motulator_plecs/c/README.md).
+In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 1e-4 relative), since motulator evaluates the GradNets in single precision, see [the C port](../motulator_export/c/README.md).

@@ -30,7 +30,8 @@ import numpy as np
 from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.drive import model, utils
 
-from motulator_plecs import StepSignal, sampled_step, sm
+from motulator_export import StepSignal, sampled_step
+from motulator_export.plecs import sm
 
 MODEL_DIR = Path(__file__).parent / "trained_models"
 nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)

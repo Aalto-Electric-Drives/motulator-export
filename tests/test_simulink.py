@@ -34,9 +34,9 @@ from motulator.drive import model
 from motulator.drive.control._base import Measurements, VectorControlSystem
 from motulator.grid import utils as grid_utils
 
-from motulator_plecs import grid, im, sm
-from motulator_plecs._common import C_SOURCES, ControlBlock
-from motulator_plecs.simulink._sfunction import (
+from motulator_export.plecs import grid, im, sm
+from motulator_export.plecs._common import C_SOURCES, ControlBlock
+from motulator_export.simulink._sfunction import (
     SFunction,
     control_sfunction,
     gradnet_machine_sfunction,

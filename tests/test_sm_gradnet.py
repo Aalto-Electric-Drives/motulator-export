@@ -30,7 +30,7 @@ from motulator.drive import model as mdl_model
 from motulator.drive import utils
 from motulator.drive.control._base import Measurements
 
-from motulator_plecs.sm import export_gradnet
+from motulator_export.plecs.sm import export_gradnet
 from tests.c_port import arr, compile_library, d
 
 MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"

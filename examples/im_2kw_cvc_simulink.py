@@ -26,8 +26,8 @@ from im_2kw_cvc import SPEED_CTRL, T_STOP, TAU_L, W_M_REF, build_system
 from motulator.common.model import SolverCfg
 from motulator.drive import model
 
-from motulator_plecs import sampled_step
-from motulator_plecs.simulink import im
+from motulator_export import sampled_step
+from motulator_export.simulink import im
 
 # %%
 if __name__ == "__main__":

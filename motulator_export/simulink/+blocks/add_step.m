@@ -1,7 +1,7 @@
 function add_step(blk, steps, pos)
 %ADD_STEP Step signal: a Step block, or a sum of Step blocks for several steps.
 %   ADD_STEP(BLK, STEPS, POS) adds the step signal with the rows [time before after]
-%   of STEPS (as StepSignal of motulator_plecs): a Step block for one row, or a
+%   of STEPS (as StepSignal of motulator_export): a Step block for one row, or a
 %   subsystem summing a Step block per row.
 if size(steps, 1) == 1
     add_single(blk, steps, pos);

@@ -1,6 +1,6 @@
 # C port
 
-C port of the motulator control algorithms and models, run in the C-Script blocks of the PLECS models.
+C port of the motulator control algorithms and models, run in the C-Script blocks of the PLECS models and in the S-functions of the Simulink models.
 The code follows the Python code of motulator closely, including the order of the state updates, and each header lists its Python counterparts.
 Optional parameters (`None` in motulator) are represented by `NAN`, and their defaults are resolved in the C code, as in motulator.
 

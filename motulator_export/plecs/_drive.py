@@ -17,7 +17,7 @@ from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._common import SpeedController
 from motulator.drive.model import Drive, MechanicalSystem
 
-from motulator_plecs._common import (
+from motulator_export.plecs._common import (
     MACH,
     ControlBlock,
     MaskParam,
@@ -25,7 +25,7 @@ from motulator_plecs._common import (
     _add_ctrl_output,
     _step,
 )
-from motulator_plecs._schematic import _probe, _Schematic, _scope
+from motulator_export.plecs._schematic import _probe, _Schematic, _scope
 
 # Machine signals in the output port "mdl"
 MDL_OUTPUTS = ["i_a", "i_b", "i_c", "w_M", "theta_M", "tau_M"]

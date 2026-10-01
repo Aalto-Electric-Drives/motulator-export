@@ -1,7 +1,7 @@
 function add_control_system(blk, c, pos)
 %ADD_CONTROL_SYSTEM Masked subsystem with the S-function of a control system.
 %   ADD_CONTROL_SYSTEM(BLK, C, POS) adds the control system described by the struct
-%   C (written by motulator_plecs.simulink), with the fields
+%   C (written by motulator_export.simulink), with the fields
 %
 %     sfunction      Name of the S-function
 %     mask_type      Type and description of the mask
