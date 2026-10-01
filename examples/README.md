@@ -1,6 +1,7 @@
 # Examples
 
 Each script builds a system of a motulator example, writes the PLECS model (`*.plecs` in this directory), and, if PLECS Standalone is running with the RPC interface enabled, simulates the system in both motulator and PLECS and prints the maximum differences.
+The scripts `*_simulink.py` do the same for Simulink, writing the build scripts of the models in `simulink/`; see [the Simulink export](../motulator_export/simulink/README.md).
 
 | Script                 | System                                                                                                                                              |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -14,7 +15,7 @@ Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.p
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.
 The scripts close the model in PLECS before simulating it, since an open model is not reloaded from the file.
 
-## Model structure
+## Structure of the PLECS models
 
 - The references (e.g., the speed reference or the power references) and the load torque are Step blocks; several steps are given as vector parameters of one Step block and summed by a Gain block. A constant reference (the converter voltage reference of grid-forming control) is a Constant block.
 - The control system samples the references and the measurements (e.g., the phase currents, the DC-bus voltage, and the rotor angle or speed in the sensored mode) with the sampling period `T_s`. The duty ratios pass through a Delay block, which models the computational delay of one sampling period, as in motulator.
@@ -27,7 +28,7 @@ The scripts close the model in PLECS before simulating it, since an open model i
 - Voltmeters and ammeters are used only for the signals fed back to the control system. The AC voltages are measured line to line (u_ab and u_bc), as in practice. The other signals, e.g., the inductor currents shown in the scope, are measured with PLECS probes.
 - A GradNet flux map of the control system is given as a struct in the model workspace (`est_flux_map`).
 
-## Agreement with motulator
+## Agreement of the PLECS models with motulator
 
 Maximum differences (PLECS − motulator) printed by the scripts, with motulator 0.8.0 and PLECS 5.0 (2026-09-28).
 motulator uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.

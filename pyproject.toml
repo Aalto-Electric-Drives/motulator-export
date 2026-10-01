@@ -13,10 +13,10 @@ requires-python = ">=3.12"
 authors = [
     {name = "Marko Hinkkanen", email = "marko.hinkkanen@aalto.fi"}
 ]
-description = "Export motulator drive and grid converter systems to PLECS"
+description = "Export motulator drive and grid converter systems to PLECS and Simulink"
 readme = "README.md"
 license = "MIT"
-keywords = ["control", "converter", "motor", "PLECS", "simulation"]
+keywords = ["control", "converter", "motor", "PLECS", "Simulink", "simulation"]
 classifiers = [
   "Programming Language :: Python",
   "Programming Language :: C",

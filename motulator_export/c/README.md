@@ -30,5 +30,5 @@ The sizes of the networks are limited by `GRADNET_MAX_IN_DIM` and `GRADNET_MAX_E
 ## Portability
 
 The C port uses the C99 complex type (`complex.h`) in double precision, mirroring the complex space vectors of motulator.
-It compiles with gcc, clang, and the compiler bundled with PLECS, but not with MSVC, and embedded compilers may lack `complex.h`.
+It compiles with gcc, clang, MinGW-w64 (e.g., for `mex` in MATLAB), and the compiler bundled with PLECS, but not with MSVC, and embedded compilers may lack `complex.h`.
 A conversion to a custom complex type or to single precision is straightforward with the C-port tests, but it is left until a concrete embedded target exists.

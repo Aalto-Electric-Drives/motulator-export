@@ -18,7 +18,7 @@ python examples/ipmsm_2kw_fvc_simulink.py
 
 This writes the MATLAB script `examples/simulink/build_ipmsm_2kw_fvc.m` and the source of the S-function (`sfun_flux_vector_control.c`) in the same folder.
 Running the script in MATLAB compiles the S-function (`mex`) and saves `ipmsm_2kw_fvc.slx`.
-If the MATLAB Engine API for Python (`pip install matlabengine`) is installed, the Python script also builds and simulates the model and prints the maximum differences from motulator, as the PLECS comparison scripts do.
+If the MATLAB Engine API for Python matching the MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a) is installed, the Python script also builds and simulates the model and prints the maximum differences from motulator, as the PLECS comparison scripts do.
 
 The C port uses the C99 complex type (`complex.h`), so `mex` must use gcc (Linux), clang (macOS), or MinGW-w64 (Windows, the MATLAB Support for MinGW-w64 C/C++ Compiler add-on, selected with `mex -setup C`); MSVC does not support it.
 A compiled S-function stays loaded in MATLAB after its model is closed, so run `clear mex` before rebuilding a model that was open in MATLAB.

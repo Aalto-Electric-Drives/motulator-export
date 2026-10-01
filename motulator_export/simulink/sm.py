@@ -2,8 +2,8 @@
 Export synchronous machine drives to Simulink.
 
 This module writes a Simulink model of a motulator synchronous machine drive, in the
-same way as `motulator_export.plecs.sm` writes a PLECS model. The control system is the
-C-Script code of the PLECS model wrapped in an S-function, in a masked subsystem
+same way as `motulator_export.plecs.sm` writes a PLECS model. The control system is
+the C-Script code of the PLECS model wrapped in an S-function, in a masked subsystem
 whose parameters are the same as in the motulator API. The system model is built
 from basic Simulink blocks, so no toolboxes are needed.
 

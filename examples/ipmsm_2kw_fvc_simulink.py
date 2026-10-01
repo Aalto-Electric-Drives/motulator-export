@@ -1,6 +1,6 @@
 """
-2.2-kW IPMSM, sensorless FVC: motulator vs. Simulink (pilot)
-============================================================
+2.2-kW IPMSM, sensorless FVC: motulator vs. Simulink
+====================================================
 
 This script builds the drive system of `ipmsm_2kw_fvc.py` in motulator and writes a
 MATLAB script (simulink/build_ipmsm_2kw_fvc.m) that builds the Simulink model. If
