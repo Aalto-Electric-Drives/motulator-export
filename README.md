@@ -15,6 +15,13 @@ You build a system in motulator, as usual, and get a ready-to-run simulation mod
 
 *PLECS model of a 5.6-kW PM-SyRM drive written by [examples/pmsyrm_6kw_gn_fvc.py](examples/pmsyrm_6kw_gn_fvc.py): the flux-vector control subsystem, the computational delay, the PWM, the converter, the machine with a GradNet model, the mechanics, and the scope.*
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="examples/pmsyrm_6kw_gn_fvc_simulink_black.png">
+  <img alt="Simulink model of the 5.6-kW PM-SyRM drive with flux-vector control" src="examples/pmsyrm_6kw_gn_fvc_simulink.png">
+</picture>
+
+*Simulink model of the same drive written by [examples/pmsyrm_6kw_gn_fvc_simulink.py](examples/pmsyrm_6kw_gn_fvc_simulink.py), with the same C code of the control system in an S-function. The output ports `mdl` and `ctrl` give the signals for the comparison with motulator.*
+
 ## Installation
 
 ```bash
