@@ -11,7 +11,7 @@ Plecs {
   AbsTol        "-1"
   InitializationCommands "% Generated from motulator. The parameters of the control system are in\n% the mask of the subsystem 'Current-vector control'.\nmachine.n_p = 2.0;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nconverter.u_dc = 540.0;\n"
   Schematic {
-    Location      [0, 0; 1000, 560]
+    Location      [0, 0; 880, 460]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -284,6 +284,24 @@ Plecs {
         Tunable       on
         TabName       "Speed control (SpeedController)"
       }
+      Parameter {
+        Variable      "pwm_t_d"
+        Prompt        "t_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), 0 = None"
+        Type          FreeText
+        Value         "0.0"
+        Show          off
+        Tunable       on
+        TabName       "PWM (PWM)"
+      }
+      Parameter {
+        Variable      "pwm_feedforward"
+        Prompt        "feedforward: Compensate for d_err (1) or not (0)"
+        Type          FreeText
+        Value         "1.0"
+        Show          off
+        Tunable       on
+        TabName       "PWM (PWM)"
+      }
       Terminal {
         Type          Input
         Position      [-50, -15]
@@ -442,7 +460,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "n_p, R_s, R_R, L_sgm, L_M, psi_s_nom, i_s_max, alpha_c, alpha_i, alpha_o, w_s_nom, k_u, k_fw, J, sensorless, T_s, speed_J, speed_alpha_s, speed_alpha_i, speed_tau_M_max"
+        Value         "n_p, R_s, R_R, L_sgm, L_M, psi_s_nom, i_s_max, alpha_c, alpha_i, alpha_o, w_s_nom, k_u, k_fw, J, sensorless, T_s, speed_J, speed_alpha_s, speed_alpha_i, speed_tau_M_max, pwm_t_d, pwm_feedforward"
         Show          off
       }
       Parameter {
@@ -467,7 +485,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"R_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"R_R must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"L_M must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"psi_s_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(15) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(16) != 1) {\n    SetErrorMessage(\"speed_J must be a scalar.\");\n    return;\n}\nif (PDIM(17) != 1) {\n    SetErrorMessage(\"speed_alpha_s must be a scalar.\");\n    return;\n}\n\n/* Machine model parameters (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {\n    P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0)};\n\n/* Current-vector controller configuration (CurrentVectorControllerCfg),\n * the defaults are used for empty parameters */\nIMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n    P(5, 0), P(6, 0));\nif (PDIM(7) > 0) {\n    cfg.alpha_c = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.alpha_i = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.alpha_o = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.w_s_nom = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.k_u = P(11, 0);\n}\nif (PDIM(12) > 0) {\n    cfg.k_fw = P(12, 0);\n}\nif (PDIM(13) > 0) {\n    cfg.J = P(13, 0);\n}\nif (PDIM(14) > 0) {\n    cfg.sensorless = P(14, 0);\n}\nif (PDIM(15) > 0) {\n    cfg.T_s = P(15, 0);\n}\n\n/* Speed controller (SpeedController) */\nPIController speed_ctrl = speed_controller(\n    P(16, 0), P(17, 0), PARAM(18),\n    PDIM(19) > 0 ? P(19, 0) : INFINITY);\n\nim_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"R_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"R_R must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"L_M must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"psi_s_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(15) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(16) != 1) {\n    SetErrorMessage(\"speed_J must be a scalar.\");\n    return;\n}\nif (PDIM(17) != 1) {\n    SetErrorMessage(\"speed_alpha_s must be a scalar.\");\n    return;\n}\nif (PDIM(20) != 1) {\n    SetErrorMessage(\"pwm_t_d must be a scalar.\");\n    return;\n}\nif (PDIM(21) != 1) {\n    SetErrorMessage(\"pwm_feedforward must be a scalar.\");\n    return;\n}\n\n/* Machine model parameters (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {\n    P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0)};\n\n/* Current-vector controller configuration (CurrentVectorControllerCfg),\n * the defaults are used for empty parameters */\nIMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n    P(5, 0), P(6, 0));\nif (PDIM(7) > 0) {\n    cfg.alpha_c = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.alpha_i = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.alpha_o = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.w_s_nom = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.k_u = P(11, 0);\n}\nif (PDIM(12) > 0) {\n    cfg.k_fw = P(12, 0);\n}\nif (PDIM(13) > 0) {\n    cfg.J = P(13, 0);\n}\nif (PDIM(14) > 0) {\n    cfg.sensorless = P(14, 0);\n}\nif (PDIM(15) > 0) {\n    cfg.T_s = P(15, 0);\n}\n\n/* Speed controller (SpeedController) */\nPIController speed_ctrl = speed_controller(\n    P(16, 0), P(17, 0), PARAM(18),\n    PDIM(19) > 0 ? P(19, 0) : INFINITY);\n\nim_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n\n/* Duty-ratio error model of the PWM (dead_time_error) */\npwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),\n                  (int)P(21, 0));\n"
         Show          off
       }
       Parameter {
@@ -887,7 +905,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed (ctrl)"
       Show          on
-      Position      [720, 300]
+      Position      [80, 220]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -901,7 +919,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed"
       Show          on
-      Position      [720, 340]
+      Position      [80, 260]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -915,7 +933,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque (ctrl)"
       Show          on
-      Position      [720, 380]
+      Position      [80, 300]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -929,7 +947,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque"
       Show          on
-      Position      [720, 420]
+      Position      [80, 340]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -943,7 +961,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Currents"
       Show          on
-      Position      [720, 460]
+      Position      [80, 380]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -957,7 +975,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Flux (ctrl)"
       Show          on
-      Position      [720, 500]
+      Position      [80, 420]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -971,7 +989,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux speed"
       Show          off
-      Position      [820, 340]
+      Position      [180, 260]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -985,7 +1003,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux torque"
       Show          off
-      Position      [820, 360]
+      Position      [180, 280]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -999,7 +1017,7 @@ Plecs {
       Type          Scope
       Name          "Scope"
       Show          on
-      Position      [900, 360]
+      Position      [260, 280]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1162,7 +1180,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed (ctrl)"
       SrcTerminal   1
-      Points        [760, 300; 760, 335]
+      Points        [120, 220; 120, 255]
       DstComponent  "Mux speed"
       DstTerminal   2
     }
@@ -1170,7 +1188,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed"
       SrcTerminal   1
-      Points        [770, 340; 770, 345]
+      Points        [130, 260; 130, 265]
       DstComponent  "Mux speed"
       DstTerminal   3
     }
@@ -1178,7 +1196,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque (ctrl)"
       SrcTerminal   1
-      Points        [780, 380; 780, 355]
+      Points        [140, 300; 140, 275]
       DstComponent  "Mux torque"
       DstTerminal   2
     }
@@ -1186,7 +1204,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque"
       SrcTerminal   1
-      Points        [790, 420; 790, 365]
+      Points        [150, 340; 150, 285]
       DstComponent  "Mux torque"
       DstTerminal   3
     }
@@ -1194,7 +1212,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux speed"
       SrcTerminal   1
-      Points        [850, 340; 850, 345]
+      Points        [210, 260; 210, 265]
       DstComponent  "Scope"
       DstTerminal   1
     }
@@ -1202,7 +1220,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux torque"
       SrcTerminal   1
-      Points        [855, 360; 855, 355]
+      Points        [215, 280; 215, 275]
       DstComponent  "Scope"
       DstTerminal   2
     }
@@ -1210,7 +1228,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Currents"
       SrcTerminal   1
-      Points        [860, 460; 860, 365]
+      Points        [220, 380; 220, 285]
       DstComponent  "Scope"
       DstTerminal   3
     }
@@ -1218,7 +1236,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Flux (ctrl)"
       SrcTerminal   1
-      Points        [865, 500; 865, 375]
+      Points        [225, 420; 225, 295]
       DstComponent  "Scope"
       DstTerminal   4
     }

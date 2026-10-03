@@ -59,6 +59,7 @@ from motulator_export.plecs._common import (
     _add_dc_bus,
     _add_delay,
     _add_pwm,
+    _check_supported_pwm,
     _write_model,
     cfg_assignments,
     monitored_code,
@@ -172,8 +173,11 @@ def _check_supported(
         raise NotImplementedError("Phase shift and negative sequence not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
         raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
+    if mdl.pwm.t_d != 0:
+        raise NotImplementedError("Converter dead time not supported")
     if len(mdl.delay.data) != 1:
         raise NotImplementedError("Only the computational delay of one sample")
+    _check_supported_pwm(ctrl.pwm)
     inner = ctrl.inner_ctrl
     if not isinstance(
         inner, (CurrentVectorController, ObserverBasedGridFormingController)

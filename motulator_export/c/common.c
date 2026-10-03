@@ -241,13 +241,60 @@ static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
     self->tau_L += T_s * d_tau_L;
 }
 
+/* Dead time --------------------------------------------------------------- */
+
+static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
+                            double T_s, double d_err[3])
+{
+    for (int k = 0; k < 3; k++) {
+        /* Switching-cycle averaged on-times of the upper and lower switches
+         * (averaged_gate_signals) */
+        double d = d_abc[k];
+        double delta = (d > 0.0 && d < 1.0) ? t_d / (2.0 * T_s) : 0.0;
+        double q_hi = fmax(d - delta, 0.0);
+        double q_lo = fmax(1.0 - d - delta, 0.0);
+        double b = 1.0 - q_hi - q_lo;
+        d_err[k] = d - q_hi - 0.5 * b * (1.0 - sign(i_abc[k]));
+    }
+}
+
 /* PWM ---------------------------------------------------------------------- */
 
 static void pwm_init(PWM *self, double k_comp)
 {
     self->k_comp = k_comp;
+    self->t_d = 0.0;
+    self->T_s = 0.0;
+    self->feedforward = 1;
     self->realized_voltage = 0.0;
     self->old_u_c_ab = 0.0;
+    for (int k = 0; k < 3; k++) {
+        self->d_abc[0][k] = 0.0;
+        self->d_abc[1][k] = 0.0;
+    }
+}
+
+static void pwm_set_dead_time(PWM *self, double t_d, double T_s, int feedforward)
+{
+    self->t_d = t_d;
+    self->T_s = T_s;
+    self->feedforward = feedforward;
+}
+
+static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
+                                           double u_dc)
+{
+    if (self->t_d <= 0.0) {
+        return self->realized_voltage;
+    }
+    double i_abc[3], e0[3], e1[3], d_err[3];
+    complex2abc(i_c_ab, i_abc);
+    dead_time_error(i_abc, self->d_abc[0], self->t_d, self->T_s, e0);
+    dead_time_error(i_abc, self->d_abc[1], self->t_d, self->T_s, e1);
+    for (int k = 0; k < 3; k++) {
+        d_err[k] = 0.5 * (e0[k] + e1[k]);
+    }
+    return self->realized_voltage - u_dc * abc2complex(d_err);
 }
 
 static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, double d_abc[3])
@@ -279,7 +326,8 @@ static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, double d_abc
 
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
-                                         double w, double d_abc[3])
+                                         double w, double complex i_c_ab,
+                                         double d_abc[3])
 {
     /* Advance the angle due to the computational and ZOH (PWM) delays */
     double theta_comp = self->k_comp * T_s * w;
@@ -288,12 +336,26 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
     /* Duty ratios */
     pwm_duty_ratios(u_c_ref_ab, u_dc, d_abc);
 
-    /* Limited voltage reference */
+    /* Compensate for the duty-ratio error using the predicted currents */
+    if (self->t_d > 0.0 && self->feedforward) {
+        double i_c_abc[3], d_err[3];
+        complex2abc(cexp(I * theta_comp) * i_c_ab, i_c_abc);
+        dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, d_err);
+        for (int k = 0; k < 3; k++) {
+            d_abc[k] = clip(d_abc[k] + d_err[k], 0.0, 1.0);
+        }
+    }
+
+    /* Limited voltage reference, including the compensation */
     return abc2complex(d_abc) * u_dc;
 }
 
-static void pwm_update(PWM *self, double complex u_c_ab)
+static void pwm_update(PWM *self, double complex u_c_ab, const double d_abc[3])
 {
     self->realized_voltage = 0.5 * (self->old_u_c_ab + u_c_ab);
     self->old_u_c_ab = u_c_ab;
+    for (int k = 0; k < 3; k++) {
+        self->d_abc[0][k] = self->d_abc[1][k];
+        self->d_abc[1][k] = d_abc[k];
+    }
 }

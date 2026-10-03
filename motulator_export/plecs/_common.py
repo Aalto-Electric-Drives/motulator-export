@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from motulator.common.control._pwm import PWM
 from motulator.common.model._converter import (
     CapacitiveDCBusConverter,
     FrequencyConverter,
@@ -285,6 +286,21 @@ def _jogs(
 CONVERTER_FRAME = "      Frame         [-25, -25; 25, 25]\n"
 
 
+def _check_supported_pwm(pwm: PWM, d_err: bool = False) -> None:
+    """
+    Raise an error if the PWM of the control system is not supported.
+
+    The duty-ratio error model `d_err` is supported only if `d_err` is True.
+
+    """
+    if not isinstance(pwm, PWM) or pwm.overmodulation != "MPE":
+        raise NotImplementedError("Only the MPE overmodulation supported")
+    if pwm.k_comp != 1.5:
+        raise NotImplementedError("Only k_comp = 1.5 supported")
+    if pwm.d_err is not None and not d_err:
+        raise NotImplementedError("Duty-ratio error model d_err not supported")
+
+
 def _add_pwm(sch: _Schematic, T_s: float) -> None:
     """
     Add the carrier comparison (PLECS Symmetrical PWM), fed by the delayed duty ratios.
@@ -323,8 +339,50 @@ def _add_delay(sch: _Schematic, T_s: float, block: ControlBlock) -> None:
     sch.signal((block.name, len(block.inputs) + 1), ("Delay", 1))
 
 
-def _add_converter(sch: _Schematic) -> None:
-    """Add the ideal two-level converter (PLECS), fed by the gate signals."""
+# Space for the blanking time between the PWM and the DC bus (horizontal shift of the
+# converter and the components after it)
+BLANKING_DX = 80
+
+
+def _add_blanking_time(sch: _Schematic) -> None:
+    """
+    Add the Blanking Time block of PLECS after the PWM.
+
+    The block delays the turn-on of the switches by the dead time `converter.t_d`. Its
+    output values are 1 (upper switch on), -1 (lower switch on), and 0 (both off).
+
+    """
+    sch.component(
+        "Reference",
+        "Blanking time",
+        (530, CS[1]),
+        {"tb": "converter.t_d"},
+        direction="up",
+        src_component="Components/Control/Modulators/Blanking Time",
+        extra="      Frame         [-20, -20; 20, 20]\n",
+        trailer=_terminals([("Output", 24, 0, "right"), ("Input", -20, 0, "left")]),
+    )
+    sch.signal(("PWM", 1), ("Blanking time", 2))
+
+
+def _add_converter(sch: _Schematic, t_d: float = 0.0) -> None:
+    """
+    Add the two-level converter (PLECS), fed by the gate signals.
+
+    Without the dead time `t_d`, the converter is ideal. With the dead time, the
+    converter is fed by the blanking time (`_add_blanking_time`, added before), and the
+    IGBT converter with ideal IGBTs and diodes is used, so that the current direction
+    determines the leg state during blanking, as in motulator with `sign=np.sign`.
+
+    """
+    if t_d > 0:
+        # The upper IGBT is turned on with a positive, the lower one with a negative
+        # gate signal, and both are off with a zero gate signal
+        src = "Components/Electrical/Converters/2-Level\\nIGBT\\nConv."
+    else:
+        # Ideal converter: the phase is connected to the positive DC terminal upon a
+        # positive gate signal and else to the negative terminal, as in motulator
+        src = "Components/Electrical/Converters/2-Level\\nConv."
     sch.component(
         "Reference",
         "Converter",
@@ -333,9 +391,7 @@ def _add_converter(sch: _Schematic) -> None:
         direction="down",
         flipped=True,
         label="south",
-        # Ideal converter: the phase is connected to the positive DC terminal upon a
-        # positive gate signal and else to the negative terminal, as in motulator
-        src_component="Components/Electrical/Converters/2-Level\\nConv.",
+        src_component=src,
         extra=CONVERTER_FRAME,
         trailer=_terminals(
             [
@@ -349,8 +405,10 @@ def _add_converter(sch: _Schematic) -> None:
         ),
     )
     # The gate signals are routed above the DC bus, the riser staying next to the PWM
-    x = X_RISER - sch.dx
-    sch.signal(("PWM", 1), ("Converter", 4), [(x, CS[1]), (x, 20), (CONV[0] + 15, 20)])
+    # (or the blanking time)
+    gate: Terminal = ("Blanking time", 1) if t_d > 0 else ("PWM", 1)
+    x = X_RISER + (BLANKING_DX if t_d > 0 else 0) - sch.dx
+    sch.signal(gate, ("Converter", 4), [(x, CS[1]), (x, 20), (CONV[0] + 15, 20)])
 
 
 def _add_dc_bus(sch: _Schematic, conv: VoltageSourceConverter) -> None:

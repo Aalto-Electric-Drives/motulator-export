@@ -6,6 +6,7 @@ and the scope.
 
 from typing import Any, cast
 
+import numpy as np
 from motulator.common.control._pwm import PWM
 from motulator.common.model._converter import (
     CapacitiveDCBusConverter,
@@ -13,6 +14,7 @@ from motulator.common.model._converter import (
     VoltageSourceConverter,
 )
 from motulator.common.model._pwm import CarrierComparison
+from motulator.common.utils import dead_time_error
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._common import SpeedController
 from motulator.drive.model import Drive, MechanicalSystem
@@ -23,6 +25,7 @@ from motulator_export.plecs._common import (
     MaskParam,
     StepSignal,
     _add_ctrl_output,
+    _check_supported_pwm,
     _step,
 )
 from motulator_export.plecs._schematic import _probe, _Schematic, _scope
@@ -47,10 +50,35 @@ SPEED_MASK_PARAMS = [
     ),
     MaskParam("speed_tau_M_max", "tau_M_max: Maximum motor torque (Nm)", TAB_SPEED, ""),
 ]
+TAB_PWM = "PWM (PWM)"
+PWM_MASK_PARAMS = [
+    MaskParam(
+        "pwm_t_d",
+        "t_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), "
+        "0 = None",
+        TAB_PWM,
+        "",
+        True,
+    ),
+    MaskParam(
+        "pwm_feedforward",
+        "feedforward: Compensate for d_err (1) or not (0)",
+        TAB_PWM,
+        "",
+        True,
+    ),
+]
 
 
-def _check_supported_plant(mdl: Drive) -> None:
-    """Raise an error if the mechanics, the converter, or the PWM is not supported."""
+def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
+    """
+    Raise an error if the mechanics, the converter, or the PWM is not supported.
+
+    The dead time of the carrier comparison (`mdl.pwm.t_d`, by default that of the
+    converter) is supported only if `dead_time` is True, and only with the
+    current-direction function `np.sign` of the converter.
+
+    """
     if not isinstance(mdl.mechanics, MechanicalSystem) or mdl.mechanics.B_L != 0:
         raise NotImplementedError("Only MechanicalSystem without friction supported")
     if mdl.lc_filter is not None:
@@ -65,18 +93,69 @@ def _check_supported_plant(mdl: Drive) -> None:
         raise NotImplementedError("External DC current not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
         raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
+    if mdl.pwm.t_d != 0:
+        if not dead_time:
+            raise NotImplementedError("Converter dead time not supported")
+        if mdl.converter.sign is not np.sign:
+            raise NotImplementedError("Only the dead time with sign=np.sign supported")
     if len(mdl.delay.data) != 1:
         raise NotImplementedError("Only the computational delay of one sample")
 
 
-def _check_supported_speed_control(ctrl: VectorControlSystem) -> None:
-    """Raise an error if the speed controller or the PWM is not supported."""
+def _check_supported_speed_control(
+    ctrl: VectorControlSystem, dead_time: bool = False
+) -> None:
+    """
+    Raise an error if the speed controller or the PWM is not supported.
+
+    The duty-ratio error model `d_err` of the PWM is supported only if `dead_time` is
+    True (see `pwm_values`).
+
+    """
     if not isinstance(ctrl.speed_ctrl, SpeedController):
         raise NotImplementedError("Speed-control mode with SpeedController required")
-    if not isinstance(ctrl.pwm, PWM) or ctrl.pwm.overmodulation != "MPE":
-        raise NotImplementedError("Only the MPE overmodulation supported")
-    if ctrl.pwm.k_comp != 1.5:
-        raise NotImplementedError("Only k_comp = 1.5 supported")
+    _check_supported_pwm(ctrl.pwm, d_err=dead_time)
+
+
+def pwm_values(pwm: PWM, T_s: float) -> dict[str, Any]:
+    """
+    Get the mask parameter values of the duty-ratio error model of the PWM.
+
+    Only `d_err = dead_time_error(i_abc, d_abc, t_d, T_s)` with the default
+    `sign=np.sign` and the sampling period `T_s` of the control system is supported.
+    Since `d_err` is a function, the dead time `t_d` is identified from its value at
+    the duty ratios of 0.5, and the function is checked at test points.
+
+    """
+    if pwm.d_err is None:
+        return {"pwm_t_d": 0.0, "pwm_feedforward": int(pwm.feedforward)}
+    d_err = pwm.d_err
+    t_d = 2 * T_s * float(d_err(np.array([1.0, -1.0, 0.0]), np.full(3, 0.5))[0])
+    t_d = float(f"{t_d:.12g}")  # Remove the rounding errors of the identification
+    rng = np.random.default_rng(0)
+    i_test = rng.uniform(-10, 10, (20, 3))
+    i_test[:, 0] = 0  # The signum function is zero at zero current
+    d_test = rng.uniform(0, 1, (20, 3))
+    d_test[:5] = [[0, 1, 0.5], [1e-3, 1 - 1e-3, 0.5], [0, 0, 1], [1, 1, 0], [0.5] * 3]
+    for i_abc, d_abc in zip(i_test, d_test, strict=True):
+        if t_d <= 0 or not np.allclose(
+            d_err(i_abc, d_abc), dead_time_error(i_abc, d_abc, t_d, T_s), atol=1e-12
+        ):
+            raise NotImplementedError(
+                "Only d_err = dead_time_error(i_abc, d_abc, t_d, T_s) with "
+                "sign=np.sign and the sampling period T_s of the control system "
+                "supported"
+            )
+    return {"pwm_t_d": t_d, "pwm_feedforward": int(pwm.feedforward)}
+
+
+def pwm_code(i: dict[str, int]) -> str:
+    """C code setting the duty-ratio error model of the PWM from the mask parameters."""
+    return (
+        "/* Duty-ratio error model of the PWM (dead_time_error) */\n"
+        f"pwm_set_dead_time(&ctrl.pwm, P({i['pwm_t_d']}, 0), P({i['T_s']}, 0),\n"
+        f"                  (int)P({i['pwm_feedforward']}, 0));\n"
+    )
 
 
 def speed_ctrl_values(
@@ -114,6 +193,9 @@ def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     if isinstance(conv, FrequencyConverter):
         variables += [("converter.L_dc", conv.L_dc)]
         variables += [("converter.u_g", conv.u_g), ("converter.w_g", conv.w_g)]
+    t_d = cast(CarrierComparison, mdl.pwm).t_d
+    if t_d > 0:
+        variables += [("converter.t_d", t_d)]
     return variables
 
 
@@ -190,32 +272,43 @@ def _add_drive_outputs(sch: _Schematic, block: ControlBlock, outputs: bool) -> N
         sch.component("Output", "mdl", (480, 300), {"Index": "1", "Width": "-1"})
         sch.signal(("Machine signals", 1), ("mdl", 1))
         _add_ctrl_output(sch, block)
-    # Scope, fed by probes of the controller outputs and the machine
+    # Scope, fed by probes of the controller outputs and the machine, below the control
+    # system (not shifted by sch.dx, since the probes have no wires)
+    dx, sch.dx = sch.dx, 0
+    x, y = 80, 220  # Position of the first probe
     probes = [
-        ("Speed (ctrl)", block.name, [speed], 300),
-        ("Speed", "Machine", [MACHINE_PROBES[1]], 340),
-        ("Torque (ctrl)", block.name, [torque], 380),
-        ("Torque", "Machine", [MACHINE_PROBES[3]], 420),
-        ("Currents", "Machine", [MACHINE_PROBES[0]], 460),
-        ("Flux (ctrl)", block.name, [flux], 500),
+        ("Speed (ctrl)", block.name, [speed]),
+        ("Speed", "Machine", [MACHINE_PROBES[1]]),
+        ("Torque (ctrl)", block.name, [torque]),
+        ("Torque", "Machine", [MACHINE_PROBES[3]]),
+        ("Currents", "Machine", [MACHINE_PROBES[0]]),
+        ("Flux (ctrl)", block.name, [flux]),
     ]
-    for name, comp, signals, y in probes:
+    for k, (name, comp, signals) in enumerate(probes):
         extra = _probe(comp, signals)
-        sch.component("PlecsProbe", name, (720, y), extra=extra)
-    sch.component("SignalMux", "Mux speed", (820, 340), {"Width": "[2 1]"}, show=False)
-    sch.component("SignalMux", "Mux torque", (820, 360), {"Width": "[2 1]"}, show=False)
-    sch.signal(("Speed (ctrl)", 1), ("Mux speed", 2), [(760, 300), (760, 335)])
-    sch.signal(("Speed", 1), ("Mux speed", 3), [(770, 340), (770, 345)])
-    sch.signal(("Torque (ctrl)", 1), ("Mux torque", 2), [(780, 380), (780, 355)])
-    sch.signal(("Torque", 1), ("Mux torque", 3), [(790, 420), (790, 365)])
+        sch.component("PlecsProbe", name, (x, y + 40 * k), extra=extra)
+    mux = {"Width": "[2 1]"}
+    sch.component("SignalMux", "Mux speed", (x + 100, y + 40), mux, show=False)
+    sch.component("SignalMux", "Mux torque", (x + 100, y + 60), mux, show=False)
+    sch.signal(("Speed (ctrl)", 1), ("Mux speed", 2), [(x + 40, y), (x + 40, y + 35)])
+    sch.signal(("Speed", 1), ("Mux speed", 3), [(x + 50, y + 40), (x + 50, y + 45)])
+    sch.signal(
+        ("Torque (ctrl)", 1), ("Mux torque", 2), [(x + 60, y + 80), (x + 60, y + 55)]
+    )
+    sch.signal(("Torque", 1), ("Mux torque", 3), [(x + 70, y + 120), (x + 70, y + 65)])
     axes = [
         ("Speed", "Speed (rad/s)"),
         ("Torque", "Torque (Nm)"),
         ("Current", "Current (A)"),
         ("Flux linkage", "Flux linkage (Vs)"),
     ]
-    sch.component("Scope", "Scope", (900, 360), extra=_scope(axes), direction="up")
-    sch.signal(("Mux speed", 1), ("Scope", 1), [(850, 340), (850, 345)])
-    sch.signal(("Mux torque", 1), ("Scope", 2), [(855, 360), (855, 355)])
-    sch.signal(("Currents", 1), ("Scope", 3), [(860, 460), (860, 365)])
-    sch.signal(("Flux (ctrl)", 1), ("Scope", 4), [(865, 500), (865, 375)])
+    scope = (x + 180, y + 60)
+    sch.component("Scope", "Scope", scope, extra=_scope(axes), direction="up")
+    # Scope inputs at y + 45, y + 55, y + 65, and y + 75
+    sources = [("Mux speed", y + 40), ("Mux torque", y + 60)]
+    sources += [("Currents", y + 160), ("Flux (ctrl)", y + 200)]
+    for k, (src, y_src) in enumerate(sources):
+        x_jog = x + 130 + 5 * k
+        points = [(x_jog, y_src), (x_jog, y + 45 + 10 * k)]
+        sch.signal((src, 1), ("Scope", k + 1), points)
+    sch.dx = dx

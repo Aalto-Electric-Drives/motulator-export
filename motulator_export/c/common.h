@@ -6,6 +6,7 @@
  *                                           wrap, clip, sign
  *   motulator/common/control/_controllers.py PIController, ComplexPIController
  *   motulator/common/control/_pwm.py         PWM (MPE overmodulation)
+ *   motulator/common/utils/_dead_time.py     dead_time_error (with numpy.sign)
  *   motulator/drive/control/_common.py       SpeedController, SpeedObserver
  *
  * Complex space vectors use peak-value scaling, as in motulator.
@@ -102,18 +103,37 @@ static void speed_observer_init(SpeedObserver *self, double k_w, double k_tau,
 static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
                                   double tau_M);
 
-/* Space-vector PWM with the minimum-phase-error (MPE) overmodulation */
+/* Duty-ratio error due to the dead time t_d (dead_time_error with the signum
+ * function), T_s being the half carrier period */
+static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
+                            double T_s, double d_err[3]);
+
+/* Space-vector PWM with the minimum-phase-error (MPE) overmodulation. Optionally,
+ * the duty-ratio error due to the dead time is modeled (pwm_set_dead_time), which
+ * corresponds to d_err = dead_time_error(i_abc, d_abc, t_d, T_s) in motulator. */
 typedef struct {
     double k_comp;
+    double t_d;      /* Dead time of the duty-ratio error model, 0 = no error model */
+    double T_s;      /* Sampling period of the duty-ratio error model */
+    int feedforward; /* Compensate for the duty-ratio error */
     /* States */
     double complex realized_voltage;
     double complex old_u_c_ab;
+    double d_abc[2][3]; /* Duty ratios of the two latest sampling periods */
 } PWM;
 
 static void pwm_init(PWM *self, double k_comp);
+static void pwm_set_dead_time(PWM *self, double t_d, double T_s, int feedforward);
+/* Realized voltage, corrected for the duty-ratio error using the measured current
+ * (get_realized_voltage) */
+static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
+                                           double u_dc);
+/* Duty ratios and the limited voltage reference; the measured current i_c_ab is
+ * used in the feedforward compensation of the duty-ratio error */
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
-                                         double w, double d_abc[3]);
-static void pwm_update(PWM *self, double complex u_c_ab);
+                                         double w, double complex i_c_ab,
+                                         double d_abc[3]);
+static void pwm_update(PWM *self, double complex u_c_ab, const double d_abc[3]);
 
 #endif
