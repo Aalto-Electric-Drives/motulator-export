@@ -28,7 +28,7 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 pip install git+https://github.com/Aalto-Electric-Drives/motulator-export
 ```
 
-This requires Python 3.12 or later and *motulator* 0.8.0 or later. In addition, you need:
+This requires Python 3.12 or later and *motulator* 0.8.1 or later. In addition, you need:
 
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
 - **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
