@@ -28,7 +28,7 @@ import motulator.grid.model as grid_model
 import numpy as np
 import pytest
 from motulator.common.control._base import ControlSystem, TimeSeries
-from motulator.common.utils import complex2abc
+from motulator.common.utils import complex2abc, dead_time_error
 from motulator.common.utils._utils import wrap
 from motulator.drive import model
 from motulator.drive.control._base import Measurements, VectorControlSystem
@@ -266,9 +266,14 @@ def test_flux_vector_control(fvc: ctypes.CDLL, sensorless: bool) -> None:
     fvc.sfun_terminate()
 
 
-@pytest.mark.parametrize("sensorless", [True, False])
-def test_current_vector_control(cvc: ctypes.CDLL, sensorless: bool) -> None:
-    """The S-function of current-vector control should agree with motulator."""
+@pytest.mark.parametrize(
+    ("sensorless", "t_d"),
+    [(True, 0.0), (False, 0.0), (True, 2e-6)],
+    ids=["sensorless", "sensored", "dead_time"],
+)
+def test_current_vector_control(cvc: ctypes.CDLL, sensorless: bool, t_d: float) -> None:
+    """The S-function of current-vector control should agree with motulator, also
+    with the dead time of the converter and its compensation."""
     par = model.InductionMachineInvGammaPars(
         n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
     )
@@ -278,15 +283,17 @@ def test_current_vector_control(cvc: ctypes.CDLL, sensorless: bool) -> None:
         mdl = model.Drive(
             model.InductionMachine(par),
             model.MechanicalSystem(J=0.015),
-            model.VoltageSourceConverter(u_dc=540),
+            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 14.6)
         cfg = im_control.CurrentVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless
         )
+        d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s)
         ctrl = VectorControlSystem(
             im_control.CurrentVectorController(par, cfg),
             im_control.SpeedController(**speed),
+            im_control.PWM(d_err=d_err),
         )
         ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
         return mdl, ctrl

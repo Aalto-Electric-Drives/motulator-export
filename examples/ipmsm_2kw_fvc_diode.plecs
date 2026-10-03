@@ -11,7 +11,7 @@ Plecs {
   AbsTol        "-1"
   InitializationCommands "% Generated from motulator. The parameters of the control system are in\n% the mask of the subsystem 'Flux-vector control'.\nmachine.n_p = 3.0;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nconverter.u_dc = 565.685424949238;\nconverter.C_dc = 0.000235;\nconverter.L_dc = 0.002;\nconverter.u_g = 326.5986323710904;\nconverter.w_g = 314.1592653589793;\n"
   Schematic {
-    Location      [0, 0; 1200, 460]
+    Location      [0, 0; 1200, 480]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -1115,7 +1115,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed (ctrl)"
       Show          on
-      Position      [80, 220]
+      Position      [80, 240]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1129,7 +1129,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed"
       Show          on
-      Position      [80, 260]
+      Position      [80, 280]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1143,7 +1143,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque (ctrl)"
       Show          on
-      Position      [80, 300]
+      Position      [80, 320]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1157,7 +1157,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque"
       Show          on
-      Position      [80, 340]
+      Position      [80, 360]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1171,7 +1171,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Currents"
       Show          on
-      Position      [80, 380]
+      Position      [80, 400]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1185,7 +1185,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Flux (ctrl)"
       Show          on
-      Position      [80, 420]
+      Position      [80, 440]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1199,7 +1199,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux speed"
       Show          off
-      Position      [180, 260]
+      Position      [180, 280]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1213,7 +1213,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux torque"
       Show          off
-      Position      [180, 280]
+      Position      [180, 300]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1227,7 +1227,7 @@ Plecs {
       Type          Scope
       Name          "Scope"
       Show          on
-      Position      [260, 280]
+      Position      [260, 300]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1390,7 +1390,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed (ctrl)"
       SrcTerminal   1
-      Points        [120, 220; 120, 255]
+      Points        [120, 240; 120, 275]
       DstComponent  "Mux speed"
       DstTerminal   2
     }
@@ -1398,7 +1398,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed"
       SrcTerminal   1
-      Points        [130, 260; 130, 265]
+      Points        [130, 280; 130, 285]
       DstComponent  "Mux speed"
       DstTerminal   3
     }
@@ -1406,7 +1406,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque (ctrl)"
       SrcTerminal   1
-      Points        [140, 300; 140, 275]
+      Points        [140, 320; 140, 295]
       DstComponent  "Mux torque"
       DstTerminal   2
     }
@@ -1414,7 +1414,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque"
       SrcTerminal   1
-      Points        [150, 340; 150, 285]
+      Points        [150, 360; 150, 305]
       DstComponent  "Mux torque"
       DstTerminal   3
     }
@@ -1422,7 +1422,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux speed"
       SrcTerminal   1
-      Points        [210, 260; 210, 265]
+      Points        [210, 280; 210, 285]
       DstComponent  "Scope"
       DstTerminal   1
     }
@@ -1430,7 +1430,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux torque"
       SrcTerminal   1
-      Points        [215, 280; 215, 275]
+      Points        [215, 300; 215, 295]
       DstComponent  "Scope"
       DstTerminal   2
     }
@@ -1438,7 +1438,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Currents"
       SrcTerminal   1
-      Points        [220, 380; 220, 285]
+      Points        [220, 400; 220, 305]
       DstComponent  "Scope"
       DstTerminal   3
     }
@@ -1446,7 +1446,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Flux (ctrl)"
       SrcTerminal   1
-      Points        [225, 420; 225, 295]
+      Points        [225, 440; 225, 315]
       DstComponent  "Scope"
       DstTerminal   4
     }

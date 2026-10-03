@@ -79,7 +79,8 @@ Run them from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 | Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |   yes    |
 | Stiff DC bus                                                                                            |  yes  |   yes    |
 | Capacitive or diode-bridge-fed DC bus                                                                   |  yes  |    no    |
-| Dead time of the converter and its compensation (induction machine drives) | yes | no |
+| Dead time of the converter in the system model (induction machine drives)                               |  yes  |    no    |
+| Dead-time compensation in the control system (induction machine drives)                                 |  yes  |   yes    |
 
 The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`), and the grid is balanced with constant voltage and frequency.
 Other configurations raise `NotImplementedError` when the model is written.

@@ -3,14 +3,14 @@
 Each script builds a system of a *motulator* example, writes the PLECS model (`*.plecs` in this directory), and, if PLECS Standalone is running with the RPC interface enabled, simulates the system in both *motulator* and PLECS and prints the maximum differences.
 The scripts `*_simulink.py` do the same for Simulink, writing the build scripts of the models in `simulink/`; see [the Simulink export](../motulator_export/simulink/README.md).
 
-| Script                 | System                                                                                                                                                |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ipmsm_2kw_fvc.py`     | 2.2-kW IPMSM, sensorless flux-vector control (the README example of *motulator*); with `--diode`, a diode bridge with a DC-bus inductor and capacitor |
-| `pmsyrm_6kw_gn_fvc.py` | 5.6-kW PM-SyRM, GradNet models from FEM data (in `trained_models/`), sensored flux-vector control (`plot_6kw_pmsyrm_gn_fvc_fem_harm.py`)              |
-| `im_2kw_cvc.py`        | 2.2-kW induction machine, sensorless current-vector control (`plot_2kw_im_sat_cvc.py` with the constant-parameter machine model)                      |
+| Script                    | System                                                                                                                                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ipmsm_2kw_fvc.py`        | 2.2-kW IPMSM, sensorless flux-vector control (the README example of *motulator*); with `--diode`, a diode bridge with a DC-bus inductor and capacitor                                                   |
+| `pmsyrm_6kw_gn_fvc.py`    | 5.6-kW PM-SyRM, GradNet models from FEM data (in `trained_models/`), sensored flux-vector control (`plot_6kw_pmsyrm_gn_fvc_fem_harm.py`)                                                                |
+| `im_2kw_cvc.py`           | 2.2-kW induction machine, sensorless current-vector control (`plot_2kw_im_sat_cvc.py` with the constant-parameter machine model)                                                                        |
 | `im_2kw_dead_time_cvc.py` | 2.2-kW induction machine, dead time and its compensation, sensorless current-vector control at low speeds (`plot_2kw_im_dead_time_cvc.py` with the constant-parameter machine model and `sign=np.sign`) |
-| `gfl_10kva_lcl.py`     | 10-kVA grid converter with an LCL filter, grid-following control (`plot_10kva_lcl_gfl.py`)                                                            |
-| `gfm_13kva_do.py`      | 12.5-kVA grid converter with an L filter in a weak grid, disturbance-observer-based grid-forming control (`plot_13kva_do_gfm.py`)                     |
+| `gfl_10kva_lcl.py`        | 10-kVA grid converter with an LCL filter, grid-following control (`plot_10kva_lcl_gfl.py`)                                                                                                              |
+| `gfm_13kva_do.py`         | 12.5-kVA grid converter with an L filter in a weak grid, disturbance-observer-based grid-forming control (`plot_13kva_do_gfm.py`)                                                                       |
 
 Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.

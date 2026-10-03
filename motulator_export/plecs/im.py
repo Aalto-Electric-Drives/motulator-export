@@ -383,7 +383,7 @@ def write_model(
         sch.wire(("Converter", k + 1), ("Machine", k + 1))
     _add_mechanics(sch, tau_L, inertia=False)
     _add_drive_outputs(sch, CVC_BLOCK, outputs)
-    size = (880 + sch.dx, 460)
+    size = (880 + sch.dx, 480)
     variables = _plant_variables(mdl)
     return _write_model(
         path, CVC_BLOCK, variables, t_stop, values["T_s"], sch, size, outputs

@@ -98,8 +98,12 @@ def test_pwm(dll: ctypes.CDLL, t_d: float, feedforward: bool) -> None:
         u_py = pwm.get_realized_voltage(i_c_ab, U_DC)
         d_py = pwm(T_S, u_ref, U_DC, w)
         dll.step(
-            d(T_S), arr([u_ref.real, u_ref.imag]), arr([i_c_ab.real, i_c_ab.imag]),
-            d(U_DC), d(w), out,
+            d(T_S),
+            arr([u_ref.real, u_ref.imag]),
+            arr([i_c_ab.real, i_c_ab.imag]),
+            d(U_DC),
+            d(w),
+            out,
         )
         assert out[0] + 1j * out[1] == pytest.approx(u_py, abs=1e-9)
         assert np.array(out[2:]) == pytest.approx(d_py, abs=1e-12)

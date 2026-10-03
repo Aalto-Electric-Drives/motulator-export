@@ -794,7 +794,7 @@ def write_model(
         sch.wire(("Converter", k + 1), ("Machine", k + 1))
     _add_mechanics(sch, tau_L, inertia=gradnet_plant)
     _add_drive_outputs(sch, FVC_BLOCK, outputs)
-    size = (880 + sch.dx, 460)
+    size = (880 + sch.dx, 480)
     return _write_model(
         path, FVC_BLOCK, variables, t_stop, mask_values["T_s"], sch, size, outputs
     )

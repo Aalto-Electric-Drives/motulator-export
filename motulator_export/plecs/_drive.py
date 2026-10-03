@@ -275,7 +275,7 @@ def _add_drive_outputs(sch: _Schematic, block: ControlBlock, outputs: bool) -> N
     # Scope, fed by probes of the controller outputs and the machine, below the control
     # system (not shifted by sch.dx, since the probes have no wires)
     dx, sch.dx = sch.dx, 0
-    x, y = 80, 220  # Position of the first probe
+    x, y = 80, 240  # Position of the first probe
     probes = [
         ("Speed (ctrl)", block.name, [speed]),
         ("Speed", "Machine", [MACHINE_PROBES[1]]),
