@@ -2,10 +2,11 @@
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import VoltageSourceConverter
+from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.model import Drive
 
 from motulator_export.plecs._common import ControlBlock, StepSignal
@@ -21,9 +22,17 @@ from motulator_export.simulink._sfunction import SFunction
 
 
 def check_supported_converter(mdl: Drive) -> None:
-    """Raise an error if the converter is not supported."""
+    """
+    Raise an error if the converter is not supported.
+
+    The dead time is not modeled in the system model, but its compensation in the
+    control system is supported.
+
+    """
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
+    if cast(CarrierComparison, mdl.pwm).t_d != 0:
+        raise NotImplementedError("Dead time not supported in the system model")
 
 
 def write_drive_model(

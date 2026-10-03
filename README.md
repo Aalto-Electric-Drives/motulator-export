@@ -28,7 +28,7 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 pip install git+https://github.com/Aalto-Electric-Drives/motulator-export
 ```
 
-This requires Python 3.12 or later and *motulator* 0.8.0 or later. In addition, you need:
+This requires Python 3.12 or later and *motulator* 0.8.1 or later. In addition, you need:
 
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
 - **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
@@ -79,6 +79,8 @@ Run them from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 | Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |   yes    |
 | Stiff DC bus                                                                                            |  yes  |   yes    |
 | Capacitive or diode-bridge-fed DC bus                                                                   |  yes  |    no    |
+| Dead time of the converter in the system model (induction machine drives)                               |  yes  |    no    |
+| Dead-time compensation in the control system (induction machine drives)                                 |  yes  |   yes    |
 
 The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`), and the grid is balanced with constant voltage and frequency.
 Other configurations raise `NotImplementedError` when the model is written.

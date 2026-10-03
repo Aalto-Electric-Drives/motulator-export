@@ -19,6 +19,9 @@ Currently supported:
 - Current-vector control (`CurrentVectorController`) in the sensorless or sensored
   mode with the default observer gain `k_o`, and a speed controller
   (`SpeedController`) in `VectorControlSystem`
+- Dead time of the converter (`t_d` with `sign=np.sign`), modeled with the Blanking
+  Time block and the IGBT converter of PLECS, and its compensation in the PWM
+  (`PWM(d_err=lambda i, d: dead_time_error(i, d, t_d, T_s))`)
 
 """
 
@@ -28,6 +31,7 @@ from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import FrequencyConverter
+from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._im_current_vector import (
     CurrentVectorController,
@@ -40,6 +44,7 @@ from motulator.drive.utils._parameters import (
 )
 
 from motulator_export.plecs._common import (
+    BLANKING_DX,
     C_DIR,
     C_PARAMS,
     DUTY_RATIO_CODE,
@@ -47,6 +52,7 @@ from motulator_export.plecs._common import (
     ControlBlock,
     MaskParam,
     StepSignal,
+    _add_blanking_time,
     _add_control_system,
     _add_converter,
     _add_dc_bus,
@@ -62,12 +68,15 @@ from motulator_export.plecs._drive import (
     MACHINE_PROBES,
     MACHINE_TERMINALS,
     MDL_OUTPUTS,
+    PWM_MASK_PARAMS,
     SPEED_MASK_PARAMS,
     _add_drive_outputs,
     _add_mechanics,
     _check_supported_plant,
     _check_supported_speed_control,
     mechanics_and_converter_variables,
+    pwm_code,
+    pwm_values,
     speed_controller_code,
     speed_ctrl_values,
 )
@@ -136,6 +145,7 @@ MASK_PARAMS = [
     ),
     MaskParam("T_s", "T_s: Sampling period (s)", TAB_CFG, "cfg.T_s", True),
     *SPEED_MASK_PARAMS,
+    *PWM_MASK_PARAMS,
 ]
 
 
@@ -150,7 +160,7 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
         raise NotImplementedError("Only InductionMachine with constant parameters")
     if par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
-    _check_supported_plant(mdl)
+    _check_supported_plant(mdl, dead_time=True)
     cvc = ctrl.vector_ctrl
     if not isinstance(cvc, CurrentVectorController):
         raise NotImplementedError("Only CurrentVectorController supported")
@@ -158,7 +168,7 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
         raise NotImplementedError("Only the default observer gain k_o supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
-    _check_supported_speed_control(ctrl)
+    _check_supported_speed_control(ctrl, dead_time=True)
 
 
 def export_mask_values(
@@ -193,6 +203,7 @@ def export_mask_values(
         "sensorless": int(cfg.sensorless),
         "T_s": cfg.T_s,
         **speed_ctrl_values(ctrl, speed_ctrl_args),
+        **pwm_values(ctrl.pwm, cfg.T_s),
     }
 
 
@@ -240,6 +251,7 @@ def _control_cscript_code() -> dict[str, str]:
         + speed_controller_code(i)
         + "\n"
         "im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        "\n" + pwm_code(i)
     )
     monitored = {
         "w_M_ref": "ctrl.ref.w_M",
@@ -357,16 +369,21 @@ def write_model(
     _add_control_system(sch, CVC_BLOCK, sources, values)
     _add_delay(sch, values["T_s"], CVC_BLOCK)
     _add_pwm(sch, values["T_s"])
-    # The diode bridge and its grid need space between the PWM and the DC bus
+    t_d = cast(CarrierComparison, mdl.pwm).t_d
+    if t_d > 0:
+        _add_blanking_time(sch)
+    # The blanking time, the diode bridge, and its grid need space between the PWM and
+    # the DC bus
     sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
-    _add_converter(sch)
+    sch.dx += BLANKING_DX if t_d > 0 else 0
+    _add_converter(sch, t_d)
     _add_dc_bus(sch, mdl.converter)
     _add_im(sch)
     for k in range(3):
         sch.wire(("Converter", k + 1), ("Machine", k + 1))
     _add_mechanics(sch, tau_L, inertia=False)
     _add_drive_outputs(sch, CVC_BLOCK, outputs)
-    size = (1000 + sch.dx, 560)
+    size = (880 + sch.dx, 480)
     variables = _plant_variables(mdl)
     return _write_model(
         path, CVC_BLOCK, variables, t_stop, values["T_s"], sch, size, outputs

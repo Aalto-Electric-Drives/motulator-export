@@ -55,9 +55,11 @@ s.control.mask = { ...
     'speed_alpha_s', 'alpha_s: Reference-tracking bandwidth (rad/s)', 'Speed control (SpeedController)', '2*pi*4'
     'speed_alpha_i', 'alpha_i: Integral-action bandwidth (rad/s), [] = alpha_s', 'Speed control (SpeedController)', '[]'
     'speed_tau_M_max', 'tau_M_max: Maximum motor torque (Nm)', 'Speed control (SpeedController)', 'inf'
+    'pwm_t_d', 't_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), 0 = None', 'PWM (PWM)', '0.0'
+    'pwm_feedforward', 'feedforward: Compensate for d_err (1) or not (0)', 'PWM (PWM)', '1.0'
     };
 s.control.mask_init = '';
-s.control.params = {'double(n_p)', 'double(R_s)', 'double(R_R)', 'double(L_sgm)', 'double(L_M)', 'double(psi_s_nom)', 'double(i_s_max)', 'double(alpha_c)', 'double(alpha_i)', 'double(alpha_o)', 'double(w_s_nom)', 'double(k_u)', 'double(k_fw)', 'double(J)', 'double(sensorless)', 'double(T_s)', 'double(speed_J)', 'double(speed_alpha_s)', 'double(speed_alpha_i)', 'double(speed_tau_M_max)'};
+s.control.params = {'double(n_p)', 'double(R_s)', 'double(R_R)', 'double(L_sgm)', 'double(L_M)', 'double(psi_s_nom)', 'double(i_s_max)', 'double(alpha_c)', 'double(alpha_i)', 'double(alpha_o)', 'double(w_s_nom)', 'double(k_u)', 'double(k_fw)', 'double(J)', 'double(sensorless)', 'double(T_s)', 'double(speed_J)', 'double(speed_alpha_s)', 'double(speed_alpha_i)', 'double(speed_tau_M_max)', 'double(pwm_t_d)', 'double(pwm_feedforward)'};
 s.control.inputs = {'w_M_ref', 'i_s_abc', 'u_dc', 'w_M'};
 s.control.outputs = {'d_abc', 'Speed (w_M_ref, w_M)', 'Torque (tau_M_ref, tau_M)', 'Flux linkage (psi_s, psi_R)', 'Current (i_sd_ref, i_sd, i_sq_ref, i_sq)'};
 s.T_s = 0.000125;

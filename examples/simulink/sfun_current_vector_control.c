@@ -44,7 +44,7 @@ static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3, 2, 2, 2, 4};
 #define NUM_INPUTS 4
 #define NUM_OUTPUTS 5
-#define NUM_PARAMS 20
+#define NUM_PARAMS 22
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -138,6 +138,14 @@ static void mdlStart(SimStruct *S)
         SetErrorMessage("speed_alpha_s must be a scalar.");
         return;
     }
+    if (PDIM(20) != 1) {
+        SetErrorMessage("pwm_t_d must be a scalar.");
+        return;
+    }
+    if (PDIM(21) != 1) {
+        SetErrorMessage("pwm_feedforward must be a scalar.");
+        return;
+    }
 
     /* Machine model parameters (InductionMachineInvGammaPars) */
     InductionMachineInvGammaPars par = {
@@ -181,6 +189,10 @@ static void mdlStart(SimStruct *S)
         PDIM(19) > 0 ? P(19, 0) : INFINITY);
 
     im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);
+
+    /* Duty-ratio error model of the PWM (dead_time_error) */
+    pwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),
+                      (int)P(21, 0));
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)

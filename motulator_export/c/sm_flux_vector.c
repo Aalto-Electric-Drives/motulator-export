@@ -352,7 +352,7 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
     References *ref = &self->ref;
 
     /* Feedback signals */
-    double complex u_c_ab = self->pwm.realized_voltage;
+    double complex u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc);
     const SpeedFluxObserver *observer = &self->vector_ctrl.observer;
     if (self->vector_ctrl.sensorless) {
         speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, 0.0, 0.0,
@@ -374,13 +374,13 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
     /* Duty ratios for the PWM */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
-                                     fbk->w_c, ref->d_abc);
+                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;
 }
 
 static void vector_control_system_update(VectorControlSystem *self)
 {
-    pwm_update(&self->pwm, self->ref.u_c_ab);
+    pwm_update(&self->pwm, self->ref.u_c_ab, self->ref.d_abc);
     flux_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
     pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
 }
