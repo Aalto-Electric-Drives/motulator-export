@@ -57,15 +57,15 @@ The state of the C code is in static variables, as in the C-Script block, so a m
 
 ## Agreement with *motulator*
 
-Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.8.0 and MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2), at the level of the PLECS models (cf. [examples/README.md](../../examples/README.md)).
+Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.8.1 and MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2), at the level of the PLECS models (cf. [examples/README.md](../../examples/README.md)).
 
 | Script                          | System model                               | Control system                                               |
 | ------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
 | `ipmsm_2kw_fvc_simulink.py`     | w_M 7.0e-6, tau_M 4.9e-6, i_s_ab 2.0e-6    | w_M 5.8e-6, tau_M 4.9e-6, tau_M_ref 4.8e-6, psi_s_ref 1.2e-8 |
 | `im_2kw_cvc_simulink.py`        | w_M 8.2e-7, tau_M 2.6e-6, i_s_ab 9.1e-7    | w_M 4.3e-6, tau_M 2.8e-6, tau_M_ref 3.2e-6, psi_R 3.5e-8     |
 | `pmsyrm_6kw_gn_fvc_simulink.py` | w_M 3.4e-4, tau_M 2.1e-3, i_s_ab 6.9e-4    |                                                              |
-| `gfl_10kva_lcl_simulink.py`     | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 4.0e-13, w_g 1.7e-13             |
-| `gfm_13kva_do_simulink.py`      | i_c_ab 9.4e-7, i_c_a 7.9e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
+| `gfl_10kva_lcl_simulink.py`     | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 1.7e-13, w_g 2.3e-13             |
+| `gfm_13kva_do_simulink.py`      | i_c_ab 9.4e-7, i_c_a 8.0e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
 
 The simulation of the IPMSM drive takes about 1.5 s in the normal mode (about 100 000 solver steps, mostly at the switching instants located by the zero-crossing detection) and 0.6 s in the accelerator mode, plus about 1 s of initialization.
 Most of the run time of a comparison script is the start of MATLAB, the build of the model, and the compilation of the MATLAB Function block.
