@@ -6,7 +6,7 @@
  *                                           wrap, clip, sign
  *   motulator/common/control/_controllers.py PIController, ComplexPIController
  *   motulator/common/control/_pwm.py         PWM (MPE overmodulation)
- *   motulator/common/utils/_dead_time.py     dead_time_error (with numpy.sign)
+ *   motulator/common/utils/_dead_time.py     dead_time_error (with numpy.sign or tanh)
  *   motulator/drive/control/_common.py       SpeedController, SpeedObserver
  *
  * Complex space vectors use peak-value scaling, as in motulator.
@@ -103,18 +103,21 @@ static void speed_observer_init(SpeedObserver *self, double k_w, double k_tau,
 static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
                                   double tau_M);
 
-/* Duty-ratio error due to the dead time t_d (dead_time_error with the signum
- * function), T_s being the half carrier period */
+/* Duty-ratio error due to the dead time t_d (dead_time_error), T_s being the half
+ * carrier period. The current direction is sign = tanh(i/i_0), or the signum
+ * function (numpy.sign) if i_0 = 0. */
 static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
-                            double T_s, double d_err[3]);
+                            double T_s, double i_0, double d_err[3]);
 
 /* Space-vector PWM with the minimum-phase-error (MPE) overmodulation. Optionally,
  * the duty-ratio error due to the dead time is modeled (pwm_set_dead_time), which
- * corresponds to d_err = dead_time_error(i_abc, d_abc, t_d, T_s) in motulator. */
+ * corresponds to d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign) in motulator
+ * with sign = tanh(i/i_0), or numpy.sign if i_0 = 0. */
 typedef struct {
     double k_comp;
     double t_d;      /* Dead time of the duty-ratio error model, 0 = no error model */
     double T_s;      /* Sampling period of the duty-ratio error model */
+    double i_0;      /* Current scale of sign = tanh(i/i_0), 0 = signum function */
     int feedforward; /* Compensate for the duty-ratio error */
     /* States */
     double complex realized_voltage;
@@ -123,7 +126,8 @@ typedef struct {
 } PWM;
 
 static void pwm_init(PWM *self, double k_comp);
-static void pwm_set_dead_time(PWM *self, double t_d, double T_s, int feedforward);
+static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
+                              int feedforward);
 /* Realized voltage, corrected for the duty-ratio error using the measured current
  * (get_realized_voltage) */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,

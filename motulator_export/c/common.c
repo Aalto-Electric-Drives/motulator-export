@@ -244,7 +244,7 @@ static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
 /* Dead time --------------------------------------------------------------- */
 
 static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
-                            double T_s, double d_err[3])
+                            double T_s, double i_0, double d_err[3])
 {
     for (int k = 0; k < 3; k++) {
         /* Switching-cycle averaged on-times of the upper and lower switches
@@ -254,7 +254,9 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
         double q_hi = fmax(d - delta, 0.0);
         double q_lo = fmax(1.0 - d - delta, 0.0);
         double b = 1.0 - q_hi - q_lo;
-        d_err[k] = d - q_hi - 0.5 * b * (1.0 - sign(i_abc[k]));
+        /* Current direction: tanh(i/i_0), or the signum function if i_0 = 0 */
+        double s = (i_0 > 0.0) ? tanh(i_abc[k] / i_0) : sign(i_abc[k]);
+        d_err[k] = d - q_hi - 0.5 * b * (1.0 - s);
     }
 }
 
@@ -265,6 +267,7 @@ static void pwm_init(PWM *self, double k_comp)
     self->k_comp = k_comp;
     self->t_d = 0.0;
     self->T_s = 0.0;
+    self->i_0 = 0.0;
     self->feedforward = 1;
     self->realized_voltage = 0.0;
     self->old_u_c_ab = 0.0;
@@ -274,10 +277,12 @@ static void pwm_init(PWM *self, double k_comp)
     }
 }
 
-static void pwm_set_dead_time(PWM *self, double t_d, double T_s, int feedforward)
+static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
+                              int feedforward)
 {
     self->t_d = t_d;
     self->T_s = T_s;
+    self->i_0 = i_0;
     self->feedforward = feedforward;
 }
 
@@ -289,8 +294,8 @@ static double complex pwm_realized_voltage(const PWM *self, double complex i_c_a
     }
     double i_abc[3], e0[3], e1[3], d_err[3];
     complex2abc(i_c_ab, i_abc);
-    dead_time_error(i_abc, self->d_abc[0], self->t_d, self->T_s, e0);
-    dead_time_error(i_abc, self->d_abc[1], self->t_d, self->T_s, e1);
+    dead_time_error(i_abc, self->d_abc[0], self->t_d, self->T_s, self->i_0, e0);
+    dead_time_error(i_abc, self->d_abc[1], self->t_d, self->T_s, self->i_0, e1);
     for (int k = 0; k < 3; k++) {
         d_err[k] = 0.5 * (e0[k] + e1[k]);
     }
@@ -340,7 +345,8 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
     if (self->t_d > 0.0 && self->feedforward) {
         double i_c_abc[3], d_err[3];
         complex2abc(cexp(I * theta_comp) * i_c_ab, i_c_abc);
-        dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, d_err);
+        dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, self->i_0,
+                        d_err);
         for (int k = 0; k < 3; k++) {
             d_abc[k] = clip(d_abc[k] + d_err[k], 0.0, 1.0);
         }

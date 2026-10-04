@@ -313,6 +313,15 @@ Plecs {
         TabName       "PWM (PWM)"
       }
       Parameter {
+        Variable      "pwm_i_0"
+        Prompt        "i_0: Current scale (A) of sign = tanh(i/i_0) in dead_time_error, 0 = np.sign"
+        Type          FreeText
+        Value         "0.0"
+        Show          off
+        Tunable       on
+        TabName       "PWM (PWM)"
+      }
+      Parameter {
         Variable      "pwm_feedforward"
         Prompt        "feedforward: Compensate for d_err (1) or not (0)"
         Type          FreeText
@@ -479,7 +488,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "n_p, R_s, R_R, L_sgm, L_M, psi_s_nom, i_s_max, alpha_c, alpha_i, alpha_o, w_s_nom, k_u, k_fw, J, sensorless, T_s, speed_J, speed_alpha_s, speed_alpha_i, speed_tau_M_max, pwm_t_d, pwm_feedforward"
+        Value         "n_p, R_s, R_R, L_sgm, L_M, psi_s_nom, i_s_max, alpha_c, alpha_i, alpha_o, w_s_nom, k_u, k_fw, J, sensorless, T_s, speed_J, speed_alpha_s, speed_alpha_i, speed_tau_M_max, pwm_t_d, pwm_i_0, pwm_feedforward"
         Show          off
       }
       Parameter {
@@ -504,7 +513,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"R_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"R_R must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"L_M must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"psi_s_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(15) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(16) != 1) {\n    SetErrorMessage(\"speed_J must be a scalar.\");\n    return;\n}\nif (PDIM(17) != 1) {\n    SetErrorMessage(\"speed_alpha_s must be a scalar.\");\n    return;\n}\nif (PDIM(20) != 1) {\n    SetErrorMessage(\"pwm_t_d must be a scalar.\");\n    return;\n}\nif (PDIM(21) != 1) {\n    SetErrorMessage(\"pwm_feedforward must be a scalar.\");\n    return;\n}\n\n/* Machine model parameters (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {\n    P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0)};\n\n/* Current-vector controller configuration (CurrentVectorControllerCfg),\n * the defaults are used for empty parameters */\nIMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n    P(5, 0), P(6, 0));\nif (PDIM(7) > 0) {\n    cfg.alpha_c = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.alpha_i = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.alpha_o = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.w_s_nom = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.k_u = P(11, 0);\n}\nif (PDIM(12) > 0) {\n    cfg.k_fw = P(12, 0);\n}\nif (PDIM(13) > 0) {\n    cfg.J = P(13, 0);\n}\nif (PDIM(14) > 0) {\n    cfg.sensorless = P(14, 0);\n}\nif (PDIM(15) > 0) {\n    cfg.T_s = P(15, 0);\n}\n\n/* Speed controller (SpeedController) */\nPIController speed_ctrl = speed_controller(\n    P(16, 0), P(17, 0), PARAM(18),\n    PDIM(19) > 0 ? P(19, 0) : INFINITY);\n\nim_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n\n/* Duty-ratio error model of the PWM (dead_time_error) */\npwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),\n                  (int)P(21, 0));\n"
+        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"R_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"R_R must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"L_M must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"psi_s_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(15) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(16) != 1) {\n    SetErrorMessage(\"speed_J must be a scalar.\");\n    return;\n}\nif (PDIM(17) != 1) {\n    SetErrorMessage(\"speed_alpha_s must be a scalar.\");\n    return;\n}\nif (PDIM(20) != 1) {\n    SetErrorMessage(\"pwm_t_d must be a scalar.\");\n    return;\n}\nif (PDIM(21) != 1) {\n    SetErrorMessage(\"pwm_i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(22) != 1) {\n    SetErrorMessage(\"pwm_feedforward must be a scalar.\");\n    return;\n}\n\n/* Machine model parameters (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {\n    P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0)};\n\n/* Current-vector controller configuration (CurrentVectorControllerCfg),\n * the defaults are used for empty parameters */\nIMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n    P(5, 0), P(6, 0));\nif (PDIM(7) > 0) {\n    cfg.alpha_c = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.alpha_i = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.alpha_o = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.w_s_nom = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.k_u = P(11, 0);\n}\nif (PDIM(12) > 0) {\n    cfg.k_fw = P(12, 0);\n}\nif (PDIM(13) > 0) {\n    cfg.J = P(13, 0);\n}\nif (PDIM(14) > 0) {\n    cfg.sensorless = P(14, 0);\n}\nif (PDIM(15) > 0) {\n    cfg.T_s = P(15, 0);\n}\n\n/* Speed controller (SpeedController) */\nPIController speed_ctrl = speed_controller(\n    P(16, 0), P(17, 0), PARAM(18),\n    PDIM(19) > 0 ? P(19, 0) : INFINITY);\n\nim_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n\n/* Duty-ratio error model of the PWM (dead_time_error) */\npwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),\n                  P(21, 0), (int)P(22, 0));\n"
         Show          off
       }
       Parameter {
