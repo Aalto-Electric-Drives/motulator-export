@@ -267,13 +267,16 @@ def test_flux_vector_control(fvc: ctypes.CDLL, sensorless: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d"),
-    [(True, 0.0), (False, 0.0), (True, 2e-6)],
-    ids=["sensorless", "sensored", "dead_time"],
+    ("sensorless", "t_d", "i_0"),
+    [(True, 0.0, 0.0), (False, 0.0, 0.0), (True, 2e-6, 0.0), (True, 2e-6, 0.5)],
+    ids=["sensorless", "sensored", "dead_time", "dead_time_tanh"],
 )
-def test_current_vector_control(cvc: ctypes.CDLL, sensorless: bool, t_d: float) -> None:
+def test_current_vector_control(
+    cvc: ctypes.CDLL, sensorless: bool, t_d: float, i_0: float
+) -> None:
     """The S-function of current-vector control should agree with motulator, also
-    with the dead time of the converter and its compensation."""
+    with the dead time of the converter and its compensation, with the
+    current-direction function np.sign or tanh(i/i_0)."""
     par = model.InductionMachineInvGammaPars(
         n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
     )
@@ -289,7 +292,10 @@ def test_current_vector_control(cvc: ctypes.CDLL, sensorless: bool, t_d: float) 
         cfg = im_control.CurrentVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless
         )
-        d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s)
+        sign = np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
+        d_err = (
+            None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s, sign)
+        )
         ctrl = VectorControlSystem(
             im_control.CurrentVectorController(par, cfg),
             im_control.SpeedController(**speed),

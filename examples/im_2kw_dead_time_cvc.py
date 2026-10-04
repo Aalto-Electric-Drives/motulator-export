@@ -12,9 +12,15 @@ control system. The script exports the system to a PLECS model
 block and the IGBT converter of PLECS, and, if PLECS Standalone is running with the
 RPC interface enabled, simulates both and compares the results.
 
+With --tanh, the current direction in the dead-time compensation of the control
+system is the smooth function tanh(i/i_0) instead of the signum function, as on
+hardware, where the current ripple and the measurement noise near the zero
+crossings would make the signum function chatter (im_2kw_dead_time_cvc_tanh.plecs).
+The converter model still uses the signum function.
+
 Run from the repository root:
 
-    python examples/im_2kw_dead_time_cvc.py
+    python examples/im_2kw_dead_time_cvc.py [--tanh]
 
 """
 
@@ -45,11 +51,18 @@ TAU_L = StepSignal(time=0.8, after=0.7 * nom.tau)
 SPEED_CTRL = {"J": 0.015, "alpha_s": 2 * pi * 4}  # Arguments of SpeedController
 T_D = 2e-6  # Dead time (s)
 T_S = 125e-6  # Sampling period (s), the default value in CurrentVectorControllerCfg
+I_0 = 0.1  # Current scale (A) of tanh(i/i_0), about half the peak-to-peak ripple
 
 
 # %%
-def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
-    """Build the drive system of the motulator example."""
+def build_system(tanh: bool = False) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Build the drive system of the motulator example.
+
+    With `tanh`, the dead-time compensation uses the current-direction function
+    `tanh(i/I_0)` instead of `np.sign`.
+
+    """
     par = model.InductionMachineInvGammaPars(
         n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
     )
@@ -67,8 +80,10 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     cfg = control.CurrentVectorControllerCfg(
         psi_s_nom=0.95 * base.psi, i_s_max=1.5 * base.i, sensorless=True, T_s=T_S
     )
-    # The duty-ratio error model of the system model, compensated for in the PWM
-    pwm = control.PWM(d_err=lambda i, d: dead_time_error(i, d, T_D, T_S))
+    # The duty-ratio error model of the system model, compensated for in the PWM,
+    # optionally with a smooth current-direction function
+    sign = (lambda i: np.tanh(i / I_0)) if tanh else np.sign
+    pwm = control.PWM(d_err=lambda i, d: dead_time_error(i, d, T_D, T_S, sign))
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(est_par, cfg),
         control.SpeedController(**SPEED_CTRL),
@@ -79,12 +94,15 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
 
 # %%
 if __name__ == "__main__":
-    mdl, ctrl = build_system()
+    tanh = "--tanh" in sys.argv  # Smooth current direction in the compensation
+    mdl, ctrl = build_system(tanh)
     # Speed reference switching at the same sample as in motulator
     T_s = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg.T_s
     w_M_ref = sampled_step(W_M_REF, T_s)
     path = im.write_model(
-        Path(__file__).with_name("im_2kw_dead_time_cvc.plecs"),
+        Path(__file__).with_name(
+            f"im_2kw_dead_time_cvc{'_tanh' if tanh else ''}.plecs"
+        ),
         mdl,
         ctrl,
         w_M_ref,

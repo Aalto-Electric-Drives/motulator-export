@@ -4,7 +4,7 @@ and the scope.
 
 """
 
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import numpy as np
 from motulator.common.control._pwm import PWM
@@ -56,6 +56,13 @@ PWM_MASK_PARAMS = [
         "pwm_t_d",
         "t_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), "
         "0 = None",
+        TAB_PWM,
+        "",
+        True,
+    ),
+    MaskParam(
+        "pwm_i_0",
+        "i_0: Current scale (A) of sign = tanh(i/i_0) in dead_time_error, 0 = np.sign",
         TAB_PWM,
         "",
         True,
@@ -117,36 +124,71 @@ def _check_supported_speed_control(
     _check_supported_pwm(ctrl.pwm, d_err=dead_time)
 
 
+def _tanh_sign(i_0: float) -> Callable[[np.ndarray], np.ndarray]:
+    """Current-direction function `tanh(i/i_0)`, or `np.sign` if `i_0` is zero."""
+    if i_0 == 0:
+        return np.sign
+    return lambda i: np.tanh(i / i_0)
+
+
 def pwm_values(pwm: PWM, T_s: float) -> dict[str, Any]:
     """
     Get the mask parameter values of the duty-ratio error model of the PWM.
 
-    Only `d_err = dead_time_error(i_abc, d_abc, t_d, T_s)` with the default
-    `sign=np.sign` and the sampling period `T_s` of the control system is supported.
-    Since `d_err` is a function, the dead time `t_d` is identified from its value at
-    the duty ratios of 0.5, and the function is checked at test points.
+    Only `d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign)` with the sampling
+    period `T_s` of the control system and `sign = np.sign` (the default) or
+    `sign = lambda i: np.tanh(i/i_0)` is supported. Since `d_err` is a function, the
+    dead time `t_d` and the current scale `i_0` are identified from its values at the
+    duty ratios of 0.5, where `d_err = t_d/(2*T_s)*sign(i)`, and the function is
+    checked at test points, also near zero current.
 
     """
     if pwm.d_err is None:
-        return {"pwm_t_d": 0.0, "pwm_feedforward": int(pwm.feedforward)}
+        return {"pwm_t_d": 0.0, "pwm_i_0": 0.0, "pwm_feedforward": int(pwm.feedforward)}
     d_err = pwm.d_err
-    t_d = 2 * T_s * float(d_err(np.array([1.0, -1.0, 0.0]), np.full(3, 0.5))[0])
-    t_d = float(f"{t_d:.12g}")  # Remove the rounding errors of the identification
+    d_half = np.full(3, 0.5)
+
+    def sign(i: float) -> float:
+        """Current direction scaled by the error at the duty ratios of 0.5."""
+        return float(d_err(np.array([i, -i, 0.0]), d_half)[0])
+
+    # The sign function saturates far from zero current
+    t_d = float(f"{2 * T_s * sign(1e6):.12g}")  # Remove the rounding errors
+    i_0 = 0.0
+    if t_d > 0 and sign(1e-300) < 0.5 * t_d / (2 * T_s):
+        # Smooth sign function: bisect the current at which it reaches tanh(1)
+        lo, hi = 0.0, 1e6
+        target = np.tanh(1) * t_d / (2 * T_s)
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            lo, hi = (mid, hi) if sign(mid) < target else (lo, mid)
+        i_0 = float(f"{0.5 * (lo + hi):.12g}")
     rng = np.random.default_rng(0)
-    i_test = rng.uniform(-10, 10, (20, 3))
+    i_test = rng.uniform(-10, 10, (40, 3))
     i_test[:, 0] = 0  # The signum function is zero at zero current
-    d_test = rng.uniform(0, 1, (20, 3))
+    # Currents near zero, where the sign functions differ
+    i_near = np.array([1e-9, 1e-6, 1e-3, 1e-2, 0.1, 0.3, 1.0])
+    if i_0 > 0:
+        i_near = np.concatenate((i_near, i_0 * np.array([0.1, 0.5, 1.0, 2.0, 5.0])))
+    for k, i in enumerate(i_near):
+        i_test[5 + 2 * k, 1:] = [i, -i]
+        i_test[6 + 2 * k, 1:] = [-i, 0.5 * i]
+    d_test = rng.uniform(0, 1, (40, 3))
     d_test[:5] = [[0, 1, 0.5], [1e-3, 1 - 1e-3, 0.5], [0, 0, 1], [1, 1, 0], [0.5] * 3]
+    d_test[5:30, 1:] = 0.5  # Duty ratios at which the error is not suppressed
     for i_abc, d_abc in zip(i_test, d_test, strict=True):
         if t_d <= 0 or not np.allclose(
-            d_err(i_abc, d_abc), dead_time_error(i_abc, d_abc, t_d, T_s), atol=1e-12
+            d_err(i_abc, d_abc),
+            dead_time_error(i_abc, d_abc, t_d, T_s, _tanh_sign(i_0)),
+            rtol=0,
+            atol=1e-12,
         ):
             raise NotImplementedError(
-                "Only d_err = dead_time_error(i_abc, d_abc, t_d, T_s) with "
-                "sign=np.sign and the sampling period T_s of the control system "
-                "supported"
+                "Only d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign) with "
+                "sign=np.sign or sign=lambda i: np.tanh(i/i_0) and the sampling "
+                "period T_s of the control system supported"
             )
-    return {"pwm_t_d": t_d, "pwm_feedforward": int(pwm.feedforward)}
+    return {"pwm_t_d": t_d, "pwm_i_0": i_0, "pwm_feedforward": int(pwm.feedforward)}
 
 
 def pwm_code(i: dict[str, int]) -> str:
@@ -154,7 +196,7 @@ def pwm_code(i: dict[str, int]) -> str:
     return (
         "/* Duty-ratio error model of the PWM (dead_time_error) */\n"
         f"pwm_set_dead_time(&ctrl.pwm, P({i['pwm_t_d']}, 0), P({i['T_s']}, 0),\n"
-        f"                  (int)P({i['pwm_feedforward']}, 0));\n"
+        f"                  P({i['pwm_i_0']}, 0), (int)P({i['pwm_feedforward']}, 0));\n"
     )
 
 

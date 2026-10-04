@@ -52,7 +52,7 @@ void init(const double *p, const double *c, const double *s)
     cfg.T_s = c[10];
     PIController speed_ctrl = speed_controller(s[0], s[1], s[2], s[3]);
     im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);
-    pwm_set_dead_time(&ctrl.pwm, s[4], cfg.T_s, (int)s[5]);
+    pwm_set_dead_time(&ctrl.pwm, s[4], cfg.T_s, s[5], (int)s[6]);
 }
 
 void step(const double *i_s_abc, double u_dc, double w_M, double w_M_ref, double *out)
@@ -82,6 +82,7 @@ PAR = control.InductionMachineInvGammaPars(
 )
 SPEED_CTRL = {"J": 0.015, "alpha_s": 2 * pi * 4}
 T_D = 2e-6  # Dead time (s)
+I_0 = 0.5  # Current scale (A) of sign = tanh(i/i_0) in the dead-time compensation
 
 
 @pytest.fixture(scope="module")
@@ -90,9 +91,15 @@ def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 def build_system(
-    sensorless: bool, t_d: float = 0.0
+    sensorless: bool, t_d: float = 0.0, i_0: float = 0.0
 ) -> tuple[model.Drive, control.VectorControlSystem]:
-    """Build the drive system of the 2.2-kW example, optionally with the dead time."""
+    """
+    Build the drive system of the 2.2-kW example, optionally with the dead time.
+
+    The dead-time compensation uses `sign = tanh(i/i_0)`, or `np.sign` if `i_0` is
+    zero.
+
+    """
     mdl = model.Drive(
         model.InductionMachine(PAR),
         model.MechanicalSystem(J=0.015),
@@ -102,7 +109,8 @@ def build_system(
     cfg = control.CurrentVectorControllerCfg(
         psi_s_nom=BASE.psi, i_s_max=1.5 * BASE.i, J=0.015, sensorless=sensorless
     )
-    d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s)
+    sign = np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
+    d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s, sign)
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(PAR, cfg),
         control.SpeedController(**SPEED_CTRL),
@@ -116,7 +124,11 @@ class CControlSystem(control.VectorControlSystem):
     """Control system running the C port, for closed-loop simulations."""
 
     def __init__(
-        self, ctrl: control.VectorControlSystem, dll: ctypes.CDLL, t_d: float
+        self,
+        ctrl: control.VectorControlSystem,
+        dll: ctypes.CDLL,
+        t_d: float,
+        i_0: float,
     ) -> None:
         super().__init__(ctrl.vector_ctrl, ctrl.speed_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
@@ -129,7 +141,7 @@ class CControlSystem(control.VectorControlSystem):
         c += [cfg.w_s_nom, cfg.k_u, cfg.k_fw, cast(float, cfg.J), cfg.sensorless]
         c += [cfg.T_s]
         p = [PAR.n_p, PAR.R_s, PAR.R_R, PAR.L_sgm, PAR.L_M]
-        s = [*SPEED_CTRL.values(), np.nan, inf, t_d, ctrl.pwm.feedforward]
+        s = [*SPEED_CTRL.values(), np.nan, inf, t_d, i_0, ctrl.pwm.feedforward]
         self.dll.init(arr(p), arr(c), arr(s))
         self.out = (ctypes.c_double * len(NAMES))()
 
@@ -149,13 +161,15 @@ class CControlSystem(control.VectorControlSystem):
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d"),
-    [(True, 0.0), (False, 0.0), (True, T_D)],
-    ids=["sensorless", "sensored", "dead_time"],
+    ("sensorless", "t_d", "i_0"),
+    [(True, 0.0, 0.0), (False, 0.0, 0.0), (True, T_D, 0.0), (True, T_D, I_0)],
+    ids=["sensorless", "sensored", "dead_time", "dead_time_tanh"],
 )
-def test_control_system(dll: ctypes.CDLL, sensorless: bool, t_d: float) -> None:
+def test_control_system(
+    dll: ctypes.CDLL, sensorless: bool, t_d: float, i_0: float
+) -> None:
     """Closed-loop simulation of the 2.2-kW drive with motulator and with the C port."""
-    mdl, ctrl = build_system(sensorless, t_d)
+    mdl, ctrl = build_system(sensorless, t_d, i_0)
     res_py = model.Simulation(mdl, ctrl).simulate(t_stop=0.5)
     fbk, ref = res_py.ctrl.fbk, res_py.ctrl.ref
     py = np.column_stack(
@@ -170,8 +184,10 @@ def test_control_system(dll: ctypes.CDLL, sensorless: bool, t_d: float) -> None:
             ref.i_s.imag,
         ]
     )
-    mdl, ctrl = build_system(sensorless, t_d)
-    res_c = model.Simulation(mdl, CControlSystem(ctrl, dll, t_d)).simulate(t_stop=0.5)
+    mdl, ctrl = build_system(sensorless, t_d, i_0)
+    res_c = model.Simulation(mdl, CControlSystem(ctrl, dll, t_d, i_0)).simulate(
+        t_stop=0.5
+    )
     c = np.column_stack([getattr(res_c.ctrl.out, name) for name in NAMES])
     assert np.allclose(res_py.ctrl.t, res_c.ctrl.t)
     err = np.max(np.abs(c - py), axis=0)

@@ -1,17 +1,17 @@
 Plecs {
-  Name          "im_2kw_cvc"
+  Name          "im_2kw_dead_time_cvc_tanh"
   Version       "5.0"
   CircuitModel  "ContStateSpace"
   StartTime     "0.0"
-  TimeSpan      "1.5"
+  TimeSpan      "2.4"
   Solver        "dopri"
   MaxStep       "0.000125"
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The parameters of the control system are in\n% the mask of the subsystem 'Current-vector control'.\nmachine.n_p = 2.0;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nconverter.u_dc = 540.0;\n"
+  InitializationCommands "% Generated from motulator. The parameters of the control system are in\n% the mask of the subsystem 'Current-vector control'.\nmachine.n_p = 2.0;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nconverter.u_dc = 540.0;\nconverter.t_d = 2e-06;\n"
   Schematic {
-    Location      [0, 0; 880, 480]
+    Location      [0, 0; 960, 480]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -26,22 +26,41 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "Time"
-        Value         "0.2000625"
+        Value         "[0.2000625 1.4000625]"
         Show          off
       }
       Parameter {
         Variable      "Before"
-        Value         "0.0"
+        Value         "[0.0 0.0]"
         Show          off
       }
       Parameter {
         Variable      "After"
-        Value         "78.53981633974483"
+        Value         "[7.853981633974484 -15.707963267948967]"
         Show          off
       }
       Parameter {
         Variable      "DataType"
         Value         "10"
+        Show          off
+      }
+    }
+    Component {
+      Type          Gain
+      Name          "w_M_ref sum"
+      Show          off
+      Position      [110, 40]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "K"
+        Value         "[1.0 1.0]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Multiplication"
+        Value         "2"
         Show          off
       }
     }
@@ -153,7 +172,7 @@ Plecs {
         Variable      "psi_s_nom"
         Prompt        "psi_s_nom: Nominal stator flux linkage (Vs)"
         Type          FreeText
-        Value         "1.0395957349782348"
+        Value         "0.987615948229323"
         Show          off
         Tunable       on
         TabName       "Current-vector control (CurrentVectorControllerCfg)"
@@ -288,7 +307,7 @@ Plecs {
         Variable      "pwm_t_d"
         Prompt        "t_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), 0 = None"
         Type          FreeText
-        Value         "0.0"
+        Value         "2e-06"
         Show          off
         Tunable       on
         TabName       "PWM (PWM)"
@@ -297,7 +316,7 @@ Plecs {
         Variable      "pwm_i_0"
         Prompt        "i_0: Current scale (A) of sign = tanh(i/i_0) in dead_time_error, 0 = np.sign"
         Type          FreeText
-        Value         "0.0"
+        Value         "0.1"
         Show          off
         Tunable       on
         TabName       "PWM (PWM)"
@@ -700,10 +719,36 @@ Plecs {
     }
     Component {
       Type          Reference
-      SrcComponent  "Components/Electrical/Converters/2-Level\\nConv."
+      SrcComponent  "Components/Control/Modulators/Blanking Time"
+      Name          "Blanking time"
+      Show          on
+      Position      [530, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-20, -20; 20, 20]
+      Parameter {
+        Variable      "tb"
+        Value         "converter.t_d"
+        Show          off
+      }
+      Terminal {
+        Type          Output
+        Position      [24, 0]
+        Direction     right
+      }
+      Terminal {
+        Type          Input
+        Position      [-20, 0]
+        Direction     left
+      }
+    }
+    Component {
+      Type          Reference
+      SrcComponent  "Components/Electrical/Converters/2-Level\\nIGBT\\nConv."
       Name          "Converter"
       Show          on
-      Position      [620, 100]
+      Position      [700, 100]
       Direction     down
       Flipped       on
       LabelPosition south
@@ -743,7 +788,7 @@ Plecs {
       Type          Voltmeter
       Name          "u_dc"
       Show          on
-      Position      [580, 100]
+      Position      [660, 100]
       Direction     up
       Flipped       off
       LabelPosition west
@@ -752,7 +797,7 @@ Plecs {
       Type          DCVoltageSource
       Name          "V_dc"
       Show          on
-      Position      [540, 100]
+      Position      [620, 100]
       Direction     up
       Flipped       off
       LabelPosition west
@@ -767,7 +812,7 @@ Plecs {
       SrcComponent  "Components/Electrical/Machines/Squirrel-Cage IM"
       Name          "Machine"
       Show          on
-      Position      [740, 100]
+      Position      [820, 100]
       Direction     up
       Flipped       off
       LabelPosition east
@@ -857,13 +902,13 @@ Plecs {
       Type          Step
       Name          "tau_L"
       Show          on
-      Position      [700, 180]
+      Position      [780, 180]
       Direction     right
       Flipped       off
       LabelPosition south
       Parameter {
         Variable      "Time"
-        Value         "0.75"
+        Value         "0.8"
         Show          off
       }
       Parameter {
@@ -873,7 +918,7 @@ Plecs {
       }
       Parameter {
         Variable      "After"
-        Value         "14.6"
+        Value         "10.219999999999999"
         Show          off
       }
       Parameter {
@@ -886,7 +931,7 @@ Plecs {
       Type          ControlledTorque
       Name          "Load"
       Show          on
-      Position      [770, 180]
+      Position      [850, 180]
       Direction     left
       Flipped       off
       LabelPosition east
@@ -905,7 +950,7 @@ Plecs {
       Type          RotationalReference
       Name          "Frame"
       Show          off
-      Position      [770, 225]
+      Position      [850, 225]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1093,6 +1138,13 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M_ref"
       SrcTerminal   1
+      DstComponent  "w_M_ref sum"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "w_M_ref sum"
+      SrcTerminal   2
       Points        [160, 40; 160, 85]
       DstComponent  "Current-vector control"
       DstTerminal   1
@@ -1139,7 +1191,14 @@ Plecs {
       Type          Signal
       SrcComponent  "PWM"
       SrcTerminal   1
-      Points        [500, 100; 500, 20; 635, 20]
+      DstComponent  "Blanking time"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "Blanking time"
+      SrcTerminal   1
+      Points        [580, 100; 580, 20; 715, 20]
       DstComponent  "Converter"
       DstTerminal   4
     }
@@ -1253,13 +1312,13 @@ Plecs {
       Type          Wire
       SrcComponent  "V_dc"
       SrcTerminal   1
-      Points        [540, 40; 580, 40]
+      Points        [620, 40; 660, 40]
       Branch {
         DstComponent  "u_dc"
         DstTerminal   1
       }
       Branch {
-        Points        [620, 40]
+        Points        [700, 40]
         DstComponent  "Converter"
         DstTerminal   5
       }
@@ -1268,13 +1327,13 @@ Plecs {
       Type          Wire
       SrcComponent  "V_dc"
       SrcTerminal   2
-      Points        [540, 160; 580, 160]
+      Points        [620, 160; 660, 160]
       Branch {
         DstComponent  "u_dc"
         DstTerminal   2
       }
       Branch {
-        Points        [620, 160]
+        Points        [700, 160]
         DstComponent  "Converter"
         DstTerminal   6
       }

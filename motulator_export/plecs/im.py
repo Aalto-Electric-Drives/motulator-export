@@ -21,7 +21,8 @@ Currently supported:
   (`SpeedController`) in `VectorControlSystem`
 - Dead time of the converter (`t_d` with `sign=np.sign`), modeled with the Blanking
   Time block and the IGBT converter of PLECS, and its compensation in the PWM
-  (`PWM(d_err=lambda i, d: dead_time_error(i, d, t_d, T_s))`)
+  (`PWM(d_err=lambda i, d: dead_time_error(i, d, t_d, T_s, sign))` with
+  `sign=np.sign` or the smooth `sign=lambda i: np.tanh(i/i_0)`)
 
 """
 

@@ -3,8 +3,9 @@ Test the C port of the PWM with the dead-time error model against motulator.
 
 The PWM of motulator with `d_err = dead_time_error(...)` and the C port are fed with
 the same sequence of voltage references and measured currents, and the duty ratios
-and the realized voltages are compared. The identification of the dead time from
-`d_err` in the writers is also tested.
+and the realized voltages are compared, with the current-direction functions
+`np.sign` and `tanh(i/i_0)`. The identification of the dead time and the current
+scale from `d_err` in the writers is also tested.
 
 Run from the repository root (requires gcc):
 
@@ -15,6 +16,7 @@ Run from the repository root (requires gcc):
 # %%
 import ctypes
 from math import pi
+from typing import Callable
 
 import numpy as np
 import pytest
@@ -29,16 +31,16 @@ CAPI = r"""
 
 static PWM pwm;
 
-void init(double t_d, double T_s, double feedforward)
+void init(double t_d, double T_s, double i_0, double feedforward)
 {
     pwm_init(&pwm, 1.5);
-    pwm_set_dead_time(&pwm, t_d, T_s, (int)feedforward);
+    pwm_set_dead_time(&pwm, t_d, T_s, i_0, (int)feedforward);
 }
 
 void error(const double *i_abc, const double *d_abc, double t_d, double T_s,
-           double *out)
+           double i_0, double *out)
 {
-    dead_time_error(i_abc, d_abc, t_d, T_s, out);
+    dead_time_error(i_abc, d_abc, t_d, T_s, i_0, out);
 }
 
 void step(double T_s, const double *u_ref, const double *i, double u_dc, double w,
@@ -57,7 +59,12 @@ void step(double T_s, const double *u_ref, const double *i, double u_dc, double 
 }
 """
 
-T_S, T_D, U_DC = 125e-6, 2e-6, 540.0
+T_S, T_D, U_DC, I_0 = 125e-6, 2e-6, 540.0, 0.5
+
+
+def tanh_sign(i_0: float) -> Callable[[np.ndarray], np.ndarray]:
+    """Current-direction function `tanh(i/i_0)`, or `np.sign` if `i_0` is zero."""
+    return np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
 
 
 @pytest.fixture(scope="module")
@@ -65,28 +72,36 @@ def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_library(CAPI, tmp_path_factory.mktemp("pwm"))
 
 
-def test_dead_time_error(dll: ctypes.CDLL) -> None:
-    """The duty-ratio error equals that of motulator, also near the limits."""
+@pytest.mark.parametrize("i_0", [0.0, I_0], ids=["sign", "tanh"])
+def test_dead_time_error(dll: ctypes.CDLL, i_0: float) -> None:
+    """The duty-ratio error equals that of motulator, also near the limits and near
+    zero current."""
     rng = np.random.default_rng(1)
-    d_limits = [[0, 1, 0.5], [1e-3, 1 - 1e-3, 0.01]]
+    d_limits = [[0, 1, 0.5], [1e-3, 1 - 1e-3, 0.01], [0.5, 0.5, 0.5]]
     d_test = np.vstack((d_limits, rng.uniform(0, 1, (50, 3))))
-    i_test = np.vstack(([[1, -1, 0], [-2, 2, 0]], rng.uniform(-5, 5, (50, 3))))
+    i_near = [[1, -1, 0], [-2, 2, 0], [0.01, -0.2, 0.6]]
+    i_test = np.vstack((i_near, rng.uniform(-5, 5, (50, 3))))
     out = (ctypes.c_double * 3)()
     for i_abc, d_abc in zip(i_test, d_test, strict=True):
-        dll.error(arr(i_abc), arr(d_abc), d(T_D), d(T_S), out)
+        dll.error(arr(i_abc), arr(d_abc), d(T_D), d(T_S), d(i_0), out)
         assert np.array(out) == pytest.approx(
-            dead_time_error(i_abc, d_abc, T_D, T_S), abs=1e-15
+            dead_time_error(i_abc, d_abc, T_D, T_S, tanh_sign(i_0)), abs=1e-15
         )
 
 
-@pytest.mark.parametrize("t_d", [0.0, T_D], ids=["no_d_err", "d_err"])
+@pytest.mark.parametrize(
+    ("t_d", "i_0"),
+    [(0.0, 0.0), (T_D, 0.0), (T_D, I_0)],
+    ids=["no_d_err", "d_err", "d_err_tanh"],
+)
 @pytest.mark.parametrize("feedforward", [True, False], ids=["ff", "no_ff"])
-def test_pwm(dll: ctypes.CDLL, t_d: float, feedforward: bool) -> None:
+def test_pwm(dll: ctypes.CDLL, t_d: float, i_0: float, feedforward: bool) -> None:
     """The duty ratios and the realized voltages equal those of motulator, also in
     overmodulation, where the error depends on the duty ratios."""
-    d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, T_S)
+    sign = tanh_sign(i_0)
+    d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, T_S, sign)
     pwm = PWM(d_err=d_err, feedforward=feedforward)
-    dll.init(d(t_d), d(T_S), d(feedforward))
+    dll.init(d(t_d), d(T_S), d(i_0), d(feedforward))
     out = (ctypes.c_double * 5)()
     rng = np.random.default_rng(2)
     for k in range(200):
@@ -110,14 +125,35 @@ def test_pwm(dll: ctypes.CDLL, t_d: float, feedforward: bool) -> None:
 
 
 def test_pwm_values() -> None:
-    """The dead time is identified from d_err, and other functions are rejected."""
+    """The dead time and the current scale of tanh are identified from d_err, and
+    other functions are rejected, also if they differ from np.sign only near zero
+    current."""
     pwm = PWM(d_err=lambda i, d: dead_time_error(i, d, T_D, T_S), feedforward=False)
-    assert pwm_values(pwm, T_S) == {"pwm_t_d": T_D, "pwm_feedforward": 0}
-    assert pwm_values(PWM(), T_S) == {"pwm_t_d": 0.0, "pwm_feedforward": 1}
-    smooth = PWM(
-        d_err=lambda i, d: dead_time_error(
-            i, d, T_D, T_S, sign=lambda x: 2 / pi * np.arctan(x / 0.1)
-        )
-    )
-    with pytest.raises(NotImplementedError):
-        pwm_values(smooth, T_S)
+    assert pwm_values(pwm, T_S) == {
+        "pwm_t_d": T_D,
+        "pwm_i_0": 0.0,
+        "pwm_feedforward": 0,
+    }
+    assert pwm_values(PWM(), T_S) == {
+        "pwm_t_d": 0.0,
+        "pwm_i_0": 0.0,
+        "pwm_feedforward": 1,
+    }
+    for i_0 in [1e-6, 0.01, I_0, 20.0]:
+        sign = tanh_sign(i_0)
+        pwm = PWM(d_err=lambda i, d, sign=sign: dead_time_error(i, d, T_D, T_S, sign))
+        assert pwm_values(pwm, T_S) == {
+            "pwm_t_d": T_D,
+            "pwm_i_0": i_0,
+            "pwm_feedforward": 1,
+        }
+    others: list[Callable[[np.ndarray], np.ndarray]] = [
+        lambda x: 2 / pi * np.arctan(x / 0.1),
+        lambda x: 2 / pi * np.arctan(x / 1e-4),  # Close to np.sign beyond 0.1 A
+        lambda x: np.clip(x / 0.01, -1, 1),
+        lambda x: np.tanh(x / 0.01) ** 3,
+    ]
+    for sign in others:
+        pwm = PWM(d_err=lambda i, d, sign=sign: dead_time_error(i, d, T_D, T_S, sign))
+        with pytest.raises(NotImplementedError):
+            pwm_values(pwm, T_S)

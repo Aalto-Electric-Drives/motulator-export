@@ -4,17 +4,17 @@ C port of the *motulator* control algorithms and models, run in the C-Script blo
 The code follows the Python code of *motulator* closely, including the order of the state updates, and each header lists its Python counterparts.
 Optional parameters (`None` in *motulator*) are represented by `NAN`, and their defaults are resolved in the C code, as in *motulator*.
 
-| File                   | Contents                                                                                                                                                                            |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `common.c`             | `PIController`, `ComplexPIController`, `SpeedController`, `SpeedObserver`, `PWM` (with the dead-time error model `dead_time_error`), root finding (`brentq`), and utility functions |
-| `gradnet.c`            | GradNet inference (`FluxMap`, `CurrentMap`, and `CurrentMapWithHarmonics`)                                                                                                          |
-| `sm_parameters.c`      | `SynchronousMachinePars` and `SaturatedSynchronousMachinePars` (flux linkage, incremental inductances, and current iteration)                                                       |
-| `sm_control_loci.c`    | `ControlLoci` (MTPA, MTPV, and current-limit loci)                                                                                                                                  |
-| `sm_flux_vector.c`     | `FluxObserver`, `SpeedFluxObserver`, `ReferenceGenerator`, `FluxTorqueController`, `FluxVectorController`, and `VectorControlSystem` for synchronous machines                       |
-| `sm_machine.c`         | `SynchronousMachine` with `SpatialSaturatedSynchronousMachinePars` and `MechanicalSystem`                                                                                           |
-| `im_current_vector.c`  | `FluxObserver`, `SpeedFluxObserver`, `CurrentReferenceGenerator`, `CurrentController`, `CurrentVectorController`, and `VectorControlSystem` for induction machines                  |
-| `gfl_current_vector.c` | Grid-following `CurrentVectorController` (PLL, current controller, and current limiter) and `GridConverterControlSystem`                                                            |
-| `gfm_observer.c`       | Disturbance-observer-based grid-forming control (`Observer` and `ObserverBasedGridFormingController`) and `GridConverterControlSystem`                                              |
+| File                   | Contents                                                                                                                                                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `common.c`             | `PIController`, `ComplexPIController`, `SpeedController`, `SpeedObserver`, `PWM` (with the dead-time error model `dead_time_error`, the current direction given by `np.sign` or `tanh(i/i_0)`), root finding (`brentq`), and utility functions |
+| `gradnet.c`            | GradNet inference (`FluxMap`, `CurrentMap`, and `CurrentMapWithHarmonics`)                                                                                                                                                                     |
+| `sm_parameters.c`      | `SynchronousMachinePars` and `SaturatedSynchronousMachinePars` (flux linkage, incremental inductances, and current iteration)                                                                                                                  |
+| `sm_control_loci.c`    | `ControlLoci` (MTPA, MTPV, and current-limit loci)                                                                                                                                                                                             |
+| `sm_flux_vector.c`     | `FluxObserver`, `SpeedFluxObserver`, `ReferenceGenerator`, `FluxTorqueController`, `FluxVectorController`, and `VectorControlSystem` for synchronous machines                                                                                  |
+| `sm_machine.c`         | `SynchronousMachine` with `SpatialSaturatedSynchronousMachinePars` and `MechanicalSystem`                                                                                                                                                      |
+| `im_current_vector.c`  | `FluxObserver`, `SpeedFluxObserver`, `CurrentReferenceGenerator`, `CurrentController`, `CurrentVectorController`, and `VectorControlSystem` for induction machines                                                                             |
+| `gfl_current_vector.c` | Grid-following `CurrentVectorController` (PLL, current controller, and current limiter) and `GridConverterControlSystem`                                                                                                                       |
+| `gfm_observer.c`       | Disturbance-observer-based grid-forming control (`Observer` and `ObserverBasedGridFormingController`) and `GridConverterControlSystem`                                                                                                         |
 
 ## Tests
 

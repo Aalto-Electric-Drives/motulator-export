@@ -44,7 +44,7 @@ static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3, 2, 2, 2, 4};
 #define NUM_INPUTS 4
 #define NUM_OUTPUTS 5
-#define NUM_PARAMS 22
+#define NUM_PARAMS 23
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -143,6 +143,10 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(21) != 1) {
+        SetErrorMessage("pwm_i_0 must be a scalar.");
+        return;
+    }
+    if (PDIM(22) != 1) {
         SetErrorMessage("pwm_feedforward must be a scalar.");
         return;
     }
@@ -192,7 +196,7 @@ static void mdlStart(SimStruct *S)
 
     /* Duty-ratio error model of the PWM (dead_time_error) */
     pwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),
-                      (int)P(21, 0));
+                      P(21, 0), (int)P(22, 0));
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
