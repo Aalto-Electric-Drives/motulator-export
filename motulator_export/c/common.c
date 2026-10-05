@@ -265,6 +265,7 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
 static void pwm_init(PWM *self, double k_comp)
 {
     self->k_comp = k_comp;
+    self->k_pred = 1.5;
     self->t_d = 0.0;
     self->T_s = 0.0;
     self->i_0 = 0.0;
@@ -344,7 +345,7 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
     /* Compensate for the duty-ratio error using the predicted currents */
     if (self->t_d > 0.0 && self->feedforward) {
         double i_c_abc[3], d_err[3];
-        complex2abc(cexp(I * theta_comp) * i_c_ab, i_c_abc);
+        complex2abc(cexp(I * self->k_pred * T_s * w) * i_c_ab, i_c_abc);
         dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, self->i_0,
                         d_err);
         for (int k = 0; k < 3; k++) {

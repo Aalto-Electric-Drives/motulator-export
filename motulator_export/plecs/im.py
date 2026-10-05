@@ -167,6 +167,8 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
         raise NotImplementedError("Only CurrentVectorController supported")
     if cvc.cfg.k_o is not None:
         raise NotImplementedError("Only the default observer gain k_o supported")
+    if cvc.cfg.discrete:
+        raise NotImplementedError("Discrete-time current control not supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
     _check_supported_speed_control(ctrl, dead_time=True)

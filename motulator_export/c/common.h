@@ -115,6 +115,7 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
  * with sign = tanh(i/i_0), or numpy.sign if i_0 = 0. */
 typedef struct {
     double k_comp;
+    double k_pred;   /* Prediction factor of the currents for the feedforward */
     double t_d;      /* Dead time of the duty-ratio error model, 0 = no error model */
     double T_s;      /* Sampling period of the duty-ratio error model */
     double i_0;      /* Current scale of sign = tanh(i/i_0), 0 = signum function */

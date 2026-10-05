@@ -23,6 +23,8 @@ import pytest
 from motulator.common.utils import abc2complex
 from motulator.drive import model
 from motulator.drive.control._base import Measurements
+from motulator.drive.control._sm_flux_vector import FluxTorqueController
+from motulator.drive.control._sm_observers import ObserverOutputs
 from scipy.optimize import brentq
 
 from tests.c_port import arr, compile_library, d
@@ -59,6 +61,21 @@ void test_luts(const double *p, double i_s_max, double *out)
             out[2 * NUM_LOCUS * i + NUM_LOCUS + k] = all[i]->y[k];
         }
     }
+}
+
+void test_flux_torque_ctrl(const double *p, const double *x, double *out)
+{
+    SynchronousMachinePars par = {p[0], p[1], p[2], p[3], p[4]};
+    FluxTorqueController ftc;
+    flux_torque_ctrl_init(&ftc, par, x[0], x[1], x[2]);
+    ObserverOutputs fbk = {0};
+    fbk.psi_s = x[3] + I * x[4];
+    fbk.i_s = x[5] + I * x[6];
+    fbk.w_m = x[7];
+    fbk.tau_M = x[8];
+    double complex u_s_ref = flux_torque_ctrl_compute_output(&ftc, x[9], x[10], &fbk);
+    out[0] = creal(u_s_ref);
+    out[1] = cimag(u_s_ref);
 }
 
 void init(const double *p, const double *c, const double *s)
@@ -197,3 +214,31 @@ def test_control_system(dll: ctypes.CDLL) -> None:
     for name, e in zip(names, err, strict=True):
         assert e < 1e-9, (name, e)
     print("  max errors:", dict(zip(names, np.round(err, 16), strict=True)))
+
+
+# PM-assisted synchronous reluctance machine, in which the torque becomes
+# uncontrollable at a high flux and a small load angle
+PAR_PMSYRM = {"n_p": 2, "R_s": 0.54, "L_d": 0.0062, "L_q": 0.041, "psi_f": 0.098}
+
+
+def test_flux_torque_ctrl(dll: ctypes.CDLL) -> None:
+    """The flux-torque controller should agree with motulator, also if c_tau < 0."""
+    par = model.SynchronousMachinePars(**PAR_PMSYRM)
+    alpha_psi, alpha_tau, alpha_i = 2 * pi * 100, 2 * pi * 200, 2 * pi * 10
+    out = (ctypes.c_double * 2)()
+    err, n_neg = 0.0, 0
+    for r in np.linspace(0.2, 1.5, 14):
+        for a in np.linspace(-pi, pi, 37):
+            psi_s = r * np.exp(1j * a)
+            i_s = complex(par.i_s_dq(psi_s))
+            ftc = FluxTorqueController(par, alpha_psi, alpha_tau, alpha_i)
+            fbk = ObserverOutputs(psi_s=psi_s, i_s=i_s, w_m=300.0, tau_M=2.0)
+            u_s_ref = ftc.compute_output(0.8, 5.0, fbk)
+            c_tau = (ftc._i_a * psi_s.conjugate()).real
+            n_neg += c_tau < 0 and psi_s.real > 0
+            x = [alpha_psi, alpha_tau, alpha_i, psi_s.real, psi_s.imag]
+            x += [i_s.real, i_s.imag, fbk.w_m, fbk.tau_M, 0.8, 5.0]
+            dll.test_flux_torque_ctrl(arr(list(PAR_PMSYRM.values())), arr(x), out)
+            err = max(err, abs(out[0] + 1j * out[1] - u_s_ref))
+    assert n_neg > 0  # The flux reduction is tested
+    assert err < 1e-9 * 300.0, err

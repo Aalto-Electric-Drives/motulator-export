@@ -462,8 +462,12 @@ def test_gradnet_flux_vector_control(fvc: ctypes.CDLL) -> None:
     names = ["d_a", "d_b", "d_c", *sm.FVC_BLOCK.signals]
     compared = ["d_a", "d_b", "d_c", "w_M", "tau_M_ref", "psi_s_ref", "psi_s"]
     y = (ctypes.c_double * len(names))()
-    res_sl, res_py = np.zeros((n, 7)), np.zeros((n, 7))
-    for k in range(n):
+    # The torque becomes uncontrollable (c_tau < 0) at k = 1766, after which the flux
+    # reduction switches on and off and the single-precision GradNet decides the
+    # branch. Hence, the comparison ends before (see test_flux_torque_ctrl).
+    n_cmp = 1750
+    res_sl, res_py = np.zeros((n_cmp, 7)), np.zeros((n_cmp, 7))
+    for k in range(n_cmp):
         th = float(wrap(theta_M[k]))
         meas = Measurements(i_s_ab[k], 540.0, w_M[k], th)
         fbk = cast(Any, ctrl.get_feedback(meas))

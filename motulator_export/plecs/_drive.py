@@ -121,6 +121,8 @@ def _check_supported_speed_control(
     """
     if not isinstance(ctrl.speed_ctrl, SpeedController):
         raise NotImplementedError("Speed-control mode with SpeedController required")
+    if type(ctrl).modulate is not VectorControlSystem.modulate:
+        raise NotImplementedError("Overridden modulate method not supported")
     _check_supported_pwm(ctrl.pwm, d_err=dead_time)
 
 

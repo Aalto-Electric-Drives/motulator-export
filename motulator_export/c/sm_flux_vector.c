@@ -240,6 +240,14 @@ static double complex flux_torque_ctrl_compute_output(FluxTorqueController *self
     double complex t_psi = (c_tau > 0.0) ? 1.5 * par->n_p * psi_s_abs * i_a / c_tau : 1.0;
     double complex t_tau = (c_tau > 0.0) ? I * fbk->psi_s / c_tau : 0.0;
 
+    /* If c_tau < 0, the torque cannot be controlled. In a PM machine with weak PMs,
+     * this occurs at a high flux and a small load angle (psi_s.real > 0), where the
+     * flux is reduced until the torque becomes controllable again. Beyond the MTPV
+     * limit (psi_s.real < 0 for PM machines), reducing the flux would not help. */
+    if (c_tau < 0.0 && par->psi_f > 0.0 && creal(fbk->psi_s) > 0.0) {
+        psi_s_ref = 0.0;
+    }
+
     /* Error signals */
     double e_psi = psi_s_ref - psi_s_abs;
     double e_tau = tau_M_ref - fbk->tau_M;

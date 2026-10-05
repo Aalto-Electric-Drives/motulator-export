@@ -297,6 +297,8 @@ def _check_supported_pwm(pwm: PWM, d_err: bool = False) -> None:
         raise NotImplementedError("Only the MPE overmodulation supported")
     if pwm.k_comp != 1.5:
         raise NotImplementedError("Only k_comp = 1.5 supported")
+    if pwm.k_pred != 1.5:
+        raise NotImplementedError("Only k_pred = 1.5 supported")
     if pwm.d_err is not None and not d_err:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
 
