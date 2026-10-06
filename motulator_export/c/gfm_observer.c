@@ -52,7 +52,7 @@ static void gfm_control_system_compute_output(GFMControlSystem *self,
     fbk->theta_c = self->theta_c;
     double complex rot = cexp(-I * fbk->theta_c);
     fbk->i_c = rot * meas->i_c_ab;
-    fbk->u_c = rot * pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc);
+    fbk->u_c = rot * pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     fbk->v_c = self->u_gp - (cfg->alpha_o - I * self->w_g) * cfg->L * fbk->i_c;
     fbk->u_g = self->u_gp - cfg->alpha_o * cfg->L * fbk->i_c;
     fbk->w_c = self->w_g;
@@ -95,7 +95,7 @@ static void gfm_control_system_update(GFMControlSystem *self)
     const GFMFeedbacks *fbk = &self->fbk;
     const GFMReferences *ref = &self->ref;
     double T_s = ref->T_s;
-    pwm_update(&self->pwm, ref->u_c_ab, ref->d_abc);
+    pwm_update(&self->pwm, ref->d_abc);
     /* Observer */
     self->u_gp += T_s * cfg->alpha_o * (fbk->u_c - fbk->v_c - cfg->R * fbk->i_c);
     self->theta_c = wrap(self->theta_c + T_s * self->w_g);

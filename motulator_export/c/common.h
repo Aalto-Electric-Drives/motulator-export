@@ -17,6 +17,7 @@
 
 #include <complex.h>
 #include <math.h>
+#include <stddef.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -119,25 +120,37 @@ typedef struct {
     double T_s;      /* Sampling period of the duty-ratio error model */
     double i_0;      /* Current scale of sign = tanh(i/i_0), 0 = signum function */
     int feedforward; /* Compensate for the duty-ratio error */
+    double d_min;    /* Minimum duty ratio of a switching leg, 0 = no limit */
     /* States */
-    double complex realized_voltage;
-    double complex old_u_c_ab;
-    double d_abc[2][3]; /* Duty ratios of the two latest sampling periods */
+    double d_abc[2][3]; /* Duty ratios of the previous and the ongoing periods */
 } PWM;
 
 static void pwm_init(PWM *self, double k_comp);
 static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
                               int feedforward);
-/* Realized voltage, corrected for the duty-ratio error using the measured current
- * (get_realized_voltage) */
+/* Minimum duty ratio d_min of a switching leg (d_min of PWM in motulator), see
+ * pwm_limit_pulses */
+static void pwm_set_min_pulse(PWM *self, double d_min);
+/* Limit the duty ratios of the switching legs to [d_min, 1 - d_min] (limit_pulses):
+ * a duty ratio in (0, d_min) is replaced by 0 or d_min, and in (1 - d_min, 1) by
+ * 1 - d_min or 1, whichever gives the realized duty ratio nearer to the reference
+ * d_ref (the leg switches if equally near). The realized duty ratios are corrected
+ * for the duty-ratio error at the currents i_abc, unless i_abc is NULL. */
+static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_ref[3],
+                             const double *i_abc);
+/* Realized voltage from the duty ratios and the measured DC-bus voltage, corrected
+ * for the duty-ratio error using the measured current (get_realized_voltage): the
+ * average of the previous and the ongoing sampling periods if average is nonzero,
+ * else that of the ongoing sampling period */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
-                                           double u_dc);
+                                           double u_dc, int average);
 /* Duty ratios and the limited voltage reference; the measured current i_c_ab is
  * used in the feedforward compensation of the duty-ratio error */
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
                                          double w, double complex i_c_ab,
                                          double d_abc[3]);
-static void pwm_update(PWM *self, double complex u_c_ab, const double d_abc[3]);
+/* Store the duty ratios of the next sampling period */
+static void pwm_update(PWM *self, const double d_abc[3]);
 
 #endif

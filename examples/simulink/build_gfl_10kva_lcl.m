@@ -23,6 +23,7 @@ s.init = strjoin({ ...
     'ac_source.w_g = 314.1592653589793;'}, newline);
 s.ac_filter = 'lcl';
 s.refs = { ...
+    'enable', 'constant', 1.0
     'p_g_ref', 'step', [0.020050000000000002 0.0 5000.0]
     'q_g_ref', 'step', [0.03995 0.0 4000.0]
     };
@@ -35,7 +36,7 @@ s.scope = { ...
 s.control.name = 'Grid-following control';
 s.control.sfunction = 'sfun_grid_following_control';
 s.control.mask_type = 'Grid-following control (motulator)';
-s.control.description = 'Current-vector grid-following control with a PLL in the power-control mode. The parameters correspond to the motulator API: CurrentVectorControllerCfg. Empty parameters ([]) correspond to the defaults of motulator.';
+s.control.description = 'Current-vector grid-following control with a PLL in the power-control mode. The parameters correspond to the motulator API: CurrentVectorControllerCfg. Empty parameters ([]) correspond to the defaults of motulator. While the input enable is not positive, the duty ratios are 0.5 and the state is reset to its initial value.';
 s.control.mask = { ...
     'i_max', 'Maximum current (A), peak value: i_max', 'Grid-following control (CurrentVectorControllerCfg)', '30.75914498161482'
     'L', 'Filter inductance (H): L', 'Grid-following control (CurrentVectorControllerCfg)', '0.003700874424440534'
@@ -48,7 +49,7 @@ s.control.mask = { ...
     };
 s.control.mask_init = '';
 s.control.params = {'double(i_max)', 'double(L)', 'double(alpha_c)', 'double(alpha_i)', 'double(u_nom)', 'double(w_nom)', 'double(alpha_pll)', 'double(T_s)'};
-s.control.inputs = {'p_g_ref', 'q_g_ref', 'i_c_abc', 'u_g_line', 'u_dc'};
+s.control.inputs = {'enable', 'p_g_ref', 'q_g_ref', 'i_c_abc', 'u_g_line', 'u_dc'};
 s.control.outputs = {'d_abc', 'Power (p_g_ref, p_g, q_g_ref, q_g)', 'Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)', 'PLL (u_g, w_g, theta_c)'};
 s.T_s = 0.0001;
 s.t_stop = 0.08;

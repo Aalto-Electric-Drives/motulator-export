@@ -48,7 +48,7 @@ static void gfl_control_system_compute_output(GFLControlSystem *self,
     fbk->w_g = self->w_g;
     double complex rot = cexp(-I * fbk->theta_c);
     fbk->i_c = rot * meas->i_c_ab;
-    fbk->u_c = rot * pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc);
+    fbk->u_c = rot * pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     fbk->u_g_meas = rot * meas->u_g_ab;
     fbk->u_g = self->u_g;
     fbk->eps = (self->u_g > 0.0) ? cimag(fbk->u_g_meas) / self->u_g : 0.0;
@@ -82,7 +82,7 @@ static void gfl_control_system_update(GFLControlSystem *self)
 {
     const GFLFeedbacks *fbk = &self->fbk;
     double T_s = self->ref.T_s;
-    pwm_update(&self->pwm, self->ref.u_c_ab, self->ref.d_abc);
+    pwm_update(&self->pwm, self->ref.d_abc);
     /* Current controller: the realized voltage in controller coordinates */
     complex_pi_update(&self->current_ctrl, T_s, fbk->u_c, fbk->w_c);
     /* PLL */

@@ -11,6 +11,8 @@ function build_drive(s)
 %               current map), or 'im' (induction machine)
 %     machine_params  Parameters of the S-function of the machine ('gn' only)
 %     control   Control system, see blocks.add_control_system
+%     enable    Input 'enable' of the control system: a constant, or steps as
+%               w_M_ref
 %     w_M_ref   Speed reference steps [time, before, after], see blocks.add_step
 %     tau_L     Load torque steps
 %     scope     Scope signals {name, indices in [mdl; ctrl]}
@@ -56,10 +58,17 @@ y = blocks.port_y(sys, 'Machine', 'Outport', 2);
 blocks.align(sys, 'Mechanics', 'Inport', 1, y);
 
 % Sources
+if isscalar(s.enable)
+    add([sys '/enable'], 'built-in/Constant', [80 0 130 20], ...
+        'Value', blocks.num(s.enable));
+else
+    blocks.add_step([sys '/enable'], s.enable, [90 0 120 30]);
+end
+blocks.align(sys, 'enable', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 1));
 blocks.add_step([sys '/w_M_ref'], s.w_M_ref, [90 0 120 30]);
-blocks.align(sys, 'w_M_ref', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 1));
+blocks.align(sys, 'w_M_ref', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 2));
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
-blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 3));
+blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 4));
 blocks.add_step([sys '/tau_L'], s.tau_L, [835 0 865 30]);
 blocks.align(sys, 'tau_L', 'Outport', 1, blocks.port_y(sys, 'Mechanics', 'Inport', 2));
 
@@ -72,11 +81,12 @@ blocks.align(sys, 'Mux mdl', 'Inport', 2, y);
 % below it, in lanes below the blocks.
 pos = get_param([sys '/Mux mdl'], 'Position');
 y_top = 60;
-y_w_M = max(pos(4), blocks.port_y(sys, cs, 'Inport', 4)) + 40;
+y_w_M = max(pos(4), blocks.port_y(sys, cs, 'Inport', 5)) + 40;
 y_theta_M = y_w_M + 30;
 y_ctrl = y_theta_M + 30;
-blocks.connect(sys, 'w_M_ref/1', [cs '/1']);
-blocks.connect(sys, 'u_dc/1', [cs '/3']);
+blocks.connect(sys, 'enable/1', [cs '/1']);
+blocks.connect(sys, 'w_M_ref/1', [cs '/2']);
+blocks.connect(sys, 'u_dc/1', [cs '/4']);
 blocks.connect(sys, [cs '/1'], 'Delay/1');
 blocks.connect(sys, 'Delay/1', 'PWM/1');
 blocks.connect(sys, 'PWM/1', 'Converter/1');
@@ -87,18 +97,18 @@ blocks.connect(sys, 'Mechanics/1', 'Mux mdl/2');
 blocks.connect(sys, 'Mechanics/2', 'Mux mdl/3');
 blocks.route(sys, 'Machine/1', 'Mux mdl/1', 'x', 1045);
 blocks.route(sys, 'Machine/2', 'Mux mdl/4', 'x', 815);
-blocks.route(sys, 'Machine/1', [cs '/2'], 'x', 800, 'y', y_top, 'x', 60);
+blocks.route(sys, 'Machine/1', [cs '/3'], 'x', 800, 'y', y_top, 'x', 60);
 blocks.route(sys, 'Mechanics/1', 'Machine/2', 'x', 1010, 'y', y_w_M, 'x', 660);
 switch s.machine
     case {'sm', 'gn'}
         % The rotor angle to the machine and to the control system
         blocks.route(sys, 'Mechanics/2', 'Machine/3', ...
             'x', 1025, 'y', y_theta_M, 'x', 640);
-        blocks.route(sys, 'Mechanics/2', [cs '/4'], ...
+        blocks.route(sys, 'Mechanics/2', [cs '/5'], ...
             'x', 1025, 'y', y_theta_M, 'x', 140);
     case 'im'
         % The rotor speed to the control system
-        blocks.route(sys, 'Mechanics/1', [cs '/4'], 'x', 1010, 'y', y_w_M, 'x', 140);
+        blocks.route(sys, 'Mechanics/1', [cs '/5'], 'x', 1010, 'y', y_w_M, 'x', 140);
 end
 
 % Output ports and the scope

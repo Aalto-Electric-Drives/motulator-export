@@ -139,6 +139,11 @@ static void mdlStart(SimStruct *S)
     READ_GRADNET(current_map, 3);
     par = spatial_saturated_synchronous_machine_pars(
         P(0, 0), P(1, 0), &current_map, (int)P(2, 0));
+    if (isnan(par.psi_f)) {
+        SetErrorMessage("The PM-flux linkage cannot be solved from the current "
+                        "map.");
+        return;
+    }
     PSI_D = par.psi_f; /* Initial states as in motulator */
     PSI_Q = 0.0;
 }

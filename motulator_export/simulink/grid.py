@@ -24,7 +24,12 @@ from motulator.grid.model import GridConverterSystem, LCLFilter
 from motulator_export.plecs import grid
 from motulator_export.plecs._common import StepSignal
 from motulator_export.plecs._schematic import _fmt
-from motulator_export.simulink._common import _m_steps, scope_indices, write_script
+from motulator_export.simulink._common import (
+    _m_source,
+    _m_steps,
+    scope_indices,
+    write_script,
+)
 from motulator_export.simulink._common import simulate as _simulate
 
 
@@ -49,6 +54,7 @@ def write_model(
     p_g_ref: StepSignal,
     q_g_ref: StepSignal | None = None,
     v_c_ref: float | None = None,
+    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write a MATLAB script that builds the Simulink model of the grid converter system.
@@ -83,7 +89,14 @@ def write_model(
     path = Path(path)
     grid._check_supported(mdl, ctrl)
     block, values = grid._control_block(ctrl)
-    refs: list[list[Any]] = [["p_g_ref", "step", _m_steps(p_g_ref)]]
+    refs: list[list[Any]] = [
+        [
+            "enable",
+            "step" if isinstance(enable, StepSignal) else "constant",
+            _m_source(enable),
+        ],
+        ["p_g_ref", "step", _m_steps(p_g_ref)],
+    ]
     if block is grid.GFL_BLOCK:
         if q_g_ref is None:
             raise ValueError("q_g_ref is needed in grid-following control")

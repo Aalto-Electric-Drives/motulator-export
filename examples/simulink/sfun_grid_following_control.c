@@ -37,13 +37,20 @@
 /* Parameter value, or NAN for an empty parameter (None in motulator) */
 #define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)
 
+/* Lower limit (V) of the measured DC-bus voltage, which avoids the division by
+ * zero in the PWM if the DC bus is not charged */
+#define U_DC_MIN 1.0
+
 static GFLControlSystem ctrl;
 
+/* Initial state, restored while the control system is disabled */
+static GFLControlSystem ctrl_init;
+
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 3, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {1, 1, 1, 3, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3, 4, 4, 3};
-#define NUM_INPUTS 5
+#define NUM_INPUTS 6
 #define NUM_OUTPUTS 4
 #define NUM_PARAMS 8
 
@@ -132,20 +139,42 @@ static void mdlStart(SimStruct *S)
     }
     cfg.alpha_i = PDIM(3) > 0 ? P(3, 0) : cfg.alpha_c;
     gfl_control_system_init(&ctrl, &cfg);
+
+    ctrl_init = ctrl;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
+    /* Disabled: zero voltage, the control algorithm is not run */
+    if (!(InputSignal(0, 0) > 0.0)) {
+        for (int k = 0; k < 3; k++) {
+            OutputSignal(0, k) = 0.5;
+        }
+        OutputSignal(1, 0) = 0.0;
+        OutputSignal(1, 1) = 0.0;
+        OutputSignal(1, 2) = 0.0;
+        OutputSignal(1, 3) = 0.0;
+        OutputSignal(2, 0) = 0.0;
+        OutputSignal(2, 1) = 0.0;
+        OutputSignal(2, 2) = 0.0;
+        OutputSignal(2, 3) = 0.0;
+        OutputSignal(3, 0) = 0.0;
+        OutputSignal(3, 1) = 0.0;
+        OutputSignal(3, 2) = 0.0;
+        return;
+    }
+
     /* Measurements and references */
-    double i_c_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),
-                         InputSignal(2, 2)};
+    double i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),
+                         InputSignal(3, 2)};
     /* Line-to-line PCC voltages u_ab and u_bc */
-    double u_g_line[2] = {InputSignal(3, 0), InputSignal(3, 1)};
+    double u_g_line[2] = {InputSignal(4, 0), InputSignal(4, 1)};
+    double u_dc = fmax(InputSignal(5, 0), U_DC_MIN);
     GridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line),
-                             InputSignal(4, 0)};
-    gfl_control_system_compute_output(&ctrl, &meas, InputSignal(0, 0),
-                                      InputSignal(1, 0));
+                             u_dc};
+    gfl_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),
+                                      InputSignal(2, 0));
 
     /* Duty ratios, delayed by the Delay block outside the subsystem */
     for (int k = 0; k < 3; k++) {
@@ -170,6 +199,12 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
+    /* Disabled: reset the state */
+    if (!(InputSignal(0, 0) > 0.0)) {
+        ctrl = ctrl_init;
+        return;
+    }
+
     gfl_control_system_update(&ctrl);
 }
 

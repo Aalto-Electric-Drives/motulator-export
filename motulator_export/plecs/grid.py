@@ -48,8 +48,11 @@ from motulator.grid.model import (
 from motulator_export.plecs._common import (
     C_DIR,
     C_PARAMS,
+    C_U_DC_MIN,
     CONV,
     DUTY_RATIO_CODE,
+    ENABLE,
+    ENABLE_DESCRIPTION,
     ControlBlock,
     MaskParam,
     StepSignal,
@@ -62,6 +65,7 @@ from motulator_export.plecs._common import (
     _check_supported_pwm,
     _write_model,
     cfg_assignments,
+    enable_code,
     monitored_code,
     parameter_checks,
 )
@@ -70,7 +74,7 @@ from motulator_export.plecs._schematic import Tap, _probe, _Schematic, _scope
 
 # %%
 # Grid-following control: inputs, monitored signals (mask probes), and mask parameters
-GFL_INPUTS = ["p_g_ref", "q_g_ref", "i_c_abc", "u_g_line", "u_dc"]
+GFL_INPUTS = [ENABLE, "p_g_ref", "q_g_ref", "i_c_abc", "u_g_line", "u_dc"]
 GFL_OUTPUTS = {
     "Power (p_g_ref, p_g, q_g_ref, q_g)": ["p_g_ref", "p_g", "q_g_ref", "q_g"],
     "Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)": [
@@ -107,7 +111,7 @@ GFL_MASK_PARAMS = [
 ]
 
 # Grid-forming control
-GFM_INPUTS = ["p_g_ref", "v_c_ref", "i_c_abc", "u_dc"]
+GFM_INPUTS = [ENABLE, "p_g_ref", "v_c_ref", "i_c_abc", "u_dc"]
 GFM_OUTPUTS = {
     "Power (p_g_ref, p_g, q_g)": ["p_g_ref", "p_g", "q_g"],
     "Voltage (v_c_ref, v_c)": ["v_c_ref", "v_c"],
@@ -218,7 +222,7 @@ def _gfl_cscript_code() -> dict[str, str]:
         " * subsystem. */\n"
         f'#include "{C_DIR}/common.c"\n'
         f'#include "{C_DIR}/gfl_current_vector.c"\n'
-        "\n" + C_PARAMS + "\n"
+        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n"
         "static GFLControlSystem ctrl;\n"
     )
     i = {m.variable: k for k, m in enumerate(GFL_MASK_PARAMS)}
@@ -237,14 +241,15 @@ def _gfl_cscript_code() -> dict[str, str]:
     )
     output = (
         "/* Measurements and references */\n"
-        "double i_c_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
-        "                     InputSignal(2, 2)};\n"
+        "double i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),\n"
+        "                     InputSignal(3, 2)};\n"
         "/* Line-to-line PCC voltages u_ab and u_bc */\n"
-        "double u_g_line[2] = {InputSignal(3, 0), InputSignal(3, 1)};\n"
+        "double u_g_line[2] = {InputSignal(4, 0), InputSignal(4, 1)};\n"
+        "double u_dc = fmax(InputSignal(5, 0), U_DC_MIN);\n"
         "GridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line),\n"
-        "                         InputSignal(4, 0)};\n"
-        "gfl_control_system_compute_output(&ctrl, &meas, InputSignal(0, 0),\n"
-        "                                  InputSignal(1, 0));\n"
+        "                         u_dc};\n"
+        "gfl_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n"
+        "                                  InputSignal(2, 0));\n"
         "\n" + DUTY_RATIO_CODE
     )
     monitored = {
@@ -261,12 +266,13 @@ def _gfl_cscript_code() -> dict[str, str]:
         "theta_c": "ctrl.fbk.theta_c",
     }
     output += monitored_code(GFL_OUTPUTS, monitored)
-    return {
+    code = {
         "Declarations": declarations,
         "StartFcn": start,
         "OutputFcn": output,
         "UpdateFcn": "gfl_control_system_update(&ctrl);\n",
     }
+    return enable_code(code, GFL_OUTPUTS)
 
 
 def _gfm_cscript_code() -> dict[str, str]:
@@ -277,7 +283,7 @@ def _gfm_cscript_code() -> dict[str, str]:
         " * subsystem. */\n"
         f'#include "{C_DIR}/common.c"\n'
         f'#include "{C_DIR}/gfm_observer.c"\n'
-        "\n" + C_PARAMS + "\n"
+        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n"
         "static GFMControlSystem ctrl;\n"
     )
     i = {m.variable: k for k, m in enumerate(GFM_MASK_PARAMS)}
@@ -294,11 +300,12 @@ def _gfm_cscript_code() -> dict[str, str]:
     )
     output = (
         "/* Measurements and references */\n"
-        "double i_c_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
-        "                     InputSignal(2, 2)};\n"
-        "GFMMeasurements meas = {abc2complex(i_c_abc), InputSignal(3, 0)};\n"
-        "gfm_control_system_compute_output(&ctrl, &meas, InputSignal(0, 0),\n"
-        "                                  InputSignal(1, 0));\n"
+        "double i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),\n"
+        "                     InputSignal(3, 2)};\n"
+        "double u_dc = fmax(InputSignal(4, 0), U_DC_MIN);\n"
+        "GFMMeasurements meas = {abc2complex(i_c_abc), u_dc};\n"
+        "gfm_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n"
+        "                                  InputSignal(2, 0));\n"
         "\n" + DUTY_RATIO_CODE
     )
     monitored = {
@@ -314,12 +321,13 @@ def _gfm_cscript_code() -> dict[str, str]:
         "theta_c": "ctrl.fbk.theta_c",
     }
     output += monitored_code(GFM_OUTPUTS, monitored)
-    return {
+    code = {
         "Declarations": declarations,
         "StartFcn": start,
         "OutputFcn": output,
         "UpdateFcn": "gfm_control_system_update(&ctrl);\n",
     }
+    return enable_code(code, GFM_OUTPUTS)
 
 
 GFL_BLOCK = ControlBlock(
@@ -329,10 +337,11 @@ GFL_BLOCK = ControlBlock(
         "Current-vector grid-following control with a PLL in the power-control mode. "
         "The parameters correspond to the motulator API: CurrentVectorControllerCfg. "
         "Empty parameters ([]) correspond to the defaults of motulator."
+        + ENABLE_DESCRIPTION
     ),
     mask_params=GFL_MASK_PARAMS,
     inputs=GFL_INPUTS,
-    input_widths=[1, 1, 3, 2, 1],
+    input_widths=[1, 1, 1, 3, 2, 1],
     outputs=GFL_OUTPUTS,
     code=_gfl_cscript_code,
 )
@@ -344,11 +353,11 @@ GFM_BLOCK = ControlBlock(
         "Disturbance-observer-based grid-forming control in the power-control mode, "
         "with transparent current limitation. The parameters correspond to the "
         "motulator API: ObserverBasedGridFormingControllerCfg. Empty parameters ([]) "
-        "correspond to None, i.e., the defaults of motulator."
+        "correspond to None, i.e., the defaults of motulator." + ENABLE_DESCRIPTION
     ),
     mask_params=GFM_MASK_PARAMS,
     inputs=GFM_INPUTS,
-    input_widths=[1, 1, 3, 1],
+    input_widths=[1, 1, 1, 3, 1],
     outputs=GFM_OUTPUTS,
     code=_gfm_cscript_code,
 )
@@ -558,6 +567,7 @@ def write_model(
     q_g_ref: StepSignal | None = None,
     v_c_ref: float | None = None,
     outputs: bool = False,
+    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write a PLECS model of the grid converter system.
@@ -582,6 +592,9 @@ def write_model(
     outputs : bool, optional
         Add the output ports "mdl" and "ctrl" for `simulate`, defaults to
         False.
+    enable : StepSignal | float, optional
+        Input `enable` of the control system, defaults to 1 (enabled), see
+        `sm.write_model`.
 
     Returns
     -------
@@ -594,7 +607,8 @@ def write_model(
     block, values = _control_block(ctrl)
     lcl = isinstance(mdl.ac_filter, LCLFilter)
     sch = _Schematic()
-    sources: list[tuple[str, StepSignal | float | str]] = [("p_g_ref", p_g_ref)]
+    sources: list[tuple[str, StepSignal | float | str]] = [(ENABLE, enable)]
+    sources += [("p_g_ref", p_g_ref)]
     if block is GFL_BLOCK:
         if q_g_ref is None:
             raise ValueError("q_g_ref is needed in grid-following control")

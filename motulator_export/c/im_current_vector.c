@@ -296,7 +296,8 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
     IMReferences *ref = &self->ref;
 
     /* Feedback signals */
-    double complex u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc);
+    double complex u_c_ab =
+        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     const IMSpeedFluxObserver *observer = &self->vector_ctrl.observer;
     if (self->vector_ctrl.sensorless) {
         im_speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, 0.0,
@@ -322,7 +323,7 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
 
 static void im_vector_control_system_update(IMVectorControlSystem *self)
 {
-    pwm_update(&self->pwm, self->ref.u_c_ab, self->ref.d_abc);
+    pwm_update(&self->pwm, self->ref.d_abc);
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
     pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
 }

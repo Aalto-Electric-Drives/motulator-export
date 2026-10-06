@@ -17,10 +17,24 @@ Plecs {
     ShowBrowser   off
     BrowserWidth  100
     Component {
+      Type          Constant
+      Name          "enable"
+      Show          on
+      Position      [60, 20]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Value"
+        Value         "1.0"
+        Show          off
+      }
+    }
+    Component {
       Type          Step
       Name          "w_M_ref"
       Show          on
-      Position      [60, 40]
+      Position      [60, 60]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -49,7 +63,7 @@ Plecs {
       Type          Gain
       Name          "w_M_ref sum"
       Show          off
-      Position      [110, 40]
+      Position      [110, 60]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -68,7 +82,7 @@ Plecs {
       Type          PlecsProbe
       Name          "i_s_abc"
       Show          on
-      Position      [60, 80]
+      Position      [60, 100]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -82,7 +96,7 @@ Plecs {
       Type          PlecsProbe
       Name          "u_dc meas."
       Show          on
-      Position      [60, 120]
+      Position      [60, 140]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -96,7 +110,7 @@ Plecs {
       Type          PlecsProbe
       Name          "w_M"
       Show          on
-      Position      [60, 160]
+      Position      [60, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -119,7 +133,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "Current-vector control (motulator)"
-      MaskDescription "Speed control of an induction machine drive with current-vector control. The parameters correspond to the motulator API: InductionMachineInvGammaPars, CurrentVectorControllerCfg, and SpeedController. Empty parameters ([]) correspond to None, i.e., the defaults of motulator."
+      MaskDescription "Speed control of an induction machine drive with current-vector control. The parameters correspond to the motulator API: InductionMachineInvGammaPars, CurrentVectorControllerCfg, and SpeedController. Empty parameters ([]) correspond to None, i.e., the defaults of motulator. While the input enable is not positive, the duty ratios are 0.5 and the state is reset to its initial value."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -330,24 +344,38 @@ Plecs {
         Tunable       on
         TabName       "PWM (PWM)"
       }
+      Parameter {
+        Variable      "pwm_d_min"
+        Prompt        "d_min: Minimum duty ratio of a switching leg, 0 = no limit"
+        Type          FreeText
+        Value         "0.0"
+        Show          off
+        Tunable       on
+        TabName       "PWM (PWM)"
+      }
       Terminal {
         Type          Input
-        Position      [-50, -15]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -5]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 5]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 15]
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 20]
         Direction     left
       }
       Terminal {
@@ -363,7 +391,7 @@ Plecs {
         BrowserWidth  100
     Component {
       Type          Input
-      Name          "w_M_ref"
+      Name          "enable"
       Show          on
       Position      [60, 40]
       Direction     right
@@ -382,7 +410,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "i_s_abc"
+      Name          "w_M_ref"
       Show          on
       Position      [60, 70]
       Direction     right
@@ -401,7 +429,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_dc"
+      Name          "i_s_abc"
       Show          on
       Position      [60, 100]
       Direction     right
@@ -420,7 +448,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "w_M"
+      Name          "u_dc"
       Show          on
       Position      [60, 130]
       Direction     right
@@ -429,6 +457,25 @@ Plecs {
       Parameter {
         Variable      "Index"
         Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "w_M"
+      Show          on
+      Position      [60, 160]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
         Show          off
       }
       Parameter {
@@ -453,7 +500,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 3 1 1]"
+        Value         "[1 1 3 1 1]"
         Show          off
       }
       Parameter {
@@ -488,7 +535,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "n_p, R_s, R_R, L_sgm, L_M, psi_s_nom, i_s_max, alpha_c, alpha_i, alpha_o, w_s_nom, k_u, k_fw, J, sensorless, T_s, speed_J, speed_alpha_s, speed_alpha_i, speed_tau_M_max, pwm_t_d, pwm_i_0, pwm_feedforward"
+        Value         "n_p, R_s, R_R, L_sgm, L_M, psi_s_nom, i_s_max, alpha_c, alpha_i, alpha_o, w_s_nom, k_u, k_fw, J, sensorless, T_s, speed_J, speed_alpha_s, speed_alpha_i, speed_tau_M_max, pwm_t_d, pwm_i_0, pwm_feedforward, pwm_d_min"
         Show          off
       }
       Parameter {
@@ -508,22 +555,22 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export.plecs.im. The control algorithms are in the\n * included C files. The parameters come from the mask of the subsystem. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/im_current_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic IMVectorControlSystem ctrl;\n"
+        Value         "/* Generated by motulator_export.plecs.im. The control algorithms are in the\n * included C files. The parameters come from the mask of the subsystem. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/im_current_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Lower limit (V) of the measured DC-bus voltage, which avoids the division by\n * zero in the PWM if the DC bus is not charged */\n#define U_DC_MIN 1.0\n\nstatic IMVectorControlSystem ctrl;\n\n/* Initial state, restored while the control system is disabled */\nstatic IMVectorControlSystem ctrl_init;\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"R_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"R_R must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"L_M must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"psi_s_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(15) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(16) != 1) {\n    SetErrorMessage(\"speed_J must be a scalar.\");\n    return;\n}\nif (PDIM(17) != 1) {\n    SetErrorMessage(\"speed_alpha_s must be a scalar.\");\n    return;\n}\nif (PDIM(20) != 1) {\n    SetErrorMessage(\"pwm_t_d must be a scalar.\");\n    return;\n}\nif (PDIM(21) != 1) {\n    SetErrorMessage(\"pwm_i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(22) != 1) {\n    SetErrorMessage(\"pwm_feedforward must be a scalar.\");\n    return;\n}\n\n/* Machine model parameters (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {\n    P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0)};\n\n/* Current-vector controller configuration (CurrentVectorControllerCfg),\n * the defaults are used for empty parameters */\nIMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n    P(5, 0), P(6, 0));\nif (PDIM(7) > 0) {\n    cfg.alpha_c = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.alpha_i = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.alpha_o = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.w_s_nom = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.k_u = P(11, 0);\n}\nif (PDIM(12) > 0) {\n    cfg.k_fw = P(12, 0);\n}\nif (PDIM(13) > 0) {\n    cfg.J = P(13, 0);\n}\nif (PDIM(14) > 0) {\n    cfg.sensorless = P(14, 0);\n}\nif (PDIM(15) > 0) {\n    cfg.T_s = P(15, 0);\n}\n\n/* Speed controller (SpeedController) */\nPIController speed_ctrl = speed_controller(\n    P(16, 0), P(17, 0), PARAM(18),\n    PDIM(19) > 0 ? P(19, 0) : INFINITY);\n\nim_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n\n/* Duty-ratio error model of the PWM (dead_time_error) */\npwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),\n                  P(21, 0), (int)P(22, 0));\n"
+        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"R_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"R_R must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"L_M must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"psi_s_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(15) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(16) != 1) {\n    SetErrorMessage(\"speed_J must be a scalar.\");\n    return;\n}\nif (PDIM(17) != 1) {\n    SetErrorMessage(\"speed_alpha_s must be a scalar.\");\n    return;\n}\nif (PDIM(20) != 1) {\n    SetErrorMessage(\"pwm_t_d must be a scalar.\");\n    return;\n}\nif (PDIM(21) != 1) {\n    SetErrorMessage(\"pwm_i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(22) != 1) {\n    SetErrorMessage(\"pwm_feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(23) != 1) {\n    SetErrorMessage(\"pwm_d_min must be a scalar.\");\n    return;\n}\n\n/* Machine model parameters (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {\n    P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0)};\n\n/* Current-vector controller configuration (CurrentVectorControllerCfg),\n * the defaults are used for empty parameters */\nIMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n    P(5, 0), P(6, 0));\nif (PDIM(7) > 0) {\n    cfg.alpha_c = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.alpha_i = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.alpha_o = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.w_s_nom = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.k_u = P(11, 0);\n}\nif (PDIM(12) > 0) {\n    cfg.k_fw = P(12, 0);\n}\nif (PDIM(13) > 0) {\n    cfg.J = P(13, 0);\n}\nif (PDIM(14) > 0) {\n    cfg.sensorless = P(14, 0);\n}\nif (PDIM(15) > 0) {\n    cfg.T_s = P(15, 0);\n}\n\n/* Speed controller (SpeedController) */\nPIController speed_ctrl = speed_controller(\n    P(16, 0), P(17, 0), PARAM(18),\n    PDIM(19) > 0 ? P(19, 0) : INFINITY);\n\nim_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n\n/* Duty-ratio error model of the PWM (dead_time_error) */\npwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),\n                  P(21, 0), (int)P(22, 0));\n/* Minimum duty ratio of a switching leg */\npwm_set_min_pulse(&ctrl.pwm, P(23, 0));\n\nctrl_init = ctrl;\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Measurements */\ndouble w_M_ref = InputSignal(0, 0);\ndouble i_s_abc[3] = {InputSignal(1, 0), InputSignal(1, 1),\n                     InputSignal(1, 2)};\nIMMeasurements meas = {abc2complex(i_s_abc), InputSignal(2, 0),\n                       InputSignal(3, 0)};\n\nim_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n\n/* Duty ratios, delayed by the Delay block outside the subsystem */\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n}\n\n/* Monitored signals, the currents in estimated rotor flux coordinates */\ndouble complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\nOutputSignal(1, 0) = ctrl.ref.w_M;\nOutputSignal(1, 1) = ctrl.fbk.w_M;\nOutputSignal(2, 0) = ctrl.ref.tau_M;\nOutputSignal(2, 1) = ctrl.fbk.tau_M;\nOutputSignal(3, 0) = cabs(ctrl.fbk.psi_s);\nOutputSignal(3, 1) = cabs(ctrl.fbk.psi_R);\nOutputSignal(4, 0) = creal(rot * ctrl.ref.i_s);\nOutputSignal(4, 1) = creal(rot * ctrl.fbk.i_s);\nOutputSignal(4, 2) = cimag(rot * ctrl.ref.i_s);\nOutputSignal(4, 3) = cimag(rot * ctrl.fbk.i_s);\n"
+        Value         "/* Disabled: zero voltage, the control algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 3; k++) {\n        OutputSignal(0, k) = 0.5;\n    }\n    OutputSignal(1, 0) = 0.0;\n    OutputSignal(1, 1) = 0.0;\n    OutputSignal(2, 0) = 0.0;\n    OutputSignal(2, 1) = 0.0;\n    OutputSignal(3, 0) = 0.0;\n    OutputSignal(3, 1) = 0.0;\n    OutputSignal(4, 0) = 0.0;\n    OutputSignal(4, 1) = 0.0;\n    OutputSignal(4, 2) = 0.0;\n    OutputSignal(4, 3) = 0.0;\n    return;\n}\n\n/* Measurements */\ndouble w_M_ref = InputSignal(1, 0);\ndouble i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n                     InputSignal(2, 2)};\ndouble u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\nIMMeasurements meas = {abc2complex(i_s_abc), u_dc, InputSignal(4, 0)};\n\nim_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n\n/* Duty ratios, delayed by the Delay block outside the subsystem */\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n}\n\n/* Monitored signals, the currents in estimated rotor flux coordinates */\ndouble complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\nOutputSignal(1, 0) = ctrl.ref.w_M;\nOutputSignal(1, 1) = ctrl.fbk.w_M;\nOutputSignal(2, 0) = ctrl.ref.tau_M;\nOutputSignal(2, 1) = ctrl.fbk.tau_M;\nOutputSignal(3, 0) = cabs(ctrl.fbk.psi_s);\nOutputSignal(3, 1) = cabs(ctrl.fbk.psi_R);\nOutputSignal(4, 0) = creal(rot * ctrl.ref.i_s);\nOutputSignal(4, 1) = creal(rot * ctrl.fbk.i_s);\nOutputSignal(4, 2) = cimag(rot * ctrl.ref.i_s);\nOutputSignal(4, 3) = cimag(rot * ctrl.fbk.i_s);\n"
         Show          off
       }
       Parameter {
         Variable      "UpdateFcn"
-        Value         "im_vector_control_system_update(&ctrl);\n"
+        Value         "/* Disabled: reset the state */\nif (!(InputSignal(0, 0) > 0.0)) {\n    ctrl = ctrl_init;\n    return;\n}\n\nim_vector_control_system_update(&ctrl);\n"
         Show          off
       }
       Parameter {
@@ -557,7 +604,7 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "Index"
-        Value         "5"
+        Value         "6"
         Show          off
       }
       Parameter {
@@ -568,40 +615,48 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "w_M_ref"
+      SrcComponent  "enable"
       SrcTerminal   1
-      Points        [124, 40; 124, 85]
+      Points        [124, 40; 124, 80]
       DstComponent  "C-Script"
       DstTerminal   1
     }
     Connection {
       Type          Signal
-      SrcComponent  "i_s_abc"
+      SrcComponent  "w_M_ref"
       SrcTerminal   1
-      Points        [116, 70; 116, 95]
+      Points        [108, 70; 108, 90]
       DstComponent  "C-Script"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc"
+      SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [100, 100; 100, 105]
+      Points        [100, 100; 100, 100]
       DstComponent  "C-Script"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "w_M"
+      SrcComponent  "u_dc"
       SrcTerminal   1
-      Points        [108, 130; 108, 115]
+      Points        [116, 130; 116, 110]
       DstComponent  "C-Script"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "w_M"
+      SrcTerminal   1
+      Points        [132, 160; 132, 120]
+      DstComponent  "C-Script"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   5
+      SrcTerminal   6
       DstComponent  "d_abc"
       DstTerminal   1
     }
@@ -1136,6 +1191,14 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "enable"
+      SrcTerminal   1
+      Points        [170, 20; 170, 80]
+      DstComponent  "Current-vector control"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "w_M_ref"
       SrcTerminal   1
       DstComponent  "w_M_ref sum"
@@ -1145,38 +1208,37 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M_ref sum"
       SrcTerminal   2
-      Points        [160, 40; 160, 85]
-      DstComponent  "Current-vector control"
-      DstTerminal   1
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "i_s_abc"
-      SrcTerminal   1
-      Points        [140, 80; 140, 95]
+      Points        [150, 60; 150, 90]
       DstComponent  "Current-vector control"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc meas."
+      SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [150, 120; 150, 105]
       DstComponent  "Current-vector control"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "w_M"
+      SrcComponent  "u_dc meas."
       SrcTerminal   1
-      Points        [170, 160; 170, 115]
+      Points        [160, 140; 160, 110]
       DstComponent  "Current-vector control"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "w_M"
+      SrcTerminal   1
+      Points        [180, 180; 180, 120]
+      DstComponent  "Current-vector control"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "Current-vector control"
-      SrcTerminal   5
+      SrcTerminal   6
       DstComponent  "Delay"
       DstTerminal   1
     }

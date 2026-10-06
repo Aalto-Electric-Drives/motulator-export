@@ -74,6 +74,11 @@ def _m_steps(sig: StepSignal) -> list[list[float]]:
     return rows
 
 
+def _m_source(sig: StepSignal | float) -> list[list[float]] | float:
+    """Steps of a step signal (see `_m_steps`), or a constant."""
+    return _m_steps(sig) if isinstance(sig, StepSignal) else float(sig)
+
+
 def control_fields(
     block: ControlBlock, sfun: SFunction, values: dict[str, Any]
 ) -> list[tuple[str, Any]]:

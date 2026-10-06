@@ -5,44 +5,37 @@
 
 #include "sm_machine.h"
 
-/* Secant method as scipy.optimize.newton without the derivative (x0 = 0) */
-static double pm_flux_secant(const SpatialSaturatedSynchronousMachinePars *par)
+/* d-axis current at the d-axis flux linkage psi_d and theta_m = 0 (for brentq) */
+static double pm_flux_i_d(double psi_d, void *data)
 {
-    const double tol = 1.48e-8;
-    double p0 = 0.0, p1 = 1e-4;
+    const SpatialSaturatedSynchronousMachinePars *par = data;
     double complex i_s;
     double tau;
-    gradnet_current_map_harmonics(&par->current_map, par->k, p0, 0.0, &i_s, &tau);
-    double q0 = creal(i_s);
-    gradnet_current_map_harmonics(&par->current_map, par->k, p1, 0.0, &i_s, &tau);
-    double q1 = creal(i_s);
-    if (fabs(q1) < fabs(q0)) {
-        double p_tmp = p0, q_tmp = q0;
-        p0 = p1;
-        q0 = q1;
-        p1 = p_tmp;
-        q1 = q_tmp;
+    gradnet_current_map_harmonics(&par->current_map, par->k, psi_d, 0.0, &i_s, &tau);
+    return creal(i_s);
+}
+
+/* PM-flux linkage from i_d(psi_f) = 0 (_solve_pm_flux): the root is bracketed by
+ * doubling the upper bound and then found using Brent's method. Zero if there are no
+ * permanent magnets, NAN if the root cannot be bracketed. */
+static double pm_flux(const SpatialSaturatedSynchronousMachinePars *par)
+{
+    void *data = (void *)par;
+    double i_lo = pm_flux_i_d(0.0, data);
+    if (i_lo >= 0.0) {
+        return 0.0; /* No permanent magnets */
     }
-    for (int it = 0; it < 50; it++) {
-        if (q1 == q0) {
-            return 0.5 * (p1 + p0);
-        }
-        double p;
-        if (fabs(q1) > fabs(q0)) {
-            p = (-q0 / q1 * p1 + p0) / (1.0 - q0 / q1);
-        } else {
-            p = (-q1 / q0 * p0 + p1) / (1.0 - q1 / q0);
-        }
-        if (fabs(p - p1) <= tol) { /* numpy.isclose(p, p1, rtol=0, atol=tol) */
-            return p;
-        }
-        p0 = p1;
-        q0 = q1;
-        p1 = p;
-        gradnet_current_map_harmonics(&par->current_map, par->k, p1, 0.0, &i_s, &tau);
-        q1 = creal(i_s);
+    double psi_lo = 0.0, psi_hi = 1e-3;
+    double i_hi = pm_flux_i_d(psi_hi, data);
+    while (i_hi < 0.0 && psi_hi < 1e3) {
+        psi_lo = psi_hi;
+        psi_hi = 2.0 * psi_hi;
+        i_hi = pm_flux_i_d(psi_hi, data);
     }
-    return p1;
+    if (isfinite(i_lo) && i_hi >= 0.0) {
+        return brentq(pm_flux_i_d, psi_lo, psi_hi, data);
+    }
+    return NAN;
 }
 
 static SpatialSaturatedSynchronousMachinePars spatial_saturated_synchronous_machine_pars(
@@ -53,7 +46,7 @@ static SpatialSaturatedSynchronousMachinePars spatial_saturated_synchronous_mach
     par.R_s = R_s;
     par.current_map = *current_map;
     par.k = k;
-    par.psi_f = pm_flux_secant(&par);
+    par.psi_f = pm_flux(&par);
     if (par.psi_f < 1e-3) {
         par.psi_f = 0.0; /* No permanent magnets */
     }

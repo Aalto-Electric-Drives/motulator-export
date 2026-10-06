@@ -17,10 +17,24 @@ Plecs {
     ShowBrowser   off
     BrowserWidth  100
     Component {
+      Type          Constant
+      Name          "enable"
+      Show          on
+      Position      [60, 20]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Value"
+        Value         "1.0"
+        Show          off
+      }
+    }
+    Component {
       Type          Step
       Name          "p_g_ref"
       Show          on
-      Position      [60, 40]
+      Position      [60, 60]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -49,7 +63,7 @@ Plecs {
       Type          Gain
       Name          "p_g_ref sum"
       Show          off
-      Position      [110, 40]
+      Position      [110, 60]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -68,7 +82,7 @@ Plecs {
       Type          Constant
       Name          "v_c_ref"
       Show          on
-      Position      [60, 80]
+      Position      [60, 100]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -82,7 +96,7 @@ Plecs {
       Type          PlecsProbe
       Name          "i_c_abc"
       Show          on
-      Position      [60, 120]
+      Position      [60, 140]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -106,7 +120,7 @@ Plecs {
       Type          PlecsProbe
       Name          "u_dc meas."
       Show          on
-      Position      [60, 160]
+      Position      [60, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -129,7 +143,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "Grid-forming control (motulator)"
-      MaskDescription "Disturbance-observer-based grid-forming control in the power-control mode, with transparent current limitation. The parameters correspond to the motulator API: ObserverBasedGridFormingControllerCfg. Empty parameters ([]) correspond to None, i.e., the defaults of motulator."
+      MaskDescription "Disturbance-observer-based grid-forming control in the power-control mode, with transparent current limitation. The parameters correspond to the motulator API: ObserverBasedGridFormingControllerCfg. Empty parameters ([]) correspond to None, i.e., the defaults of motulator. While the input enable is not positive, the duty ratios are 0.5 and the state is reset to its initial value."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -243,22 +257,27 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -15]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -5]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 5]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 15]
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 20]
         Direction     left
       }
       Terminal {
@@ -274,7 +293,7 @@ Plecs {
         BrowserWidth  100
     Component {
       Type          Input
-      Name          "p_g_ref"
+      Name          "enable"
       Show          on
       Position      [60, 40]
       Direction     right
@@ -293,7 +312,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "v_c_ref"
+      Name          "p_g_ref"
       Show          on
       Position      [60, 70]
       Direction     right
@@ -312,7 +331,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "i_c_abc"
+      Name          "v_c_ref"
       Show          on
       Position      [60, 100]
       Direction     right
@@ -331,7 +350,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_dc"
+      Name          "i_c_abc"
       Show          on
       Position      [60, 130]
       Direction     right
@@ -340,6 +359,25 @@ Plecs {
       Parameter {
         Variable      "Index"
         Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_dc"
+      Show          on
+      Position      [60, 160]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
         Show          off
       }
       Parameter {
@@ -364,7 +402,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 1 3 1]"
+        Value         "[1 1 1 3 1]"
         Show          off
       }
       Parameter {
@@ -419,22 +457,22 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export.plecs.grid. The control algorithms are in\n * the included C files. The parameters come from the mask of the\n * subsystem. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic GFMControlSystem ctrl;\n"
+        Value         "/* Generated by motulator_export.plecs.grid. The control algorithms are in\n * the included C files. The parameters come from the mask of the\n * subsystem. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Lower limit (V) of the measured DC-bus voltage, which avoids the division by\n * zero in the PWM if the DC bus is not charged */\n#define U_DC_MIN 1.0\n\nstatic GFMControlSystem ctrl;\n\n/* Initial state, restored while the control system is disabled */\nstatic GFMControlSystem ctrl_init;\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"i_max must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(9) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\n\n/* Configuration (ObserverBasedGridFormingControllerCfg), the defaults are\n * used for empty parameters */\nGFMControllerCfg cfg = gfm_controller_cfg(P(0, 0), P(1, 0));\nif (PDIM(2) > 0) {\n    cfg.R = P(2, 0);\n}\nif (PDIM(3) > 0) {\n    cfg.R_a = P(3, 0);\n}\nif (PDIM(4) > 0) {\n    cfg.k_v = P(4, 0);\n}\nif (PDIM(5) > 0) {\n    cfg.alpha_o = P(5, 0);\n}\nif (PDIM(6) > 0) {\n    cfg.alpha_c = P(6, 0);\n}\nif (PDIM(7) > 0) {\n    cfg.u_nom = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.w_nom = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.T_s = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.i_d_max = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.alpha_l = P(11, 0);\n}\ngfm_control_system_init(&ctrl, &cfg);\n"
+        Value         "/* Check the parameters of the mask */\nif (PDIM(0) != 1) {\n    SetErrorMessage(\"i_max must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(9) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\n\n/* Configuration (ObserverBasedGridFormingControllerCfg), the defaults are\n * used for empty parameters */\nGFMControllerCfg cfg = gfm_controller_cfg(P(0, 0), P(1, 0));\nif (PDIM(2) > 0) {\n    cfg.R = P(2, 0);\n}\nif (PDIM(3) > 0) {\n    cfg.R_a = P(3, 0);\n}\nif (PDIM(4) > 0) {\n    cfg.k_v = P(4, 0);\n}\nif (PDIM(5) > 0) {\n    cfg.alpha_o = P(5, 0);\n}\nif (PDIM(6) > 0) {\n    cfg.alpha_c = P(6, 0);\n}\nif (PDIM(7) > 0) {\n    cfg.u_nom = P(7, 0);\n}\nif (PDIM(8) > 0) {\n    cfg.w_nom = P(8, 0);\n}\nif (PDIM(9) > 0) {\n    cfg.T_s = P(9, 0);\n}\nif (PDIM(10) > 0) {\n    cfg.i_d_max = P(10, 0);\n}\nif (PDIM(11) > 0) {\n    cfg.alpha_l = P(11, 0);\n}\ngfm_control_system_init(&ctrl, &cfg);\n\nctrl_init = ctrl;\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Measurements and references */\ndouble i_c_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n                     InputSignal(2, 2)};\nGFMMeasurements meas = {abc2complex(i_c_abc), InputSignal(3, 0)};\ngfm_control_system_compute_output(&ctrl, &meas, InputSignal(0, 0),\n                                  InputSignal(1, 0));\n\n/* Duty ratios, delayed by the Delay block outside the subsystem */\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n}\n\n/* Monitored signals */\nOutputSignal(1, 0) = ctrl.ref.p_g;\nOutputSignal(1, 1) = ctrl.fbk.p_g;\nOutputSignal(1, 2) = ctrl.fbk.q_g;\nOutputSignal(2, 0) = ctrl.ref.v_c;\nOutputSignal(2, 1) = cabs(ctrl.fbk.v_c);\nOutputSignal(3, 0) = creal(ctrl.ref.i_c);\nOutputSignal(3, 1) = creal(ctrl.fbk.i_c);\nOutputSignal(3, 2) = cimag(ctrl.ref.i_c);\nOutputSignal(3, 3) = cimag(ctrl.fbk.i_c);\nOutputSignal(4, 0) = ctrl.fbk.theta_c;\n"
+        Value         "/* Disabled: zero voltage, the control algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 3; k++) {\n        OutputSignal(0, k) = 0.5;\n    }\n    OutputSignal(1, 0) = 0.0;\n    OutputSignal(1, 1) = 0.0;\n    OutputSignal(1, 2) = 0.0;\n    OutputSignal(2, 0) = 0.0;\n    OutputSignal(2, 1) = 0.0;\n    OutputSignal(3, 0) = 0.0;\n    OutputSignal(3, 1) = 0.0;\n    OutputSignal(3, 2) = 0.0;\n    OutputSignal(3, 3) = 0.0;\n    OutputSignal(4, 0) = 0.0;\n    return;\n}\n\n/* Measurements and references */\ndouble i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),\n                     InputSignal(3, 2)};\ndouble u_dc = fmax(InputSignal(4, 0), U_DC_MIN);\nGFMMeasurements meas = {abc2complex(i_c_abc), u_dc};\ngfm_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n                                  InputSignal(2, 0));\n\n/* Duty ratios, delayed by the Delay block outside the subsystem */\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n}\n\n/* Monitored signals */\nOutputSignal(1, 0) = ctrl.ref.p_g;\nOutputSignal(1, 1) = ctrl.fbk.p_g;\nOutputSignal(1, 2) = ctrl.fbk.q_g;\nOutputSignal(2, 0) = ctrl.ref.v_c;\nOutputSignal(2, 1) = cabs(ctrl.fbk.v_c);\nOutputSignal(3, 0) = creal(ctrl.ref.i_c);\nOutputSignal(3, 1) = creal(ctrl.fbk.i_c);\nOutputSignal(3, 2) = cimag(ctrl.ref.i_c);\nOutputSignal(3, 3) = cimag(ctrl.fbk.i_c);\nOutputSignal(4, 0) = ctrl.fbk.theta_c;\n"
         Show          off
       }
       Parameter {
         Variable      "UpdateFcn"
-        Value         "gfm_control_system_update(&ctrl);\n"
+        Value         "/* Disabled: reset the state */\nif (!(InputSignal(0, 0) > 0.0)) {\n    ctrl = ctrl_init;\n    return;\n}\n\ngfm_control_system_update(&ctrl);\n"
         Show          off
       }
       Parameter {
@@ -468,7 +506,7 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "Index"
-        Value         "5"
+        Value         "6"
         Show          off
       }
       Parameter {
@@ -479,40 +517,48 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "p_g_ref"
+      SrcComponent  "enable"
       SrcTerminal   1
-      Points        [124, 40; 124, 85]
+      Points        [124, 40; 124, 80]
       DstComponent  "C-Script"
       DstTerminal   1
     }
     Connection {
       Type          Signal
-      SrcComponent  "v_c_ref"
+      SrcComponent  "p_g_ref"
       SrcTerminal   1
-      Points        [116, 70; 116, 95]
+      Points        [108, 70; 108, 90]
       DstComponent  "C-Script"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "i_c_abc"
+      SrcComponent  "v_c_ref"
       SrcTerminal   1
-      Points        [100, 100; 100, 105]
+      Points        [100, 100; 100, 100]
       DstComponent  "C-Script"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc"
+      SrcComponent  "i_c_abc"
       SrcTerminal   1
-      Points        [108, 130; 108, 115]
+      Points        [116, 130; 116, 110]
       DstComponent  "C-Script"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "u_dc"
+      SrcTerminal   1
+      Points        [132, 160; 132, 120]
+      DstComponent  "C-Script"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   5
+      SrcTerminal   6
       DstComponent  "d_abc"
       DstTerminal   1
     }
@@ -1056,6 +1102,14 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "enable"
+      SrcTerminal   1
+      Points        [170, 20; 170, 80]
+      DstComponent  "Grid-forming control"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "p_g_ref"
       SrcTerminal   1
       DstComponent  "p_g_ref sum"
@@ -1065,38 +1119,37 @@ Plecs {
       Type          Signal
       SrcComponent  "p_g_ref sum"
       SrcTerminal   2
-      Points        [160, 40; 160, 85]
-      DstComponent  "Grid-forming control"
-      DstTerminal   1
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "v_c_ref"
-      SrcTerminal   1
-      Points        [140, 80; 140, 95]
+      Points        [150, 60; 150, 90]
       DstComponent  "Grid-forming control"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "i_c_abc"
+      SrcComponent  "v_c_ref"
       SrcTerminal   1
-      Points        [150, 120; 150, 105]
       DstComponent  "Grid-forming control"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc meas."
+      SrcComponent  "i_c_abc"
       SrcTerminal   1
-      Points        [170, 160; 170, 115]
+      Points        [160, 140; 160, 110]
       DstComponent  "Grid-forming control"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "u_dc meas."
+      SrcTerminal   1
+      Points        [180, 180; 180, 120]
+      DstComponent  "Grid-forming control"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "Grid-forming control"
-      SrcTerminal   5
+      SrcTerminal   6
       DstComponent  "Delay"
       DstTerminal   1
     }
