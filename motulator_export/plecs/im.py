@@ -48,7 +48,10 @@ from motulator_export.plecs._common import (
     BLANKING_DX,
     C_DIR,
     C_PARAMS,
+    C_U_DC_MIN,
     DUTY_RATIO_CODE,
+    ENABLE,
+    ENABLE_DESCRIPTION,
     MACH,
     ControlBlock,
     MaskParam,
@@ -61,6 +64,7 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _write_model,
     cfg_assignments,
+    enable_code,
     monitored_code,
     parameter_checks,
 )
@@ -85,7 +89,7 @@ from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import _probe, _Schematic, _terminals
 
 # Inputs of the control system and the monitored signals (mask probes)
-CTRL_INPUTS = ["w_M_ref", "i_s_abc", "u_dc", "w_M"]
+CTRL_INPUTS = [ENABLE, "w_M_ref", "i_s_abc", "u_dc", "w_M"]
 CTRL_OUTPUTS = {
     "Speed (w_M_ref, w_M)": ["w_M_ref", "w_M"],
     "Torque (tau_M_ref, tau_M)": ["tau_M_ref", "tau_M"],
@@ -162,13 +166,18 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     if par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
     _check_supported_plant(mdl, dead_time=True)
+    _check_supported_control(ctrl)
+
+
+def _check_supported_control(ctrl: VectorControlSystem) -> None:
+    """Raise an error if the control system is not supported."""
     cvc = ctrl.vector_ctrl
     if not isinstance(cvc, CurrentVectorController):
         raise NotImplementedError("Only CurrentVectorController supported")
     if cvc.cfg.k_o is not None:
         raise NotImplementedError("Only the default observer gain k_o supported")
     if cvc.cfg.discrete:
-        raise NotImplementedError("Discrete-time current control not supported")
+        raise NotImplementedError("Direct discrete-time current control not supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
     _check_supported_speed_control(ctrl, dead_time=True)
@@ -232,7 +241,7 @@ def _control_cscript_code() -> dict[str, str]:
         " * included C files. The parameters come from the mask of the subsystem. */\n"
         f'#include "{C_DIR}/common.c"\n'
         f'#include "{C_DIR}/im_current_vector.c"\n'
-        "\n" + C_PARAMS + "\n"
+        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n"
         "static IMVectorControlSystem ctrl;\n"
     )
     i = {m.variable: k for k, m in enumerate(MASK_PARAMS)}
@@ -270,11 +279,11 @@ def _control_cscript_code() -> dict[str, str]:
     }
     output = (
         "/* Measurements */\n"
-        "double w_M_ref = InputSignal(0, 0);\n"
-        "double i_s_abc[3] = {InputSignal(1, 0), InputSignal(1, 1),\n"
-        "                     InputSignal(1, 2)};\n"
-        "IMMeasurements meas = {abc2complex(i_s_abc), InputSignal(2, 0),\n"
-        "                       InputSignal(3, 0)};\n"
+        "double w_M_ref = InputSignal(1, 0);\n"
+        "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
+        "                     InputSignal(2, 2)};\n"
+        "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
+        "IMMeasurements meas = {abc2complex(i_s_abc), u_dc, InputSignal(4, 0)};\n"
         "\n"
         "im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n"
         "\n"
@@ -287,12 +296,13 @@ def _control_cscript_code() -> dict[str, str]:
         )
     )
     update = "im_vector_control_system_update(&ctrl);\n"
-    return {
+    code = {
         "Declarations": declarations,
         "StartFcn": start,
         "OutputFcn": output,
         "UpdateFcn": update,
     }
+    return enable_code(code, CTRL_OUTPUTS)
 
 
 CVC_BLOCK = ControlBlock(
@@ -303,11 +313,11 @@ CVC_BLOCK = ControlBlock(
         "The parameters correspond to the motulator API: "
         "InductionMachineInvGammaPars, CurrentVectorControllerCfg, and "
         "SpeedController. Empty parameters ([]) correspond to None, i.e., the "
-        "defaults of motulator."
+        "defaults of motulator." + ENABLE_DESCRIPTION
     ),
     mask_params=MASK_PARAMS,
     inputs=CTRL_INPUTS,
-    input_widths=[1, 3, 1, 1],
+    input_widths=[1, 1, 3, 1, 1],
     outputs=CTRL_OUTPUTS,
     code=_control_cscript_code,
 )
@@ -357,6 +367,7 @@ def write_model(
     t_stop: float,
     speed_ctrl_args: dict[str, float],
     outputs: bool = False,
+    enable: StepSignal | float = 1.0,
 ) -> Path:
     """Write a PLECS model of the induction machine drive, see `sm.write_model`."""
     path = Path(path)
@@ -364,6 +375,7 @@ def write_model(
     values = export_mask_values(ctrl, speed_ctrl_args)
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
+        (ENABLE, enable),
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),

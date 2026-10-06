@@ -36,15 +36,22 @@
 /* Parameter value, or NAN for an empty parameter (None in motulator) */
 #define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)
 
+/* Lower limit (V) of the measured DC-bus voltage, which avoids the division by
+ * zero in the PWM if the DC bus is not charged */
+#define U_DC_MIN 1.0
+
 static IMVectorControlSystem ctrl;
 
+/* Initial state, restored while the control system is disabled */
+static IMVectorControlSystem ctrl_init;
+
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 3, 1, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {1, 1, 3, 1, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3, 2, 2, 2, 4};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 5
 #define NUM_OUTPUTS 5
-#define NUM_PARAMS 23
+#define NUM_PARAMS 24
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -150,6 +157,10 @@ static void mdlStart(SimStruct *S)
         SetErrorMessage("pwm_feedforward must be a scalar.");
         return;
     }
+    if (PDIM(23) != 1) {
+        SetErrorMessage("pwm_d_min must be a scalar.");
+        return;
+    }
 
     /* Machine model parameters (InductionMachineInvGammaPars) */
     InductionMachineInvGammaPars par = {
@@ -197,17 +208,39 @@ static void mdlStart(SimStruct *S)
     /* Duty-ratio error model of the PWM (dead_time_error) */
     pwm_set_dead_time(&ctrl.pwm, P(20, 0), P(15, 0),
                       P(21, 0), (int)P(22, 0));
+    /* Minimum duty ratio of a switching leg */
+    pwm_set_min_pulse(&ctrl.pwm, P(23, 0));
+
+    ctrl_init = ctrl;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
+    /* Disabled: zero voltage, the control algorithm is not run */
+    if (!(InputSignal(0, 0) > 0.0)) {
+        for (int k = 0; k < 3; k++) {
+            OutputSignal(0, k) = 0.5;
+        }
+        OutputSignal(1, 0) = 0.0;
+        OutputSignal(1, 1) = 0.0;
+        OutputSignal(2, 0) = 0.0;
+        OutputSignal(2, 1) = 0.0;
+        OutputSignal(3, 0) = 0.0;
+        OutputSignal(3, 1) = 0.0;
+        OutputSignal(4, 0) = 0.0;
+        OutputSignal(4, 1) = 0.0;
+        OutputSignal(4, 2) = 0.0;
+        OutputSignal(4, 3) = 0.0;
+        return;
+    }
+
     /* Measurements */
-    double w_M_ref = InputSignal(0, 0);
-    double i_s_abc[3] = {InputSignal(1, 0), InputSignal(1, 1),
-                         InputSignal(1, 2)};
-    IMMeasurements meas = {abc2complex(i_s_abc), InputSignal(2, 0),
-                           InputSignal(3, 0)};
+    double w_M_ref = InputSignal(1, 0);
+    double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),
+                         InputSignal(2, 2)};
+    double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);
+    IMMeasurements meas = {abc2complex(i_s_abc), u_dc, InputSignal(4, 0)};
 
     im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);
 
@@ -234,6 +267,12 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
+    /* Disabled: reset the state */
+    if (!(InputSignal(0, 0) > 0.0)) {
+        ctrl = ctrl_init;
+        return;
+    }
+
     im_vector_control_system_update(&ctrl);
 }
 

@@ -9,8 +9,9 @@ function build_grid(s)
 %     init      MATLAB code of the model workspace (converter, ac_filter, ac_source)
 %     ac_filter 'lcl' (LCL filter) or 'l' (L filter and grid inductance)
 %     control   Control system, see blocks.add_control_system
-%     refs      References {name, 'step' or 'constant', steps or value}, the first
-%               inputs of the control system (see blocks.add_step)
+%     refs      Input 'enable' and the references {name, 'step' or 'constant',
+%               steps or value}, the first inputs of the control system (see
+%               blocks.add_step)
 %     scope     Scope signals {name, indices in [mdl; ctrl]}
 %     T_s       Sampling period (s)
 %     t_stop    Stop time (s)
@@ -51,7 +52,7 @@ for blk = {'Delay', 'PWM', 'Converter', 'AC filter'}
 end
 blocks.align(sys, 'Grid', 'Outport', 1, blocks.port_y(sys, 'AC filter', 'Inport', 2));
 
-% References and the DC-bus voltage
+% Input 'enable', the references, and the DC-bus voltage
 for k = 1:size(s.refs, 1)
     name = s.refs{k, 1};
     if strcmp(s.refs{k, 2}, 'step')

@@ -49,8 +49,10 @@ static double complex flux_observer_aux_flux(const FluxObserver *self,
 }
 
 static void flux_observer_compute_output(const FluxObserver *self,
-                                         double complex u_s_ab, double complex i_s_ab,
-                                         double w_M, double eps_ext, double h,
+                                         double complex u_s_ab,
+                                         double complex u_s_zoh_ab,
+                                         double complex i_s_ab, double w_M,
+                                         double eps_ext, double h,
                                          ObserverOutputs *out)
 {
     /* The weight h of the external position error signal eps_ext selects between
@@ -70,6 +72,7 @@ static void flux_observer_compute_output(const FluxObserver *self,
     /* Current and voltage vectors in (estimated) rotor coordinates */
     out->i_s = cexp(-I * out->theta_c) * i_s_ab;
     out->u_s = cexp(-I * out->theta_c) * u_s_ab;
+    out->u_s_zoh = cexp(-I * out->theta_c) * u_s_zoh_ab;
 
     /* Flux estimation error */
     double complex psi_s_model = psi_s_dq(par, out->i_s);
@@ -103,9 +106,12 @@ static void flux_observer_update(FluxObserver *self, double T_s,
         k_o2 = (1.0 - out->h) * k_o1;
     }
 
-    /* Update the state estimates (the PM-flux estimation gain k_f is zero) */
-    double complex v = out->u_s - par->R_s * out->i_s - I * out->w_c * out->psi_s;
-    self->psi_s += T_s * (v + k_o1 * out->e_o + k_o2 * conj(out->e_o));
+    /* Update the state estimates (the PM-flux estimation gain k_f is zero). The flux
+     * is integrated in stator coordinates using the average voltage of the ongoing
+     * sampling period and then rotated to the coordinates of the next step. */
+    double complex v = out->u_s_zoh - par->R_s * out->i_s;
+    double complex v_err = k_o1 * out->e_o + k_o2 * conj(out->e_o);
+    self->psi_s = cexp(-I * T_s * out->w_c) * (out->psi_s + T_s * (v + v_err));
     self->theta_m = wrap(self->theta_m + T_s * out->w_c);
 }
 
@@ -132,13 +138,14 @@ static void speed_flux_observer_init(SpeedFluxObserver *self,
 
 static void speed_flux_observer_compute_output(const SpeedFluxObserver *self,
                                                double complex u_s_ab,
+                                               double complex u_s_zoh_ab,
                                                double complex i_s_ab, double eps_ext,
                                                double h, ObserverOutputs *out)
 {
     double w_M = self->speed_observer.w_M;
     double tau_L = self->speed_observer.tau_L;
-    flux_observer_compute_output(&self->flux_observer, u_s_ab, i_s_ab, w_M, eps_ext, h,
-                                 out);
+    flux_observer_compute_output(&self->flux_observer, u_s_ab, u_s_zoh_ab, i_s_ab, w_M,
+                                 eps_ext, h, out);
     out->tau_L = tau_L;
 }
 
@@ -360,18 +367,21 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
     References *ref = &self->ref;
 
     /* Feedback signals */
-    double complex u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc);
+    double complex u_c_ab =
+        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    double complex u_c_zoh_ab =
+        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
     const SpeedFluxObserver *observer = &self->vector_ctrl.observer;
     if (self->vector_ctrl.sensorless) {
-        speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, 0.0, 0.0,
-                                           fbk);
+        speed_flux_observer_compute_output(observer, u_c_ab, u_c_zoh_ab, meas->i_c_ab,
+                                           0.0, 0.0, fbk);
     } else {
         /* Position error from the measured rotor angle (position_error) */
         double n_p = observer->flux_observer.par.n_p;
         double theta_m = observer->flux_observer.theta_m;
         double eps = wrap(n_p * meas->theta_M - theta_m) / n_p;
-        speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, eps, 1.0,
-                                           fbk);
+        speed_flux_observer_compute_output(observer, u_c_ab, u_c_zoh_ab, meas->i_c_ab,
+                                           eps, 1.0, fbk);
     }
     fbk->u_dc = meas->u_dc;
 
@@ -388,7 +398,7 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
 
 static void vector_control_system_update(VectorControlSystem *self)
 {
-    pwm_update(&self->pwm, self->ref.u_c_ab, self->ref.d_abc);
+    pwm_update(&self->pwm, self->ref.d_abc);
     flux_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
     pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
 }

@@ -265,13 +265,11 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
 static void pwm_init(PWM *self, double k_comp)
 {
     self->k_comp = k_comp;
-    self->k_pred = 1.5;
     self->t_d = 0.0;
     self->T_s = 0.0;
     self->i_0 = 0.0;
     self->feedforward = 1;
-    self->realized_voltage = 0.0;
-    self->old_u_c_ab = 0.0;
+    self->d_min = 0.0;
     for (int k = 0; k < 3; k++) {
         self->d_abc[0][k] = 0.0;
         self->d_abc[1][k] = 0.0;
@@ -287,20 +285,57 @@ static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
     self->feedforward = feedforward;
 }
 
-static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
-                                           double u_dc)
+static void pwm_set_min_pulse(PWM *self, double d_min)
 {
-    if (self->t_d <= 0.0) {
-        return self->realized_voltage;
-    }
-    double i_abc[3], e0[3], e1[3], d_err[3];
-    complex2abc(i_c_ab, i_abc);
-    dead_time_error(i_abc, self->d_abc[0], self->t_d, self->T_s, self->i_0, e0);
-    dead_time_error(i_abc, self->d_abc[1], self->t_d, self->T_s, self->i_0, e1);
+    self->d_min = d_min;
+}
+
+static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_ref[3],
+                             const double *i_abc)
+{
     for (int k = 0; k < 3; k++) {
-        d_err[k] = 0.5 * (e0[k] + e1[k]);
+        double candidates[2]; /* The leg switching, the leg clamped */
+        if (d_abc[k] > 0.0 && d_abc[k] < self->d_min) {
+            candidates[0] = self->d_min;
+            candidates[1] = 0.0;
+        } else if (d_abc[k] > 1.0 - self->d_min && d_abc[k] < 1.0) {
+            candidates[0] = 1.0 - self->d_min;
+            candidates[1] = 1.0;
+        } else {
+            continue;
+        }
+        double errors[2];
+        for (int j = 0; j < 2; j++) {
+            d_abc[k] = candidates[j];
+            double realized = candidates[j];
+            if (i_abc != NULL) {
+                double d_err[3];
+                dead_time_error(i_abc, d_abc, self->t_d, self->T_s, self->i_0, d_err);
+                realized -= d_err[k];
+            }
+            errors[j] = fabs(realized - d_ref[k]);
+        }
+        d_abc[k] = (errors[1] < errors[0]) ? candidates[1] : candidates[0];
     }
-    return self->realized_voltage - u_dc * abc2complex(d_err);
+}
+
+static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
+                                           double u_dc, int average)
+{
+    double i_abc[3], d_err[3];
+    complex2abc(i_c_ab, i_abc);
+    int k0 = average ? 0 : 1;
+    double complex q_ab = 0.0;
+    for (int k = k0; k < 2; k++) {
+        double complex q = abc2complex(self->d_abc[k]);
+        if (self->t_d > 0.0) {
+            dead_time_error(i_abc, self->d_abc[k], self->t_d, self->T_s, self->i_0,
+                            d_err);
+            q -= abc2complex(d_err);
+        }
+        q_ab += q;
+    }
+    return u_dc * q_ab / (double)(2 - k0);
 }
 
 static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, double d_abc[3])
@@ -341,11 +376,15 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
 
     /* Duty ratios */
     pwm_duty_ratios(u_c_ref_ab, u_dc, d_abc);
+    double d_ref[3] = {d_abc[0], d_abc[1], d_abc[2]};
 
-    /* Compensate for the duty-ratio error using the predicted currents */
-    if (self->t_d > 0.0 && self->feedforward) {
-        double i_c_abc[3], d_err[3];
-        complex2abc(cexp(I * self->k_pred * T_s * w) * i_c_ab, i_c_abc);
+    /* Compensate for the duty-ratio error using the predicted currents (the prediction
+     * factor k_pred of motulator equals k_comp, both being 1.5) */
+    int compensate = self->t_d > 0.0 && self->feedforward;
+    double i_c_abc[3];
+    if (compensate) {
+        double d_err[3];
+        complex2abc(cexp(I * theta_comp) * i_c_ab, i_c_abc);
         dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, self->i_0,
                         d_err);
         for (int k = 0; k < 3; k++) {
@@ -353,14 +392,17 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
         }
     }
 
+    /* Minimum pulses */
+    if (self->d_min > 0.0) {
+        pwm_limit_pulses(self, d_abc, d_ref, compensate ? i_c_abc : NULL);
+    }
+
     /* Limited voltage reference, including the compensation */
     return abc2complex(d_abc) * u_dc;
 }
 
-static void pwm_update(PWM *self, double complex u_c_ab, const double d_abc[3])
+static void pwm_update(PWM *self, const double d_abc[3])
 {
-    self->realized_voltage = 0.5 * (self->old_u_c_ab + u_c_ab);
-    self->old_u_c_ab = u_c_ab;
     for (int k = 0; k < 3; k++) {
         self->d_abc[0][k] = self->d_abc[1][k];
         self->d_abc[1][k] = d_abc[k];

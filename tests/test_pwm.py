@@ -31,10 +31,11 @@ CAPI = r"""
 
 static PWM pwm;
 
-void init(double t_d, double T_s, double i_0, double feedforward)
+void init(double t_d, double T_s, double i_0, double feedforward, double d_min)
 {
     pwm_init(&pwm, 1.5);
     pwm_set_dead_time(&pwm, t_d, T_s, i_0, (int)feedforward);
+    pwm_set_min_pulse(&pwm, d_min);
 }
 
 void error(const double *i_abc, const double *d_abc, double t_d, double T_s,
@@ -47,19 +48,21 @@ void step(double T_s, const double *u_ref, const double *i, double u_dc, double 
           double *out)
 {
     double complex i_c_ab = i[0] + I * i[1];
-    double complex u = pwm_realized_voltage(&pwm, i_c_ab, u_dc);
+    double complex u = pwm_realized_voltage(&pwm, i_c_ab, u_dc, 1);
+    double complex u_zoh = pwm_realized_voltage(&pwm, i_c_ab, u_dc, 0);
     double d_abc[3];
-    double complex u_c_ab = pwm_compute_output(&pwm, T_s, u_ref[0] + I * u_ref[1],
-                                               u_dc, w, i_c_ab, d_abc);
-    pwm_update(&pwm, u_c_ab, d_abc);
-    double o[5] = {creal(u), cimag(u), d_abc[0], d_abc[1], d_abc[2]};
-    for (int k = 0; k < 5; k++) {
+    pwm_compute_output(&pwm, T_s, u_ref[0] + I * u_ref[1], u_dc, w, i_c_ab, d_abc);
+    pwm_update(&pwm, d_abc);
+    double o[7] = {creal(u),  cimag(u),  creal(u_zoh), cimag(u_zoh),
+                   d_abc[0], d_abc[1], d_abc[2]};
+    for (int k = 0; k < 7; k++) {
         out[k] = o[k];
     }
 }
 """
 
 T_S, T_D, U_DC, I_0 = 125e-6, 2e-6, 540.0, 0.5
+D_MIN = 0.04  # Minimum duty ratio of a switching leg
 
 
 def tanh_sign(i_0: float) -> Callable[[np.ndarray], np.ndarray]:
@@ -90,19 +93,28 @@ def test_dead_time_error(dll: ctypes.CDLL, i_0: float) -> None:
 
 
 @pytest.mark.parametrize(
-    ("t_d", "i_0"),
-    [(0.0, 0.0), (T_D, 0.0), (T_D, I_0)],
-    ids=["no_d_err", "d_err", "d_err_tanh"],
+    ("t_d", "i_0", "d_min"),
+    [
+        (0.0, 0.0, 0.0),
+        (T_D, 0.0, 0.0),
+        (T_D, I_0, 0.0),
+        (0.0, 0.0, D_MIN),
+        (T_D, I_0, D_MIN),
+    ],
+    ids=["no_d_err", "d_err", "d_err_tanh", "min_pulse", "d_err_tanh_min_pulse"],
 )
 @pytest.mark.parametrize("feedforward", [True, False], ids=["ff", "no_ff"])
-def test_pwm(dll: ctypes.CDLL, t_d: float, i_0: float, feedforward: bool) -> None:
-    """The duty ratios and the realized voltages equal those of motulator, also in
-    overmodulation, where the error depends on the duty ratios."""
+def test_pwm(
+    dll: ctypes.CDLL, t_d: float, i_0: float, d_min: float, feedforward: bool
+) -> None:
+    """The duty ratios and the realized voltages (the average of two sampling periods
+    and that of the ongoing period) equal those of motulator, also in overmodulation,
+    where the error depends on the duty ratios, and with a varying DC-bus voltage."""
     sign = tanh_sign(i_0)
     d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, T_S, sign)
-    pwm = PWM(d_err=d_err, feedforward=feedforward)
-    dll.init(d(t_d), d(T_S), d(i_0), d(feedforward))
-    out = (ctypes.c_double * 5)()
+    pwm = PWM(d_err=d_err, feedforward=feedforward, d_min=d_min)
+    dll.init(d(t_d), d(T_S), d(i_0), d(feedforward), d(d_min))
+    out = (ctypes.c_double * 7)()
     rng = np.random.default_rng(2)
     for k in range(200):
         # Rotating voltage reference, reaching the overmodulation range
@@ -110,18 +122,21 @@ def test_pwm(dll: ctypes.CDLL, t_d: float, i_0: float, feedforward: bool) -> Non
         u_ref = (100 + 2 * k) * np.exp(1j * theta)
         i_c_ab = 5 * np.exp(1j * (theta - 0.5)) + rng.normal(0, 0.1)
         w = 2 * pi * 50
-        u_py = pwm.get_realized_voltage(i_c_ab, U_DC)
-        d_py = pwm(T_S, u_ref, U_DC, w)
+        u_dc = U_DC * (1 + 0.05 * np.sin(2 * pi * 300 * k * T_S))
+        u_py = pwm.get_realized_voltage(i_c_ab, u_dc)
+        u_zoh_py = pwm.get_realized_voltage(i_c_ab, u_dc, average=False)
+        d_py = pwm(T_S, u_ref, u_dc, w)
         dll.step(
             d(T_S),
             arr([u_ref.real, u_ref.imag]),
             arr([i_c_ab.real, i_c_ab.imag]),
-            d(U_DC),
+            d(u_dc),
             d(w),
             out,
         )
         assert out[0] + 1j * out[1] == pytest.approx(u_py, abs=1e-9)
-        assert np.array(out[2:]) == pytest.approx(d_py, abs=1e-12)
+        assert out[2] + 1j * out[3] == pytest.approx(u_zoh_py, abs=1e-9)
+        assert np.array(out[4:]) == pytest.approx(d_py, abs=1e-12)
 
 
 def test_pwm_values() -> None:
@@ -133,11 +148,13 @@ def test_pwm_values() -> None:
         "pwm_t_d": T_D,
         "pwm_i_0": 0.0,
         "pwm_feedforward": 0,
+        "pwm_d_min": 0.0,
     }
     assert pwm_values(PWM(), T_S) == {
         "pwm_t_d": 0.0,
         "pwm_i_0": 0.0,
         "pwm_feedforward": 1,
+        "pwm_d_min": 0.0,
     }
     for i_0 in [1e-6, 0.01, I_0, 20.0]:
         sign = tanh_sign(i_0)
@@ -146,6 +163,7 @@ def test_pwm_values() -> None:
             "pwm_t_d": T_D,
             "pwm_i_0": i_0,
             "pwm_feedforward": 1,
+            "pwm_d_min": 0.0,
         }
     others: list[Callable[[np.ndarray], np.ndarray]] = [
         lambda x: 2 / pi * np.arctan(x / 0.1),
@@ -157,3 +175,9 @@ def test_pwm_values() -> None:
         pwm = PWM(d_err=lambda i, d, sign=sign: dead_time_error(i, d, T_D, T_S, sign))
         with pytest.raises(NotImplementedError):
             pwm_values(pwm, T_S)
+
+
+def test_pwm_values_min_pulse() -> None:
+    """The minimum duty ratio is a parameter of the PWM."""
+    pwm = PWM(d_min=D_MIN)
+    assert pwm_values(pwm, T_S)["pwm_d_min"] == D_MIN

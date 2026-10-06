@@ -25,10 +25,12 @@ Currently supported:
   (`VoltageSourceConverter`), capacitive (`CapacitiveDCBusConverter` without an
   external DC current), or fed by a diode bridge with a DC-bus inductor and
   capacitor (`FrequencyConverter`). The computational delay of one sampling period
-  is a PLECS Delay block.
+  is a PLECS Delay block. The dead time (`t_d` with `sign=np.sign`) is modeled as
+  in `motulator_export.plecs.im`.
 - Flux-vector control (`FluxVectorController`) in the sensorless or sensored mode,
   with `SynchronousMachinePars` or `SaturatedSynchronousMachinePars` (GradNet flux
-  map), and a speed controller (`SpeedController`) in `VectorControlSystem`
+  map), and a speed controller (`SpeedController`) in `VectorControlSystem`, with
+  the dead-time compensation in the PWM as in `motulator_export.plecs.im`
 
 The PLECS model can be simulated from Python via the XML-RPC interface of PLECS
 Standalone (enable it in Preferences > General > RPC interface).
@@ -42,6 +44,7 @@ from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import FrequencyConverter
+from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._sm_flux_vector import (
     FluxVectorController,
@@ -55,10 +58,14 @@ from motulator.drive.utils._parameters import (
 )
 
 from motulator_export.plecs._common import (
+    BLANKING_DX,
     C_DIR,
     C_GRADNET_PARAMS,
     C_PARAMS,
+    C_U_DC_MIN,
     DUTY_RATIO_CODE,
+    ENABLE,
+    ENABLE_DESCRIPTION,
     GRADNET_MAX_EMBED_DIM,
     GRADNET_MAX_IN_DIM,
     MACH,
@@ -66,6 +73,7 @@ from motulator_export.plecs._common import (
     ControlBlock,
     MaskParam,
     StepSignal,
+    _add_blanking_time,
     _add_control_system,
     _add_converter,
     _add_dc_bus,
@@ -73,6 +81,7 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _write_model,
     cfg_assignments,
+    enable_code,
     monitored_code,
     parameter_checks,
 )
@@ -81,12 +90,15 @@ from motulator_export.plecs._drive import (
     MACHINE_PROBES,
     MACHINE_TERMINALS,
     MDL_OUTPUTS,
+    PWM_MASK_PARAMS,
     SPEED_MASK_PARAMS,
     _add_drive_outputs,
     _add_mechanics,
     _check_supported_plant,
     _check_supported_speed_control,
     mechanics_and_converter_variables,
+    pwm_code,
+    pwm_values,
     speed_controller_code,
     speed_ctrl_values,
 )
@@ -112,7 +124,7 @@ CTRL_OUTPUTS = {
 }
 
 # Inputs of the control system
-CTRL_INPUTS = ["w_M_ref", "i_s_abc", "u_dc", "theta_M"]
+CTRL_INPUTS = [ENABLE, "w_M_ref", "i_s_abc", "u_dc", "theta_M"]
 
 # GradNet parameters, as fields of a workspace struct and in the C-Script parameters
 GRADNET_FIELDS = [
@@ -199,7 +211,7 @@ MASK_PARAMS = [
     ),
     MaskParam("T_s", "T_s: Sampling period (s)", TAB_CFG, "cfg.T_s", True),
 ]
-MASK_PARAMS += SPEED_MASK_PARAMS
+MASK_PARAMS += SPEED_MASK_PARAMS + PWM_MASK_PARAMS
 
 # Mask initialization: the fields of the GradNet flux map as separate variables
 MASK_INIT = (
@@ -293,7 +305,7 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
         export_gradnet(par.magnetic_map_fcn)  # Raises if not supported
     if par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
-    _check_supported_plant(mdl)
+    _check_supported_plant(mdl, dead_time=True)
     _check_supported_control(ctrl)
 
 
@@ -310,7 +322,7 @@ def _check_supported_control(ctrl: VectorControlSystem) -> None:
         export_gradnet(fvc.par.psi_s_dq_fcn)  # Raises if not supported
     elif not isinstance(fvc.par, SynchronousMachinePars):
         raise NotImplementedError("Machine model of the control system not supported")
-    _check_supported_speed_control(ctrl)
+    _check_supported_speed_control(ctrl, dead_time=True)
 
 
 def export_mask_values(
@@ -376,6 +388,7 @@ def export_mask_values(
         "sensorless": int(cfg.sensorless),
         "T_s": cfg.T_s,
         **speed_ctrl_values(ctrl, speed_ctrl_args),
+        **pwm_values(ctrl.pwm, cfg.T_s),
     }
     return values, flux_map
 
@@ -411,7 +424,7 @@ def _control_cscript_code() -> dict[str, str]:
         f'#include "{C_DIR}/sm_parameters.c"\n'
         f'#include "{C_DIR}/sm_control_loci.c"\n'
         f'#include "{C_DIR}/sm_flux_vector.c"\n'
-        "\n" + C_PARAMS + "\n" + C_GRADNET_PARAMS + "\n"
+        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n" + C_GRADNET_PARAMS + "\n"
         "static VectorControlSystem ctrl;\n"
     )
     i = {m.variable: k for k, m in enumerate(MASK_PARAMS)}
@@ -458,6 +471,7 @@ def _control_cscript_code() -> dict[str, str]:
         "}\n"
         "\n" + speed_controller_code(i) + "\n"
         "vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        "\n" + pwm_code(i)
     )
     monitored = {
         "w_M_ref": "ctrl.ref.w_M",
@@ -472,22 +486,23 @@ def _control_cscript_code() -> dict[str, str]:
     }
     output = (
         "/* Measurements */\n"
-        "double w_M_ref = InputSignal(0, 0);\n"
-        "double i_s_abc[3] = {InputSignal(1, 0), InputSignal(1, 1),\n"
-        "                     InputSignal(1, 2)};\n"
-        "Measurements meas = {abc2complex(i_s_abc), InputSignal(2, 0),\n"
-        "                     InputSignal(3, 0)};\n"
+        "double w_M_ref = InputSignal(1, 0);\n"
+        "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
+        "                     InputSignal(2, 2)};\n"
+        "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
+        "Measurements meas = {abc2complex(i_s_abc), u_dc, InputSignal(4, 0)};\n"
         "\n"
         "vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n"
         "\n" + DUTY_RATIO_CODE + monitored_code(CTRL_OUTPUTS, monitored)
     )
     update = "vector_control_system_update(&ctrl);\n"
-    return {
+    code = {
         "Declarations": declarations,
         "StartFcn": start,
         "OutputFcn": output,
         "UpdateFcn": update,
     }
+    return enable_code(code, CTRL_OUTPUTS)
 
 
 def _machine_cscript_code() -> dict[str, str]:
@@ -512,6 +527,11 @@ def _machine_cscript_code() -> dict[str, str]:
         "READ_GRADNET(current_map, 3);\n"
         "par = spatial_saturated_synchronous_machine_pars(\n"
         "    P(0, 0), P(1, 0), &current_map, (int)P(2, 0));\n"
+        "if (isnan(par.psi_f)) {\n"
+        '    SetErrorMessage("The PM-flux linkage cannot be solved from the current "\n'
+        '                    "map.");\n'
+        "    return;\n"
+        "}\n"
         "PSI_D = par.psi_f; /* Initial states as in motulator */\n"
         "PSI_Q = 0.0;\n"
     )
@@ -706,11 +726,11 @@ FVC_BLOCK = ControlBlock(
         "parameters correspond to the motulator API: SynchronousMachinePars (or "
         "SaturatedSynchronousMachinePars with a GradNet flux map), "
         "FluxVectorControllerCfg, and SpeedController. Empty parameters ([]) "
-        "correspond to None, i.e., the defaults of motulator."
+        "correspond to None, i.e., the defaults of motulator." + ENABLE_DESCRIPTION
     ),
     mask_params=MASK_PARAMS,
     inputs=CTRL_INPUTS,
-    input_widths=[1, 3, 1, 1],
+    input_widths=[1, 1, 3, 1, 1],
     outputs=CTRL_OUTPUTS,
     code=_control_cscript_code,
     mask_init=MASK_INIT,
@@ -733,6 +753,7 @@ def write_model(
     t_stop: float,
     speed_ctrl_args: dict[str, float],
     outputs: bool = False,
+    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write a PLECS model of the drive system.
@@ -757,6 +778,10 @@ def write_model(
         "alpha_s": 25}``.
     outputs : bool, optional
         Add the output ports "mdl" and "ctrl" for `simulate`, defaults to False.
+    enable : StepSignal | float, optional
+        Input `enable` of the control system, defaults to 1 (enabled). While it is
+        not positive, the duty ratios are 0.5 and the state of the control system is
+        reset to its initial value.
 
     Returns
     -------
@@ -774,6 +799,7 @@ def write_model(
     sch = _Schematic()
     gradnet_plant = _has_gradnet_plant(mdl)
     sources: list[tuple[str, StepSignal | float | str]] = [
+        (ENABLE, enable),
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
@@ -782,9 +808,14 @@ def write_model(
     _add_control_system(sch, FVC_BLOCK, sources, mask_values)
     _add_delay(sch, mask_values["T_s"], FVC_BLOCK)
     _add_pwm(sch, mask_values["T_s"])
-    # The diode bridge and its grid need space between the PWM and the DC bus
+    t_d = cast(CarrierComparison, mdl.pwm).t_d
+    if t_d > 0:
+        _add_blanking_time(sch)
+    # The blanking time, the diode bridge, and its grid need space between the PWM and
+    # the DC bus
     sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
-    _add_converter(sch)
+    sch.dx += BLANKING_DX if t_d > 0 else 0
+    _add_converter(sch, t_d)
     _add_dc_bus(sch, mdl.converter)
     if gradnet_plant:
         _add_gradnet_machine(sch)

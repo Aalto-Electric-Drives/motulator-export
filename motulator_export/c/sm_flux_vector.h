@@ -27,7 +27,8 @@
 typedef struct {
     double u_dc;           /* DC-bus voltage */
     double complex i_s;    /* Stator current */
-    double complex u_s;    /* Stator voltage */
+    double complex u_s;    /* Stator voltage (previous and ongoing periods) */
+    double complex u_s_zoh; /* Stator voltage (ongoing period) */
     double complex psi_s;  /* Stator flux linkage estimate */
     double complex e_o;    /* Flux estimation error signal */
     double eps;            /* Mechanical position estimation error signal */

@@ -13,6 +13,7 @@ from motulator_export.plecs._common import ControlBlock, StepSignal
 from motulator_export.plecs._drive import MDL_OUTPUTS
 from motulator_export.plecs._schematic import _fmt
 from motulator_export.simulink._common import (
+    _m_source,
     _m_steps,
     scope_indices,
     simulate,
@@ -45,6 +46,7 @@ def write_drive_model(
     tau_L: StepSignal,
     t_stop: float,
     sfunctions: Sequence[SFunction] = (),
+    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write the S-functions and the MATLAB script building the model of a drive.
@@ -71,6 +73,10 @@ def write_drive_model(
     sfunctions : Sequence[SFunction], optional
         S-function of the machine ("gn"), whose parameters are passed to the
         builder.
+    enable : StepSignal | float, optional
+        Input `enable` of the control system, defaults to 1 (enabled). While it is
+        not positive, the duty ratios are 0.5 and the state of the control system is
+        reset to its initial value.
 
     Returns
     -------
@@ -91,6 +97,7 @@ def write_drive_model(
     fields = [
         ("init", init),
         ("machine", machine),
+        ("enable", _m_source(enable)),
         ("w_M_ref", _m_steps(w_M_ref)),
         ("tau_L", _m_steps(tau_L)),
         ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),

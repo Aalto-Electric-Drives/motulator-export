@@ -16,6 +16,7 @@
 #ifndef MOTULATOR_SM_MACHINE_H
 #define MOTULATOR_SM_MACHINE_H
 
+#include "common.h"
 #include "gradnet.h"
 
 /* Parameters of the machine (SpatialSaturatedSynchronousMachinePars) */

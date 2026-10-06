@@ -42,6 +42,7 @@ s.init = strjoin({ ...
     'est_flux_map.in_base = 12.445079803466797;', ...
     'est_flux_map.out_base = 0.996279239654541;'}, newline);
 s.machine = 'gn';
+s.enable = 1.0;
 s.w_M_ref = [0.2500625 0.0 376.99111843077515];
 s.tau_L = [1.25 0.0 18.59816140556179];
 s.scope = { ...
@@ -54,7 +55,7 @@ s.machine_params = {'double(machine.n_p)', 'double(machine.R_s)', 'double(machin
 s.control.name = 'Flux-vector control';
 s.control.sfunction = 'sfun_flux_vector_control';
 s.control.mask_type = 'Flux-vector control (motulator)';
-s.control.description = 'Speed control of a synchronous machine drive with flux-vector control. The parameters correspond to the motulator API: SynchronousMachinePars (or SaturatedSynchronousMachinePars with a GradNet flux map), FluxVectorControllerCfg, and SpeedController. Empty parameters ([]) correspond to None, i.e., the defaults of motulator.';
+s.control.description = 'Speed control of a synchronous machine drive with flux-vector control. The parameters correspond to the motulator API: SynchronousMachinePars (or SaturatedSynchronousMachinePars with a GradNet flux map), FluxVectorControllerCfg, and SpeedController. Empty parameters ([]) correspond to None, i.e., the defaults of motulator. While the input enable is not positive, the duty ratios are 0.5 and the state is reset to its initial value.';
 s.control.mask = { ...
     'n_p', 'n_p: Number of pole pairs', 'Machine model (SynchronousMachinePars)', '2.0'
     'R_s', 'R_s: Stator resistance (Ohm)', 'Machine model (SynchronousMachinePars)', '0.63'
@@ -79,6 +80,10 @@ s.control.mask = { ...
     'speed_alpha_s', 'alpha_s: Reference-tracking bandwidth (rad/s)', 'Speed control (SpeedController)', '2*pi*4'
     'speed_alpha_i', 'alpha_i: Integral-action bandwidth (rad/s), [] = alpha_s', 'Speed control (SpeedController)', '[]'
     'speed_tau_M_max', 'tau_M_max: Maximum motor torque (Nm)', 'Speed control (SpeedController)', 'inf'
+    'pwm_t_d', 't_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), 0 = None', 'PWM (PWM)', '0.0'
+    'pwm_i_0', 'i_0: Current scale (A) of sign = tanh(i/i_0) in dead_time_error, 0 = np.sign', 'PWM (PWM)', '0.0'
+    'pwm_feedforward', 'feedforward: Compensate for d_err (1) or not (0)', 'PWM (PWM)', '1.0'
+    'pwm_d_min', 'd_min: Minimum duty ratio of a switching leg, 0 = no limit', 'PWM (PWM)', '0.0'
     };
 s.control.mask_init = strjoin({ ...
     '% Fields of the GradNet flux map for the C-Script', ...
@@ -107,8 +112,8 @@ s.control.mask_init = strjoin({ ...
     '  gn_in_base = psi_s_dq_fcn.in_base;', ...
     '  gn_out_base = psi_s_dq_fcn.out_base;', ...
     'end'}, newline);
-s.control.params = {'double(n_p)', 'double(R_s)', 'double(isempty(psi_s_dq_fcn))', 'double(L_d)', 'double(L_q)', 'double(psi_f)', 'double(i_s_max)', 'double(alpha_tau)', 'double(alpha_psi)', 'double(alpha_i)', 'double(alpha_o)', 'double(k_o)', 'double(psi_s_min)', 'double(psi_s_max)', 'double(k_u)', 'double(k_mtpv)', 'double(J)', 'double(sensorless)', 'double(T_s)', 'double(speed_J)', 'double(speed_alpha_s)', 'double(speed_alpha_i)', 'double(speed_tau_M_max)', 'double(gn_in_dim)', 'double(gn_mu_dim)', 'double(gn_W)', 'double(gn_b)', 'double(gn_mu_log)', 'double(gn_bias)', 'double(gn_activation)', 'double(gn_beta_log)', 'double(gn_p)', 'double(gn_in_base)', 'double(gn_out_base)'};
-s.control.inputs = {'w_M_ref', 'i_s_abc', 'u_dc', 'theta_M'};
+s.control.params = {'double(n_p)', 'double(R_s)', 'double(isempty(psi_s_dq_fcn))', 'double(L_d)', 'double(L_q)', 'double(psi_f)', 'double(i_s_max)', 'double(alpha_tau)', 'double(alpha_psi)', 'double(alpha_i)', 'double(alpha_o)', 'double(k_o)', 'double(psi_s_min)', 'double(psi_s_max)', 'double(k_u)', 'double(k_mtpv)', 'double(J)', 'double(sensorless)', 'double(T_s)', 'double(speed_J)', 'double(speed_alpha_s)', 'double(speed_alpha_i)', 'double(speed_tau_M_max)', 'double(pwm_t_d)', 'double(pwm_i_0)', 'double(pwm_feedforward)', 'double(pwm_d_min)', 'double(gn_in_dim)', 'double(gn_mu_dim)', 'double(gn_W)', 'double(gn_b)', 'double(gn_mu_log)', 'double(gn_bias)', 'double(gn_activation)', 'double(gn_beta_log)', 'double(gn_p)', 'double(gn_in_base)', 'double(gn_out_base)'};
+s.control.inputs = {'enable', 'w_M_ref', 'i_s_abc', 'u_dc', 'theta_M'};
 s.control.outputs = {'d_abc', 'Speed (w_M_ref, w_M)', 'Torque (tau_M_ref, tau_M)', 'Flux linkage (psi_s_ref, psi_s)', 'Angle and current (theta_m, i_d, i_q)'};
 s.T_s = 0.000125;
 s.t_stop = 1.75;

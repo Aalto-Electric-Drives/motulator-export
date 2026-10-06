@@ -22,6 +22,7 @@ s.init = strjoin({ ...
     'ac_source.w_g = 314.1592653589793;'}, newline);
 s.ac_filter = 'l';
 s.refs = { ...
+    'enable', 'constant', 1.0
     'p_g_ref', 'step', [0.2000625 0.0 4166.666666666667; 0.5000625 0.0 4166.666666666667; 0.7999375 0.0 4166.666666666666; 1.1999375 0.0 -25000.0]
     'v_c_ref', 'constant', 326.5986323710904
     };
@@ -35,7 +36,7 @@ s.scope = { ...
 s.control.name = 'Grid-forming control';
 s.control.sfunction = 'sfun_grid_forming_control';
 s.control.mask_type = 'Grid-forming control (motulator)';
-s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with transparent current limitation. The parameters correspond to the motulator API: ObserverBasedGridFormingControllerCfg. Empty parameters ([]) correspond to None, i.e., the defaults of motulator.';
+s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with transparent current limitation. The parameters correspond to the motulator API: ObserverBasedGridFormingControllerCfg. Empty parameters ([]) correspond to None, i.e., the defaults of motulator. While the input enable is not positive, the duty ratios are 0.5 and the state is reset to its initial value.';
 s.control.mask = { ...
     'i_max', 'Maximum current (A), peak value: i_max', 'Grid-forming control (ObserverBasedGridFormingControllerCfg)', '33.09259735953043'
     'L', 'Total inductance estimate (H): L', 'Grid-forming control (ObserverBasedGridFormingControllerCfg)', '0.014293712103527936'
@@ -52,7 +53,7 @@ s.control.mask = { ...
     };
 s.control.mask_init = '';
 s.control.params = {'double(i_max)', 'double(L)', 'double(R)', 'double(R_a)', 'double(k_v)', 'double(alpha_o)', 'double(alpha_c)', 'double(u_nom)', 'double(w_nom)', 'double(T_s)', 'double(i_d_max)', 'double(alpha_l)'};
-s.control.inputs = {'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_dc'};
+s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_dc'};
 s.control.outputs = {'d_abc', 'Power (p_g_ref, p_g, q_g)', 'Voltage (v_c_ref, v_c)', 'Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)', 'Angle (theta_c)'};
 s.T_s = 0.000125;
 s.t_stop = 1.4;

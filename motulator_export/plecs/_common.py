@@ -120,10 +120,10 @@ class ControlBlock:
     """
     Control-system block: a masked subsystem containing a C-Script block.
 
-    The mask parameters are passed to the C-Script, whose inputs are the references
-    and the measurements. The first output of the C-Script, the duty ratios, is the
-    only output of the block. The monitored signals are the other outputs of the
-    C-Script, available as mask probes of the block.
+    The mask parameters are passed to the C-Script, whose inputs are `enable` (see
+    `enable_code`), the references, and the measurements. The first output of the
+    C-Script, the duty ratios, is the only output of the block. The monitored signals
+    are the other outputs of the C-Script, available as mask probes of the block.
 
     """
 
@@ -152,6 +152,13 @@ C_PARAMS = (
     "\n"
     "/* Parameter value, or NAN for an empty parameter (None in motulator) */\n"
     "#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n"
+)
+
+# C-Script declaration of the lower limit of the measured DC-bus voltage
+C_U_DC_MIN = (
+    "/* Lower limit (V) of the measured DC-bus voltage, which avoids the division by\n"
+    " * zero in the PWM if the DC bus is not charged */\n"
+    "#define U_DC_MIN 1.0\n"
 )
 
 # C-Script declarations for reading a GradNet from the parameters (sm.py only)
@@ -201,6 +208,55 @@ DUTY_RATIO_CODE = (
     "}\n"
     "\n"
 )
+
+
+# The first input of the control systems
+ENABLE = "enable"
+ENABLE_DESCRIPTION = (
+    " While the input enable is not positive, the duty ratios are 0.5 and the state "
+    "is reset to its initial value."
+)
+
+
+def enable_code(code: dict[str, str], outputs: dict[str, list[str]]) -> dict[str, str]:
+    """
+    Add the input `enable` (the first input) to the code sections of a C-Script.
+
+    While the input is not positive, the control algorithm is not run: the duty ratios
+    are 0.5 (zero voltage), the monitored signals are zero, and the state `ctrl` is
+    reset to its initial value, so that the control system starts from the initial
+    state when enabled, e.g., after a fault. The initial state is copied at the end
+    of the start function, so the reset does not evaluate the parameters again.
+
+    """
+    match = re.search(r"^static (\w+) ctrl;$", code["Declarations"], re.M)
+    if match is None:
+        raise RuntimeError("State of the control system (ctrl) not found")
+    disabled = "if (!(InputSignal(0, 0) > 0.0)) {\n"
+    zeros = "".join(
+        f"    OutputSignal({i_out + 1}, {j}) = 0.0;\n"
+        for i_out, names in enumerate(outputs.values())
+        for j in range(len(names))
+    )
+    return code | {
+        "Declarations": code["Declarations"]
+        + "\n/* Initial state, restored while the control system is disabled */\n"
+        f"static {match.group(1)} ctrl_init;\n",
+        "StartFcn": code["StartFcn"] + "\nctrl_init = ctrl;\n",
+        "OutputFcn": "/* Disabled: zero voltage, the control algorithm is not run */\n"
+        + disabled
+        + "    for (int k = 0; k < 3; k++) {\n"
+        "        OutputSignal(0, k) = 0.5;\n"
+        "    }\n" + zeros + "    return;\n"
+        "}\n"
+        "\n" + code["OutputFcn"],
+        "UpdateFcn": "/* Disabled: reset the state */\n"
+        + disabled
+        + "    ctrl = ctrl_init;\n"
+        "    return;\n"
+        "}\n"
+        "\n" + code["UpdateFcn"],
+    }
 
 
 def parameter_checks(mask_params: list[MaskParam]) -> str:
@@ -631,7 +687,9 @@ def _add_control_system(
 
     """
     n_in = len(sources)
-    y_src = [CS[1] - 20 * (n_in - 1) + 40 * k for k in range(n_in)]
+    # The sources are centered at the control system, but not above the top margin
+    y_0 = max(CS[1] - 20 * (n_in - 1), 20)
+    y_src = [y_0 + 40 * k for k in range(n_in)]
     y_in = [CS[1] + 10 * k - 5 * (n_in - 1) for k in range(n_in)]
     x_jog = _jogs(y_src, y_in, 140, 10)
     for k, (name, src) in enumerate(sources):

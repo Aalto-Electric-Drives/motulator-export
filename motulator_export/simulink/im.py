@@ -37,6 +37,7 @@ def write_model(
     tau_L: StepSignal,
     t_stop: float,
     speed_ctrl_args: dict[str, float],
+    enable: StepSignal | float = 1.0,
 ) -> Path:
     """Write a MATLAB script that builds the Simulink model, see `sm.write_model`."""
     im._check_supported(mdl, ctrl)
@@ -44,7 +45,7 @@ def write_model(
     values = im.export_mask_values(ctrl, speed_ctrl_args)
     variables = im._plant_variables(mdl)
     return write_drive_model(
-        path, BLOCK, values, variables, "im", w_M_ref, tau_L, t_stop
+        path, BLOCK, values, variables, "im", w_M_ref, tau_L, t_stop, enable=enable
     )
 
 

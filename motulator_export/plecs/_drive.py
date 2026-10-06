@@ -74,6 +74,13 @@ PWM_MASK_PARAMS = [
         "",
         True,
     ),
+    MaskParam(
+        "pwm_d_min",
+        "d_min: Minimum duty ratio of a switching leg, 0 = no limit",
+        TAB_PWM,
+        "",
+        True,
+    ),
 ]
 
 
@@ -142,11 +149,18 @@ def pwm_values(pwm: PWM, T_s: float) -> dict[str, Any]:
     `sign = lambda i: np.tanh(i/i_0)` is supported. Since `d_err` is a function, the
     dead time `t_d` and the current scale `i_0` are identified from its values at the
     duty ratios of 0.5, where `d_err = t_d/(2*T_s)*sign(i)`, and the function is
-    checked at test points, also near zero current.
+    checked at test points, also near zero current. The minimum duty ratio `d_min` of
+    a switching leg is a parameter of the PWM.
 
     """
+    d_min = float(pwm.d_min)
     if pwm.d_err is None:
-        return {"pwm_t_d": 0.0, "pwm_i_0": 0.0, "pwm_feedforward": int(pwm.feedforward)}
+        return {
+            "pwm_t_d": 0.0,
+            "pwm_i_0": 0.0,
+            "pwm_feedforward": int(pwm.feedforward),
+            "pwm_d_min": d_min,
+        }
     d_err = pwm.d_err
     d_half = np.full(3, 0.5)
 
@@ -190,15 +204,26 @@ def pwm_values(pwm: PWM, T_s: float) -> dict[str, Any]:
                 "sign=np.sign or sign=lambda i: np.tanh(i/i_0) and the sampling "
                 "period T_s of the control system supported"
             )
-    return {"pwm_t_d": t_d, "pwm_i_0": i_0, "pwm_feedforward": int(pwm.feedforward)}
+    return {
+        "pwm_t_d": t_d,
+        "pwm_i_0": i_0,
+        "pwm_feedforward": int(pwm.feedforward),
+        "pwm_d_min": d_min,
+    }
 
 
 def pwm_code(i: dict[str, int]) -> str:
-    """C code setting the duty-ratio error model of the PWM from the mask parameters."""
+    """
+    C code setting the duty-ratio error model and the minimum pulses of the PWM from
+    the mask parameters.
+
+    """
     return (
         "/* Duty-ratio error model of the PWM (dead_time_error) */\n"
         f"pwm_set_dead_time(&ctrl.pwm, P({i['pwm_t_d']}, 0), P({i['T_s']}, 0),\n"
         f"                  P({i['pwm_i_0']}, 0), (int)P({i['pwm_feedforward']}, 0));\n"
+        "/* Minimum duty ratio of a switching leg */\n"
+        f"pwm_set_min_pulse(&ctrl.pwm, P({i['pwm_d_min']}, 0));\n"
     )
 
 
