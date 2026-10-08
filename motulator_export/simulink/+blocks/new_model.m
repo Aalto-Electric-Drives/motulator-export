@@ -1,12 +1,13 @@
 function slx = new_model(s)
-%NEW_MODEL Create the model s.name with its workspace and solver settings.
-%   The workspace of the model is the MATLAB code s.init (the parameters of the
-%   system model). The solver is as in the PLECS models: Dormand-Prince with the
-%   relative tolerance of 1e-6 and the maximum step s.T_s. The outputs are saved as
-%   arrays for the comparison with motulator. Unconnected ports and lines are
-%   errors, so that the builders cannot leave them. A previous model in s.folder
-%   is closed and deleted, since it would shadow the new one. Returns the path of
-%   the model.
+%NEW_MODEL Create the model s.name with its parameters and solver settings.
+%   The parameters are defined in the base workspace by the script s.init_script
+%   in s.folder (init_<model>.m), which is run now, after loading the model, and at
+%   the start of each simulation. The solver is as in the PLECS models:
+%   Dormand-Prince with the relative tolerance of 1e-6 and the maximum step s.T_s.
+%   The outputs are saved as arrays for the comparison with motulator. Unconnected
+%   ports and lines are errors, so that the builders cannot leave them. A previous
+%   model in s.folder is closed and deleted, since it would shadow the new one.
+%   Returns the path of the model.
 name = s.name;
 if bdIsLoaded(name)
     close_system(name, 0);
@@ -16,12 +17,13 @@ if isfile(slx)
     delete(slx);
 end
 addpath(s.folder);
+evalin('base', s.init_script);
 new_system(name);
-ws = get_param(name, 'ModelWorkspace');
-ws.DataSource = 'MATLAB Code';
-ws.MATLABCode = s.init;
-ws.reload;
+init = sprintf('addpath(fileparts(get_param(bdroot, ''FileName'')));\n%s;', ...
+    s.init_script);
 set_param(name, ...
+    'PostLoadFcn', init, ...
+    'InitFcn', init, ...
     'Solver', 'ode45', ...
     'MaxStep', blocks.num(s.T_s), ...
     'RelTol', '1e-6', ...
@@ -34,6 +36,5 @@ set_param(name, ...
     'ReturnWorkspaceOutputs', 'on', ...
     'UnconnectedInputMsg', 'error', ...
     'UnconnectedOutputMsg', 'error', ...
-    'UnconnectedLineMsg', 'error', ...
-    'InitFcn', 'addpath(fileparts(get_param(bdroot, ''FileName'')))');
+    'UnconnectedLineMsg', 'error');
 end

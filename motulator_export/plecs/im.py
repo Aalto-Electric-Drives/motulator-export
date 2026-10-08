@@ -1,14 +1,17 @@
 """
 Export motulator induction machine drives to PLECS.
 
-This module converts an induction machine drive with current-vector control into a
-PLECS Standalone model, in the same way as `motulator_export.plecs.sm` does for
-synchronous machine drives. The control system is a masked subsystem, whose
-parameters are those of `InductionMachineInvGammaPars`,
-`CurrentVectorControllerCfg`, and `SpeedController`, and contains a C-Script block
-with the C port in
-`c/im_current_vector.c`. The machine is the PLECS squirrel-cage induction machine,
-parametrized as the T model equivalent to the inverse-Γ model of motulator.
+This module converts an induction machine drive with current-vector control or
+observer-based V/Hz control into a PLECS Standalone model, in the same way as
+`motulator_export.plecs.sm` does for synchronous machine drives. In the control
+system, each class of motulator is a block with a mask of its arguments (see
+`_im_control` and `_im_vhz_control`), with the C port in `c/im_current_vector.c`
+and `c/im_flux_vector.c`. The parameters are defined in the initialization commands
+of the PLECS model as the structs par (`InductionMachineInvGammaPars`), cfg
+(`CurrentVectorControllerCfg` or `ObserverBasedVHzControllerCfg`), speed_ctrl
+(`SpeedController`) or slew_rate (of `VHzControlSystem`), and pwm (`PWM`).
+The machine is the PLECS squirrel-cage induction machine, parametrized as the T
+model equivalent to the inverse-Γ model of motulator.
 
 Currently supported:
 
@@ -19,6 +22,11 @@ Currently supported:
 - Current-vector control (`CurrentVectorController`) in the sensorless or sensored
   mode with the default observer gain `k_o`, and a speed controller
   (`SpeedController`) in `VectorControlSystem`
+- Observer-based V/Hz control (`ObserverBasedVHzController`) with the default
+  observer gain `k_o` in `VHzControlSystem`, including pure open-loop V/Hz control
+  as its special case (`L_M = inf` in the machine model of the control system)
+- The MPE or MME overmodulation of the PWM (`overmodulation`, MME by default in V/Hz
+  control) and the minimum duty ratio (`d_min`)
 - Dead time of the converter (`t_d` with `sign=np.sign`), modeled with the Blanking
   Time block and the IGBT converter of PLECS, and its compensation in the PWM
   (`PWM(d_err=lambda i, d: dead_time_error(i, d, t_d, T_s, sign))` with
@@ -33,11 +41,12 @@ from typing import Any, cast
 import numpy as np
 from motulator.common.model._converter import FrequencyConverter
 from motulator.common.model._pwm import CarrierComparison
-from motulator.drive.control._base import VectorControlSystem
+from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import (
     CurrentVectorController,
     CurrentVectorControllerCfg,
 )
+from motulator.drive.control._im_flux_vector import ObserverBasedVHzController
 from motulator.drive.model import Drive, InductionMachine
 from motulator.drive.utils._parameters import (
     InductionMachineInvGammaPars,
@@ -46,15 +55,10 @@ from motulator.drive.utils._parameters import (
 
 from motulator_export.plecs._common import (
     BLANKING_DX,
-    C_DIR,
-    C_PARAMS,
-    C_U_DC_MIN,
-    DUTY_RATIO_CODE,
+    DC_DX,
     ENABLE,
-    ENABLE_DESCRIPTION,
     MACH,
     ControlBlock,
-    MaskParam,
     StepSignal,
     _add_blanking_time,
     _add_control_system,
@@ -62,99 +66,30 @@ from motulator_export.plecs._common import (
     _add_dc_bus,
     _add_delay,
     _add_pwm,
+    _check_supported_pwm,
     _write_model,
-    cfg_assignments,
-    enable_code,
-    monitored_code,
-    parameter_checks,
 )
+from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._drive import (
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
     MDL_OUTPUTS,
-    PWM_MASK_PARAMS,
-    SPEED_MASK_PARAMS,
     _add_drive_outputs,
     _add_mechanics,
     _check_supported_plant,
     _check_supported_speed_control,
     mechanics_and_converter_variables,
-    pwm_code,
-    pwm_values,
-    speed_controller_code,
     speed_ctrl_values,
 )
+from motulator_export.plecs._im_control import CVC_BLOCK, init_script
+from motulator_export.plecs._im_vhz_control import VHZ_BLOCK
+from motulator_export.plecs._im_vhz_control import init_script as vhz_init_script
 from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import _probe, _Schematic, _terminals
 
-# Inputs of the control system and the monitored signals (mask probes)
-CTRL_INPUTS = [ENABLE, "w_M_ref", "i_s_abc", "u_dc", "w_M"]
-CTRL_OUTPUTS = {
-    "Speed (w_M_ref, w_M)": ["w_M_ref", "w_M"],
-    "Torque (tau_M_ref, tau_M)": ["tau_M_ref", "tau_M"],
-    "Flux linkage (psi_s, psi_R)": ["psi_s", "psi_R"],
-    "Current (i_sd_ref, i_sd, i_sq_ref, i_sq)": [
-        "i_sd_ref",
-        "i_sd",
-        "i_sq_ref",
-        "i_sq",
-    ],
-}
 
-TAB_PAR = "Machine model (InductionMachineInvGammaPars)"
-TAB_CFG = "Current-vector control (CurrentVectorControllerCfg)"
-MASK_PARAMS = [
-    MaskParam("n_p", "n_p: Number of pole pairs", TAB_PAR, "", True),
-    MaskParam("R_s", "R_s: Stator resistance (Ω)", TAB_PAR, "", True),
-    MaskParam("R_R", "R_R: Rotor resistance (Ω)", TAB_PAR, "", True),
-    MaskParam("L_sgm", "L_sgm: Leakage inductance (H)", TAB_PAR, "", True),
-    MaskParam("L_M", "L_M: Magnetizing inductance (H)", TAB_PAR, "", True),
-    MaskParam(
-        "psi_s_nom", "psi_s_nom: Nominal stator flux linkage (Vs)", TAB_CFG, "", True
-    ),
-    MaskParam("i_s_max", "i_s_max: Maximum stator current (A)", TAB_CFG, "", True),
-    MaskParam(
-        "alpha_c", "alpha_c: Current-control bandwidth (rad/s)", TAB_CFG, "cfg.alpha_c"
-    ),
-    MaskParam(
-        "alpha_i",
-        "alpha_i: Integral-action bandwidth (rad/s), [] = alpha_c",
-        TAB_CFG,
-        "cfg.alpha_i",
-    ),
-    MaskParam(
-        "alpha_o",
-        "alpha_o: Speed estimation pole (rad/s), [] = default",
-        TAB_CFG,
-        "cfg.alpha_o",
-    ),
-    MaskParam(
-        "w_s_nom",
-        "w_s_nom: Nominal stator angular frequency (rad/s)",
-        TAB_CFG,
-        "cfg.w_s_nom",
-    ),
-    MaskParam("k_u", "k_u: Voltage utilization factor", TAB_CFG, "cfg.k_u"),
-    MaskParam(
-        "k_fw", "k_fw: Field-weakening gain (1/H), [] = default", TAB_CFG, "cfg.k_fw"
-    ),
-    MaskParam(
-        "J", "J: Inertia (kgm²) for the speed observer, [] = not used", TAB_CFG, "cfg.J"
-    ),
-    MaskParam(
-        "sensorless",
-        "sensorless: Sensorless mode (1) or sensored mode (0)",
-        TAB_CFG,
-        "cfg.sensorless",
-    ),
-    MaskParam("T_s", "T_s: Sampling period (s)", TAB_CFG, "cfg.T_s", True),
-    *SPEED_MASK_PARAMS,
-    *PWM_MASK_PARAMS,
-]
-
-
-def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
+def _check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
     par = mdl.machine.par
     if (
@@ -169,8 +104,11 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     _check_supported_control(ctrl)
 
 
-def _check_supported_control(ctrl: VectorControlSystem) -> None:
+def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the control system is not supported."""
+    if isinstance(ctrl, VHzControlSystem):
+        _check_supported_vhz(ctrl)
+        return
     cvc = ctrl.vector_ctrl
     if not isinstance(cvc, CurrentVectorController):
         raise NotImplementedError("Only CurrentVectorController supported")
@@ -183,10 +121,59 @@ def _check_supported_control(ctrl: VectorControlSystem) -> None:
     _check_supported_speed_control(ctrl, dead_time=True)
 
 
-def export_mask_values(
+def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
+    """Raise an error if the V/Hz control system is not supported."""
+    vhz = ctrl.vhz_ctrl
+    if not isinstance(vhz, ObserverBasedVHzController):
+        raise NotImplementedError("Only ObserverBasedVHzController supported")
+    if vhz.cfg.k_o is not None:
+        raise NotImplementedError("Only the default observer gain k_o supported")
+    if not isinstance(vhz.reference_gen.par, InductionMachineInvGammaPars):
+        raise NotImplementedError("Only InductionMachineInvGammaPars supported")
+    if type(ctrl).modulate is not VHzControlSystem.modulate:
+        raise NotImplementedError("Overridden modulate method not supported")
+    _check_supported_pwm(ctrl.pwm, d_err=True)
+
+
+def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
+    """Control-system block of current-vector control or V/Hz control."""
+    return VHZ_BLOCK if isinstance(ctrl, VHzControlSystem) else CVC_BLOCK
+
+
+def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
+    """
+    Get the parameter values of the V/Hz control system in the motulator API (see
+    `_im_vhz_control.init_script`).
+    """
+    vhz = cast(ObserverBasedVHzController, ctrl.vhz_ctrl)
+    cfg = vhz.cfg
+    par = cast(InductionMachineInvGammaPars, vhz.reference_gen.par)
+    return {
+        "n_p": par.n_p,
+        "R_s": par.R_s,
+        "R_R": par.R_R,
+        "L_sgm": par.L_sgm,
+        "L_M": par.L_M,
+        "psi_s_nom": cfg.psi_s_nom,
+        "i_s_max": cfg.i_s_max,
+        "alpha_psi": cfg.alpha_psi,
+        "alpha_tau": cfg.alpha_tau,
+        "alpha_f": cfg.alpha_f,
+        "k_u": cfg.k_u,
+        "k_b": cfg.k_b,
+        "T_s": cfg.T_s,
+        "slew_rate": ctrl.rate_limiter.rate_limit,
+        **pwm_values(ctrl.pwm, cfg.T_s),
+    }
+
+
+def export_values(
     ctrl: VectorControlSystem, speed_ctrl_args: dict[str, float]
 ) -> dict[str, Any]:
-    """Get the mask parameter values of the control system in the motulator API."""
+    """
+    Get the parameter values of the control system in the motulator API, None for
+    the defaults (see `_im_control.init_script`).
+    """
     cvc = cast(CurrentVectorController, ctrl.vector_ctrl)
     cfg, par = cvc.cfg, cast(InductionMachineInvGammaPars, cvc.reference_gen.par)
     # alpha_o is resolved in CurrentVectorControllerCfg.__post_init__
@@ -234,95 +221,6 @@ def _plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
     return variables + mechanics_and_converter_variables(mdl)
 
 
-def _control_cscript_code() -> dict[str, str]:
-    """Code sections of the C-Script block of the control system."""
-    declarations = (
-        "/* Generated by motulator_export.plecs.im. The control algorithms are in the\n"
-        " * included C files. The parameters come from the mask of the subsystem. */\n"
-        f'#include "{C_DIR}/common.c"\n'
-        f'#include "{C_DIR}/im_current_vector.c"\n'
-        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n"
-        "static IMVectorControlSystem ctrl;\n"
-    )
-    i = {m.variable: k for k, m in enumerate(MASK_PARAMS)}
-    start = (
-        "/* Check the parameters of the mask */\n"
-        + parameter_checks(MASK_PARAMS)
-        + "\n"
-        "/* Machine model parameters (InductionMachineInvGammaPars) */\n"
-        "InductionMachineInvGammaPars par = {\n"
-        f"    P({i['n_p']}, 0), P({i['R_s']}, 0), P({i['R_R']}, 0), "
-        f"P({i['L_sgm']}, 0), P({i['L_M']}, 0)}};\n"
-        "\n"
-        "/* Current-vector controller configuration (CurrentVectorControllerCfg),\n"
-        " * the defaults are used for empty parameters */\n"
-        "IMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n"
-        f"    P({i['psi_s_nom']}, 0), P({i['i_s_max']}, 0));\n"
-        + cfg_assignments(MASK_PARAMS)
-        + "\n"
-        + speed_controller_code(i)
-        + "\n"
-        "im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
-        "\n" + pwm_code(i)
-    )
-    monitored = {
-        "w_M_ref": "ctrl.ref.w_M",
-        "w_M": "ctrl.fbk.w_M",
-        "tau_M_ref": "ctrl.ref.tau_M",
-        "tau_M": "ctrl.fbk.tau_M",
-        "psi_s": "cabs(ctrl.fbk.psi_s)",
-        "psi_R": "cabs(ctrl.fbk.psi_R)",
-        "i_sd_ref": "creal(rot * ctrl.ref.i_s)",
-        "i_sd": "creal(rot * ctrl.fbk.i_s)",
-        "i_sq_ref": "cimag(rot * ctrl.ref.i_s)",
-        "i_sq": "cimag(rot * ctrl.fbk.i_s)",
-    }
-    output = (
-        "/* Measurements */\n"
-        "double w_M_ref = InputSignal(1, 0);\n"
-        "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
-        "                     InputSignal(2, 2)};\n"
-        "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
-        "IMMeasurements meas = {abc2complex(i_s_abc), u_dc, InputSignal(4, 0)};\n"
-        "\n"
-        "im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);\n"
-        "\n"
-        + DUTY_RATIO_CODE
-        + monitored_code(
-            CTRL_OUTPUTS,
-            monitored,
-            "Monitored signals, the currents in estimated rotor flux coordinates",
-            "double complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\n",
-        )
-    )
-    update = "im_vector_control_system_update(&ctrl);\n"
-    code = {
-        "Declarations": declarations,
-        "StartFcn": start,
-        "OutputFcn": output,
-        "UpdateFcn": update,
-    }
-    return enable_code(code, CTRL_OUTPUTS)
-
-
-CVC_BLOCK = ControlBlock(
-    name="Current-vector control",
-    mask_type="Current-vector control (motulator)",
-    description=(
-        "Speed control of an induction machine drive with current-vector control. "
-        "The parameters correspond to the motulator API: "
-        "InductionMachineInvGammaPars, CurrentVectorControllerCfg, and "
-        "SpeedController. Empty parameters ([]) correspond to None, i.e., the "
-        "defaults of motulator." + ENABLE_DESCRIPTION
-    ),
-    mask_params=MASK_PARAMS,
-    inputs=CTRL_INPUTS,
-    input_widths=[1, 1, 3, 1, 1],
-    outputs=CTRL_OUTPUTS,
-    code=_control_cscript_code,
-)
-
-
 def _add_im(sch: _Schematic) -> None:
     """
     Add the PLECS squirrel-cage induction machine (including the inertia).
@@ -361,29 +259,47 @@ def _add_im(sch: _Schematic) -> None:
 def write_model(
     path: str | Path,
     mdl: Drive,
-    ctrl: VectorControlSystem,
+    ctrl: VectorControlSystem | VHzControlSystem,
     w_M_ref: StepSignal,
     tau_L: StepSignal,
     t_stop: float,
-    speed_ctrl_args: dict[str, float],
+    speed_ctrl_args: dict[str, float] | None = None,
     outputs: bool = False,
     enable: StepSignal | float = 1.0,
 ) -> Path:
-    """Write a PLECS model of the induction machine drive, see `sm.write_model`."""
+    """
+    Write a PLECS model of the induction machine drive, see `sm.write_model`.
+
+    The control system is current-vector control (`VectorControlSystem`, whose speed
+    controller is given by `speed_ctrl_args`) or observer-based V/Hz control
+    (`VHzControlSystem`, without `speed_ctrl_args`), whose inputs are `enable`, the
+    speed reference, the phase currents, and the DC-bus voltage.
+
+    """
     path = Path(path)
     _check_supported(mdl, ctrl)
-    values = export_mask_values(ctrl, speed_ctrl_args)
+    block = control_block(ctrl)
+    variables = _plant_variables(mdl)
+    if isinstance(ctrl, VHzControlSystem):
+        init = vhz_init_script(variables, export_vhz_values(ctrl), INIT_COMMENT)
+    else:
+        if speed_ctrl_args is None:
+            raise ValueError("speed_ctrl_args is needed in current-vector control")
+        values = export_values(ctrl, speed_ctrl_args)
+        init = init_script(variables, values, INIT_COMMENT)
+    T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
         (ENABLE, enable),
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
-        ("w_M", _probe("Machine", MACHINE_PROBES[1:2])),
     ]
-    _add_control_system(sch, CVC_BLOCK, sources, values)
-    _add_delay(sch, values["T_s"], CVC_BLOCK)
-    _add_pwm(sch, values["T_s"])
+    if block is CVC_BLOCK:
+        sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
+    _add_control_system(sch, block, sources, VALUES, init)
+    _add_delay(sch, T_s, block)
+    _add_pwm(sch, T_s)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         _add_blanking_time(sch)
@@ -391,24 +307,29 @@ def write_model(
     # the DC bus
     sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
+    sch.dx += DC_DX
     _add_converter(sch, t_d)
     _add_dc_bus(sch, mdl.converter)
     _add_im(sch)
     for k in range(3):
         sch.wire(("Converter", k + 1), ("Machine", k + 1))
     _add_mechanics(sch, tau_L, inertia=False)
-    _add_drive_outputs(sch, CVC_BLOCK, outputs)
-    size = (880 + sch.dx, 480)
-    variables = _plant_variables(mdl)
-    return _write_model(
-        path, CVC_BLOCK, variables, t_stop, values["T_s"], sch, size, outputs
-    )
+    _add_drive_outputs(sch, block, outputs)
+    size = (880 + sch.dx, 520)
+    return _write_model(path, init, t_stop, T_s, sch, size, outputs)
 
 
 def simulate(
-    path: str | Path, t_eval: np.ndarray
+    path: str | Path,
+    t_eval: np.ndarray,
+    ctrl: VectorControlSystem | VHzControlSystem | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Simulate the PLECS model of an induction machine drive, see `sm.simulate`."""
+    """
+    Simulate the PLECS model of an induction machine drive, see `sm.simulate`. The
+    control system `ctrl` defines the monitored signals, by default those of
+    current-vector control.
+    """
+    block = CVC_BLOCK if ctrl is None else control_block(ctrl)
     return simulate_plecs(
-        path, t_eval, mdl_outputs=MDL_OUTPUTS, ctrl_outputs=CVC_BLOCK.signals
+        path, t_eval, mdl_outputs=MDL_OUTPUTS, ctrl_outputs=block.signals
     )

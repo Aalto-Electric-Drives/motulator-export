@@ -7,8 +7,9 @@ model file.
 
 """
 
+import base64
 from math import isinf
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -40,6 +41,8 @@ def _q(text: str) -> str:
 Point = tuple[int, int]
 Terminal = tuple[str, int]
 Tap = tuple[list[Point], list[tuple[Terminal, list[Point]]]]
+# Branched connection: (points, branches, destination), see _Schematic.tree
+Branches = tuple[list[Point], list[Any], Terminal | None]
 
 
 def _points(points: list[Point], indent: str) -> str:
@@ -68,6 +71,7 @@ class _Schematic:
         ] = {}
         self.trunks: dict[tuple[Terminal, str], list[Point]] = {}
         self.buses: list[tuple[Terminal, str, list[Tap]]] = []
+        self.trees: list[tuple[Terminal, str, Branches]] = []
         self.dx = 0  # Horizontal shift of the components and points added afterwards
 
     def _shift(self, points: list[Point] | None) -> list[Point]:
@@ -136,6 +140,26 @@ class _Schematic:
         ]
         self.buses.append((src, typ, taps))
 
+    def tree(self, src: Terminal, typ: str, tree: "Branches") -> None:
+        """
+        Add a branched connection given as a tree.
+
+        The tree is `(points, branches, dst)`: the points from the start (the source
+        terminal or the branching point), and the branches (trees from the end of
+        the points) or the destination terminal (if there are no branches).
+
+        """
+        self.trees.append((src, typ, tree))
+
+    def _tree(self, tree: "Branches", ind: str) -> str:
+        points, branches, dst = tree
+        text = _points(points, ind)
+        if not branches:
+            return text + _dst(cast(Terminal, dst), ind)
+        for b in branches:
+            text += f"{ind}Branch {{\n{self._tree(b, ind + '  ')}{ind}}}\n"
+        return text
+
     def _bus(self, taps: list[Tap], i: int, ind: str) -> str:
         points, dsts = taps[i]
         if len(dsts) == 1 and i + 1 == len(taps):
@@ -166,6 +190,8 @@ class _Schematic:
             text += "    }\n"
         for src, typ, taps in self.buses:
             text += _connection(src, typ) + self._bus(taps, 0, "      ") + "    }\n"
+        for src, typ, tree in self.trees:
+            text += _connection(src, typ) + self._tree(tree, "      ") + "    }\n"
         return text
 
     def signal(
@@ -296,18 +322,43 @@ def _inner_schematic(sub: _Schematic, size: Point) -> str:
     )
 
 
-def _mask_probes(probes: list[tuple[str, str, str]]) -> str:
-    """Probe signals of a masked subsystem: (name, component, signal)."""
+def _mask_probes(probes: list[tuple[str, str, str]], path: str = "") -> str:
+    """
+    Probe signals of a masked subsystem: (name, component, signal), the components
+    in the subsystem `path` of the masked subsystem.
+    """
     return "".join(
         "      MaskProbe {\n"
         f"        Name          {_q(name)}\n"
         "        Probe {\n"
         f"          Component     {_q(comp)}\n"
-        '          Path          ""\n'
+        f"          Path          {_q(path)}\n"
         f"          Signals       {{{_q(signal)}}}\n"
         "        }\n"
         "      }\n"
         for name, comp, signal in probes
+    )
+
+
+def _mask_param(variable: str, prompt: str, value: str, tab: str = "") -> str:
+    """Mask parameter definition of a subsystem (a non-ASCII prompt in base64)."""
+    text = (
+        _q(prompt)
+        if prompt.isascii()
+        else "base64 " + _q(base64.b64encode(prompt.encode()).decode())
+    )
+    return (
+        "      Parameter {\n"
+        f"        Variable      {_q(variable)}\n"
+        f"        Prompt        {text}\n"
+        "        Type          FreeText\n"
+        f"        Value         {_q(value)}\n"
+        "        Show          off\n"
+        # Tunable, since non-tunable parameters are inlined as constants, which
+        # makes accessing an empty parameter (None) a compilation error
+        "        Tunable       on\n"
+        f"        TabName       {_q(tab)}\n"
+        "      }\n"
     )
 
 

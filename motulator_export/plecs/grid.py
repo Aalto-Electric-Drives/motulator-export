@@ -3,11 +3,13 @@ Export motulator grid converter systems to PLECS.
 
 This module converts a grid converter system with grid-following current-vector
 control or disturbance-observer-based grid-forming control into a PLECS Standalone
-model, in the same way as `motulator_export.plecs.sm` does for drive systems. The
-control system is a masked subsystem, whose parameters are those of
-`CurrentVectorControllerCfg` or `ObserverBasedGridFormingControllerCfg`, and
-contains a C-Script block with the C port in `c/gfl_current_vector.c` or
-`c/gfm_observer.c`. The system model consists of PLECS blocks.
+model, in the same way as `motulator_export.plecs.sm` does for drive systems. In
+the control system, each class of motulator is a block with a mask of its arguments
+(see `_grid_control`), with the C port in `c/gfl_current_vector.c` or
+`c/gfm_observer.c`. The parameters are defined in the initialization commands of
+the PLECS model as the structs cfg (`CurrentVectorControllerCfg` or
+`ObserverBasedGridFormingControllerCfg`) and pwm (`PWM`). The system model consists
+of PLECS blocks.
 
 Currently supported:
 
@@ -46,15 +48,10 @@ from motulator.grid.model import (
 )
 
 from motulator_export.plecs._common import (
-    C_DIR,
-    C_PARAMS,
-    C_U_DC_MIN,
     CONV,
-    DUTY_RATIO_CODE,
+    DC_DX,
     ENABLE,
-    ENABLE_DESCRIPTION,
     ControlBlock,
-    MaskParam,
     StepSignal,
     _add_control_system,
     _add_converter,
@@ -64,97 +61,11 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _check_supported_pwm,
     _write_model,
-    cfg_assignments,
-    enable_code,
-    monitored_code,
-    parameter_checks,
 )
+from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
+from motulator_export.plecs._grid_control import GFL_BLOCK, GFM_BLOCK, init_script
 from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import Tap, _probe, _Schematic, _scope
-
-# %%
-# Grid-following control: inputs, monitored signals (mask probes), and mask parameters
-GFL_INPUTS = [ENABLE, "p_g_ref", "q_g_ref", "i_c_abc", "u_g_line", "u_dc"]
-GFL_OUTPUTS = {
-    "Power (p_g_ref, p_g, q_g_ref, q_g)": ["p_g_ref", "p_g", "q_g_ref", "q_g"],
-    "Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)": [
-        "i_c_d_ref",
-        "i_c_d",
-        "i_c_q_ref",
-        "i_c_q",
-    ],
-    "PLL (u_g, w_g, theta_c)": ["u_g", "w_g", "theta_c"],
-}
-TAB_GFL = "Grid-following control (CurrentVectorControllerCfg)"
-GFL_MASK_PARAMS = [
-    MaskParam("i_max", "Maximum current (A), peak value: i_max", TAB_GFL, "", True),
-    MaskParam("L", "Filter inductance (H): L", TAB_GFL, "", True),
-    MaskParam(
-        "alpha_c", "Current-control bandwidth (rad/s): alpha_c", TAB_GFL, "cfg.alpha_c"
-    ),
-    MaskParam(
-        "alpha_i",
-        "Integral-action bandwidth (rad/s), [] = alpha_c: alpha_i",
-        TAB_GFL,
-        "",
-    ),
-    MaskParam(
-        "u_nom", "Nominal grid voltage (V), peak phase: u_nom", TAB_GFL, "cfg.u_nom"
-    ),
-    MaskParam(
-        "w_nom", "Nominal grid angular frequency (rad/s): w_nom", TAB_GFL, "cfg.w_nom"
-    ),
-    MaskParam(
-        "alpha_pll", "PLL bandwidth (rad/s): alpha_pll", TAB_GFL, "cfg.alpha_pll"
-    ),
-    MaskParam("T_s", "Sampling period (s): T_s", TAB_GFL, "cfg.T_s", True),
-]
-
-# Grid-forming control
-GFM_INPUTS = [ENABLE, "p_g_ref", "v_c_ref", "i_c_abc", "u_dc"]
-GFM_OUTPUTS = {
-    "Power (p_g_ref, p_g, q_g)": ["p_g_ref", "p_g", "q_g"],
-    "Voltage (v_c_ref, v_c)": ["v_c_ref", "v_c"],
-    "Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)": [
-        "i_c_d_ref",
-        "i_c_d",
-        "i_c_q_ref",
-        "i_c_q",
-    ],
-    "Angle (theta_c)": ["theta_c"],
-}
-TAB_GFM = "Grid-forming control (ObserverBasedGridFormingControllerCfg)"
-GFM_MASK_PARAMS = [
-    MaskParam("i_max", "Maximum current (A), peak value: i_max", TAB_GFM, "", True),
-    MaskParam("L", "Total inductance estimate (H): L", TAB_GFM, "", True),
-    MaskParam("R", "Total series resistance estimate (Ω): R", TAB_GFM, "cfg.R"),
-    MaskParam(
-        "R_a", "Active resistance (Ω), [] = 0.25*u_nom/i_max: R_a", TAB_GFM, "cfg.R_a"
-    ),
-    MaskParam(
-        "k_v", "Voltage control gain, [] = alpha_o/w_nom: k_v", TAB_GFM, "cfg.k_v"
-    ),
-    MaskParam("alpha_o", "Observer gain (rad/s): alpha_o", TAB_GFM, "cfg.alpha_o"),
-    MaskParam(
-        "alpha_c", "Current-control bandwidth (rad/s): alpha_c", TAB_GFM, "cfg.alpha_c"
-    ),
-    MaskParam(
-        "u_nom", "Nominal grid voltage (V), peak phase: u_nom", TAB_GFM, "cfg.u_nom"
-    ),
-    MaskParam(
-        "w_nom", "Nominal grid angular frequency (rad/s): w_nom", TAB_GFM, "cfg.w_nom"
-    ),
-    MaskParam("T_s", "Sampling period (s): T_s", TAB_GFM, "cfg.T_s", True),
-    MaskParam(
-        "i_d_max",
-        "Maximum active current (A), [] = no power limitation: i_d_max",
-        TAB_GFM,
-        "cfg.i_d_max",
-    ),
-    MaskParam(
-        "alpha_l", "Power-limitation bandwidth (rad/s): alpha_l", TAB_GFM, "cfg.alpha_l"
-    ),
-]
 
 
 # %%
@@ -187,6 +98,12 @@ def _check_supported(
         inner, (CurrentVectorController, ObserverBasedGridFormingController)
     ):
         raise NotImplementedError("Only CurrentVectorController and DO-GFM supported")
+    # The PCC voltage of grid-following control is measured after the LCL filter
+    if isinstance(inner, CurrentVectorController) != isinstance(f, LCLFilter):
+        raise NotImplementedError(
+            "Only grid-following control with LCLFilter and grid-forming control "
+            "with LFilter supported"
+        )
     if ctrl.dc_bus_voltage_ctrl is not None:
         raise NotImplementedError("DC-bus voltage control not supported")
 
@@ -213,165 +130,24 @@ def _plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
     return variables + [("ac_source.e_g", src.e_g), ("ac_source.w_g", src.w_g)]
 
 
-# %%
-def _gfl_cscript_code() -> dict[str, str]:
-    """Code sections of the C-Script block of grid-following control."""
-    declarations = (
-        "/* Generated by motulator_export.plecs.grid. The control algorithms are in\n"
-        " * the included C files. The parameters come from the mask of the\n"
-        " * subsystem. */\n"
-        f'#include "{C_DIR}/common.c"\n'
-        f'#include "{C_DIR}/gfl_current_vector.c"\n'
-        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n"
-        "static GFLControlSystem ctrl;\n"
-    )
-    i = {m.variable: k for k, m in enumerate(GFL_MASK_PARAMS)}
-    start = (
-        "/* Check the parameters of the mask */\n"
-        + parameter_checks(GFL_MASK_PARAMS)
-        + "\n"
-        "/* Configuration (CurrentVectorControllerCfg), the defaults are used for\n"
-        " * empty parameters */\n"
-        f"GFLControllerCfg cfg = gfl_controller_cfg(P({i['i_max']}, 0), "
-        f"P({i['L']}, 0));\n"
-        + cfg_assignments(GFL_MASK_PARAMS)
-        + f"cfg.alpha_i = PDIM({i['alpha_i']}) > 0 ? P({i['alpha_i']}, 0) : "
-        "cfg.alpha_c;\n"
-        "gfl_control_system_init(&ctrl, &cfg);\n"
-    )
-    output = (
-        "/* Measurements and references */\n"
-        "double i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),\n"
-        "                     InputSignal(3, 2)};\n"
-        "/* Line-to-line PCC voltages u_ab and u_bc */\n"
-        "double u_g_line[2] = {InputSignal(4, 0), InputSignal(4, 1)};\n"
-        "double u_dc = fmax(InputSignal(5, 0), U_DC_MIN);\n"
-        "GridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line),\n"
-        "                         u_dc};\n"
-        "gfl_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n"
-        "                                  InputSignal(2, 0));\n"
-        "\n" + DUTY_RATIO_CODE
-    )
-    monitored = {
-        "p_g_ref": "ctrl.ref.p_g",
-        "p_g": "ctrl.fbk.p_g",
-        "q_g_ref": "ctrl.ref.q_g",
-        "q_g": "ctrl.fbk.q_g",
-        "i_c_d_ref": "creal(ctrl.ref.i_c)",
-        "i_c_d": "creal(ctrl.fbk.i_c)",
-        "i_c_q_ref": "cimag(ctrl.ref.i_c)",
-        "i_c_q": "cimag(ctrl.fbk.i_c)",
-        "u_g": "ctrl.fbk.u_g",
-        "w_g": "ctrl.fbk.w_g",
-        "theta_c": "ctrl.fbk.theta_c",
-    }
-    output += monitored_code(GFL_OUTPUTS, monitored)
-    code = {
-        "Declarations": declarations,
-        "StartFcn": start,
-        "OutputFcn": output,
-        "UpdateFcn": "gfl_control_system_update(&ctrl);\n",
-    }
-    return enable_code(code, GFL_OUTPUTS)
+def control_block(ctrl: GridConverterControlSystem) -> ControlBlock:
+    """Control-system block of grid-following or grid-forming control."""
+    if isinstance(ctrl.inner_ctrl, CurrentVectorController):
+        return GFL_BLOCK
+    return GFM_BLOCK
 
 
-def _gfm_cscript_code() -> dict[str, str]:
-    """Code sections of the C-Script block of grid-forming control."""
-    declarations = (
-        "/* Generated by motulator_export.plecs.grid. The control algorithms are in\n"
-        " * the included C files. The parameters come from the mask of the\n"
-        " * subsystem. */\n"
-        f'#include "{C_DIR}/common.c"\n'
-        f'#include "{C_DIR}/gfm_observer.c"\n'
-        "\n" + C_PARAMS + "\n" + C_U_DC_MIN + "\n"
-        "static GFMControlSystem ctrl;\n"
-    )
-    i = {m.variable: k for k, m in enumerate(GFM_MASK_PARAMS)}
-    start = (
-        "/* Check the parameters of the mask */\n"
-        + parameter_checks(GFM_MASK_PARAMS)
-        + "\n"
-        "/* Configuration (ObserverBasedGridFormingControllerCfg), the defaults are\n"
-        " * used for empty parameters */\n"
-        f"GFMControllerCfg cfg = gfm_controller_cfg(P({i['i_max']}, 0), "
-        f"P({i['L']}, 0));\n"
-        + cfg_assignments(GFM_MASK_PARAMS)
-        + "gfm_control_system_init(&ctrl, &cfg);\n"
-    )
-    output = (
-        "/* Measurements and references */\n"
-        "double i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),\n"
-        "                     InputSignal(3, 2)};\n"
-        "double u_dc = fmax(InputSignal(4, 0), U_DC_MIN);\n"
-        "GFMMeasurements meas = {abc2complex(i_c_abc), u_dc};\n"
-        "gfm_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n"
-        "                                  InputSignal(2, 0));\n"
-        "\n" + DUTY_RATIO_CODE
-    )
-    monitored = {
-        "p_g_ref": "ctrl.ref.p_g",
-        "p_g": "ctrl.fbk.p_g",
-        "q_g": "ctrl.fbk.q_g",
-        "v_c_ref": "ctrl.ref.v_c",
-        "v_c": "cabs(ctrl.fbk.v_c)",
-        "i_c_d_ref": "creal(ctrl.ref.i_c)",
-        "i_c_d": "creal(ctrl.fbk.i_c)",
-        "i_c_q_ref": "cimag(ctrl.ref.i_c)",
-        "i_c_q": "cimag(ctrl.fbk.i_c)",
-        "theta_c": "ctrl.fbk.theta_c",
-    }
-    output += monitored_code(GFM_OUTPUTS, monitored)
-    code = {
-        "Declarations": declarations,
-        "StartFcn": start,
-        "OutputFcn": output,
-        "UpdateFcn": "gfm_control_system_update(&ctrl);\n",
-    }
-    return enable_code(code, GFM_OUTPUTS)
-
-
-GFL_BLOCK = ControlBlock(
-    name="Grid-following control",
-    mask_type="Grid-following control (motulator)",
-    description=(
-        "Current-vector grid-following control with a PLL in the power-control mode. "
-        "The parameters correspond to the motulator API: CurrentVectorControllerCfg. "
-        "Empty parameters ([]) correspond to the defaults of motulator."
-        + ENABLE_DESCRIPTION
-    ),
-    mask_params=GFL_MASK_PARAMS,
-    inputs=GFL_INPUTS,
-    input_widths=[1, 1, 1, 3, 2, 1],
-    outputs=GFL_OUTPUTS,
-    code=_gfl_cscript_code,
-)
-
-GFM_BLOCK = ControlBlock(
-    name="Grid-forming control",
-    mask_type="Grid-forming control (motulator)",
-    description=(
-        "Disturbance-observer-based grid-forming control in the power-control mode, "
-        "with transparent current limitation. The parameters correspond to the "
-        "motulator API: ObserverBasedGridFormingControllerCfg. Empty parameters ([]) "
-        "correspond to None, i.e., the defaults of motulator." + ENABLE_DESCRIPTION
-    ),
-    mask_params=GFM_MASK_PARAMS,
-    inputs=GFM_INPUTS,
-    input_widths=[1, 1, 1, 3, 1],
-    outputs=GFM_OUTPUTS,
-    code=_gfm_cscript_code,
-)
-
-
-def _control_block(
-    ctrl: GridConverterControlSystem,
-) -> tuple[ControlBlock, dict[str, Any]]:
-    """Get the control-system block and its mask values in the motulator API."""
+def export_values(ctrl: GridConverterControlSystem) -> dict[str, Any]:
+    """
+    Get the parameter values of the control system in the motulator API, None for
+    the defaults (see `_grid_control.init_script`).
+    """
     inner = ctrl.inner_ctrl
     if isinstance(inner, CurrentVectorController):
         cfg = inner.cfg
-        values = {m.variable: getattr(cfg, m.variable) for m in GFL_MASK_PARAMS}
-        return GFL_BLOCK, values
+        names = ["i_max", "L", "alpha_c", "alpha_i", "u_nom", "w_nom", "alpha_pll"]
+        values = {n: getattr(cfg, n) for n in [*names, "T_s"]}
+        return values | pwm_values(ctrl.pwm, cfg.T_s)
     gfm = cast(ObserverBasedGridFormingController, inner)
     obs = gfm.observer  # The configuration is stored only as the resulting gains
     u_nom, w_nom, i_max = obs.state.u_gp, obs.w_g, gfm.current_limiter.i_max
@@ -390,9 +166,10 @@ def _control_block(
         "i_d_max": gfm.i_d_max,
         "alpha_l": gfm.alpha_l,
     }
-    return GFM_BLOCK, values
+    return values | pwm_values(ctrl.pwm, gfm.T_s)
 
 
+# %%
 # %%
 def _abc_probe(comp: str, signal: str) -> str:
     """Probe of the three-phase measurements comp + "a", comp + "b", comp + "c"."""
@@ -604,7 +381,11 @@ def write_model(
     """
     path = Path(path)
     _check_supported(mdl, ctrl)
-    block, values = _control_block(ctrl)
+    block, values = control_block(ctrl), export_values(ctrl)
+    init = init_script(
+        _plant_variables(mdl), values, INIT_COMMENT, gfl=block is GFL_BLOCK
+    )
+    T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     lcl = isinstance(mdl.ac_filter, LCLFilter)
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [(ENABLE, enable)]
@@ -623,9 +404,10 @@ def write_model(
         voltages += _probe("u_gbc", ["Measured voltage"])
         sources += [("u_g_line", voltages)]
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
-    _add_control_system(sch, block, sources, values)
-    _add_delay(sch, values["T_s"], block)
-    _add_pwm(sch, values["T_s"])
+    _add_control_system(sch, block, sources, VALUES, init)
+    _add_delay(sch, T_s, block)
+    _add_pwm(sch, T_s)
+    sch.dx = DC_DX  # Space for the DC bus
     _add_converter(sch)
     _add_dc_bus(sch, mdl.converter)
     if lcl:
@@ -633,11 +415,8 @@ def write_model(
     else:
         _add_l_filter_and_grid(sch)
     _add_outputs(sch, block, lcl, outputs)
-    variables = _plant_variables(mdl)
-    size = (1200, 440)
-    return _write_model(
-        path, block, variables, t_stop, values["T_s"], sch, size, outputs
-    )
+    size = (1200 + sch.dx, 440)
+    return _write_model(path, init, t_stop, T_s, sch, size, outputs)
 
 
 def simulate(
@@ -647,7 +426,9 @@ def simulate(
     ctrl: GridConverterControlSystem,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Simulate the PLECS model of a grid converter system, see `sm.simulate`."""
-    block, _ = _control_block(ctrl)
     return simulate_plecs(
-        path, t_eval, mdl_outputs=_mdl_outputs(mdl), ctrl_outputs=block.signals
+        path,
+        t_eval,
+        mdl_outputs=_mdl_outputs(mdl),
+        ctrl_outputs=control_block(ctrl).signals,
     )

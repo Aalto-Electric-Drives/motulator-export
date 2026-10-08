@@ -151,4 +151,47 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
                                                  double w_M_ref);
 static void vector_control_system_update(VectorControlSystem *self);
 
+/* Signal vectors of the modular control system, in which each class is a block (see
+ * motulator_export.plecs.sm): the measurements (meas), the feedback signals (fbk),
+ * and the references of the flux-vector controller (ref) as arrays of doubles, a
+ * complex field as its real and imaginary parts. The defines give the indices of
+ * the fields. The fields u_dc and tau_L of ObserverOutputs, which the callers of
+ * FluxObserver set in motulator (VectorControlSystem and SpeedFluxObserver), are not
+ * included. */
+#define MEAS_i_c_ab 0
+#define MEAS_u_dc 2
+#define MEAS_theta_M 3
+#define MEAS_WIDTH 4
+
+#define FBK_i_s 0
+#define FBK_u_s 2
+#define FBK_u_s_zoh 4
+#define FBK_psi_s 6
+#define FBK_e_o 8
+#define FBK_eps 10
+#define FBK_eps_f 11
+#define FBK_psi_a 12
+#define FBK_tau_M 14
+#define FBK_w_c 15
+#define FBK_w_m 16
+#define FBK_w_M 17
+#define FBK_theta_c 18
+#define FBK_theta_m 19
+#define FBK_psi_f 20
+#define FBK_h 21
+#define FBK_WIDTH 22
+
+#define REF_psi_s 0
+#define REF_tau_M 1
+#define REF_u_s 2
+#define REF_WIDTH 4
+
+static void measurements_pack(const Measurements *meas, double y[MEAS_WIDTH]);
+static void measurements_unpack(const double u[MEAS_WIDTH], Measurements *meas);
+static void observer_outputs_pack(const ObserverOutputs *fbk, double y[FBK_WIDTH]);
+/* The fields u_dc and tau_L are zero */
+static void observer_outputs_unpack(const double u[FBK_WIDTH], ObserverOutputs *fbk);
+/* The fields psi_s, tau_M, and u_s, the others are zero */
+static void references_unpack(const double u[REF_WIDTH], References *ref);
+
 #endif

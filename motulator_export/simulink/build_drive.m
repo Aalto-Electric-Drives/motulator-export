@@ -1,26 +1,28 @@
 function build_drive(s)
 %BUILD_DRIVE Build a Simulink model of a machine drive.
-%   BUILD_DRIVE(S) compiles the S-function of the control system, builds the model
+%   BUILD_DRIVE(S) compiles the S-functions of the control system, builds the model
 %   S.name, and saves it in the folder S.folder. The struct S is written by
 %   motulator_export.simulink, with the fields
 %
 %     name      Model name
-%     folder    Folder of the model, the S-function, and its compiled version
-%     init      MATLAB code of the model workspace (machine, mechanics, converter)
+%     folder    Folder of the model, the S-functions, and their compiled versions
+%     init_script  Script in the folder defining the parameters (the system model
+%               and the control system) in the base workspace, see blocks.new_model
 %     machine   'sm' (synchronous machine), 'gn' (synchronous machine with a GradNet
 %               current map), or 'im' (induction machine)
 %     machine_params  Parameters of the S-function of the machine ('gn' only)
-%     control   Control system, see blocks.add_control_system
+%     control   Control system, see blocks.add_control_system (the field sfunction
+%               lists the S-functions of its blocks)
 %     enable    Input 'enable' of the control system: a constant, or steps as
 %               w_M_ref
 %     w_M_ref   Speed reference steps [time, before, after], see blocks.add_step
 %     tau_L     Load torque steps
 %     scope     Scope signals {name, indices in [mdl; ctrl]}
-%     T_s       Sampling period (s)
+%     T_s       Sampling period (s), or its expression (cfg.T_s)
 %     t_stop    Stop time (s)
 %
-%   The control system is the S-function in a masked subsystem, whose parameters
-%   follow the motulator API. The system model is built from basic Simulink blocks:
+%   The control system is a masked subsystem, in which each class of motulator is a
+%   block with a mask of its arguments. The system model is built from basic Simulink blocks:
 %   the carrier comparison, the ideal converter with a stiff DC bus, the machine,
 %   and the mechanics. The root-level output ports 'mdl' and 'ctrl' give the
 %   machine signals [i_a i_b i_c w_M theta_M tau_M] and the monitored signals of the
@@ -29,7 +31,11 @@ function build_drive(s)
 %   The blocks are aligned with the ports they connect to, so that the lines are
 %   straight, and the feedback lines are drawn through given corners.
 
-blocks.compile(s.control.sfunction, s.folder);
+% The S-functions of the blocks of the control system
+sfunctions = cellstr(s.control.sfunction);
+for k = 1:numel(sfunctions)
+    blocks.compile(sfunctions{k}, s.folder);
+end
 slx = blocks.new_model(s);
 sys = s.name;
 cs = s.control.name;
@@ -81,7 +87,8 @@ blocks.align(sys, 'Mux mdl', 'Inport', 2, y);
 % below it, in lanes below the blocks.
 pos = get_param([sys '/Mux mdl'], 'Position');
 y_top = 60;
-y_w_M = max(pos(4), blocks.port_y(sys, cs, 'Inport', 5)) + 40;
+n_in = numel(s.control.inputs);
+y_w_M = max(pos(4), blocks.port_y(sys, cs, 'Inport', n_in)) + 40;
 y_theta_M = y_w_M + 30;
 y_ctrl = y_theta_M + 30;
 blocks.connect(sys, 'enable/1', [cs '/1']);
@@ -107,8 +114,11 @@ switch s.machine
         blocks.route(sys, 'Mechanics/2', [cs '/5'], ...
             'x', 1025, 'y', y_theta_M, 'x', 140);
     case 'im'
-        % The rotor speed to the control system
-        blocks.route(sys, 'Mechanics/1', [cs '/5'], 'x', 1010, 'y', y_w_M, 'x', 140);
+        % The rotor speed to the control system (not in V/Hz control)
+        if n_in >= 5
+            blocks.route(sys, 'Mechanics/1', [cs '/5'], ...
+                'x', 1010, 'y', y_w_M, 'x', 140);
+        end
 end
 
 % Output ports and the scope
@@ -153,7 +163,8 @@ function add_gradnet_machine(blk, pos, s)
 % sfun_gradnet_machine with the code of the PLECS model. Its inputs are the negated
 % line-to-line voltages -u_ac and -u_bc, the rotor angle, and the rotor speed, and
 % its outputs the phase currents a and b, the phase currents, the torque, the
-% speed, and the angle. Its parameters are in the model workspace (machine).
+% speed, and the angle. Its parameters are in the struct machine of the
+% initialization script.
 blocks.compile('sfun_gradnet_machine', s.folder);
 add(blk, 'built-in/Subsystem', pos);
 fcn = [blk '/Magnetic model'];

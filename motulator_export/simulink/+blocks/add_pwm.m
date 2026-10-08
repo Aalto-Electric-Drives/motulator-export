@@ -4,14 +4,19 @@ function add_pwm(blk, T_s, pos)
 %   maximum, is compared with the duty ratios, which are updated at its extrema.
 %   This corresponds to CarrierComparison in motulator (without the counter
 %   quantization). The switching instants are located by the zero-crossing
-%   detection of the Relational Operator block.
+%   detection of the Relational Operator block. T_s is a number or an expression.
+if ischar(T_s)
+    period = sprintf('[0 %s 2*%s]', T_s, T_s);
+else
+    period = sprintf('[0 %s %s]', blocks.num(T_s), blocks.num(2*T_s));
+end
 blocks.add(blk, 'built-in/Subsystem', pos);
 blocks.add([blk '/Compare'], 'built-in/RelationalOperator', [130 40 160 120], ...
     'Operator', '>', 'ZeroCross', 'on');
 blocks.add([blk '/d_abc'], 'built-in/Inport', [40 0 70 14]);
 blocks.add([blk '/Carrier'], 'simulink/Sources/Repeating Sequence', ...
     [40 0 80 30], ...
-    'rep_seq_t', sprintf('[0 %s %s]', blocks.num(T_s), blocks.num(2*T_s)), ...
+    'rep_seq_t', period, ...
     'rep_seq_y', '[1 0 1]');
 blocks.add([blk '/To double'], 'built-in/DataTypeConversion', [200 0 250 30], ...
     'OutDataTypeStr', 'double');
