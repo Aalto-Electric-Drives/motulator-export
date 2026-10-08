@@ -31,7 +31,6 @@ from typing import Any
 from motulator_export.plecs._common import ENABLE
 from motulator_export.plecs._control import (
     SAMPLING,
-    T_S,
     Signals,
     abc_input,
     assign,
@@ -102,7 +101,7 @@ def _flux_observer() -> CBlock:
             ),
             Param("h", "h: Weight of the external speed error signal", "h"),
             Param("psi_s0", "psi_s0: Initial stator flux estimate (Vs)", "psi_s0"),
-            T_S,
+            Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
         ],
         init=PAR_INIT,
     )

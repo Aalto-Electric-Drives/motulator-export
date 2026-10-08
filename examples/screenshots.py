@@ -4,19 +4,20 @@ Screenshots of the models for the README
 
 This script prints the Simulink model of `pmsyrm_6kw_gn_fvc_simulink.py`
 (simulink/pmsyrm_6kw_gn_fvc.slx, built by the script) to
-pmsyrm_6kw_gn_fvc_simulink.png with the MATLAB Engine API for Python, and writes the
-dark versions (`*_black.png`) of the screenshots for the dark mode of GitHub.
+pmsyrm_6kw_gn_fvc_simulink.png with the MATLAB Engine API for Python, and writes its
+dark version (`*_black.png`) for the dark mode of GitHub.
 
 The dark version of an image inverts its lightness and keeps its hues: white becomes
-black, black becomes white, and, e.g., the green signals of PLECS stay green. The
-PLECS screenshot (pmsyrm_6kw_gn_fvc.png, exported from PLECS with File > Export >
-PNG at 300 dpi) is not made here, but its dark version is.
+black, black becomes white, and, e.g., the green signals stay green. The PLECS
+screenshots (pmsyrm_6kw_gn_fvc.png and pmsyrm_6kw_gn_fvc_black.png) are not made
+here: they are exported from PLECS with File > Export > PNG at 300 dpi, with the
+light and the dark theme of PLECS.
 
 Run from the repository root:
 
     python examples/screenshots.py [--dark-only]
 
-With --dark-only, only the dark versions are written (MATLAB is not needed).
+With --dark-only, only the dark version is written (MATLAB is not needed).
 
 """
 
@@ -30,7 +31,7 @@ from PIL import Image
 
 HERE = Path(__file__).parent
 MODEL = HERE / "simulink" / "pmsyrm_6kw_gn_fvc.slx"
-SCREENSHOTS = [HERE / "pmsyrm_6kw_gn_fvc.png", HERE / "pmsyrm_6kw_gn_fvc_simulink.png"]
+SCREENSHOT = HERE / "pmsyrm_6kw_gn_fvc_simulink.png"
 DPI = 300
 
 
@@ -78,7 +79,6 @@ def dark_version(png: Path) -> Path:
 # %%
 if __name__ == "__main__":
     if "--dark-only" not in sys.argv:
-        print_simulink(MODEL, SCREENSHOTS[1])
-        print(f"Wrote {SCREENSHOTS[1]}")
-    for png in SCREENSHOTS:
-        print(f"Wrote {dark_version(png)}")
+        print_simulink(MODEL, SCREENSHOT)
+        print(f"Wrote {SCREENSHOT}")
+    print(f"Wrote {dark_version(SCREENSHOT)}")

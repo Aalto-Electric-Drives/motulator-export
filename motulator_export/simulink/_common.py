@@ -130,7 +130,7 @@ def write_init(path: Path, init: Callable[[str], str]) -> str:
         "%   below, as in the motulator API.\n"
     )
     script = path.with_name(f"init_{name}.m")
-    script.write_text(init(comment))
+    script.write_text(init(comment), encoding="utf-8")
     return script.stem
 
 
@@ -221,7 +221,7 @@ def write_script(
         f"{builder}(s);\n"
     )
     script = path.with_name(f"build_{path.stem}.m")
-    script.write_text(text)
+    script.write_text(text, encoding="utf-8")
     return script
 
 

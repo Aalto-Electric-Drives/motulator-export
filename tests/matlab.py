@@ -6,7 +6,8 @@ The statements are assignments (also to the fields of structs) and if-elseif-els
 blocks, and the expressions are numbers, matrices, variables, fields, the
 arithmetic, comparison, and logical operators, and the functions isempty,
 isfield, isinf, and strcmp. The variables are resolved through the workspaces of
-the masks, as in Simulink and PLECS (`block_params`).
+the masks, as in Simulink, or only in the workspace of the innermost mask, as in
+PLECS (`block_params`).
 
 """
 
@@ -18,6 +19,7 @@ from typing import Any
 
 import numpy as np
 
+from motulator_export.plecs._common import workspace_variables
 from motulator_export.plecs._netlist import CBlock, Subsystem
 
 
@@ -288,17 +290,26 @@ def _assign(lhs: str, value: Any, ws: MutableMapping) -> None:
 
 # %%
 def block_params(
-    top: Subsystem, init: str, values: dict[str, str]
+    top: Subsystem, init: str, values: dict[str, str], plecs: bool = False
 ) -> dict[str, list[Any]]:
     """
     Parameters of the C blocks of a control system, by their paths, as the masks of
     the model compute them: the model initialization `init` is run, the values of
     the mask of the control-system block (`values`) are evaluated, and so on to the
     blocks, the mask initializations defining the variables of the masks.
+
+    In Simulink, a mask sees the variables of the masks around it and of the model
+    initialization. In PLECS (`plecs`), it sees only its own variables, the mask of
+    the control-system block also passing the variables of the control system in
+    the model initialization (`workspace_variables`).
     """
     base: dict[str, Any] = {}
     run(init, base)
-    ws = ChainMap({n: evaluate(v, base) for n, v in values.items()}, base)
+    top_vars = {n: evaluate(v, base) for n, v in values.items()}
+    if plecs:
+        ws = ChainMap(top_vars | {n: base[n] for n in workspace_variables(init)})
+    else:
+        ws = ChainMap(top_vars, base)
     out: dict[str, list[Any]] = {}
 
     def visit(sub: Subsystem, ws: ChainMap, path: str) -> None:
@@ -308,7 +319,7 @@ def block_params(
             local = ws
             if b.mask is not None:
                 params = {p.variable: evaluate(p.value, ws) for p in b.mask.params}
-                local = ws.new_child(params)
+                local = ChainMap(params) if plecs else ws.new_child(params)
                 run(b.mask.init, local)
             name = f"{path}/{b.name}" if path else b.name
             if isinstance(b, CBlock):

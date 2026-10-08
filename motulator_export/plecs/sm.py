@@ -62,6 +62,7 @@ from motulator_export.plecs._common import (
     C_DIR,
     C_GRADNET_PARAMS,
     C_PARAMS,
+    DC_DX,
     ENABLE,
     GRADNET_FIELDS,
     GRADNET_MAX_EMBED_DIM,
@@ -569,7 +570,7 @@ def write_model(
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
         ("theta_M", _probe("Machine", MACHINE_PROBES[2:3])),
     ]
-    _add_control_system(sch, block, sources, VALUES)
+    _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
@@ -579,6 +580,7 @@ def write_model(
     # the DC bus
     sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
+    sch.dx += DC_DX
     _add_converter(sch, t_d)
     _add_dc_bus(sch, mdl.converter)
     if gradnet_plant:
@@ -589,7 +591,7 @@ def write_model(
         sch.wire(("Converter", k + 1), ("Machine", k + 1))
     _add_mechanics(sch, tau_L, inertia=gradnet_plant)
     _add_drive_outputs(sch, block, outputs)
-    size = (880 + sch.dx, 480)
+    size = (880 + sch.dx, 520)
     return _write_model(path, init, t_stop, T_s, sch, size, outputs)
 
 

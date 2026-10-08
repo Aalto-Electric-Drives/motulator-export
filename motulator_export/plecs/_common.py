@@ -321,6 +321,11 @@ CONV = (620, 100)
 MACH = (740, 100)
 Y_TOP, Y_BOT = 40, 160
 X_RISER = 500
+# The DC source (or capacitor) and the DC-bus voltmeter, spaced so that their labels on
+# the left fit between them, and the shift of the converter and the components after
+# it (sch.dx), which makes the same space between the riser and the DC source
+X_DC, X_U_DC = CONV[0] - 120, CONV[0] - 60
+DC_DX = 60
 SRC = {"DiscretizationBehavior": "2", "StateSpaceInlining": "1"}  # Controlled sources
 
 
@@ -487,7 +492,7 @@ def _add_dc_bus(sch: _Schematic, conv: VoltageSourceConverter) -> None:
 
     """
     x_c, y_c = CONV
-    sch.component("Voltmeter", "u_dc", (580, y_c), direction="up", label="west")
+    sch.component("Voltmeter", "u_dc", (X_U_DC, y_c), direction="up", label="west")
     if isinstance(conv, FrequencyConverter):
         _add_diode_bridge(sch)
         return
@@ -495,11 +500,11 @@ def _add_dc_bus(sch: _Schematic, conv: VoltageSourceConverter) -> None:
         dc, typ, params = "C_dc", "Capacitor", {"C": "converter.C_dc"}
         params["v_init"] = "converter.u_dc"
     else:
-        dc, typ, params = "V_dc", "DCVoltageSource", {"V": "converter.u_dc"}
-    sch.component(typ, dc, (540, y_c), params, direction="up", label="west")
+        dc, typ, params = "U_dc", "DCVoltageSource", {"V": "converter.u_dc"}
+    sch.component(typ, dc, (X_DC, y_c), params, direction="up", label="west")
     # Positive and negative rails via the voltmeter to the converter
     for terminal, y in ((1, Y_TOP), (2, Y_BOT)):
-        taps: list[Tap] = [([(540, y), (580, y)], [(("u_dc", terminal), [])])]
+        taps: list[Tap] = [([(X_DC, y), (X_U_DC, y)], [(("u_dc", terminal), [])])]
         taps += [([(x_c, y)], [(("Converter", 4 + terminal), [])])]
         sch.bus((dc, terminal), "Wire", taps)
 
@@ -550,7 +555,7 @@ def _add_diode_bridge(sch: _Schematic) -> None:
     sch.component(
         "Capacitor",
         "C_dc",
-        (540, y_c),
+        (X_DC, y_c),
         {"C": "converter.C_dc", "v_init": "converter.u_dc"},
         direction="up",
         label="west",
@@ -561,12 +566,12 @@ def _add_diode_bridge(sch: _Schematic) -> None:
     ]
     sch.bus(("L_dc", 1), "Wire", legs[::-1])
     taps = [
-        ([(540, Y_TOP)], [(("C_dc", 1), [])]),
-        ([(580, Y_TOP)], [(("u_dc", 1), [])]),
+        ([(X_DC, Y_TOP)], [(("C_dc", 1), [])]),
+        ([(X_U_DC, Y_TOP)], [(("u_dc", 1), [])]),
     ]
     sch.bus(("L_dc", 2), "Wire", taps + [([(x_c, Y_TOP)], [(("Converter", 5), [])])])
-    taps = [([(x_c, Y_BOT), (580, Y_BOT)], [(("u_dc", 2), [])])]
-    taps += [([(540, Y_BOT)], [(("C_dc", 2), [])])]
+    taps = [([(x_c, Y_BOT), (X_U_DC, Y_BOT)], [(("u_dc", 2), [])])]
+    taps += [([(X_DC, Y_BOT)], [(("C_dc", 2), [])])]
     taps += [
         ([(x, Y_BOT)], [((f"D{ph}-", 1), [])])
         for x, ph in zip(x_legs[::-1], "cba", strict=True)
@@ -603,7 +608,40 @@ def _mask_parameter(m: MaskParam, value: Any) -> str:
     return _mask_param(m.variable, m.prompt, _fmt_mask(value), m.tab)
 
 
-def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str, str]:
+# Prompts of the variables of the model initialization in the mask of the control
+# system
+WORKSPACE_PROMPTS = {
+    "par": "Machine model of the control system (struct)",
+    "cfg": "Configuration of the controller (struct)",
+    "speed_ctrl": "Arguments of SpeedController (struct)",
+    "slew_rate": "Slew rate of the speed reference (mechanical rad/s²)",
+    "pwm": "Arguments of the PWM (struct)",
+}
+
+
+def workspace_variables(init: str) -> list[str]:
+    """
+    Variables of the control system in the model initialization (after the heading
+    "%% Control system"), which the mask of the control system passes to the blocks
+    inside it, since the components inside a masked subsystem of PLECS see only the
+    variables of its mask.
+    """
+    control = init.split("%% Control system", 1)[1]
+    return list(dict.fromkeys(re.findall(r"^(\w+)", control, re.M)))
+
+
+def _workspace_params(init: str, tab: str) -> str:
+    """Mask parameters of the variables of the control system (see
+    `workspace_variables`)."""
+    return "".join(
+        _mask_param(n, f"{n}: {WORKSPACE_PROMPTS[n]}", n, tab)
+        for n in workspace_variables(init)
+    )
+
+
+def _control_subsystem(
+    block: ControlBlock, values: dict[str, Any], init: str
+) -> tuple[str, str]:
     """Mask and contents of the control-system subsystem."""
     n_in = len(block.inputs)
     header = (
@@ -617,6 +655,7 @@ def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str
         + "      MaskIconFrame on\n"
         "      MaskIconOpaque off\n"
         "      MaskIconRotates on\n"
+        + _workspace_params(init, block.mask_params[0].tab)
         + "".join(_mask_parameter(m, values[m.variable]) for m in block.mask_params)
     )
     # The duty ratios are the only output; the monitored signals are mask probes
@@ -628,8 +667,14 @@ def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str
     )
 
     inner, size = schematic(block.netlist())
-    probes = [("Duty ratios (d_abc)", "compute_output", "Output 1")]
-    monitored = [(n, MONITOR, f"Output {k + 1}") for k, n in enumerate(block.outputs)]
+    # The probe signal of the only output of a C-Script block is "Output", and those
+    # of several outputs are "Output 1", "Output 2", ...
+    probes = [("Duty ratios (d_abc)", "compute_output", "Output")]
+    n_out = len(block.outputs)
+    monitored = [
+        (n, MONITOR, "Output" if n_out == 1 else f"Output {k + 1}")
+        for k, n in enumerate(block.outputs)
+    ]
     return header, (
         terminals
         + _inner_schematic(inner, size)
@@ -643,19 +688,23 @@ def _add_control_system(
     block: ControlBlock,
     sources: list[tuple[str, StepSignal | float | str]],
     values: dict[str, Any],
+    init: str,
 ) -> None:
     """
     Add the control system and its inputs (references and measurements).
 
     Each source is a `(name, signal)` pair in the order of the block inputs, the
     signal being a `StepSignal`, a constant, or a probe definition (`_probe`). The
-    steps of a `StepSignal` with several steps are summed by a Gain block.
+    steps of a `StepSignal` with several steps are summed by a Gain block. The mask
+    of the control system passes the variables of the control system in the model
+    initialization `init` to the blocks inside it.
 
     """
     n_in = len(sources)
-    # The sources are centered at the control system, but not above the top margin
-    y_0 = max(CS[1] - 20 * (n_in - 1), 20)
-    y_src = [y_0 + 40 * k for k in range(n_in)]
+    # The sources are centered at the control system, but not above the top margin,
+    # spaced so that their labels below them do not touch the next source
+    y_0 = max(CS[1] - 25 * (n_in - 1), 20)
+    y_src = [y_0 + 50 * k for k in range(n_in)]
     y_in = [CS[1] + 10 * k - 5 * (n_in - 1) for k in range(n_in)]
     x_jog = _jogs(y_src, y_in, 140, 10)
     for k, (name, src) in enumerate(sources):
@@ -675,7 +724,7 @@ def _add_control_system(
         x = x_jog[k]
         points = [] if y_src[k] == y_in[k] else [(x, y_src[k]), (x, y_in[k])]
         sch.signal(out, (block.name, k + 1), points)
-    header, trailer = _control_subsystem(block, values)
+    header, trailer = _control_subsystem(block, values, init)
     sch.component(
         "Subsystem", block.name, CS, direction="up", extra=header, trailer=trailer
     )
@@ -735,5 +784,5 @@ def _write_model(
         c_dir = Path(os.path.relpath(C_SOURCES, path.resolve().parent)).as_posix()
     except ValueError:  # Different drives (Windows)
         c_dir = C_SOURCES.as_posix()
-    path.write_text(text.replace(C_DIR, c_dir))
+    path.write_text(text.replace(C_DIR, c_dir), encoding="utf-8")
     return path

@@ -49,6 +49,7 @@ from motulator.grid.model import (
 
 from motulator_export.plecs._common import (
     CONV,
+    DC_DX,
     ENABLE,
     ControlBlock,
     StepSignal,
@@ -403,9 +404,10 @@ def write_model(
         voltages += _probe("u_gbc", ["Measured voltage"])
         sources += [("u_g_line", voltages)]
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
-    _add_control_system(sch, block, sources, VALUES)
+    _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s)
+    sch.dx = DC_DX  # Space for the DC bus
     _add_converter(sch)
     _add_dc_bus(sch, mdl.converter)
     if lcl:
@@ -413,7 +415,7 @@ def write_model(
     else:
         _add_l_filter_and_grid(sch)
     _add_outputs(sch, block, lcl, outputs)
-    size = (1200, 440)
+    size = (1200 + sch.dx, 440)
     return _write_model(path, init, t_stop, T_s, sch, size, outputs)
 
 

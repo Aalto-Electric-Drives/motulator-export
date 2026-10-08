@@ -160,7 +160,7 @@ class SFunction:
     def write(self, folder: str | Path) -> Path:
         """Write the source of the S-function in the folder."""
         path = Path(folder) / f"{self.name}.c"
-        path.write_text(self.source())
+        path.write_text(self.source(), encoding="utf-8")
         return path
 
 

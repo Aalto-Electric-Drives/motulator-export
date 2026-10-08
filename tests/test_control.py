@@ -146,11 +146,14 @@ def check(
     (e.g., in a closed-loop simulation compared with motulator), which returns the
     inputs at each step. The monolithic control system should give the same outputs
     exactly with the same inputs, from the initial state. Finally, check the input
-    `enable` with the constant inputs `enable_inputs`.
+    `enable` with the constant inputs `enable_inputs`. The parameters are the same
+    with the scoping of the masks in PLECS and in Simulink.
     """
     net, ref = compiled(key)
     block, mono = SYSTEMS[key]
-    params = block_params(net.top, init_script(key, values, flux_map), VALUES)
+    init = init_script(key, values, flux_map)
+    params = block_params(net.top, init, VALUES)
+    np.testing.assert_equal(block_params(net.top, init, VALUES, plecs=True), params)
 
     def restart() -> None:
         assert net.start(params, start) is None

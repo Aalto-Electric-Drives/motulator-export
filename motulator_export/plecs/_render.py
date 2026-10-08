@@ -88,7 +88,7 @@ def schematic(sub: Subsystem) -> tuple[_Schematic, Point]:
         if name in lay.froms or name in lay.gotos:
             tag = lay.froms[name][0] if name in lay.froms else lay.gotos[name]
             typ = "From" if name in lay.froms else "Goto"
-            params = {"Tag": tag, "Visibility": "1"}
+            params = {"Tag": tag, "Visibility": "2"}  # Schematic
             sch.component(typ, name, pos, params, show=False)
         elif b.kind == "input":
             k = [p.name for p in sub.inputs].index(name)
@@ -152,7 +152,7 @@ def _block(
             trailer=terminals(p) + _inner_schematic(inner, size),
         )
     elif isinstance(b, Tag):
-        params = {"Tag": b.tag, "Visibility": "1"}
+        params = {"Tag": b.tag, "Visibility": "2"}  # Schematic
         sch.component("Goto" if b.goto else "From", b.name, pos, params, show=False)
     elif isinstance(b, Selector):
         params = {

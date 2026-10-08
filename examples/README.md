@@ -17,7 +17,7 @@ Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.p
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.
 The scripts close the model in PLECS before simulating it, since an open model is not reloaded from the file.
 
-`screenshots.py` makes the screenshots of the README: it prints the Simulink model of `pmsyrm_6kw_gn_fvc_simulink.py` with the MATLAB Engine API, and it writes the dark versions (`*_black.png`, the lightness inverted and the hues kept) of both screenshots; the PLECS screenshot `pmsyrm_6kw_gn_fvc.png` is exported from PLECS (File > Export > PNG, 300 dpi), after which `python examples/screenshots.py --dark-only` writes its dark version.
+`screenshots.py` makes the Simulink screenshot of the README: it prints the Simulink model of `pmsyrm_6kw_gn_fvc_simulink.py` with the MATLAB Engine API and writes its dark version (`*_black.png`, the lightness inverted and the hues kept). The PLECS screenshots `pmsyrm_6kw_gn_fvc.png` and `pmsyrm_6kw_gn_fvc_black.png` are exported from PLECS (File > Export > PNG, 300 dpi) with the light and the dark theme of PLECS.
 
 ## Structure of the PLECS models
 
@@ -29,7 +29,7 @@ The scripts close the model in PLECS before simulating it, since an open model i
   - V/Hz control: `VHzControlSystem` contains the `RateLimiter` of the speed reference instead of the speed controller, and the `ObserverBasedVHzController` contains the `FluxObserver` (without speed estimation, the rotor speed being the rate-limited speed reference), the `ReferenceGenerator`, the `FluxTorqueController`, and the low-pass filter of the torque estimate (`tau_M_lpf`). Pure open-loop V/Hz control is the special case `par.L_M = inf`, for which the mask initialization of the `ObserverBasedVHzController` sets the unit observer gain and the other settings, as *motulator* does.
   - Grid-following control: the `CurrentVectorController` of `GridConverterControlSystem` contains the `PLL`, its `compute_output` (the current reference from the power references), the `CurrentLimiter`, and the `CurrentController`.
   - Grid-forming control: the `ObserverBasedGridFormingController` contains the `Observer` and its `compute_output` before and after the `CurrentLimiter` (the current reference with the active-power limitation, and the voltage reference).
-- The masks of the composite classes pass the arguments to the blocks inside them as the constructors of *motulator*, e.g., the mask initialization of the `FluxVectorController` resolves the defaults of `FluxVectorControllerCfg` and `FluxVectorController`, and that of the `SpeedFluxObserver` computes the gains of `create_speed_flux_observer` and `SpeedFluxObserver`. The masks of the top-level classes refer to the variables defined in the initialization commands of the model, which read as the *motulator* example (`[]` is `None`): `par` (the machine model), `cfg` (the configuration of the controller), `speed_ctrl` (`SpeedController`) or `slew_rate` (of `VHzControlSystem`), and `pwm` (the PWM); `T_s` of the mask of the control system and of the delay and the PWM is `cfg.T_s`.
+- The masks of the composite classes pass the arguments to the blocks inside them as the constructors of *motulator*, e.g., the mask initialization of the `FluxVectorController` resolves the defaults of `FluxVectorControllerCfg` and `FluxVectorController`, and that of the `SpeedFluxObserver` computes the gains of `create_speed_flux_observer` and `SpeedFluxObserver`. The masks of the top-level classes refer to the variables defined in the initialization commands of the model, which read as the *motulator* example (`[]` is `None`): `par` (the machine model), `cfg` (the configuration of the controller), `speed_ctrl` (`SpeedController`) or `slew_rate` (of `VHzControlSystem`), and `pwm` (the PWM). The mask of the control system passes these variables to the blocks inside it as its parameters, since the blocks inside a masked subsystem of PLECS see only the variables of its mask; `T_s` of the mask of the control system and of the delay and the PWM is `cfg.T_s`.
 - The measurements, the feedback signals, and the references are signal vectors (`meas`, `fbk`, and `ref`, defined in the C headers, e.g., `motulator_export/c/sm_flux_vector.h`), whose fields are selected by Signal Selector blocks (e.g., `fbk.w_M`) where *motulator* accesses them. The input `enable` is distributed by Goto and From blocks, as are the feedback signals and the references to the speed controller and to the monitored signals, and the voltage reference fed back to the field weakening and to the active-power limitation.
 - The control system samples the references and the measurements (e.g., the phase currents, the DC-bus voltage, and the rotor angle or speed in the sensored mode) with the sampling period `T_s`. The duty ratios pass through a Delay block, which models the computational delay of one sampling period, as in *motulator*.
 - The Symmetrical PWM block of PLECS (regular sampling with double update, carrier frequency `1/(2*T_s)`) generates the gate signals of the ideal two-level converter of PLECS. This corresponds to carrier comparison in *motulator* (`pwm=True`), except that the counter quantization of the duty ratios is not modeled. The scripts therefore use a fine quantization in *motulator* (`CarrierComparison(N=2**24)`); with the default quantization of 4096 levels, the differences are about 1e-2.
@@ -44,21 +44,22 @@ The scripts close the model in PLECS before simulating it, since an open model i
 
 ## Agreement of the PLECS models with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.8.2 and PLECS 5.0 (2026-10-05).
+Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.9.0 and PLECS 5.0 (2026-10-08).
 *motulator* uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
-The V/Hz examples (`im_2kw_vhz.py`) have not yet been compared in PLECS; their Simulink models agree with *motulator* at this level, see [the Simulink export](../motulator_export/simulink/README.md).
 
 | Script                           | System model                               | Control system                                               |
 | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc.py`               | w_M 7.5e-6, tau_M 5.4e-6, i_s_ab 2.2e-6    | w_M 6.8e-6, tau_M 5.4e-6, tau_M_ref 5.4e-6, psi_s_ref 1.3e-8 |
-| `ipmsm_2kw_fvc.py --diode`       | w_M 1.6e-6, tau_M 2.8e-6, i_s_ab 1.3e-6    | w_M 4.0e-6, tau_M 2.8e-6, tau_M_ref 3.0e-6, psi_s_ref 9.1e-9 |
-| `pmsyrm_6kw_gn_fvc.py`           | w_M 3.4e-4, tau_M 2.1e-3, i_s_ab 7.0e-4    |                                                              |
-| `im_2kw_cvc.py`                  | w_M 7.1e-7, tau_M 2.3e-6, i_s_ab 8.3e-7    | w_M 3.9e-6, tau_M 2.6e-6, tau_M_ref 2.9e-6, psi_R 3.2e-8     |
+| `ipmsm_2kw_fvc.py`               | w_M 7.1e-6, tau_M 4.4e-6, i_s_ab 2.4e-6    | w_M 5.3e-6, tau_M 4.5e-6, tau_M_ref 4.4e-6, psi_s_ref 1.8e-8 |
+| `ipmsm_2kw_fvc.py --diode`       | w_M 9.3e-6, tau_M 6.1e-6, i_s_ab 2.7e-6    | w_M 7.6e-6, tau_M 6.0e-6, tau_M_ref 6.3e-6, psi_s_ref 1.7e-8 |
+| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.0e-4, tau_M 1.9e-3, i_s_ab 6.9e-4    |                                                              |
+| `im_2kw_cvc.py`                  | w_M 7.2e-7, tau_M 2.4e-6, i_s_ab 8.6e-7    | w_M 5.0e-6, tau_M 3.0e-6, tau_M_ref 3.7e-6, psi_R 3.4e-8     |
 | `im_2kw_dead_time_cvc.py`        | w_M 0.23, tau_M 0.75, i_s_ab 0.50          | w_M 1.4, tau_M 0.90, tau_M_ref 1.1, psi_R 7.1e-3             |
-| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.28, tau_M 0.48, i_s_ab 0.18          | w_M 0.66, tau_M 0.38, tau_M_ref 0.44, psi_R 6.1e-3           |
-| `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 1.7e-13, w_g 1.1e-12             |
-| `gfm_13kva_do.py`                | i_c_ab 9.4e-7, i_c_a 8.0e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
+| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.28, tau_M 0.45, i_s_ab 0.17          | w_M 0.61, tau_M 0.35, tau_M_ref 0.40, psi_R 6.1e-3           |
+| `im_2kw_vhz.py`                  | w_M 3.2e-6, tau_M 6.9e-6, i_s_ab 2.5e-6    | w_s 7.9e-6, tau_M 8.1e-6, tau_M_ref 3.6e-7, psi_s 2.9e-8     |
+| `im_2kw_vhz.py --open-loop`      | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 9.2e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 0                         |
+| `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
+| `gfm_13kva_do.py`                | i_c_ab 9.4e-7, i_c_a 7.8e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
 In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 1e-4 relative), since *motulator* evaluates the GradNets in single precision, see [the C port](../motulator_export/c/README.md).
