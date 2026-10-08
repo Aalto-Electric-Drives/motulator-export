@@ -402,3 +402,76 @@ static void vector_control_system_update(VectorControlSystem *self)
     flux_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
     pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
 }
+
+/* Signal vectors of the modular control system ---------------------------- */
+
+#define COMPLEX_AT(u, i) complex_from((u)[i], (u)[(i) + 1])
+
+static void measurements_pack(const Measurements *meas, double y[MEAS_WIDTH])
+{
+    y[MEAS_i_c_ab] = creal(meas->i_c_ab);
+    y[MEAS_i_c_ab + 1] = cimag(meas->i_c_ab);
+    y[MEAS_u_dc] = meas->u_dc;
+    y[MEAS_theta_M] = meas->theta_M;
+}
+
+static void measurements_unpack(const double u[MEAS_WIDTH], Measurements *meas)
+{
+    meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
+    meas->u_dc = u[MEAS_u_dc];
+    meas->theta_M = u[MEAS_theta_M];
+}
+
+static void observer_outputs_pack(const ObserverOutputs *fbk, double y[FBK_WIDTH])
+{
+    const double complex z[] = {fbk->i_s,   fbk->u_s,   fbk->u_s_zoh,
+                                fbk->psi_s, fbk->e_o,   fbk->psi_a};
+    const int i_z[] = {FBK_i_s, FBK_u_s, FBK_u_s_zoh, FBK_psi_s, FBK_e_o, FBK_psi_a};
+    for (int k = 0; k < 6; k++) {
+        y[i_z[k]] = creal(z[k]);
+        y[i_z[k] + 1] = cimag(z[k]);
+    }
+    y[FBK_eps] = fbk->eps;
+    y[FBK_eps_f] = fbk->eps_f;
+    y[FBK_tau_M] = fbk->tau_M;
+    y[FBK_w_c] = fbk->w_c;
+    y[FBK_w_m] = fbk->w_m;
+    y[FBK_w_M] = fbk->w_M;
+    y[FBK_theta_c] = fbk->theta_c;
+    y[FBK_theta_m] = fbk->theta_m;
+    y[FBK_psi_f] = fbk->psi_f;
+    y[FBK_h] = fbk->h;
+}
+
+static void observer_outputs_unpack(const double u[FBK_WIDTH], ObserverOutputs *fbk)
+{
+    fbk->u_dc = 0.0;
+    fbk->i_s = COMPLEX_AT(u, FBK_i_s);
+    fbk->u_s = COMPLEX_AT(u, FBK_u_s);
+    fbk->u_s_zoh = COMPLEX_AT(u, FBK_u_s_zoh);
+    fbk->psi_s = COMPLEX_AT(u, FBK_psi_s);
+    fbk->e_o = COMPLEX_AT(u, FBK_e_o);
+    fbk->eps = u[FBK_eps];
+    fbk->eps_f = u[FBK_eps_f];
+    fbk->psi_a = COMPLEX_AT(u, FBK_psi_a);
+    fbk->tau_M = u[FBK_tau_M];
+    fbk->tau_L = 0.0;
+    fbk->w_c = u[FBK_w_c];
+    fbk->w_m = u[FBK_w_m];
+    fbk->w_M = u[FBK_w_M];
+    fbk->theta_c = u[FBK_theta_c];
+    fbk->theta_m = u[FBK_theta_m];
+    fbk->psi_f = u[FBK_psi_f];
+    fbk->h = u[FBK_h];
+}
+
+static void references_unpack(const double u[REF_WIDTH], References *ref)
+{
+    References zero = {0};
+    *ref = zero;
+    ref->psi_s = u[REF_psi_s];
+    ref->tau_M = u[REF_tau_M];
+    ref->u_s = COMPLEX_AT(u, REF_u_s);
+}
+
+#undef COMPLEX_AT

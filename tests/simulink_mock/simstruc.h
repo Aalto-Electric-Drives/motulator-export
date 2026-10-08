@@ -22,7 +22,7 @@ typedef struct {
 
 #define MOCK_MAX_PARAMS 64
 #define MOCK_MAX_PORTS 8
-#define MOCK_MAX_WIDTH 16
+#define MOCK_MAX_WIDTH 32
 #define MOCK_MAX_STATES 8
 
 typedef struct {
@@ -56,6 +56,7 @@ typedef struct {
 #define SS_OPTION_EXCEPTION_FREE_CODE 0
 #define UNUSED_ARG(x) (void)(x)
 #define CONTINUOUS_SAMPLE_TIME 0.0
+#define INHERITED_SAMPLE_TIME (-1.0)
 
 #define ssSetNumSFcnParams(S, n) ((S)->num_params = (n))
 #define ssGetNumSFcnParams(S) ((S)->num_params)

@@ -43,6 +43,7 @@ static void im_flux_observer_init(IMFluxObserver *self,
 {
     self->par = par;
     self->sensorless = sensorless;
+    self->unit_gain = 0;
     self->psi_s = 0.0;
     self->theta_c = 0.0;
     self->T_s_old = 0.0;
@@ -53,6 +54,9 @@ static void im_flux_observer_init(IMFluxObserver *self,
 static double complex im_observer_gain(const IMFluxObserver *self, double w_m)
 {
     double alpha = im_alpha(&self->par);
+    if (self->unit_gain) {
+        return 1.0;
+    }
     if (self->sensorless) {
         return (0.5 * alpha + 0.2 * fabs(w_m)) / (alpha - I * w_m);
     }
@@ -223,7 +227,19 @@ static void im_reference_gen_update(IMCurrentReferenceGenerator *self, double T_
     self->i_sd_ref = clip(self->i_sd_ref, -self->i_s_max, self->i_sd_nom);
 }
 
-/* IMCurrentVectorController ------------------------------------------------ */
+/* CurrentController and IMCurrentVectorController ------------------------- */
+
+static ComplexPIController
+im_current_controller(const InductionMachineInvGammaPars *par, double alpha_c,
+                      double alpha_i)
+{
+    ComplexPIController ctrl;
+    double k_t = alpha_c * par->L_sgm;
+    double k_i = alpha_c * alpha_i * par->L_sgm;
+    double k_p = (alpha_c + alpha_i) * par->L_sgm;
+    complex_pi_init(&ctrl, k_p, k_i, k_t);
+    return ctrl;
+}
 
 static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
                                         InductionMachineInvGammaPars par,
@@ -243,12 +259,7 @@ static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
     self->sensorless = cfg->sensorless;
     im_reference_gen_init(&self->reference_gen, par, cfg->psi_s_nom, cfg->i_s_max,
                           cfg->w_s_nom, cfg->k_u, cfg->k_fw);
-    /* CurrentController: 2DOF PI gains from the bandwidths and the leakage
-     * inductance */
-    double k_t = cfg->alpha_c * par.L_sgm;
-    double k_i = cfg->alpha_c * alpha_i * par.L_sgm;
-    double k_p = (cfg->alpha_c + alpha_i) * par.L_sgm;
-    complex_pi_init(&self->current_ctrl, k_p, k_i, k_t);
+    self->current_ctrl = im_current_controller(&par, cfg->alpha_c, alpha_i);
     im_speed_flux_observer_init(&self->observer, par, alpha_o, cfg->sensorless, J);
 }
 
@@ -327,3 +338,77 @@ static void im_vector_control_system_update(IMVectorControlSystem *self)
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
     pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
 }
+
+/* Signal vectors of the modular control system ---------------------------- */
+
+#define COMPLEX_AT(u, i) complex_from((u)[i], (u)[(i) + 1])
+#define SET_COMPLEX(y, i, z)                                                       \
+    do {                                                                           \
+        (y)[i] = creal(z);                                                         \
+        (y)[(i) + 1] = cimag(z);                                                   \
+    } while (0)
+
+static void im_measurements_pack(const IMMeasurements *meas, double y[MEAS_WIDTH])
+{
+    SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
+    y[MEAS_u_dc] = meas->u_dc;
+    y[MEAS_w_M] = meas->w_M;
+}
+
+static void im_measurements_unpack(const double u[MEAS_WIDTH], IMMeasurements *meas)
+{
+    meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
+    meas->u_dc = u[MEAS_u_dc];
+    meas->w_M = u[MEAS_w_M];
+}
+
+static void im_observer_outputs_pack(const IMObserverOutputs *fbk, double y[FBK_WIDTH])
+{
+    SET_COMPLEX(y, FBK_i_s, fbk->i_s);
+    SET_COMPLEX(y, FBK_u_s, fbk->u_s);
+    SET_COMPLEX(y, FBK_psi_s, fbk->psi_s);
+    SET_COMPLEX(y, FBK_psi_R, fbk->psi_R);
+    y[FBK_tau_M] = fbk->tau_M;
+    y[FBK_w_c] = fbk->w_c;
+    y[FBK_w_s] = fbk->w_s;
+    y[FBK_w_r] = fbk->w_r;
+    y[FBK_w_m] = fbk->w_m;
+    y[FBK_w_M] = fbk->w_M;
+    y[FBK_theta_c] = fbk->theta_c;
+    SET_COMPLEX(y, FBK_e_o, fbk->e_o);
+    y[FBK_eps] = fbk->eps;
+    y[FBK_h] = fbk->h;
+}
+
+static void im_observer_outputs_unpack(const double u[FBK_WIDTH],
+                                       IMObserverOutputs *fbk)
+{
+    fbk->u_dc = 0.0;
+    fbk->i_s = COMPLEX_AT(u, FBK_i_s);
+    fbk->u_s = COMPLEX_AT(u, FBK_u_s);
+    fbk->psi_s = COMPLEX_AT(u, FBK_psi_s);
+    fbk->psi_R = COMPLEX_AT(u, FBK_psi_R);
+    fbk->tau_M = u[FBK_tau_M];
+    fbk->tau_L = 0.0;
+    fbk->w_c = u[FBK_w_c];
+    fbk->w_s = u[FBK_w_s];
+    fbk->w_r = u[FBK_w_r];
+    fbk->w_m = u[FBK_w_m];
+    fbk->w_M = u[FBK_w_M];
+    fbk->theta_c = u[FBK_theta_c];
+    fbk->e_o = COMPLEX_AT(u, FBK_e_o);
+    fbk->eps = u[FBK_eps];
+    fbk->h = u[FBK_h];
+}
+
+static void im_references_unpack(const double u[REF_WIDTH], IMReferences *ref)
+{
+    IMReferences zero = {0};
+    *ref = zero;
+    ref->i_s = COMPLEX_AT(u, REF_i_s);
+    ref->tau_M = u[REF_tau_M];
+    ref->u_s = COMPLEX_AT(u, REF_u_s);
+}
+
+#undef COMPLEX_AT
+#undef SET_COMPLEX

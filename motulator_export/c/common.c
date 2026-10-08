@@ -23,6 +23,16 @@ static double complex line2complex(const double u[2])
     return (2.0 * u[0] + u[1]) / 3.0 + I * u[1] / sqrt(3.0);
 }
 
+static double complex complex_from(double re, double im)
+{
+    /* A complex number has the representation of an array of its real and imaginary
+     * parts (C99 6.2.5) */
+    double complex z;
+    ((double *)&z)[0] = re;
+    ((double *)&z)[1] = im;
+    return z;
+}
+
 static double wrap(double theta)
 {
     /* Limit the angle into the range [-pi, pi), as numpy.mod does */
@@ -200,6 +210,16 @@ static void complex_pi_update(ComplexPIController *self, double T_s,
     self->u_i += T_s * (self->alpha_i + I * w_c) * (u - self->v);
 }
 
+/* CurrentLimiter ----------------------------------------------------------- */
+
+static double complex current_limiter(double i_max, double complex i)
+{
+    if (cabs(i) > i_max) {
+        i = i_max * i / cabs(i);
+    }
+    return i;
+}
+
 /* SpeedController ---------------------------------------------------------- */
 
 static PIController speed_controller(double J, double alpha_s, double alpha_i,
@@ -241,6 +261,32 @@ static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
     self->tau_L += T_s * d_tau_L;
 }
 
+/* RateLimiter -------------------------------------------------------------- */
+
+static void rate_limiter_init(RateLimiter *self, double rate_limit)
+{
+    self->rate_limit = rate_limit;
+    self->old_y = 0.0;
+}
+
+static double rate_limiter_compute_output(const RateLimiter *self, double T_s,
+                                          double u)
+{
+    double rate = (u - self->old_y) / T_s;
+    if (rate > self->rate_limit) {
+        return self->old_y + T_s * self->rate_limit;
+    }
+    if (rate < -self->rate_limit) {
+        return self->old_y - T_s * self->rate_limit;
+    }
+    return u;
+}
+
+static void rate_limiter_update(RateLimiter *self, double y)
+{
+    self->old_y = y;
+}
+
 /* Dead time --------------------------------------------------------------- */
 
 static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
@@ -265,6 +311,7 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
 static void pwm_init(PWM *self, double k_comp)
 {
     self->k_comp = k_comp;
+    self->mme = 0;
     self->t_d = 0.0;
     self->T_s = 0.0;
     self->i_0 = 0.0;
@@ -283,6 +330,11 @@ static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
     self->T_s = T_s;
     self->i_0 = i_0;
     self->feedforward = feedforward;
+}
+
+static void pwm_set_overmodulation(PWM *self, int mme)
+{
+    self->mme = mme;
 }
 
 static void pwm_set_min_pulse(PWM *self, double d_min)
@@ -338,7 +390,8 @@ static double complex pwm_realized_voltage(const PWM *self, double complex i_c_a
     return u_dc * q_ab / (double)(2 - k0);
 }
 
-static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, double d_abc[3])
+static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, int mme,
+                            double d_abc[3])
 {
     double u_abc[3];
     complex2abc(u_c_ref_ab, u_abc);
@@ -351,9 +404,9 @@ static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, double d_abc
         u_abc[k] -= u_0;
     }
 
-    /* MPE overmodulation */
+    /* MPE overmodulation (MME results from limiting the duty ratios) */
     double m = (2.0 / u_dc) * fmax(fmax(u_abc[0], u_abc[1]), u_abc[2]);
-    if (m > 1.0) {
+    if (!mme && m > 1.0) {
         for (int k = 0; k < 3; k++) {
             u_abc[k] = u_abc[k] / m;
         }
@@ -375,7 +428,7 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
     u_c_ref_ab = cexp(I * theta_comp) * u_c_ref_ab;
 
     /* Duty ratios */
-    pwm_duty_ratios(u_c_ref_ab, u_dc, d_abc);
+    pwm_duty_ratios(u_c_ref_ab, u_dc, self->mme, d_abc);
     double d_ref[3] = {d_abc[0], d_abc[1], d_abc[2]};
 
     /* Compensate for the duty-ratio error using the predicted currents (the prediction

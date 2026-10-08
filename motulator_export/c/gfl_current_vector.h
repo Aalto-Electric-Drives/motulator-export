@@ -68,12 +68,36 @@ typedef struct {
     double complex u_c_ab; /* Limited converter voltage in stator coordinates */
 } GFLReferences;
 
+/* Phase-locked loop with the voltage-magnitude filtering (PLL) */
+typedef struct {
+    double k_p, k_i; /* Gains */
+    double w_g, theta_c, u_g; /* States */
+} PLL;
+
+static void pll_init(PLL *self, double u_nom, double w_nom, double alpha_pll);
+/* Feedback signals from the realized converter voltage, the converter current, and
+ * the PCC voltage in stationary coordinates (the field u_dc is not set) */
+static void pll_compute_output(const PLL *self, double complex u_c_ab,
+                               double complex i_c_ab, double complex u_g_ab,
+                               GFLFeedbacks *out);
+static void pll_update(PLL *self, double T_s, const GFLFeedbacks *out);
+
+/* Current controller (CurrentController), a 2DOF PI controller with the gains from
+ * the bandwidths and the inductance */
+static ComplexPIController gfl_current_controller(double L, double alpha_c,
+                                                  double alpha_i);
+
+/* Current reference from the power references and the filtered PCC voltage
+ * magnitude u_g (CurrentVectorController.compute_output, before the
+ * CurrentLimiter) */
+static double complex gfl_current_reference(double p_g_ref, double q_g_ref,
+                                            double u_g);
+
 /* Control system (GridConverterControlSystem with CurrentVectorController) */
 typedef struct {
     GFLControllerCfg cfg;
     ComplexPIController current_ctrl;
-    double k_p_pll, k_i_pll; /* PLL gains */
-    double w_g, theta_c, u_g; /* PLL states */
+    PLL pll;
     PWM pwm;
     GFLFeedbacks fbk;
     GFLReferences ref;
@@ -84,5 +108,40 @@ static void gfl_control_system_compute_output(GFLControlSystem *self,
                                               const GridMeasurements *meas,
                                               double p_g_ref, double q_g_ref);
 static void gfl_control_system_update(GFLControlSystem *self);
+
+/* Signal vectors of the modular control system (see sm_flux_vector.h): the
+ * measurements (meas), the feedback signals (fbk) without u_dc, and the references
+ * (ref) p_g, q_g, i_c, and u_c */
+#define MEAS_i_c_ab 0
+#define MEAS_u_g_ab 2
+#define MEAS_u_dc 4
+#define MEAS_WIDTH 5
+
+#define FBK_i_c 0
+#define FBK_u_c 2
+#define FBK_u_g 4
+#define FBK_u_g_meas 5
+#define FBK_theta_c 7
+#define FBK_w_g 8
+#define FBK_w_c 9
+#define FBK_p_g 10
+#define FBK_q_g 11
+#define FBK_eps 12
+#define FBK_WIDTH 13
+
+#define REF_p_g 0
+#define REF_q_g 1
+#define REF_i_c 2
+#define REF_u_c 4
+#define REF_WIDTH 6
+
+static void grid_measurements_pack(const GridMeasurements *meas, double y[MEAS_WIDTH]);
+static void grid_measurements_unpack(const double u[MEAS_WIDTH],
+                                     GridMeasurements *meas);
+static void gfl_feedbacks_pack(const GFLFeedbacks *fbk, double y[FBK_WIDTH]);
+/* The field u_dc is zero */
+static void gfl_feedbacks_unpack(const double u[FBK_WIDTH], GFLFeedbacks *fbk);
+/* The fields p_g, q_g, i_c, and u_c, the others are zero */
+static void gfl_references_unpack(const double u[REF_WIDTH], GFLReferences *ref);
 
 #endif

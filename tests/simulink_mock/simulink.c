@@ -39,20 +39,40 @@ double sfun_sample_time(void)
     return mock.sample_time;
 }
 
-/* One sampling period: the outputs from the inputs, then the state update */
-void sfun_step(const double *u, double *y)
+static void set_inputs(const double *u)
 {
     for (int k = 0; k < mock.num_inputs; k++) {
         for (int j = 0; j < mock.input_width[k]; j++) {
             mock.inputs[k][j] = *u++;
         }
     }
+}
+
+/* The outputs from the inputs */
+void sfun_outputs(const double *u, double *y)
+{
+    set_inputs(u);
     mdlOutputs(&mock, 0);
     for (int k = 0; k < mock.num_outputs; k++) {
         for (int j = 0; j < mock.output_width[k]; j++) {
             *y++ = mock.outputs[k][j];
         }
     }
+}
+
+/* The state update with the inputs (also those without direct feedthrough) */
+void sfun_update(const double *u)
+{
+    set_inputs(u);
+#ifdef MDL_UPDATE
+    mdlUpdate(&mock, 0);
+#endif
+}
+
+/* One sampling period: the outputs from the inputs, then the state update */
+void sfun_step(const double *u, double *y)
+{
+    sfun_outputs(u, y);
 #ifdef MDL_UPDATE
     mdlUpdate(&mock, 0);
 #endif

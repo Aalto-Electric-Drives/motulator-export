@@ -1,20 +1,20 @@
 """
 S-functions generated from the C-Script code of the PLECS models.
 
-The code sections of a C-Script block (e.g., `ControlBlock.code` of the PLECS
-writers) are wrapped in a Level-2 C MEX S-function, which defines the C-Script
-macros used in the code with the Simulink API. The S-function thus runs the same code
-as the C-Script block of the PLECS model, with the same ports, parameters, sample
-time, and continuous states.
+The code sections of a C-Script block (e.g., `CBlock.code` of the blocks of the
+control systems) are wrapped in a Level-2 C MEX S-function, which defines the
+C-Script macros used in the code with the Simulink API. The S-function thus runs the
+same code as the C-Script block of the PLECS model, with the same ports,
+parameters, sample time, and continuous states.
 
 """
 
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from motulator_export.plecs import sm
-from motulator_export.plecs._common import C_DIR, ControlBlock
+from motulator_export.plecs._common import C_DIR
+from motulator_export.plecs._netlist import CBlock
 
 # C-Script macros in terms of the Simulink API (the SimStruct is S in the callbacks)
 MACROS = """\
@@ -42,6 +42,7 @@ class SFunction:
     sample_time: int | None  # Index of the sample-time parameter, None = continuous
     num_cont_states: int = 0
     feedthrough: list[int] = field(default_factory=list)  # Defaults to all inputs
+    inherited: bool = False  # Inherited sample time (sample_time is None)
 
     def source(self) -> str:
         """C source of the S-function."""
@@ -49,9 +50,9 @@ class SFunction:
         feedthrough = self.feedthrough or [1] * len(self.input_widths)
         n_params = len(self.params)
         if self.sample_time is None:
+            ts = "INHERITED_SAMPLE_TIME" if self.inherited else "CONTINUOUS_SAMPLE_TIME"
             sample_time = (
-                "    ssSetSampleTime(S, 0, CONTINUOUS_SAMPLE_TIME);\n"
-                "    ssSetOffsetTime(S, 0, 0.0);\n"
+                f"    ssSetSampleTime(S, 0, {ts});\n    ssSetOffsetTime(S, 0, 0.0);\n"
             )
             ts_check = ""
         else:
@@ -178,29 +179,19 @@ def _c_list(values: list[int]) -> str:
     return "{" + ", ".join(str(v) for v in values) + "}"
 
 
-def sfunction_name(name: str) -> str:
-    """Name of the S-function of a block, e.g., sfun_flux_vector_control."""
-    return "sfun_" + re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
-
-
-def control_sfunction(block: ControlBlock) -> SFunction:
-    """
-    S-function of a control-system block.
-
-    The inputs are those of the block, and the outputs are the duty ratios and the
-    groups of the monitored signals. The parameters are the C-Script parameters,
-    converted to double, and the sample time is the parameter `T_s`.
-
-    """
-    params = block.cscript_params or [m.variable for m in block.mask_params]
-    variables = [m.variable for m in block.mask_params]
+def block_sfunction(block: CBlock) -> SFunction:
+    """S-function of a C block of a control system (see `plecs._netlist`)."""
     return SFunction(
-        name=sfunction_name(block.name),
-        code=block.code(),
-        input_widths=block.input_widths,
-        output_widths=[3, *(len(v) for v in block.outputs.values())],
-        params=[f"double({p})" for p in params],
-        sample_time=variables.index("T_s"),
+        name=block.sfunction,
+        code=block.code,
+        input_widths=[p.width for p in block.inputs],
+        output_widths=[p.width for p in block.outputs],
+        params=[f"double({p})" for p in block.params],
+        sample_time=(
+            None if block.sample_time is None else block.params.index(block.sample_time)
+        ),
+        feedthrough=block.feedthrough or [],
+        inherited=block.sample_time is None,
     )
 
 
@@ -212,7 +203,7 @@ def gradnet_machine_sfunction() -> SFunction:
     negated line-to-line voltages -u_ac and -u_bc, the rotor angle, and the rotor
     speed, and the outputs are the phase currents a and b, the phase currents, the
     torque, the speed, and the angle. The stator flux linkage is the continuous
-    state. The parameters are in the model workspace (`machine`).
+    state. The parameters are in the struct `machine` of the initialization script.
 
     """
     params = ["machine.n_p", "machine.R_s", "machine.k"]

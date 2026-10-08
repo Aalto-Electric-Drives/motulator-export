@@ -2,15 +2,18 @@
 Export synchronous machine drives to Simulink.
 
 This module writes a Simulink model of a motulator synchronous machine drive, in the
-same way as `motulator_export.plecs.sm` writes a PLECS model. The control system is
-the C-Script code of the PLECS model wrapped in an S-function, in a masked subsystem
-whose parameters are the same as in the motulator API. The system model is built
-from basic Simulink blocks, so no toolboxes are needed.
+same way as `motulator_export.plecs.sm` writes a PLECS model. In the control system,
+each class of motulator is a block with a mask of its arguments, and the blocks of
+the classes are the C-Script code of the PLECS model wrapped in S-functions. The
+system model is built from basic Simulink blocks, so no toolboxes are needed.
 
-The model is written as a MATLAB script (and the source of the S-function), which
-builds the model with `build_drive.m` of this directory. The C port uses the C99
-complex type, so the S-function needs gcc (Linux), Xcode clang (macOS), or
-MinGW-w64 (Windows), not MSVC.
+The model is written as MATLAB scripts (and the sources of the S-functions): the
+script `build_<model>.m` builds the model with `build_drive.m` of this directory,
+and the script `init_<model>.m` defines the parameters (the system model, and the
+structs par, cfg, speed_ctrl, and pwm of the control system, as in the motulator
+API), which the model runs after loading and at the start of each simulation. The C
+port uses the C99 complex type, so the S-functions need gcc (Linux), Xcode clang
+(macOS), or MinGW-w64 (Windows), not MSVC.
 
 Currently supported:
 
@@ -39,8 +42,9 @@ import numpy as np
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.model import Drive
 
-from motulator_export.plecs import sm
+from motulator_export.plecs import _sm_control, sm
 from motulator_export.plecs._common import StepSignal
+from motulator_export.simulink._common import write_init
 from motulator_export.simulink._drive import (
     check_supported_converter,
     simulate_drive,
@@ -68,16 +72,17 @@ def write_model(
     enable: StepSignal | float = 1.0,
 ) -> Path:
     """
-    Write a MATLAB script that builds the Simulink model of the drive system.
+    Write the MATLAB scripts that build the Simulink model of the drive system.
 
-    Running the script in MATLAB compiles the S-function and saves the model (and
-    the compiled S-function) in the folder of the script.
+    Running the script `build_<model>.m` in MATLAB compiles the S-functions and
+    saves the model (and the compiled S-functions) in the folder of the script.
 
     Parameters
     ----------
     path : str | Path
-        Path of the model (.slx). The script is written in the same folder, named
-        `build_<model>.m`, with the source of the S-function.
+        Path of the model (.slx). The scripts `build_<model>.m` and
+        `init_<model>.m` are written in the same folder, with the sources of the
+        S-functions.
     mdl : Drive
         Continuous-time system model.
     ctrl : VectorControlSystem
@@ -98,11 +103,12 @@ def write_model(
     Returns
     -------
     Path
-        Path of the written script.
+        Path of the build script.
 
     """
     _check_supported(mdl, ctrl)
-    values, flux_map = sm.export_mask_values(ctrl, speed_ctrl_args)
+    path = Path(path)
+    values, flux_map = sm.export_values(ctrl, speed_ctrl_args)
     variables = sm.export_plant_variables(mdl)
     if flux_map is not None:
         variables += [(f"est_flux_map.{f}", flux_map[f]) for f in sm.GRADNET_FIELDS]
@@ -110,17 +116,11 @@ def write_model(
         machine, sfunctions = "gn", [gradnet_machine_sfunction()]
     else:
         machine, sfunctions = "sm", []
+    script = write_init(
+        path, lambda comment: _sm_control.init_script(variables, values, comment)
+    )
     return write_drive_model(
-        path,
-        BLOCK,
-        values,
-        variables,
-        machine,
-        w_M_ref,
-        tau_L,
-        t_stop,
-        sfunctions,
-        enable,
+        path, BLOCK, script, machine, w_M_ref, tau_L, t_stop, sfunctions, enable
     )
 
 

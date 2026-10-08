@@ -23,7 +23,7 @@ import pytest
 from motulator.common.control import PWM
 from motulator.common.utils import dead_time_error
 
-from motulator_export.plecs._drive import pwm_values
+from motulator_export.plecs._control import pwm_values
 from tests.c_port import arr, compile_library, d
 
 CAPI = r"""
@@ -149,12 +149,14 @@ def test_pwm_values() -> None:
         "pwm_i_0": 0.0,
         "pwm_feedforward": 0,
         "pwm_d_min": 0.0,
+        "pwm_overmodulation": "MPE",
     }
     assert pwm_values(PWM(), T_S) == {
         "pwm_t_d": 0.0,
         "pwm_i_0": 0.0,
         "pwm_feedforward": 1,
         "pwm_d_min": 0.0,
+        "pwm_overmodulation": "MPE",
     }
     for i_0 in [1e-6, 0.01, I_0, 20.0]:
         sign = tanh_sign(i_0)
@@ -164,6 +166,7 @@ def test_pwm_values() -> None:
             "pwm_i_0": i_0,
             "pwm_feedforward": 1,
             "pwm_d_min": 0.0,
+            "pwm_overmodulation": "MPE",
         }
     others: list[Callable[[np.ndarray], np.ndarray]] = [
         lambda x: 2 / pi * np.arctan(x / 0.1),

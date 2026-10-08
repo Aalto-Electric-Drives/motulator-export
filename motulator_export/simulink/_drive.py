@@ -10,8 +10,8 @@ from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.model import Drive
 
 from motulator_export.plecs._common import ControlBlock, StepSignal
+from motulator_export.plecs._control import VALUES
 from motulator_export.plecs._drive import MDL_OUTPUTS
-from motulator_export.plecs._schematic import _fmt
 from motulator_export.simulink._common import (
     _m_source,
     _m_steps,
@@ -39,8 +39,7 @@ def check_supported_converter(mdl: Drive) -> None:
 def write_drive_model(
     path: str | Path,
     block: ControlBlock,
-    values: dict[str, Any],
-    variables: list[tuple[str, Any]],
+    init_script: str,
     machine: str,
     w_M_ref: StepSignal,
     tau_L: StepSignal,
@@ -57,10 +56,9 @@ def write_drive_model(
         Path of the model (.slx).
     block : ControlBlock
         Control-system block.
-    values : dict[str, Any]
-        Mask parameter values of the control system.
-    variables : list[tuple[str, Any]]
-        Workspace variables of the system model.
+    init_script : str
+        Script in the folder of the model defining the parameters in the base
+        workspace (see `write_init` and `blocks.new_model`).
     machine : str
         "sm" (synchronous machine), "gn" (synchronous machine with a GradNet current
         map, see `gradnet_machine_sfunction`), or "im" (induction machine).
@@ -87,15 +85,15 @@ def write_drive_model(
     path = Path(path)
     signals = block.signals
     flux = [f"ctrl.{n}" for n in signals if n.startswith("psi")]
+    speed, torque = list(block.outputs.values())[:2]
     scope = [
-        ("Speed", ["ctrl.w_M_ref", "ctrl.w_M", "mdl.w_M"]),
-        ("Torque", ["ctrl.tau_M_ref", "ctrl.tau_M", "mdl.tau_M"]),
+        ("Speed", [*(f"ctrl.{n}" for n in speed), "mdl.w_M"]),
+        ("Torque", [*(f"ctrl.{n}" for n in torque), "mdl.tau_M"]),
         ("Current", ["mdl.i_a", "mdl.i_b", "mdl.i_c"]),
         ("Flux", flux),
     ]
-    init = "".join(f"{n} = {_fmt(v)};\n" for n, v in variables)
-    fields = [
-        ("init", init),
+    fields: list[tuple[str, Any]] = [
+        ("init_script", init_script),
         ("machine", machine),
         ("enable", _m_source(enable)),
         ("w_M_ref", _m_steps(w_M_ref)),
@@ -105,7 +103,7 @@ def write_drive_model(
     if sfunctions:
         fields.append(("machine_params", sfunctions[0].params))
     return write_script(
-        path, block, values, fields, "build_drive", values["T_s"], t_stop, sfunctions
+        path, block, VALUES, fields, "build_drive", VALUES["T_s"], t_stop, sfunctions
     )
 
 

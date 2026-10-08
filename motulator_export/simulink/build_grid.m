@@ -1,19 +1,22 @@
 function build_grid(s)
 %BUILD_GRID Build a Simulink model of a grid converter system.
-%   BUILD_GRID(S) compiles the S-function of the control system, builds the model
+%   BUILD_GRID(S) compiles the S-functions of the control system, builds the model
 %   S.name, and saves it in the folder S.folder. The struct S is written by
 %   motulator_export.simulink.grid, with the fields
 %
 %     name      Model name
-%     folder    Folder of the model, the S-function, and its compiled version
-%     init      MATLAB code of the model workspace (converter, ac_filter, ac_source)
+%     folder    Folder of the model, the S-functions, and their compiled versions
+%     init_script  Script in the folder defining the parameters (converter,
+%               ac_filter, ac_source, and the control system) in the base
+%               workspace, see blocks.new_model
 %     ac_filter 'lcl' (LCL filter) or 'l' (L filter and grid inductance)
-%     control   Control system, see blocks.add_control_system
+%     control   Control system, see blocks.add_control_system (the field sfunction
+%               lists the S-functions of its blocks, and inputs its inputs)
 %     refs      Input 'enable' and the references {name, 'step' or 'constant',
 %               steps or value}, the first inputs of the control system (see
 %               blocks.add_step)
 %     scope     Scope signals {name, indices in [mdl; ctrl]}
-%     T_s       Sampling period (s)
+%     T_s       Sampling period (s), or its expression (cfg.T_s)
 %     t_stop    Stop time (s)
 %
 %   The system model is built from basic Simulink blocks: the carrier comparison,
@@ -25,7 +28,10 @@ function build_grid(s)
 %   The blocks are aligned with the ports they connect to, so that the lines are
 %   straight, and the feedback lines are drawn through given corners.
 
-blocks.compile(s.control.sfunction, s.folder);
+sfunctions = cellstr(s.control.sfunction);
+for k = 1:numel(sfunctions)
+    blocks.compile(sfunctions{k}, s.folder);
+end
 slx = blocks.new_model(s);
 sys = s.name;
 cs = s.control.name;

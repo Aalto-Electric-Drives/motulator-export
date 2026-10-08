@@ -56,6 +56,7 @@ typedef struct {
 typedef struct {
     InductionMachineInvGammaPars par;
     int sensorless; /* Selects the default observer gain k_o(w_m) */
+    int unit_gain;  /* k_o = 1 (create_vhz_observer with L_M = inf) */
     /* States */
     double complex psi_s;
     double theta_c;
@@ -95,6 +96,12 @@ typedef struct {
     int sensorless;
     double T_s;
 } IMCurrentVectorControllerCfg;
+
+/* Current controller (CurrentController), a 2DOF PI controller with the gains from
+ * the bandwidths and the leakage inductance */
+static ComplexPIController
+im_current_controller(const InductionMachineInvGammaPars *par, double alpha_c,
+                      double alpha_i);
 
 typedef struct {
     double T_s;
@@ -142,5 +149,43 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
                                                     const IMMeasurements *meas,
                                                     double w_M_ref);
 static void im_vector_control_system_update(IMVectorControlSystem *self);
+
+/* Signal vectors of the modular control system (see sm_flux_vector.h): the
+ * measurements (meas), the feedback signals (fbk) without u_dc and tau_L, and the
+ * references (ref) tau_M, i_s, and u_s */
+#define MEAS_i_c_ab 0
+#define MEAS_u_dc 2
+#define MEAS_w_M 3
+#define MEAS_WIDTH 4
+
+#define FBK_i_s 0
+#define FBK_u_s 2
+#define FBK_psi_s 4
+#define FBK_psi_R 6
+#define FBK_tau_M 8
+#define FBK_w_c 9
+#define FBK_w_s 10
+#define FBK_w_r 11
+#define FBK_w_m 12
+#define FBK_w_M 13
+#define FBK_theta_c 14
+#define FBK_e_o 15
+#define FBK_eps 17
+#define FBK_h 18
+#define FBK_WIDTH 19
+
+#define REF_tau_M 0
+#define REF_i_s 1
+#define REF_u_s 3
+#define REF_WIDTH 5
+
+static void im_measurements_pack(const IMMeasurements *meas, double y[MEAS_WIDTH]);
+static void im_measurements_unpack(const double u[MEAS_WIDTH], IMMeasurements *meas);
+static void im_observer_outputs_pack(const IMObserverOutputs *fbk, double y[FBK_WIDTH]);
+/* The fields u_dc and tau_L are zero */
+static void im_observer_outputs_unpack(const double u[FBK_WIDTH],
+                                       IMObserverOutputs *fbk);
+/* The fields tau_M, i_s, and u_s, the others are zero */
+static void im_references_unpack(const double u[REF_WIDTH], IMReferences *ref);
 
 #endif

@@ -7,7 +7,6 @@ RPC interface is in `_rpc`.
 
 """
 
-import base64
 import os
 import re
 from collections.abc import Callable, Sequence
@@ -24,13 +23,15 @@ from motulator.common.model._converter import (
     VoltageSourceConverter,
 )
 
+from motulator_export.plecs._netlist import Subsystem
+from motulator_export.plecs._render import schematic
 from motulator_export.plecs._schematic import (
     Point,
     Tap,
     Terminal,
-    _cscript,
     _fmt,
     _inner_schematic,
+    _mask_param,
     _mask_probes,
     _probe,
     _q,
@@ -58,6 +59,21 @@ def _c_define(header: str, name: str) -> int:
 GRADNET_MAX_EMBED_DIM = _c_define("gradnet.h", "GRADNET_MAX_EMBED_DIM")
 GRADNET_MAX_IN_DIM = _c_define("gradnet.h", "GRADNET_MAX_IN_DIM")
 
+# GradNet parameters, as fields of a workspace struct and in the C-Script parameters
+GRADNET_FIELDS = [
+    "in_dim",
+    "mu_dim",
+    "W",
+    "b",
+    "mu_log",
+    "bias",
+    "activation",
+    "beta_log",
+    "p",
+    "in_base",
+    "out_base",
+]
+
 
 # %%
 @dataclass
@@ -66,13 +82,21 @@ class StepSignal:
     Step signal: `before` at first and `after` at `t > time`.
 
     Several steps are given as sequences: `after[k]` is the value after the step at
-    `time[k]`. The signal is callable, as the reference functions of motulator.
+    `time[k]`, the times being increasing. The signal is callable, as the reference
+    functions of motulator.
 
     """
 
     time: float | Sequence[float]
     after: float | Sequence[float]
     before: float = 0.0
+
+    def __post_init__(self) -> None:
+        times, afters = np.atleast_1d(self.time), np.atleast_1d(self.after)
+        if times.ndim != 1 or times.size == 0 or times.shape != afters.shape:
+            raise ValueError("time and after must have the same number of steps")
+        if not np.all(np.isfinite(times)) or np.any(np.diff(times) < 0):
+            raise ValueError("The step times must be finite and increasing")
 
     def __call__(self, t: Any) -> Any:
         """Value at the time `t` (a float or an array)."""
@@ -93,6 +117,8 @@ def sampled_step(sig: StepSignal, T_s: float) -> StepSignal:
     returns a step switching halfway between the samples, as in motulator.
 
     """
+    if not (np.isfinite(T_s) and T_s > 0):
+        raise ValueError("The sampling period T_s must be positive and finite")
     times = []
     for time in np.atleast_1d(sig.time):
         t, k = 0.0, 0
@@ -118,12 +144,13 @@ class MaskParam:
 @dataclass
 class ControlBlock:
     """
-    Control-system block: a masked subsystem containing a C-Script block.
+    Control-system block: a masked subsystem containing the blocks of the classes of
+    the control system (see `_control`).
 
-    The mask parameters are passed to the C-Script, whose inputs are `enable` (see
-    `enable_code`), the references, and the measurements. The first output of the
-    C-Script, the duty ratios, is the only output of the block. The monitored signals
-    are the other outputs of the C-Script, available as mask probes of the block.
+    The inputs are `enable` (see `block_enable_code`), the references, and the
+    measurements. The duty ratios of the C block "PWM/compute_output" are the only
+    output of the block. The monitored signals are the outputs of the C block
+    "Monitored signals", available as mask probes of the block.
 
     """
 
@@ -134,9 +161,8 @@ class ControlBlock:
     inputs: list[str]  # Input ports
     input_widths: list[int]
     outputs: dict[str, list[str]]  # Monitored signals: probe name -> signal names
-    code: Callable[[], dict[str, str]]  # Code sections of the C-Script
+    netlist: Callable[[], Subsystem]  # Contents of the subsystem
     mask_init: str = ""  # Mask initialization commands
-    cscript_params: list[str] | None = None  # Defaults to the mask variables
 
     @property
     def signals(self) -> list[str]:
@@ -200,84 +226,66 @@ C_GRADNET_PARAMS = (
     "    } while (0)\n"
 )
 
-# C code writing the duty ratios to the first output of the C-Script
-DUTY_RATIO_CODE = (
-    "/* Duty ratios, delayed by the Delay block outside the subsystem */\n"
-    "for (int k = 0; k < 3; k++) {\n"
-    "    OutputSignal(0, k) = ctrl.ref.d_abc[k];\n"
-    "}\n"
-    "\n"
-)
-
-
 # The first input of the control systems
 ENABLE = "enable"
+# C block of the monitored signals of a control system
+MONITOR = "Monitored signals"
 ENABLE_DESCRIPTION = (
     " While the input enable is not positive, the duty ratios are 0.5 and the state "
     "is reset to its initial value."
 )
 
 
-def enable_code(code: dict[str, str], outputs: dict[str, list[str]]) -> dict[str, str]:
+def block_enable_code(
+    code: dict[str, str],
+    state: list[tuple[str, str]],
+    output_widths: list[int],
+    disabled: float = 0.0,
+) -> dict[str, str]:
     """
-    Add the input `enable` (the first input) to the code sections of a C-Script.
+    Add the input `enable` (the first input) to the code sections of a C block.
 
-    While the input is not positive, the control algorithm is not run: the duty ratios
-    are 0.5 (zero voltage), the monitored signals are zero, and the state `ctrl` is
-    reset to its initial value, so that the control system starts from the initial
-    state when enabled, e.g., after a fault. The initial state is copied at the end
-    of the start function, so the reset does not evaluate the parameters again.
+    While the input is not positive, the algorithm is not run: the outputs are
+    `disabled` (the duty ratios 0.5, i.e., zero voltage, and the monitored signals
+    zero), and the state variables `state` (type, name) are reset to their initial
+    values, so that the control system starts from its initial state when enabled,
+    e.g., after a fault. The initial values are copied at the end of the start
+    function, so the reset does not evaluate the parameters again.
 
     """
-    match = re.search(r"^static (\w+) ctrl;$", code["Declarations"], re.M)
-    if match is None:
-        raise RuntimeError("State of the control system (ctrl) not found")
-    disabled = "if (!(InputSignal(0, 0) > 0.0)) {\n"
-    zeros = "".join(
-        f"    OutputSignal({i_out + 1}, {j}) = 0.0;\n"
-        for i_out, names in enumerate(outputs.values())
-        for j in range(len(names))
+    disabled_if = "if (!(InputSignal(0, 0) > 0.0)) {\n"
+    outputs = "".join(
+        f"    for (int k = 0; k < {w}; k++) {{\n"
+        f"        OutputSignal({i}, k) = {disabled!r};\n"
+        "    }\n"
+        for i, w in enumerate(output_widths)
     )
-    return code | {
-        "Declarations": code["Declarations"]
-        + "\n/* Initial state, restored while the control system is disabled */\n"
-        f"static {match.group(1)} ctrl_init;\n",
-        "StartFcn": code["StartFcn"] + "\nctrl_init = ctrl;\n",
-        "OutputFcn": "/* Disabled: zero voltage, the control algorithm is not run */\n"
-        + disabled
-        + "    for (int k = 0; k < 3; k++) {\n"
-        "        OutputSignal(0, k) = 0.5;\n"
-        "    }\n" + zeros + "    return;\n"
+    out = code | {
+        "OutputFcn": "/* Disabled: the algorithm is not run */\n"
+        + disabled_if
+        + outputs
+        + "    return;\n"
         "}\n"
-        "\n" + code["OutputFcn"],
-        "UpdateFcn": "/* Disabled: reset the state */\n"
-        + disabled
-        + "    ctrl = ctrl_init;\n"
-        "    return;\n"
-        "}\n"
-        "\n" + code["UpdateFcn"],
+        "\n" + code["OutputFcn"]
     }
-
-
-def parameter_checks(mask_params: list[MaskParam]) -> str:
-    """C code checking that the required mask parameters are scalars."""
-    return "".join(
-        f"if (PDIM({k}) != 1) {{\n"
-        f'    SetErrorMessage("{m.variable} must be a scalar.");\n'
-        "    return;\n"
-        "}\n"
-        for k, m in enumerate(mask_params)
-        if m.required
-    )
-
-
-def cfg_assignments(mask_params: list[MaskParam]) -> str:
-    """C code assigning the non-empty mask parameters to the configuration."""
-    return "".join(
-        f"if (PDIM({k}) > 0) {{\n    {m.target} = P({k}, 0);\n}}\n"
-        for k, m in enumerate(mask_params)
-        if m.target.startswith("cfg.")
-    )
+    if state:
+        out["Declarations"] = (
+            code["Declarations"]
+            + "\n/* Initial state, restored while the block is disabled */\n"
+            + "".join(f"static {t} {n}_init;\n" for t, n in state)
+        )
+        out["StartFcn"] = (
+            code["StartFcn"] + "\n" + "".join(f"{n}_init = {n};\n" for _, n in state)
+        )
+        out["UpdateFcn"] = (
+            "/* Disabled: reset the state */\n"
+            + disabled_if
+            + "".join(f"    {n} = {n}_init;\n" for _, n in state)
+            + "    return;\n"
+            "}\n"
+            "\n" + code["UpdateFcn"]
+        )
+    return out
 
 
 def monitored_code(
@@ -285,16 +293,18 @@ def monitored_code(
     monitored: dict[str, str],
     comment: str = "Monitored signals",
     prelude: str = "",
+    first: int = 1,
 ) -> str:
     """
-    C code writing the monitored signals to the other outputs of the C-Script.
+    C code writing the monitored signals to the outputs of the C-Script from the
+    output `first` on.
 
     The code starts with the comment, followed by the prelude (e.g., a coordinate
     transformation used in the expressions of `monitored`) and the assignments.
 
     """
     return f"/* {comment} */\n{prelude}" + "".join(
-        f"OutputSignal({i_out + 1}, {j}) = {monitored[name]};\n"
+        f"OutputSignal({i_out + first}, {j}) = {monitored[name]};\n"
         for i_out, names in enumerate(outputs.values())
         for j, name in enumerate(names)
     )
@@ -349,8 +359,8 @@ def _check_supported_pwm(pwm: PWM, d_err: bool = False) -> None:
     The duty-ratio error model `d_err` is supported only if `d_err` is True.
 
     """
-    if not isinstance(pwm, PWM) or pwm.overmodulation != "MPE":
-        raise NotImplementedError("Only the MPE overmodulation supported")
+    if not isinstance(pwm, PWM) or pwm.overmodulation not in ("MPE", "MME"):
+        raise NotImplementedError("Only the MPE and MME overmodulation supported")
     if pwm.k_comp != 1.5:
         raise NotImplementedError("Only k_comp = 1.5 supported")
     if pwm.k_pred != 1.5:
@@ -359,7 +369,7 @@ def _check_supported_pwm(pwm: PWM, d_err: bool = False) -> None:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
 
 
-def _add_pwm(sch: _Schematic, T_s: float) -> None:
+def _add_pwm(sch: _Schematic, T_s: float | str) -> None:
     """
     Add the carrier comparison (PLECS Symmetrical PWM), fed by the delayed duty ratios.
 
@@ -371,7 +381,7 @@ def _add_pwm(sch: _Schematic, T_s: float) -> None:
     """
     params = {
         "sampling": "3",  # Regular (double update)
-        "fc": _fmt(0.5 / T_s),
+        "fc": f"0.5/{T_s}" if isinstance(T_s, str) else _fmt(0.5 / T_s),
         "carrier_phaseshift": "0",
         "carrier_limits": "[0 1]",
         "output_values": "[-1 1]",
@@ -389,7 +399,7 @@ def _add_pwm(sch: _Schematic, T_s: float) -> None:
     sch.signal(("Delay", 2), ("PWM", 2))
 
 
-def _add_delay(sch: _Schematic, T_s: float, block: ControlBlock) -> None:
+def _add_delay(sch: _Schematic, T_s: float | str, block: ControlBlock) -> None:
     """Add the computational delay of one sampling period (PLECS Delay block)."""
     sch.component(
         "Delay", "Delay", (370, CS[1]), {"N": "1", "X0": "0", "Ts": _fmt(T_s)}
@@ -583,31 +593,14 @@ def _fmt_mask(value: Any) -> str:
     """Format a mask value, writing multiples of 2*pi as in motulator."""
     if isinstance(value, float) and value > 0 and not isinf(value):
         k = value / (2 * pi)
-        if k == round(k, 6) and 2 * pi * round(k, 6) == value:
+        if 2 * pi * round(k, 6) == value:  # Exact, as 2*pi*k in MATLAB
             return f"2*pi*{round(k, 6):g}"
     return _fmt(value)
 
 
 def _mask_parameter(m: MaskParam, value: Any) -> str:
     """Mask parameter definition of a subsystem."""
-    prompt = (
-        _q(m.prompt)
-        if m.prompt.isascii()
-        else "base64 " + _q(base64.b64encode(m.prompt.encode()).decode())
-    )
-    return (
-        "      Parameter {\n"
-        f"        Variable      {_q(m.variable)}\n"
-        f"        Prompt        {prompt}\n"
-        "        Type          FreeText\n"
-        f"        Value         {_q(_fmt_mask(value))}\n"
-        "        Show          off\n"
-        # Tunable, since non-tunable parameters are inlined as constants, which
-        # makes accessing an empty parameter (None) a compilation error
-        "        Tunable       on\n"
-        f"        TabName       {_q(m.tab)}\n"
-        "      }\n"
-    )
+    return _mask_param(m.variable, m.prompt, _fmt_mask(value), m.tab)
 
 
 def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str, str]:
@@ -634,42 +627,15 @@ def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str
         ]
     )
 
-    # Contents: input ports, C-Script, and the output port
-    sub = _Schematic()
-    y_cs = 100  # C-Script position, inputs spaced by 10 around it
-    y_src = [40 + 30 * k for k in range(n_in)]
-    y_in = [y_cs + 10 * k - 5 * (n_in - 1) for k in range(n_in)]
-    x_jog = _jogs(y_src, y_in, 100, 8)
-    for k, name in enumerate(block.inputs):
-        sub.component(
-            "Input", name, (60, y_src[k]), {"Index": str(k + 1), "Width": "-1"}
-        )
-        points = [(x_jog[k], y_src[k]), (x_jog[k], y_in[k])]
-        sub.signal((name, 1), ("C-Script", k + 1), points)
-    params = block.cscript_params or [m.variable for m in block.mask_params]
-    widths = " ".join(str(w) for w in block.input_widths)
-    n_out = " ".join(str(len(v)) for v in block.outputs.values())
-    cscript = _cscript(
-        block.code(), f"[{widths}]", f"[3 {n_out}]", ", ".join(params), "T_s"
+    inner, size = schematic(block.netlist())
+    probes = [("Duty ratios (d_abc)", "compute_output", "Output 1")]
+    monitored = [(n, MONITOR, f"Output {k + 1}") for k, n in enumerate(block.outputs)]
+    return header, (
+        terminals
+        + _inner_schematic(inner, size)
+        + _mask_probes(probes, "PWM")
+        + _mask_probes(monitored)
     )
-    sub.component(
-        "CScript",
-        "C-Script",
-        (200, y_cs),
-        cscript,
-        direction="up",
-        extra="      Frame         [-50, -60; 50, 60]\n",
-    )
-    # The port index runs over both the inputs and the outputs
-    y_out = y_cs - 5 * len(block.outputs)  # First output of the C-Script
-    sub.component(
-        "Output", "d_abc", (340, y_out), {"Index": str(n_in + 1), "Width": "-1"}
-    )
-    sub.signal(("C-Script", n_in + 1), ("d_abc", 1))
-    # Probe signals of the masked subsystem (the internals cannot be probed directly)
-    probes = [("Duty ratios (d_abc)", "C-Script", "Output 1")]
-    probes += [(n, "C-Script", f"Output {k + 2}") for k, n in enumerate(block.outputs)]
-    return header, terminals + _inner_schematic(sub, (500, 250)) + _mask_probes(probes)
 
 
 def _add_control_system(
@@ -733,20 +699,17 @@ OUTPUT_TERMINALS = "".join(
 
 def _write_model(
     path: Path,
-    block: ControlBlock,
-    variables: list[tuple[str, Any]],
+    init: str,
     t_stop: float,
-    T_s: float,
+    T_s: float | str,
     sch: _Schematic,
     size: Point,
     outputs: bool,
 ) -> Path:
-    """Write the model file: settings, workspace variables, and the schematic."""
-    init = (
-        "% Generated from motulator. The parameters of the control system are in\n"
-        f"% the mask of the subsystem '{block.name}'.\n"
-        + "".join(f"{n} = {_fmt(v)};\n" for n, v in variables)
-    )
+    """
+    Write the model file: the settings, the model initialization `init` (the
+    parameters), and the schematic.
+    """
     text = (
         "Plecs {\n"
         f"  Name          {_q(path.stem)}\n"
