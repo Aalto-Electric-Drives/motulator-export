@@ -7,8 +7,10 @@
  *   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based)
  *   motulator/drive/control/_sm_flux_vector.py    FluxTorqueController,
  *                                                 FluxVectorController
- *   motulator/drive/control/_base.py              VectorControlSystem
- *   motulator/drive/control/_common.py            SpeedController
+ *   motulator/drive/control/_base.py              DriveControlSystem,
+ *                                                 VectorControlSystem
+ *   motulator/drive/control/_common.py            FluxTorqueControllerBase,
+ *                                                 SpeedController
  *
  * The machine model parameters correspond to SynchronousMachinePars, i.e., a
  * machine without magnetic saturation. The control loop follows motulator: the
@@ -27,7 +29,8 @@
 typedef struct {
     double u_dc;           /* DC-bus voltage */
     double complex i_s;    /* Stator current */
-    double complex u_s;    /* Stator voltage (previous and ongoing periods) */
+    double complex u_s;    /* Stator voltage (previous and ongoing periods), set by
+                            * the control system for the control laws */
     double complex u_s_zoh; /* Stator voltage (ongoing period) */
     double complex psi_s;  /* Stator flux linkage estimate */
     double complex e_o;    /* Flux estimation error signal */
@@ -81,7 +84,7 @@ typedef struct {
     double x_tau;
     /* Workspace variables */
     double complex i_a;
-    double complex v;
+    double complex u_ff;
 } FluxTorqueController;
 
 typedef struct {

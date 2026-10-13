@@ -261,6 +261,25 @@ static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
     self->tau_L += T_s * d_tau_L;
 }
 
+/* Discretization ----------------------------------------------------------- */
+
+static void hold_equivalent(double T_s, double w_c, double complex *Phi,
+                            double complex *Gamma)
+{
+    /* Half-angle form, requiring a single sine-cosine pair. The sinc function is
+     * computed as numpy.sinc(x/pi). */
+    double x = 0.5 * w_c * T_s;
+    double complex exp_jx = cexp(-I * x);
+    double y = M_PI * ((x != 0.0) ? x / M_PI : 1e-20);
+    *Phi = exp_jx * exp_jx;
+    *Gamma = T_s * (sin(y) / y) * exp_jx;
+}
+
+static double matched_pole(double alpha, double T_s)
+{
+    return -expm1(-alpha * T_s) / T_s;
+}
+
 /* RateLimiter -------------------------------------------------------------- */
 
 static void rate_limiter_init(RateLimiter *self, double rate_limit)

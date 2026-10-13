@@ -114,8 +114,7 @@ static void mdlStart(SimStruct *S)
         SetErrorMessage("T_s must be a scalar.");
         return;
     }
-    double alpha_i = PDIM(2) > 0 ? P(2, 0) : P(1, 0);
-    self = gfl_current_controller(P(0, 0), P(1, 0), alpha_i);
+    self = gfl_current_controller(P(0, 0), P(1, 0), PARAM(2));
     T_s = P(3, 0);
 
     self_init = self;

@@ -194,7 +194,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1115, 365]
+        Location      [0, 0; 1125, 375]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -298,7 +298,7 @@ Plecs {
       Type          Output
       Name          "d_abc"
       Show          on
-      Position      [680, 245]
+      Position      [690, 245]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -427,7 +427,7 @@ Plecs {
       Type          Goto
       Name          "Goto fbk"
       Show          off
-      Position      [845, 90]
+      Position      [855, 100]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -446,7 +446,7 @@ Plecs {
       Type          Goto
       Name          "Goto ref"
       Show          off
-      Position      [845, 205]
+      Position      [855, 215]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -503,7 +503,7 @@ Plecs {
       Type          From
       Name          "From fbk 2"
       Show          off
-      Position      [845, 245]
+      Position      [855, 255]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -522,7 +522,7 @@ Plecs {
       Type          From
       Name          "From ref 2"
       Show          off
-      Position      [845, 285]
+      Position      [855, 295]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -547,12 +547,12 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "InputWidth"
-        Value         "19"
+        Value         "21"
         Show          off
       }
       Parameter {
         Variable      "OutputIndices"
-        Value         "[14]"
+        Value         "[16]"
         Show          off
       }
     }
@@ -1526,17 +1526,17 @@ Plecs {
       Type          Subsystem
       Name          "CurrentVectorController"
       Show          on
-      Position      [720, 135]
+      Position      [730, 145]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -50; 50, 50]
+      Frame         [-50, -60; 50, 60]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "CurrentVectorController (motulator)"
       MaskDescription "Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o and the continuous-time current controller only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as CurrentVectorController. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
-      MaskInit      "% Default of alpha_o (CurrentVectorControllerCfg.__post_init__)\nalpha_o = cfg.alpha_o;\nif isempty(alpha_o)\n  alpha_o = 2*pi*60;\n  if ~isempty(cfg.J)\n    alpha_o = 0.5*alpha_o;\n  end\nend\n% Default of alpha_i (CurrentController.__init__)\nalpha_i = cfg.alpha_i;\nif isempty(alpha_i)\n  alpha_i = cfg.alpha_c;\nend\n"
+      MaskInit      "% Default of alpha_i (CurrentController.__init__)\nalpha_i = cfg.alpha_i;\nif isempty(alpha_i)\n  alpha_i = cfg.alpha_c;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1560,22 +1560,27 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -30]
+        Position      [-50, -40]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -10]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 10]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 30]
+        Position      [-50, 20]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 40]
         Direction     left
       }
       Terminal {
@@ -1589,7 +1594,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1035, 335]
+        Location      [0, 0; 1045, 365]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1598,7 +1603,7 @@ Plecs {
       Type          Input
       Name          "enable"
       Show          on
-      Position      [40, 290]
+      Position      [40, 320]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1636,7 +1641,7 @@ Plecs {
       Type          Input
       Name          "meas"
       Show          on
-      Position      [40, 210]
+      Position      [40, 200]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1655,7 +1660,7 @@ Plecs {
       Type          Input
       Name          "u_c_ab"
       Show          on
-      Position      [40, 250]
+      Position      [40, 240]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1671,10 +1676,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "fbk"
+      Type          Input
+      Name          "u_c_zoh_ab"
       Show          on
-      Position      [985, 210]
+      Position      [40, 280]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1691,9 +1696,9 @@ Plecs {
     }
     Component {
       Type          Output
-      Name          "ref"
+      Name          "fbk"
       Show          on
-      Position      [985, 80]
+      Position      [995, 210]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1709,20 +1714,39 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "ref"
+      Show          on
+      Position      [995, 80]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "7"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          Subsystem
       Name          "SpeedFluxObserver"
       Show          on
-      Position      [275, 210]
+      Position      [285, 210]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -40; 50, 40]
+      Frame         [-50, -50; 50, 50]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedFluxObserver (motulator)"
-      MaskDescription "Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
-      MaskInit      "% Gains for critically damped dynamics (SpeedFluxObserver.__init__)\nif isempty(J)\n  k_w = alpha_o;\n  k_tau = 0;\nelse\n  k_w = 2*alpha_o;\n  k_tau = J*alpha_o^2;\nend\n% Default observer gain of create_speed_flux_observer, and the weight of the\n% measured rotor speed in the FluxObserver\nk_o = sensorless;\nh = 1 - sensorless;\n"
+      MaskDescription "Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
+      MaskInit      "% Default speed estimation poles of create_speed_flux_observer. With J, the\n% double pole at alpha_o/2 keeps the speed gain about the same.\nalpha_o_obs = alpha_o;\nif isempty(alpha_o_obs)\n  if sensorless\n    alpha_o_obs = 2*pi*60;\n  else\n    alpha_o_obs = 2*pi*400;\n  end\n  if ~isempty(J)\n    alpha_o_obs = 0.5*alpha_o_obs;\n  end\nend\n% Gains for critically damped dynamics (SpeedFluxObserver.__init__), the\n% pole matched to the sampling period (matched_pole)\nalpha_o_obs = -expm1(-alpha_o_obs*T_s)/T_s;\nif isempty(J)\n  k_w = alpha_o_obs;\n  k_tau = 0;\nelse\n  k_w = 2*alpha_o_obs;\n  k_tau = J*alpha_o_obs^2;\nend\n% Default observer gain of create_speed_flux_observer, and the weight of the\n% measured rotor speed in the FluxObserver\nk_o = sensorless;\nh = 1 - sensorless;\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1737,9 +1761,9 @@ Plecs {
       }
       Parameter {
         Variable      "alpha_o"
-        Prompt        "alpha_o: Speed estimation pole (rad/s)"
+        Prompt        "alpha_o: Speed estimation poles (rad/s), [] = default"
         Type          FreeText
-        Value         "alpha_o"
+        Value         "cfg.alpha_o"
         Show          off
         Tunable       on
         TabName       ""
@@ -1773,17 +1797,22 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -20]
+        Position      [-50, -30]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 0]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 20]
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 30]
         Direction     left
       }
       Terminal {
@@ -1792,7 +1821,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 710, 235]
+        Location      [0, 0; 720, 245]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1855,10 +1884,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "out"
+      Type          Input
+      Name          "u_s_zoh_ab"
       Show          on
-      Position      [660, 60]
+      Position      [40, 145]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1874,19 +1903,38 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "out"
+      Show          on
+      Position      [670, 65]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          Subsystem
       Name          "FluxObserver"
       Show          on
-      Position      [285, 60]
+      Position      [295, 65]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -30; 50, 30]
+      Frame         [-50, -35; 50, 35]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver). In the sensored mode (h = 1), the speed error signal is computed from the measured rotor speed (CurrentVectorController.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
+      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver). The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In the sensored mode (h = 1), the speed error signal is computed from the measured rotor speed (compute_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -1929,22 +1977,27 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -15]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -5]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 5]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 15]
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 20]
         Direction     left
       }
       Terminal {
@@ -1953,7 +2006,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 320, 200]
+        Location      [0, 0; 330, 240]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -2017,7 +2070,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "w_M"
+      Name          "u_s_zoh_ab"
       Show          on
       Position      [40, 155]
       Direction     right
@@ -2035,10 +2088,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "out"
+      Type          Input
+      Name          "w_M"
       Show          on
-      Position      [270, 60]
+      Position      [40, 195]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2054,14 +2107,33 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "out"
+      Show          on
+      Position      [280, 65]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "6"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [175, 60]
+      Position      [185, 65]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -30; 50, 30]
+      Frame         [-50, -35; 50, 35]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -2069,12 +2141,12 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 4 2 1]"
+        Value         "[1 4 2 2 1]"
         Show          off
       }
       Parameter {
         Variable      "NumOutputs"
-        Value         "[19]"
+        Value         "[21]"
         Show          off
       }
       Parameter {
@@ -2094,7 +2166,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1 1]"
+        Value         "[1 1 1 1 1]"
         Show          off
       }
       Parameter {
@@ -2134,7 +2206,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 19; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nIMMeasurements meas;\nim_measurements_unpack(meas_u, &meas);\ndouble complex u_s_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\ndouble w_M = InputSignal(3, 0);\n/* Speed error from the measured rotor speed in the sensored mode */\ndouble eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\nim_flux_observer_compute_output(&self, u_s_ab, meas.i_c_ab, w_M, eps, h,\n                                &out);\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 21; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nIMMeasurements meas;\nim_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));\ndouble w_M = InputSignal(4, 0);\n/* Speed error from the measured rotor speed in the sensored mode */\ndouble eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps, h,\n                                &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback) */\nout.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -2189,7 +2261,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "w_M"
+      SrcComponent  "u_s_zoh_ab"
       SrcTerminal   1
       Points        [100, 155; 100, 75]
       DstComponent  "C-Script"
@@ -2197,8 +2269,16 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "w_M"
+      SrcTerminal   1
+      Points        [110, 195; 110, 85]
+      DstComponent  "C-Script"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   5
+      SrcTerminal   6
       DstComponent  "out"
       DstTerminal   1
     }
@@ -2208,18 +2288,18 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.eps"
       Show          on
-      Position      [395, 110]
+      Position      [405, 120]
       Direction     right
       Flipped       off
       LabelPosition south
       Parameter {
         Variable      "InputWidth"
-        Value         "19"
+        Value         "21"
         Show          off
       }
       Parameter {
         Variable      "OutputIndices"
-        Value         "[18]"
+        Value         "[20]"
         Show          off
       }
     }
@@ -2227,18 +2307,18 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.tau_M"
       Show          on
-      Position      [395, 160]
+      Position      [405, 170]
       Direction     right
       Flipped       off
       LabelPosition south
       Parameter {
         Variable      "InputWidth"
-        Value         "19"
+        Value         "21"
         Show          off
       }
       Parameter {
         Variable      "OutputIndices"
-        Value         "[9]"
+        Value         "[11]"
         Show          off
       }
     }
@@ -2246,7 +2326,7 @@ Plecs {
       Type          Subsystem
       Name          "SpeedObserver"
       Show          on
-      Position      [560, 110]
+      Position      [570, 120]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2576,7 +2656,7 @@ Plecs {
       Type          From
       Name          "From FluxObserver.enable"
       Show          off
-      Position      [196, 45]
+      Position      [206, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2595,7 +2675,7 @@ Plecs {
       Type          From
       Name          "From SpeedObserver.enable"
       Show          off
-      Position      [471, 100]
+      Position      [481, 110]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2661,29 +2741,37 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "SpeedObserver"
-      SrcTerminal   4
-      Points        [625, 105; 625, 195; 155, 195; 155, 75]
+      SrcComponent  "u_s_zoh_ab"
+      SrcTerminal   1
+      Points        [155, 145; 155, 75]
       DstComponent  "FluxObserver"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "SpeedObserver"
+      SrcTerminal   4
+      Points        [635, 115; 635, 205; 165, 205; 165, 85]
+      DstComponent  "FluxObserver"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "FluxObserver"
-      SrcTerminal   5
-      Points        [355, 60]
+      SrcTerminal   6
+      Points        [365, 65]
       Branch {
         DstComponent  "out"
         DstTerminal   1
       }
       Branch {
-        Points        [355, 110]
+        Points        [365, 120]
         Branch {
           DstComponent  "fbk.eps"
           DstTerminal   1
         }
         Branch {
-          Points        [355, 160]
+          Points        [365, 170]
           DstComponent  "fbk.tau_M"
           DstTerminal   1
         }
@@ -2700,7 +2788,7 @@ Plecs {
       Type          Signal
       SrcComponent  "fbk.tau_M"
       SrcTerminal   2
-      Points        [430, 160; 430, 120]
+      Points        [440, 170; 440, 130]
       DstComponent  "SpeedObserver"
       DstTerminal   3
     }
@@ -2717,7 +2805,7 @@ Plecs {
       Type          From
       Name          "From u_s"
       Show          off
-      Position      [390, 85]
+      Position      [400, 85]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2736,7 +2824,7 @@ Plecs {
       Type          SignalSelector
       Name          "meas.u_dc"
       Show          on
-      Position      [385, 130]
+      Position      [395, 130]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2755,18 +2843,18 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.psi_R"
       Show          on
-      Position      [385, 175]
+      Position      [395, 175]
       Direction     right
       Flipped       off
       LabelPosition south
       Parameter {
         Variable      "InputWidth"
-        Value         "19"
+        Value         "21"
         Show          off
       }
       Parameter {
         Variable      "OutputIndices"
-        Value         "[7 8]"
+        Value         "[9 10]"
         Show          off
       }
     }
@@ -2774,7 +2862,7 @@ Plecs {
       Type          Subsystem
       Name          "CurrentReferenceGenerator"
       Show          on
-      Position      [570, 85]
+      Position      [580, 85]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3196,7 +3284,7 @@ Plecs {
       Type          Subsystem
       Name          "CurrentController"
       Show          on
-      Position      [785, 90]
+      Position      [795, 90]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3364,7 +3452,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 2 19]"
+        Value         "[1 2 21]"
         Show          off
       }
       Parameter {
@@ -3495,7 +3583,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux ref"
       Show          off
-      Position      [905, 80]
+      Position      [915, 80]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3509,7 +3597,7 @@ Plecs {
       Type          Goto
       Name          "Goto u_s"
       Show          off
-      Position      [920, 140]
+      Position      [930, 140]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3528,7 +3616,7 @@ Plecs {
       Type          From
       Name          "From SpeedFluxObserver.enable"
       Show          off
-      Position      [186, 190]
+      Position      [196, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3547,7 +3635,7 @@ Plecs {
       Type          From
       Name          "From CurrentReferenceGenerator.enable"
       Show          off
-      Position      [481, 65]
+      Position      [491, 65]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3566,7 +3654,7 @@ Plecs {
       Type          From
       Name          "From CurrentController.enable"
       Show          off
-      Position      [696, 80]
+      Position      [706, 80]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3585,7 +3673,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [100, 290]
+      Position      [100, 320]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3625,13 +3713,13 @@ Plecs {
       Type          Signal
       SrcComponent  "meas"
       SrcTerminal   1
-      Points        [145, 210]
+      Points        [155, 200]
       Branch {
         DstComponent  "SpeedFluxObserver"
         DstTerminal   2
       }
       Branch {
-        Points        [145, 130]
+        Points        [155, 130]
         DstComponent  "meas.u_dc"
         DstTerminal   1
       }
@@ -3640,24 +3728,32 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_ab"
       SrcTerminal   1
-      Points        [135, 250; 135, 230]
+      Points        [135, 240; 135, 220]
       DstComponent  "SpeedFluxObserver"
       DstTerminal   3
     }
     Connection {
       Type          Signal
+      SrcComponent  "u_c_zoh_ab"
+      SrcTerminal   1
+      Points        [145, 280; 145, 240]
+      DstComponent  "SpeedFluxObserver"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "SpeedFluxObserver"
-      SrcTerminal   4
-      Points        [345, 210]
+      SrcTerminal   5
+      Points        [355, 210]
       Branch {
-        Points        [345, 175]
+        Points        [355, 175]
         DstComponent  "fbk.psi_R"
         DstTerminal   1
       }
       Branch {
-        Points        [655, 210]
+        Points        [665, 210]
         Branch {
-          Points        [655, 100]
+          Points        [665, 100]
           DstComponent  "CurrentController"
           DstTerminal   3
         }
@@ -3678,7 +3774,7 @@ Plecs {
       Type          Signal
       SrcComponent  "fbk.psi_R"
       SrcTerminal   2
-      Points        [440, 175; 440, 105]
+      Points        [450, 175; 450, 105]
       DstComponent  "CurrentReferenceGenerator"
       DstTerminal   5
     }
@@ -3693,7 +3789,7 @@ Plecs {
       Type          Signal
       SrcComponent  "meas.u_dc"
       SrcTerminal   2
-      Points        [430, 130; 430, 95]
+      Points        [440, 130; 440, 95]
       DstComponent  "CurrentReferenceGenerator"
       DstTerminal   4
     }
@@ -3701,13 +3797,13 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentReferenceGenerator"
       SrcTerminal   7
-      Points        [645, 90]
+      Points        [655, 90]
       Branch {
         DstComponent  "CurrentController"
         DstTerminal   2
       }
       Branch {
-        Points        [645, 40; 855, 40; 855, 80]
+        Points        [655, 40; 865, 40; 865, 80]
         DstComponent  "Mux ref"
         DstTerminal   3
       }
@@ -3716,7 +3812,7 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentReferenceGenerator"
       SrcTerminal   6
-      Points        [635, 80; 635, 30; 865, 30; 865, 70]
+      Points        [645, 80; 645, 30; 875, 30; 875, 70]
       DstComponent  "Mux ref"
       DstTerminal   2
     }
@@ -3724,13 +3820,13 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentController"
       SrcTerminal   4
-      Points        [875, 90]
+      Points        [885, 90]
       Branch {
         DstComponent  "Mux ref"
         DstTerminal   4
       }
       Branch {
-        Points        [875, 140]
+        Points        [885, 140]
         DstComponent  "Goto u_s"
         DstTerminal   1
       }
@@ -3755,7 +3851,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.u_s"
       Show          on
-      Position      [840, 170]
+      Position      [850, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3774,7 +3870,7 @@ Plecs {
       Type          CScript
       Name          "modulate"
       Show          on
-      Position      [1025, 130]
+      Position      [1035, 140]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3786,7 +3882,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[19 2]"
+        Value         "[21 2]"
         Show          off
       }
       Parameter {
@@ -3884,7 +3980,7 @@ Plecs {
       Type          CScript
       Name          "Monitored signals"
       Show          on
-      Position      [1025, 250]
+      Position      [1035, 260]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3896,7 +3992,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 19 5 1]"
+        Value         "[1 21 5 1]"
         Show          off
       }
       Parameter {
@@ -4032,7 +4128,7 @@ Plecs {
       Type          From
       Name          "From CurrentVectorController.enable"
       Show          off
-      Position      [631, 105]
+      Position      [641, 105]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4051,7 +4147,7 @@ Plecs {
       Type          From
       Name          "From Monitored signals.enable"
       Show          off
-      Position      [936, 235]
+      Position      [946, 245]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4089,7 +4185,7 @@ Plecs {
       Type          From
       Name          "From Monitored signals.w_M_ref"
       Show          off
-      Position      [936, 265]
+      Position      [946, 275]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4255,7 +4351,7 @@ Plecs {
       Type          Signal
       SrcComponent  "SpeedController"
       SrcTerminal   5
-      Points        [590, 60; 590, 125]
+      Points        [600, 60; 600, 125]
       DstComponent  "CurrentVectorController"
       DstTerminal   2
     }
@@ -4270,6 +4366,14 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "PWM"
+      SrcTerminal   6
+      Points        [590, 225; 590, 185]
+      DstComponent  "CurrentVectorController"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "PWM"
       SrcTerminal   7
       DstComponent  "d_abc"
       DstTerminal   1
@@ -4277,10 +4381,10 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "CurrentVectorController"
-      SrcTerminal   5
-      Points        [790, 125]
+      SrcTerminal   6
+      Points        [800, 135]
       Branch {
-        Points        [790, 90]
+        Points        [800, 100]
         DstComponent  "Goto fbk"
         DstTerminal   1
       }
@@ -4292,10 +4396,10 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "CurrentVectorController"
-      SrcTerminal   6
-      Points        [800, 145; 800, 170]
+      SrcTerminal   7
+      Points        [810, 155; 810, 180]
       Branch {
-        Points        [800, 205]
+        Points        [810, 215]
         DstComponent  "Goto ref"
         DstTerminal   1
       }
@@ -4308,7 +4412,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.u_s"
       SrcTerminal   2
-      Points        [895, 170; 895, 135]
+      Points        [905, 180; 905, 145]
       DstComponent  "modulate"
       DstTerminal   2
     }
@@ -4316,7 +4420,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   3
-      Points        [1105, 125; 1105, 325; 375, 325; 375, 235]
+      Points        [1115, 135; 1115, 335; 375, 335; 375, 235]
       DstComponent  "PWM"
       DstTerminal   3
     }
@@ -4324,7 +4428,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   4
-      Points        [1095, 135; 1095, 315; 385, 315; 385, 255]
+      Points        [1105, 145; 1105, 325; 385, 325; 385, 255]
       DstComponent  "PWM"
       DstTerminal   4
     }
@@ -4339,7 +4443,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref 2"
       SrcTerminal   1
-      Points        [885, 285; 885, 255]
+      Points        [895, 295; 895, 265]
       DstComponent  "Monitored signals"
       DstTerminal   3
     }

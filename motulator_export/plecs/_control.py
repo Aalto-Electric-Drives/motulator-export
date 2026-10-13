@@ -885,12 +885,13 @@ def vhz_control_system(
     The inputs are `enable`, the speed reference `w_M_ref`, and the inputs of the
     measurements. The speed reference is limited by the rate limiter. The V/Hz
     controller has the inputs `enable`, the rate-limited speed reference `w_M`,
-    `meas`, and `u_c_ab`, and the outputs `fbk` and `ref`. The inputs of the
-    monitored signals are `enable`, `fbk`, `ref`, and `w_M_ref` (the rate-limited
-    speed reference).
+    `meas`, `u_c_ab`, and optionally `u_c_zoh_ab`, and the outputs `fbk` and `ref`.
+    The inputs of the monitored signals are `enable`, `fbk`, `ref`, and `w_M_ref`
+    (the rate-limited speed reference).
 
     """
     vc = vhz_ctrl.name
+    zoh = "u_c_zoh_ab" in [p.name for p in vhz_ctrl.inputs]
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals, the references, and the rate-limited speed reference to
     # the monitored signals by tags
@@ -928,6 +929,7 @@ def vhz_control_system(
             ("get_measurement:meas", "PWM:meas"),
             ("get_measurement:meas", f"{vc}:meas"),
             ("PWM:u_c_ab", f"{vc}:u_c_ab"),
+            *([("PWM:u_c_zoh_ab", f"{vc}:u_c_zoh_ab")] if zoh else []),
             ("PWM:d_abc", "d_abc"),
             (f"{vc}:fbk", "Goto fbk"),
             (f"{vc}:fbk", "modulate:fbk"),

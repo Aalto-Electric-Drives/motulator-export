@@ -34,7 +34,6 @@ Currently supported:
 
 """
 
-from dataclasses import fields
 from pathlib import Path
 from typing import Any, cast
 
@@ -42,10 +41,7 @@ import numpy as np
 from motulator.common.model._converter import FrequencyConverter
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
-from motulator.drive.control._im_current_vector import (
-    CurrentVectorController,
-    CurrentVectorControllerCfg,
-)
+from motulator.drive.control._im_current_vector import CurrentVectorController
 from motulator.drive.control._im_flux_vector import ObserverBasedVHzController
 from motulator.drive.model import Drive, InductionMachine
 from motulator.drive.utils._parameters import (
@@ -176,14 +172,6 @@ def export_values(
     """
     cvc = cast(CurrentVectorController, ctrl.vector_ctrl)
     cfg, par = cvc.cfg, cast(InductionMachineInvGammaPars, cvc.reference_gen.par)
-    # alpha_o is resolved in CurrentVectorControllerCfg.__post_init__
-    default = CurrentVectorControllerCfg(
-        **{
-            f.name: getattr(cfg, f.name)
-            for f in fields(cfg)
-            if f.name not in ("alpha_o",) and f.init
-        }
-    ).alpha_o
     return {
         "n_p": par.n_p,
         "R_s": par.R_s,
@@ -194,10 +182,10 @@ def export_values(
         "i_s_max": cfg.i_s_max,
         "alpha_c": cfg.alpha_c,
         "alpha_i": cfg.alpha_i,
-        "alpha_o": None if cfg.alpha_o == default else cfg.alpha_o,
+        "alpha_o": cfg.alpha_o,
         "w_s_nom": cfg.w_s_nom,
         "k_u": cfg.k_u,
-        "k_fw": cfg.k_fw or None,
+        "k_fw": cfg.k_fw,
         "J": cfg.J,
         "sensorless": int(cfg.sensorless),
         "T_s": cfg.T_s,

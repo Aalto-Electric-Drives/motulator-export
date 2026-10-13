@@ -11,7 +11,7 @@ static GFLControllerCfg gfl_controller_cfg(double i_max, double L)
     cfg.i_max = i_max;
     cfg.L = L;
     cfg.alpha_c = 2.0 * M_PI * 400.0;
-    cfg.alpha_i = cfg.alpha_c;
+    cfg.alpha_i = NAN;
     cfg.u_nom = sqrt(2.0 / 3.0) * 400.0;
     cfg.w_nom = 2.0 * M_PI * 50.0;
     cfg.alpha_pll = 2.0 * M_PI * 20.0;
@@ -67,6 +67,7 @@ static void pll_update(PLL *self, double T_s, const GFLFeedbacks *out)
 static ComplexPIController gfl_current_controller(double L, double alpha_c,
                                                   double alpha_i)
 {
+    alpha_i = isnan(alpha_i) ? alpha_c : alpha_i;
     ComplexPIController ctrl;
     double k_t = alpha_c * L;
     double k_i = alpha_c * alpha_i * L;
@@ -79,6 +80,14 @@ static double complex gfl_current_reference(double p_g_ref, double q_g_ref,
                                             double u_g)
 {
     return (p_g_ref - I * q_g_ref) / (1.5 * u_g);
+}
+
+static void gfl_power_references(double complex i_c_ref, double u_g, double *p_g_ref,
+                                 double *q_g_ref)
+{
+    double complex s_g_ref = 1.5 * u_g * conj(i_c_ref);
+    *p_g_ref = creal(s_g_ref);
+    *q_g_ref = cimag(s_g_ref);
 }
 
 /* GFLControlSystem --------------------------------------------------------- */
@@ -106,10 +115,11 @@ static void gfl_control_system_compute_output(GFLControlSystem *self,
 
     /* Current reference, limited to i_max (CurrentLimiter) */
     ref->T_s = self->cfg.T_s;
-    ref->p_g = p_g_ref;
-    ref->q_g = q_g_ref;
     ref->i_c = current_limiter(self->cfg.i_max,
                                gfl_current_reference(p_g_ref, q_g_ref, fbk->u_g));
+    /* Power references corresponding to the limited current, which are also used
+     * for the anti-windup of the DC-bus voltage controller */
+    gfl_power_references(ref->i_c, fbk->u_g, &ref->p_g, &ref->q_g);
 
     /* Voltage reference from the current controller, with the PCC voltage as the
      * feedforward */

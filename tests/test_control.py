@@ -21,9 +21,12 @@ import ctypes
 from collections.abc import Callable, Iterator
 from typing import Any
 
+import motulator.drive.control.im as im_control
+import motulator.drive.control.sm as sm_control
 import numpy as np
 import pytest
 from motulator.drive import model
+from motulator.drive.control._base import VectorControlSystem
 from motulator.grid import model as grid_model
 
 from motulator_export.plecs import (
@@ -47,8 +50,10 @@ from tests.test_simulink import (
     GFL_INPUTS,
     GFM_INPUTS,
     IM_INPUTS,
+    IM_PAR,
     IM_SPEED,
     SM_INPUTS,
+    SM_PAR,
     SM_SPEED,
     VHZ_CASES,
     VHZ_IDS,
@@ -284,6 +289,48 @@ def test_parameter_errors(compiled: Compiled) -> None:
         err = net.start(block_params(net.top, init, VALUES), start)
         assert err is not None and err.endswith(message), err
     net.sfun_terminate()
+
+
+@pytest.mark.parametrize("J", [None, 0.015], ids=["without_J", "with_J"])
+@pytest.mark.parametrize("sensorless", [True, False], ids=["sensorless", "sensored"])
+def test_observer_gains(sensorless: bool, J: float | None) -> None:
+    """The masks should give the observer gains of motulator, with the default speed
+    estimation poles matched to the sampling period."""
+    # Flux-vector control of a synchronous machine
+    sm_par = model.SynchronousMachinePars(**SM_PAR)
+    cfg = sm_control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=sensorless, J=J)
+    fvc = sm_control.FluxVectorController(sm_par, cfg)
+    ctrl = VectorControlSystem(fvc, sm_control.SpeedController(**SM_SPEED))
+    values, _ = sm.export_values(ctrl, SM_SPEED)
+    params = block_params(
+        _sm_control.FVC_BLOCK.netlist(), init_script("fvc", values), VALUES
+    )
+    obs = fvc.observer
+    path = "FluxVectorController/SpeedFluxObserver/"
+    assert params[path + "FluxObserver"][0] == pytest.approx(
+        obs.flux_observer.k_theta, rel=1e-14
+    )
+    k = params[path + "SpeedObserver"][:2]
+    assert k == pytest.approx(
+        [obs.speed_observer.k_w, obs.speed_observer.k_tau], rel=1e-14
+    )
+
+    # Current-vector control of an induction machine
+    im_par = model.InductionMachineInvGammaPars(**IM_PAR)
+    cfg = im_control.CurrentVectorControllerCfg(
+        psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless, J=J
+    )
+    cvc = im_control.CurrentVectorController(im_par, cfg)
+    ctrl = VectorControlSystem(cvc, im_control.SpeedController(**IM_SPEED))
+    values = im.export_values(ctrl, IM_SPEED)
+    params = block_params(
+        _im_control.CVC_BLOCK.netlist(), init_script("cvc", values), VALUES
+    )
+    obs = cvc.observer
+    k = params["CurrentVectorController/SpeedFluxObserver/SpeedObserver"][:2]
+    assert k == pytest.approx(
+        [obs.speed_observer.k_w, obs.speed_observer.k_tau], rel=1e-14
+    )
 
 
 def test_init_script() -> None:

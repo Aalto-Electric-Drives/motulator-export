@@ -8,8 +8,9 @@ with a mask of the arguments of its class (see `_control`):
   containing the blocks of its methods (`get_measurement` and `modulate`), the
   monitored signals, the `PWM`, and the inner controller
 - Grid-following control: CurrentVectorController(cfg), containing the `PLL`, the
-  `CurrentLimiter`, the `CurrentController`, and the block of its `compute_output`
-  computing the current reference from the power references
+  `CurrentLimiter`, the `CurrentController`, and the blocks of its `compute_output`
+  before and after the current limiter: the current reference from the power
+  references and the power references corresponding to the limited current
 - Grid-forming control: ObserverBasedGridFormingController(cfg), containing the
   `Observer`, the `CurrentLimiter`, and the blocks of its `compute_output` before
   and after the current limiter: the current reference (with the state of the
@@ -165,25 +166,43 @@ def _pll() -> CBlock:
 
 
 def _gfl_current_reference() -> CBlock:
-    """
-    References ref.p_g and ref.q_g, and the current reference from the power
-    references before the current limiter (compute_output).
-    """
+    """Current reference from the power references before the current limiter."""
     output = (
-        "OutputSignal(0, 0) = InputSignal(0, 0);\n"
-        "OutputSignal(1, 0) = InputSignal(1, 0);\n"
         "/* Current reference from the power references and the PCC voltage */\n"
         "double complex i_c_ref =\n"
         "    gfl_current_reference(InputSignal(0, 0), InputSignal(1, 0), "
-        "InputSignal(2, 0));\n" + complex_out(2, "i_c_ref")
+        "InputSignal(2, 0));\n" + complex_out(0, "i_c_ref")
     )
     return CBlock(
         "compute_output",
         [Port("p_g_ref", 1), Port("q_g_ref", 1), Port("u_g", 1)],
-        [Port("p_g", 1), Port("q_g", 1), Port("i_c", 2)],
+        [Port("i_c", 2)],
         GFL_SIGNALS.function_code(output),
         ["cfg.T_s"],
         GFL_SIGNALS.sfunction("current_reference"),
+        sample_time="cfg.T_s",
+    )
+
+
+def _gfl_power_reference() -> CBlock:
+    """
+    References ref.p_g and ref.q_g corresponding to the limited current reference
+    ref.i_c, which is passed through (compute_output after the current limiter).
+    """
+    output = (
+        f"double complex i_c_ref = {complex_in(0)};\n"
+        "double p_g_ref, q_g_ref;\n"
+        "gfl_power_references(i_c_ref, InputSignal(1, 0), &p_g_ref, &q_g_ref);\n"
+        "OutputSignal(0, 0) = p_g_ref;\n"
+        "OutputSignal(1, 0) = q_g_ref;\n" + complex_out(2, "i_c_ref")
+    )
+    return CBlock(
+        "power_reference",
+        [Port("i_lim", 2), Port("u_g", 1)],
+        [Port("p_g", 1), Port("q_g", 1), Port("i_c", 2)],
+        GFL_SIGNALS.function_code(output),
+        ["cfg.T_s"],
+        GFL_SIGNALS.sfunction("power_reference"),
         sample_time="cfg.T_s",
     )
 
@@ -215,8 +234,7 @@ def _gfl_current_controller() -> CBlock:
     params = mask_params(mask)
     start = (
         checks(params, ["L", "alpha_c", "T_s"])
-        + "double alpha_i = PDIM(2) > 0 ? P(2, 0) : P(1, 0);\n"
-        "self = gfl_current_controller(P(0, 0), P(1, 0), alpha_i);\n"
+        + "self = gfl_current_controller(P(0, 0), P(1, 0), PARAM(2));\n"
         "T_s = P(3, 0);\n"
     )
     output = (
@@ -253,7 +271,10 @@ def _gfl_current_vector_controller() -> Subsystem:
         "Grid-following current-vector controller (CurrentVectorController) in the "
         "power-control mode. The configuration cfg is a struct with the fields of "
         "CurrentVectorControllerCfg ([] = None, i.e., the default), passed to the "
-        "blocks inside it, as CurrentVectorController.",
+        "blocks inside it, as CurrentVectorController. The blocks compute_output and "
+        "power_reference are its compute_output before and after the current "
+        "limiter: the power references ref.p_g and ref.q_g correspond to the limited "
+        "current reference.",
         [
             Param(
                 "cfg",
@@ -277,6 +298,7 @@ def _gfl_current_vector_controller() -> Subsystem:
             sig.selector("fbk", "u_g"),
             _gfl_current_reference(),
             current_limiter(sig),
+            _gfl_power_reference(),
             _gfl_current_controller(),
             Mux(
                 "Mux ref",
@@ -294,11 +316,13 @@ def _gfl_current_vector_controller() -> Subsystem:
             ("p_g_ref", "compute_output:p_g_ref"),
             ("q_g_ref", "compute_output:q_g_ref"),
             ("fbk.u_g:y", "compute_output:u_g"),
+            ("fbk.u_g:y", "power_reference:u_g"),
             ("compute_output:i_c", "CurrentLimiter:i"),
-            ("CurrentLimiter:i_lim", "CurrentController:i_c_ref"),
-            ("CurrentLimiter:i_lim", "Mux ref:i_c"),
-            ("compute_output:p_g", "Mux ref:p_g"),
-            ("compute_output:q_g", "Mux ref:q_g"),
+            ("CurrentLimiter:i_lim", "power_reference:i_lim"),
+            ("power_reference:i_c", "CurrentController:i_c_ref"),
+            ("power_reference:i_c", "Mux ref:i_c"),
+            ("power_reference:p_g", "Mux ref:p_g"),
+            ("power_reference:q_g", "Mux ref:q_g"),
             ("CurrentController:u_c", "Mux ref:u_c"),
             ("Mux ref:y", "ref"),
         ],
@@ -308,6 +332,7 @@ def _gfl_current_vector_controller() -> Subsystem:
             ["fbk.u_g"],
             ["compute_output"],
             ["CurrentLimiter"],
+            ["power_reference"],
             ["CurrentController"],
             ["Mux ref"],
             ["ref", "fbk"],
@@ -319,15 +344,17 @@ def _gfl_current_vector_controller() -> Subsystem:
             "PLL:out": "fbk.u_g:u+2",
             "meas": "PLL:meas",
             "CurrentLimiter:i": "compute_output:i_c",
-            "CurrentController:i_c_ref": "CurrentLimiter:i_lim",
+            "power_reference:i_lim": "CurrentLimiter:i_lim",
+            "CurrentController:i_c_ref": "power_reference:i_c",
             "Mux ref:u_c": "CurrentController:u_c",
             "ref": "Mux ref:y",
             "fbk": "PLL:out",
         },
         lanes={
-            "Mux ref:p_g": "above:1",
-            "Mux ref:q_g": "above:0",
+            "Mux ref:p_g": "over:CurrentController:2",
+            "Mux ref:q_g": "over:CurrentController:1",
             "Mux ref:i_c": "over:CurrentController:0",
+            "power_reference:u_g": "under:compute_output:0",
         },
         tags=[ENABLE],
         mask=mask,
@@ -515,10 +542,9 @@ def _gfm_voltage_reference() -> CBlock:
 
 
 # Mask initialization of the ObserverBasedGridFormingController:
-# ObserverBasedGridFormingControllerCfg.__post_init__ and
 # ObserverBasedGridFormingController.__init__
 GFM_INIT = (
-    "% Defaults of ObserverBasedGridFormingControllerCfg.__post_init__\n"
+    "% Defaults of R_a and k_v (ObserverBasedGridFormingController.__init__)\n"
     "R_a = cfg.R_a;\n"
     "if isempty(R_a)\n"
     "  R_a = 0.25*cfg.u_nom/cfg.i_max;\n"

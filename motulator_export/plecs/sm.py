@@ -38,7 +38,6 @@ Standalone (enable it in Preferences > General > RPC interface).
 """
 
 from collections.abc import Callable
-from dataclasses import fields
 from pathlib import Path
 from typing import Any, cast
 
@@ -231,15 +230,6 @@ def export_values(
     fvc = cast(FluxVectorController, ctrl.vector_ctrl)
     cfg: FluxVectorControllerCfg = fvc.cfg
 
-    # alpha_o is resolved in FluxVectorControllerCfg.__post_init__
-    default = FluxVectorControllerCfg(
-        **{
-            f.name: getattr(cfg, f.name)
-            for f in fields(cfg)
-            if f.name not in ("alpha_o",) and f.init
-        }
-    )
-    alpha_o = None if cfg.alpha_o == default.alpha_o else cfg.alpha_o
     k_o = None if cfg.k_o is None else _fit_speed_dependent_gain(cfg.k_o, "k_o")
 
     # Machine model of the control system
@@ -259,7 +249,7 @@ def export_values(
         "alpha_tau": cfg.alpha_tau,
         "alpha_psi": cfg.alpha_psi,
         "alpha_i": cfg.alpha_i,
-        "alpha_o": alpha_o,
+        "alpha_o": cfg.alpha_o,
         "k_o": k_o,
         "psi_s_min": cfg.psi_s_min,
         "psi_s_max": cfg.psi_s_max,

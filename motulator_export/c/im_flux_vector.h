@@ -7,14 +7,16 @@
  *                                                 ObserverBasedVHzControllerCfg,
  *                                                 ObserverBasedVHzController
  *   motulator/drive/control/_im_observers.py      create_vhz_observer
- *   motulator/drive/control/_base.py              VHzControlSystem
+ *   motulator/drive/control/_common.py            FluxTorqueControllerBase
+ *   motulator/drive/control/_base.py              DriveControlSystem,
+ *                                                 VHzControlSystem
  *   motulator/common/control/_controllers.py      RateLimiter
  *
  * The flux observer of im_current_vector.h is used without speed estimation, the
  * rotor speed being the rate-limited speed reference. Pure open-loop V/Hz control is
  * the special case L_M = inf (with R_s = R_R = L_sgm = 0 and zero gains), as in
  * motulator. The observer gain k_o is the default of motulator. The PWM uses the MME
- * overmodulation (pwm_mode of ObserverBasedVHzController). As in the other control
+ * overmodulation (default_pwm of ObserverBasedVHzController). As in the other control
  * systems, the output function has no side effects (apart from workspace variables),
  * and all states are updated in the update function.
  */

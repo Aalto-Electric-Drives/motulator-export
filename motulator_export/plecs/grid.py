@@ -69,13 +69,14 @@ from motulator_export.plecs._schematic import Tap, _probe, _Schematic, _scope
 
 
 # %%
-def _check_supported(
-    mdl: GridConverterSystem, ctrl: GridConverterControlSystem
-) -> None:
-    """Raise an error if the grid converter system is not supported."""
+def _check_supported_plant(mdl: GridConverterSystem) -> None:
+    """Raise an error if the system model is not supported."""
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
     f = mdl.ac_filter
+    sensors = (mdl.converter.u_dc_sensor, f.i_c_sensor, f.u_g_sensor)
+    if any(sensor is not None for sensor in sensors):
+        raise NotImplementedError("Sensor models not supported")
     if isinstance(f, LCLFilter):
         if f.R_fc or f.R_fg or f.L_g or f.R_g:
             raise NotImplementedError("Only LCLFilter without resistances and L_g")
@@ -92,7 +93,15 @@ def _check_supported(
         raise NotImplementedError("Converter dead time not supported")
     if len(mdl.delay.data) != 1:
         raise NotImplementedError("Only the computational delay of one sample")
+
+
+def _check_supported(
+    mdl: GridConverterSystem, ctrl: GridConverterControlSystem
+) -> None:
+    """Raise an error if the grid converter system is not supported."""
+    _check_supported_plant(mdl)
     _check_supported_pwm(ctrl.pwm)
+    f = mdl.ac_filter
     inner = ctrl.inner_ctrl
     if not isinstance(
         inner, (CurrentVectorController, ObserverBasedGridFormingController)
@@ -151,7 +160,7 @@ def export_values(ctrl: GridConverterControlSystem) -> dict[str, Any]:
     gfm = cast(ObserverBasedGridFormingController, inner)
     obs = gfm.observer  # The configuration is stored only as the resulting gains
     u_nom, w_nom, i_max = obs.state.u_gp, obs.w_g, gfm.current_limiter.i_max
-    # R_a and k_v are resolved in ObserverBasedGridFormingControllerCfg.__post_init__
+    # R_a and k_v are resolved in ObserverBasedGridFormingController.__init__
     values = {
         "i_max": i_max,
         "L": obs.L,

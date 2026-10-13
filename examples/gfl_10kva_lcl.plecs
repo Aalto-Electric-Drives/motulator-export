@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nconverter.u_dc = 650;\nac_filter.L_fc = 0.003700874424440534;\nac_filter.L_fg = 0.003700874424440534;\nac_filter.C_f = 8.593839157387184e-06;\nac_filter.u_f0_abc = [326.5986323710904 -163.2993161855452 -163.2993161855452];\nac_source.e_g = 326.5986323710904;\nac_source.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Grid-following control (CurrentVectorControllerCfg)\ncfg.i_max = 30.75914498161482;\ncfg.L = 0.003700874424440534;\ncfg.alpha_c = 2*pi*400;\ncfg.alpha_i = 2*pi*400;\ncfg.u_nom = 326.5986323710904;\ncfg.w_nom = 2*pi*50;\ncfg.alpha_pll = 2*pi*20;\ncfg.T_s = 0.0001;\n% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n% compensation, the minimum duty ratio of a switching leg, and the\n% overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nconverter.u_dc = 650;\nac_filter.L_fc = 0.003700874424440534;\nac_filter.L_fg = 0.003700874424440534;\nac_filter.C_f = 8.593839157387184e-06;\nac_filter.u_f0_abc = [326.5986323710904 -163.2993161855452 -163.2993161855452];\nac_source.e_g = 326.5986323710904;\nac_source.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Grid-following control (CurrentVectorControllerCfg)\ncfg.i_max = 30.75914498161482;\ncfg.L = 0.003700874424440534;\ncfg.alpha_c = 2*pi*400;\ncfg.alpha_i = [];\ncfg.u_nom = 326.5986323710904;\ncfg.w_nom = 2*pi*50;\ncfg.alpha_pll = 2*pi*20;\ncfg.T_s = 0.0001;\n% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n% compensation, the minimum duty ratio of a switching leg, and the\n% overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
     Location      [0, 0; 1260, 440]
     ZoomFactor    1
@@ -1094,7 +1094,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "CurrentVectorController (motulator)"
-      MaskDescription "Grid-following current-vector controller (CurrentVectorController) in the power-control mode. The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default), passed to the blocks inside it, as CurrentVectorController."
+      MaskDescription "Grid-following current-vector controller (CurrentVectorController) in the power-control mode. The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default), passed to the blocks inside it, as CurrentVectorController. The blocks compute_output and power_reference are its compute_output before and after the current limiter: the power references ref.p_g and ref.q_g correspond to the limited current reference."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1143,7 +1143,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1075, 355]
+        Location      [0, 0; 1230, 320]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1152,7 +1152,7 @@ Plecs {
       Type          Input
       Name          "enable"
       Show          on
-      Position      [40, 310]
+      Position      [40, 275]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1171,7 +1171,7 @@ Plecs {
       Type          Input
       Name          "p_g_ref"
       Show          on
-      Position      [40, 70]
+      Position      [40, 35]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1190,7 +1190,7 @@ Plecs {
       Type          Input
       Name          "q_g_ref"
       Show          on
-      Position      [40, 115]
+      Position      [40, 80]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1209,7 +1209,7 @@ Plecs {
       Type          Input
       Name          "meas"
       Show          on
-      Position      [40, 230]
+      Position      [40, 195]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1228,7 +1228,7 @@ Plecs {
       Type          Input
       Name          "u_c_ab"
       Show          on
-      Position      [40, 270]
+      Position      [40, 235]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1247,7 +1247,7 @@ Plecs {
       Type          Output
       Name          "fbk"
       Show          on
-      Position      [1025, 230]
+      Position      [1180, 195]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1266,7 +1266,7 @@ Plecs {
       Type          Output
       Name          "ref"
       Show          on
-      Position      [1025, 145]
+      Position      [1180, 115]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1285,7 +1285,7 @@ Plecs {
       Type          Subsystem
       Name          "PLL"
       Show          on
-      Position      [265, 230]
+      Position      [265, 195]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1583,7 +1583,7 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.u_g"
       Show          on
-      Position      [375, 160]
+      Position      [375, 125]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1602,7 +1602,7 @@ Plecs {
       Type          CScript
       Name          "compute_output"
       Show          on
-      Position      [495, 150]
+      Position      [505, 115]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1619,7 +1619,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumOutputs"
-        Value         "[1 1 2]"
+        Value         "[2]"
         Show          off
       }
       Parameter {
@@ -1679,7 +1679,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "OutputSignal(0, 0) = InputSignal(0, 0);\nOutputSignal(1, 0) = InputSignal(1, 0);\n/* Current reference from the power references and the PCC voltage */\ndouble complex i_c_ref =\n    gfl_current_reference(InputSignal(0, 0), InputSignal(1, 0), InputSignal(2, 0));\nOutputSignal(2, 0) = creal(i_c_ref);\nOutputSignal(2, 1) = cimag(i_c_ref);\n"
+        Value         "/* Current reference from the power references and the PCC voltage */\ndouble complex i_c_ref =\n    gfl_current_reference(InputSignal(0, 0), InputSignal(1, 0), InputSignal(2, 0));\nOutputSignal(0, 0) = creal(i_c_ref);\nOutputSignal(0, 1) = cimag(i_c_ref);\n"
         Show          off
       }
       Parameter {
@@ -1712,7 +1712,7 @@ Plecs {
       Type          Subsystem
       Name          "CurrentLimiter"
       Show          on
-      Position      [645, 160]
+      Position      [635, 115]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1916,10 +1916,120 @@ Plecs {
       }
     }
     Component {
+      Type          CScript
+      Name          "power_reference"
+      Show          on
+      Position      [780, 120]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -25; 50, 25]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[2 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[1 1 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "cfg.T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "cfg.T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfl_current_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double complex i_c_ref = complex_from(InputSignal(0, 0), InputSignal(0, 1));\ndouble p_g_ref, q_g_ref;\ngfl_power_references(i_c_ref, InputSignal(1, 0), &p_g_ref, &q_g_ref);\nOutputSignal(0, 0) = p_g_ref;\nOutputSignal(1, 0) = q_g_ref;\nOutputSignal(2, 0) = creal(i_c_ref);\nOutputSignal(2, 1) = cimag(i_c_ref);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
       Type          Subsystem
       Name          "CurrentController"
       Show          on
-      Position      [855, 160]
+      Position      [1010, 130]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2146,7 +2256,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"alpha_c must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\ndouble alpha_i = PDIM(2) > 0 ? P(2, 0) : P(1, 0);\nself = gfl_current_controller(P(0, 0), P(1, 0), alpha_i);\nT_s = P(3, 0);\n\nself_init = self;\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"alpha_c must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nself = gfl_current_controller(P(0, 0), P(1, 0), PARAM(2));\nT_s = P(3, 0);\n\nself_init = self;\n"
         Show          off
       }
       Parameter {
@@ -2217,7 +2327,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux ref"
       Show          off
-      Position      [975, 145]
+      Position      [1130, 115]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2231,7 +2341,7 @@ Plecs {
       Type          From
       Name          "From PLL.enable"
       Show          off
-      Position      [176, 220]
+      Position      [176, 185]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2250,7 +2360,7 @@ Plecs {
       Type          From
       Name          "From CurrentController.enable"
       Show          off
-      Position      [766, 150]
+      Position      [921, 120]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2269,7 +2379,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [100, 310]
+      Position      [100, 275]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2309,7 +2419,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_ab"
       SrcTerminal   1
-      Points        [135, 270; 135, 240]
+      Points        [135, 235; 135, 205]
       DstComponent  "PLL"
       DstTerminal   3
     }
@@ -2317,16 +2427,16 @@ Plecs {
       Type          Signal
       SrcComponent  "PLL"
       SrcTerminal   4
-      Points        [335, 230]
+      Points        [335, 195]
       Branch {
-        Points        [335, 160]
+        Points        [335, 125]
         DstComponent  "fbk.u_g"
         DstTerminal   1
       }
       Branch {
-        Points        [725, 230]
+        Points        [880, 195]
         Branch {
-          Points        [725, 170]
+          Points        [880, 140]
           DstComponent  "CurrentController"
           DstTerminal   3
         }
@@ -2340,7 +2450,7 @@ Plecs {
       Type          Signal
       SrcComponent  "p_g_ref"
       SrcTerminal   1
-      Points        [420, 70; 420, 140]
+      Points        [430, 35; 430, 105]
       DstComponent  "compute_output"
       DstTerminal   1
     }
@@ -2348,7 +2458,7 @@ Plecs {
       Type          Signal
       SrcComponent  "q_g_ref"
       SrcTerminal   1
-      Points        [410, 115; 410, 150]
+      Points        [410, 80; 410, 115]
       DstComponent  "compute_output"
       DstTerminal   2
     }
@@ -2356,13 +2466,21 @@ Plecs {
       Type          Signal
       SrcComponent  "fbk.u_g"
       SrcTerminal   2
-      DstComponent  "compute_output"
-      DstTerminal   3
+      Points        [420, 125]
+      Branch {
+        DstComponent  "compute_output"
+        DstTerminal   3
+      }
+      Branch {
+        Points        [420, 165; 705, 165; 705, 125]
+        DstComponent  "power_reference"
+        DstTerminal   2
+      }
     }
     Connection {
       Type          Signal
       SrcComponent  "compute_output"
-      SrcTerminal   6
+      SrcTerminal   4
       DstComponent  "CurrentLimiter"
       DstTerminal   1
     }
@@ -2370,30 +2488,37 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentLimiter"
       SrcTerminal   2
-      Points        [715, 160]
+      DstComponent  "power_reference"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "power_reference"
+      SrcTerminal   5
+      Points        [870, 130]
       Branch {
         DstComponent  "CurrentController"
         DstTerminal   2
       }
       Branch {
-        Points        [715, 110; 925, 110; 925, 150]
+        Points        [870, 80; 1080, 80; 1080, 120]
         DstComponent  "Mux ref"
         DstTerminal   4
       }
     }
     Connection {
       Type          Signal
-      SrcComponent  "compute_output"
-      SrcTerminal   4
-      Points        [560, 140; 560, 30; 945, 30; 945, 130]
+      SrcComponent  "power_reference"
+      SrcTerminal   3
+      Points        [850, 110; 850, 60; 1100, 60; 1100, 100]
       DstComponent  "Mux ref"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "compute_output"
-      SrcTerminal   5
-      Points        [570, 150; 570, 40; 935, 40; 935, 140]
+      SrcComponent  "power_reference"
+      SrcTerminal   4
+      Points        [860, 120; 860, 70; 1090, 70; 1090, 110]
       DstComponent  "Mux ref"
       DstTerminal   3
     }

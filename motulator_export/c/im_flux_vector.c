@@ -151,7 +151,7 @@ static void im_vhz_control_system_init(IMVHzControlSystem *self,
                                        const IMVHzControllerCfg *cfg, double slew_rate)
 {
     pwm_init(&self->pwm, 1.5);
-    pwm_set_overmodulation(&self->pwm, 1); /* pwm_mode = "MME" */
+    pwm_set_overmodulation(&self->pwm, 1); /* default_pwm: MME */
     im_vhz_ctrl_init(&self->vhz_ctrl, par, cfg);
     rate_limiter_init(&self->rate_limiter, slew_rate);
 }
@@ -165,9 +165,11 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
     IMVHzReferences *ref = &self->ref;
     double T_s = ctrl->T_s;
 
-    /* Feedback signals */
+    /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
+     * voltage of the ongoing sampling period, while the control laws use the voltage
+     * averaged over the previous and ongoing periods. */
     double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
 
     /* Rate-limited speed reference (RateLimiter), stored in the update function */
     w_M_ref = rate_limiter_compute_output(&self->rate_limiter, T_s, w_M_ref);
@@ -175,6 +177,8 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
     /* The rotor speed of the observer is the speed reference */
     im_flux_observer_compute_output(&ctrl->observer, u_c_ab, meas->i_c_ab, w_M_ref, 0.0,
                                     ctrl->h, fbk);
+    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
     /* References */

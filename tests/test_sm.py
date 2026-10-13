@@ -159,10 +159,12 @@ def test_luts(dll: ctypes.CDLL) -> None:
         print(f"  {name or 'tau_M_mtpv'}: max error {err:.3g}")
 
 
-def test_control_system(dll: ctypes.CDLL) -> None:
-    """The control system should give the same outputs as motulator."""
+@pytest.mark.parametrize("J", [None, 0.015], ids=["without_J", "with_J"])
+def test_control_system(dll: ctypes.CDLL, J: float | None) -> None:
+    """The control system should give the same outputs as motulator, also with the
+    default speed estimation poles of the mechanical model (J)."""
     par = model.SynchronousMachinePars(**PAR)
-    cfg = control.FluxVectorControllerCfg(**CFG)
+    cfg = control.FluxVectorControllerCfg(**CFG, J=J)
     ctrl = control.VectorControlSystem(
         control.FluxVectorController(par, cfg), control.SpeedController(**SPEED)
     )
@@ -190,7 +192,6 @@ def test_control_system(dll: ctypes.CDLL) -> None:
     t = np.arange(n) * cfg.T_s
     i_s_ab = (2 + np.sin(2 * pi * 3 * t)) * np.exp(1j * 2 * pi * 20 * t)
     i_s_ab += 0.05 * (rng.standard_normal(n) + 1j * rng.standard_normal(n))
-    w_M_ref = np.where(t > 0.05, 50.0, 0.0)
     ctrl.set_speed_ref(lambda t_: 50.0 if t_ > 0.05 else 0.0)
 
     out = (ctypes.c_double * 8)()
@@ -207,8 +208,8 @@ def test_control_system(dll: ctypes.CDLL) -> None:
         ref = cast(Any, ctrl.compute_output(fbk))
         ctrl.update(ref, fbk)
         py = [*ref.d_abc, fbk.w_M, fbk.tau_M, ref.tau_M, ref.psi_s, fbk.theta_m]
-        # C port
-        dll.step(arr(i_abc), d(540.0), d(w_M_ref[k]), out)
+        # C port, with the speed reference of motulator (sampled at its control time)
+        dll.step(arr(i_abc), d(540.0), d(ref.w_M), out)
         err = np.maximum(err, np.abs(np.array(out) - np.array(py)))
     names = ["d_a", "d_b", "d_c", "w_M", "tau_M", "tau_M_ref", "psi_s_ref", "theta_m"]
     for name, e in zip(names, err, strict=True):

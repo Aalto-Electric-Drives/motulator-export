@@ -97,7 +97,7 @@ typedef struct {
 } GFMController;
 
 /* Initialize from the configuration, resolving the defaults as
- * ObserverBasedGridFormingControllerCfg.__post_init__ */
+ * ObserverBasedGridFormingController.__init__ */
 static void gfm_controller_init(GFMController *self, const GFMControllerCfg *cfg);
 /* The limited active-power reference, the voltage reference, and the current
  * reference before the CurrentLimiter */

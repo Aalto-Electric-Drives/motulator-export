@@ -1056,7 +1056,7 @@ Plecs {
       CodeGenTarget "Generic"
       MaskType      "ObserverBasedGridFormingController (motulator)"
       MaskDescription "Disturbance-observer-based grid-forming controller (ObserverBasedGridFormingController) in the power-control mode, with the transparent current limitation. The configuration cfg is a struct with the fields of ObserverBasedGridFormingControllerCfg ([] = None, i.e., the default). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as ObserverBasedGridFormingController. The blocks compute_output and voltage_reference are its compute_output before and after the current limiter, and compute_output updates the active-power limitation."
-      MaskInit      "% Defaults of ObserverBasedGridFormingControllerCfg.__post_init__\nR_a = cfg.R_a;\nif isempty(R_a)\n  R_a = 0.25*cfg.u_nom/cfg.i_max;\nend\nk_v = cfg.k_v;\nif isempty(k_v)\n  k_v = cfg.alpha_o/cfg.w_nom;\nend\n% Current-control gain (ObserverBasedGridFormingController.__init__)\nk_c = cfg.alpha_c*cfg.L;\n% Other parameters of compute_output\nR = cfg.R;\ni_d_max = cfg.i_d_max;\nalpha_l = cfg.alpha_l;\nu_nom = cfg.u_nom;\nT_s = cfg.T_s;\n"
+      MaskInit      "% Defaults of R_a and k_v (ObserverBasedGridFormingController.__init__)\nR_a = cfg.R_a;\nif isempty(R_a)\n  R_a = 0.25*cfg.u_nom/cfg.i_max;\nend\nk_v = cfg.k_v;\nif isempty(k_v)\n  k_v = cfg.alpha_o/cfg.w_nom;\nend\n% Current-control gain (ObserverBasedGridFormingController.__init__)\nk_c = cfg.alpha_c*cfg.L;\n% Other parameters of compute_output\nR = cfg.R;\ni_d_max = cfg.i_d_max;\nalpha_l = cfg.alpha_l;\nu_nom = cfg.u_nom;\nT_s = cfg.T_s;\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on

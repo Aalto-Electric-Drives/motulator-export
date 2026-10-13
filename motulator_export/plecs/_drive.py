@@ -52,6 +52,8 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
         raise NotImplementedError("Converter not supported")
     if mdl.converter.inp.i_dc is not None:
         raise NotImplementedError("External DC current not supported")
+    if mdl.machine.i_s_sensor is not None or mdl.converter.u_dc_sensor is not None:
+        raise NotImplementedError("Sensor models not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
         raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
     if mdl.pwm.t_d != 0:

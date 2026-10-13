@@ -209,19 +209,20 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     Measurements meas;
     measurements_unpack(meas_u, &meas);
-    double complex u_s_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));
     double complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));
     double w_M = InputSignal(4, 0);
     if (h == 0.0) {
-        flux_observer_compute_output(&self, u_s_ab, u_s_zoh_ab, meas.i_c_ab,
-                                     w_M, 0.0, 0.0, &out);
+        flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,
+                                     0.0, &out);
     } else {
-        /* Position error from the measured rotor angle (position_error) */
+        /* Position error from the measured rotor angle (compute_feedback) */
         double n_p = self.par.n_p;
         double eps = wrap(n_p * meas.theta_M - self.theta_m) / n_p;
-        flux_observer_compute_output(&self, u_s_ab, u_s_zoh_ab, meas.i_c_ab,
-                                     w_M, eps, h, &out);
+        flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps,
+                                     h, &out);
     }
+    /* Voltage for the control laws (DriveControlSystem.get_feedback) */
+    out.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
     double y[FBK_WIDTH];
     observer_outputs_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {

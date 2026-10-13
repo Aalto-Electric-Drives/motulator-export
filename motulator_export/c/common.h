@@ -8,7 +8,8 @@
  *                                            RateLimiter
  *   motulator/common/control/_pwm.py         PWM (MPE and MME overmodulation)
  *   motulator/common/utils/_dead_time.py     dead_time_error (with numpy.sign or tanh)
- *   motulator/drive/control/_common.py       SpeedController, SpeedObserver
+ *   motulator/drive/control/_common.py       SpeedController, SpeedObserver,
+ *                                            hold_equivalent, matched_pole
  *
  * Complex space vectors use peak-value scaling, as in motulator.
  */
@@ -110,6 +111,20 @@ static void speed_observer_init(SpeedObserver *self, double k_w, double k_tau,
                                 double J);
 static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
                                   double tau_M);
+
+/* Hold-equivalent discretization of a vector integrator in rotating coordinates
+ * (hold_equivalent): the coefficients discretize d(psi)/dt = u + v - 1j*w_c*psi,
+ * where psi is in coordinates rotating at w_c, u is constant in stator coordinates,
+ * and v is constant in the rotating coordinates over the sampling period. Then,
+ * psi(k+1) = Phi*(psi(k) + T_s*u(k)) + Gamma*v(k), with Phi = exp(-1j*w_c*T_s) and
+ * Gamma = (1 - Phi)/(1j*w_c). */
+static void hold_equivalent(double T_s, double w_c, double complex *Phi,
+                            double complex *Gamma);
+
+/* Pole for the gain formulas of estimators updated by the forward Euler method
+ * (matched_pole): (1 - exp(-alpha*T_s))/T_s, placing the discrete-time poles at
+ * exp(-alpha*T_s) */
+static double matched_pole(double alpha, double T_s);
 
 /* Rate limiter (RateLimiter), the falling rate limit being the negative rising one */
 typedef struct {

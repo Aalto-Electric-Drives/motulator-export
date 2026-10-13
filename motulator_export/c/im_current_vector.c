@@ -47,10 +47,11 @@ static void im_flux_observer_init(IMFluxObserver *self,
     self->psi_s = 0.0;
     self->theta_c = 0.0;
     self->T_s_old = 0.0;
-    self->old_i_s = 0.0;
+    self->psi_R_pred = 0.0;
 }
 
-/* Default observer gain of create_speed_flux_observer */
+/* Default observer gain of create_speed_flux_observer (default_sensorless_k_o in the
+ * sensorless mode) */
 static double complex im_observer_gain(const IMFluxObserver *self, double w_m)
 {
     double alpha = im_alpha(&self->par);
@@ -76,16 +77,19 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
     out->theta_c = self->theta_c;
     out->h = h;
 
-    /* Current and voltage vectors in estimated rotor flux coordinates */
+    /* Current and voltage vectors in synchronous coordinates. The voltage averaged
+     * over the previous and ongoing sampling periods is set by the control system
+     * (DriveControlSystem.get_feedback). */
     out->i_s = cexp(-I * out->theta_c) * i_s_ab;
-    out->u_s = cexp(-I * out->theta_c) * u_s_ab;
+    out->u_s = 0.0;
+    out->u_s_zoh = cexp(-I * out->theta_c) * u_s_ab;
 
     /* Mechanical and electrical angular speeds of the rotor */
     out->w_M = w_M;
     out->w_m = par->n_p * w_M;
 
     /* Rotor flux estimate */
-    out->psi_R = out->psi_s - par->L_sgm * self->old_i_s;
+    out->psi_R = out->psi_s - par->L_sgm * out->i_s;
 
     /* Slip angular frequency */
     double complex prod = out->psi_s * conj(out->psi_R);
@@ -94,13 +98,10 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
     /* Angular speed of the coordinate system equals synchronous angular frequency */
     out->w_c = out->w_s = out->w_m + out->w_r;
 
-    /* Estimation error */
-    double complex d_i_s =
-        (self->T_s_old > 0.0) ? (out->i_s - self->old_i_s) / self->T_s_old : 0.0;
-    double R_sgm = par->R_s + par->R_R;
-    out->e_o = par->L_sgm * d_i_s - out->u_s +
-               (R_sgm + I * out->w_c * par->L_sgm) * out->i_s -
-               (im_alpha(par) - I * out->w_m) * out->psi_R;
+    /* Estimation error, i.e., the difference between the rotor flux predictions of
+     * the current model and the voltage model */
+    out->e_o = (self->T_s_old > 0.0) ? (self->psi_R_pred - out->psi_R) / self->T_s_old
+                                     : 0.0;
 
     /* Torque estimate */
     out->tau_M =
@@ -125,25 +126,36 @@ static void im_flux_observer_update(IMFluxObserver *self, double T_s,
         (cabs(out->psi_R) > 0.0) ? out->psi_R / conj(out->psi_R) : 0.0;
     double complex k_o2 = (1.0 - out->h) * k_o1 * proj;
 
-    /* Update the states */
+    /* Correct the flux estimate at the sampling instant. The estimation error has
+     * accumulated over the previous sampling period, whose length scales it. */
     double complex v_err = k_o1 * out->e_o + k_o2 * conj(out->e_o);
-    double complex d_psi_s =
-        out->u_s - par->R_s * out->i_s - I * out->w_c * out->psi_s + v_err;
-    self->psi_s += T_s * d_psi_s;
+    double complex psi_s = out->psi_s + self->T_s_old * v_err;
+    double complex psi_R = psi_s - par->L_sgm * out->i_s;
+
+    /* Predict the voltage model and the current model to the next sampling instant.
+     * The stator voltage is constant in stator coordinates, while the other terms
+     * are constant in the observer coordinates. */
+    double complex Phi, Gamma;
+    hold_equivalent(T_s, out->w_c, &Phi, &Gamma);
+    self->psi_s = Phi * (psi_s + T_s * out->u_s_zoh) - Gamma * par->R_s * out->i_s;
+    hold_equivalent(T_s, out->w_c - out->w_m, &Phi, &Gamma);
+    self->psi_R_pred =
+        Phi * psi_R + Gamma * (par->R_R * out->i_s - im_alpha(par) * psi_R);
     self->theta_c = wrap(self->theta_c + T_s * out->w_c);
 
-    /* Sampling period and current for the next sampling period */
+    /* Sampling period for the next sampling period */
     self->T_s_old = T_s;
-    self->old_i_s = out->i_s;
 }
 
 /* IMSpeedFluxObserver ------------------------------------------------------ */
 
 static void im_speed_flux_observer_init(IMSpeedFluxObserver *self,
                                         InductionMachineInvGammaPars par,
-                                        double alpha_o, int sensorless, double J)
+                                        double alpha_o, double T_s, int sensorless,
+                                        double J)
 {
     /* Observer gains for critically damped dynamics */
+    alpha_o = matched_pole(alpha_o, T_s);
     double k_w, k_tau;
     if (J <= 0.0) {
         k_w = alpha_o;
@@ -187,7 +199,7 @@ static void im_reference_gen_init(IMCurrentReferenceGenerator *self,
     self->i_s_max = i_s_max;
     self->k_u = k_u;
     self->i_sd_nom = psi_s_nom / (par.L_M + par.L_sgm);
-    if (isnan(k_fw) || k_fw == 0.0) {
+    if (isnan(k_fw)) {
         k_fw = 2.0 * par.R_R / (w_s_nom * par.L_sgm * par.L_sgm);
     }
     self->k_fw = k_fw;
@@ -245,14 +257,15 @@ static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
                                         InductionMachineInvGammaPars par,
                                         const IMCurrentVectorControllerCfg *cfg)
 {
-    /* Resolve the defaults, as in CurrentVectorControllerCfg.__post_init__ and
-     * CurrentVectorController.__init__ */
+    /* Resolve the defaults, as in CurrentVectorController.__init__ and
+     * create_speed_flux_observer */
     double alpha_i = isnan(cfg->alpha_i) ? cfg->alpha_c : cfg->alpha_i;
     double J = isnan(cfg->J) ? 0.0 : cfg->J; /* Zero means None */
     double alpha_o = cfg->alpha_o;
     if (isnan(alpha_o)) {
-        double alpha = 2.0 * M_PI * 60.0;
-        alpha_o = (J > 0.0) ? 0.5 * alpha : alpha;
+        /* With J, the double pole at alpha_o/2 keeps the speed gain about the same */
+        alpha_o = cfg->sensorless ? 2.0 * M_PI * 60.0 : 2.0 * M_PI * 400.0;
+        alpha_o = (J > 0.0) ? 0.5 * alpha_o : alpha_o;
     }
 
     self->T_s = cfg->T_s;
@@ -260,7 +273,8 @@ static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
     im_reference_gen_init(&self->reference_gen, par, cfg->psi_s_nom, cfg->i_s_max,
                           cfg->w_s_nom, cfg->k_u, cfg->k_fw);
     self->current_ctrl = im_current_controller(&par, cfg->alpha_c, alpha_i);
-    im_speed_flux_observer_init(&self->observer, par, alpha_o, cfg->sensorless, J);
+    im_speed_flux_observer_init(&self->observer, par, alpha_o, cfg->T_s,
+                                cfg->sensorless, J);
 }
 
 static void im_current_vector_ctrl_compute_output(IMCurrentVectorController *self,
@@ -306,19 +320,23 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
     IMObserverOutputs *fbk = &self->fbk;
     IMReferences *ref = &self->ref;
 
-    /* Feedback signals */
+    /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
+     * voltage of the ongoing sampling period, while the control laws use the voltage
+     * averaged over the previous and ongoing periods. */
     double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
     const IMSpeedFluxObserver *observer = &self->vector_ctrl.observer;
     if (self->vector_ctrl.sensorless) {
         im_speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, 0.0,
                                               0.0, fbk);
     } else {
-        /* Speed error from the measured rotor speed */
+        /* Speed error from the measured rotor speed (compute_feedback) */
         double eps = meas->w_M - observer->speed_observer.w_M;
         im_speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, eps,
                                               1.0, fbk);
     }
+    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
     /* Speed controller and vector controller */
@@ -366,6 +384,7 @@ static void im_observer_outputs_pack(const IMObserverOutputs *fbk, double y[FBK_
 {
     SET_COMPLEX(y, FBK_i_s, fbk->i_s);
     SET_COMPLEX(y, FBK_u_s, fbk->u_s);
+    SET_COMPLEX(y, FBK_u_s_zoh, fbk->u_s_zoh);
     SET_COMPLEX(y, FBK_psi_s, fbk->psi_s);
     SET_COMPLEX(y, FBK_psi_R, fbk->psi_R);
     y[FBK_tau_M] = fbk->tau_M;
@@ -386,6 +405,7 @@ static void im_observer_outputs_unpack(const double u[FBK_WIDTH],
     fbk->u_dc = 0.0;
     fbk->i_s = COMPLEX_AT(u, FBK_i_s);
     fbk->u_s = COMPLEX_AT(u, FBK_u_s);
+    fbk->u_s_zoh = COMPLEX_AT(u, FBK_u_s_zoh);
     fbk->psi_s = COMPLEX_AT(u, FBK_psi_s);
     fbk->psi_R = COMPLEX_AT(u, FBK_psi_R);
     fbk->tau_M = u[FBK_tau_M];
