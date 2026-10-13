@@ -37,19 +37,14 @@
 #define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)
 
 static GFMController self;
-static double T_s; /* Sampling period */
-static GFMFeedbacks fbk;
-
-/* Initial state, restored while the block is disabled */
-static GFMController self_init;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 1, 2, 12};
-static const int FEEDTHROUGH[] = {1, 1, 1, 0, 1};
+static const int INPUT_WIDTHS[] = {1, 1, 14};
+static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {1, 1, 2};
-#define NUM_INPUTS 5
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 3
-#define NUM_PARAMS 7
+#define NUM_PARAMS 3
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -85,17 +80,12 @@ static void mdlInitializeSizes(SimStruct *S)
         }
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
-    if (ParamDim(6, 0) * ParamDim(6, 1) != 1
-        || !(ParamRealData(6, 0) > 0.0)) {
-        SetErrorMessage("The sampling period must be a positive scalar.");
-        return;
-    }
 #endif
 }
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, ParamRealData(6, 0));
+    ssSetSampleTime(S, 0, INHERITED_SAMPLE_TIME);
     ssSetOffsetTime(S, 0, 0.0);
 }
 
@@ -114,75 +104,27 @@ static void mdlStart(SimStruct *S)
         SetErrorMessage("k_c must be a scalar.");
         return;
     }
-    if (PDIM(4) != 1) {
-        SetErrorMessage("alpha_l must be a scalar.");
-        return;
-    }
-    if (PDIM(5) != 1) {
-        SetErrorMessage("u_nom must be a scalar.");
-        return;
-    }
-    if (PDIM(6) != 1) {
-        SetErrorMessage("T_s must be a scalar.");
-        return;
-    }
     self.R_a = P(0, 0);
     self.k_v = P(1, 0);
     self.k_c = P(2, 0);
-    self.i_d_max = PARAM(3);
-    self.alpha_l = P(4, 0);
-    /* Initial maximum active power (inf without the power limitation) */
-    self.p_max = isnan(self.i_d_max) ? INFINITY : 1.5 * P(5, 0) * self.i_d_max;
-    T_s = P(6, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(1, k) = 0.0;
-        }
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(2, k) = 0.0;
-        }
-        return;
-    }
-
     double fbk_u[FBK_WIDTH];
     for (int k = 0; k < FBK_WIDTH; k++) {
-        fbk_u[k] = InputSignal(4, k);
+        fbk_u[k] = InputSignal(2, k);
     }
+    GFMFeedbacks fbk;
     gfm_feedbacks_unpack(fbk_u, &fbk);
     GFMReferences ref = {0};
-    gfm_current_reference(&self, InputSignal(1, 0), InputSignal(2, 0), &fbk,
+    gfm_current_reference(&self, InputSignal(0, 0), InputSignal(1, 0), &fbk,
                           &ref);
     OutputSignal(0, 0) = ref.p_g;
     OutputSignal(1, 0) = ref.v_c;
     OutputSignal(2, 0) = creal(ref.i_c);
     OutputSignal(2, 1) = cimag(ref.i_c);
-}
-
-#define MDL_UPDATE
-static void mdlUpdate(SimStruct *S, int_T tid)
-{
-    UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
-    /* Active-power limitation with the voltage reference ref.u_c */
-    GFMReferences ref = {0};
-    ref.u_c = complex_from(InputSignal(3, 0), InputSignal(3, 1));
-    gfm_power_limit_update(&self, T_s, &ref, &fbk);
 }
 
 static void mdlTerminate(SimStruct *S)

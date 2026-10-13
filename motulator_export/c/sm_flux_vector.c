@@ -360,6 +360,7 @@ static void vector_control_system_init(VectorControlSystem *self,
                                        PIController speed_ctrl)
 {
     pwm_init(&self->pwm, 1.5);
+    self->k_comp = 1.5; /* k_comp of FluxVectorController */
     flux_vector_ctrl_init(&self->vector_ctrl, par, cfg);
     self->speed_ctrl = speed_ctrl;
     self->speed_ctrl.u_i = 0.0;
@@ -398,8 +399,10 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
     double tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
     flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
 
-    /* Duty ratios for the PWM */
+    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
+     * k_comp*T_s*w_c */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
+    u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
                                      fbk->w_c, meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;

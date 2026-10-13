@@ -151,7 +151,8 @@ static void im_vhz_control_system_init(IMVHzControlSystem *self,
                                        const IMVHzControllerCfg *cfg, double slew_rate)
 {
     pwm_init(&self->pwm, 1.5);
-    pwm_set_overmodulation(&self->pwm, 1); /* default_pwm: MME */
+    pwm_set_overmodulation(&self->pwm, 1); /* Default of VHzControlSystem: MME */
+    self->k_comp = 1.5; /* k_comp of ObserverBasedVHzController */
     im_vhz_ctrl_init(&self->vhz_ctrl, par, cfg);
     rate_limiter_init(&self->rate_limiter, slew_rate);
 }
@@ -189,8 +190,10 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
     ref->u_s = im_flux_torque_ctrl_compute_output(&ctrl->flux_torque_ctrl, ref->psi_s,
                                                   ref->tau_M, fbk);
 
-    /* Duty ratios for the PWM */
+    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
+     * k_comp*T_s*w_c */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
+    u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
     ref->u_c_ab = pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
                                      meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;

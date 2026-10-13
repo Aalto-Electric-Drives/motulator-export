@@ -128,7 +128,7 @@ def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
     if type(ctrl).modulate is not VHzControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl.pwm, d_err=True)
+    _check_supported_pwm(ctrl.pwm, ctrl.k_comp, d_err=True)
 
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:

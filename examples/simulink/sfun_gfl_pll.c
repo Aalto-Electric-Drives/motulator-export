@@ -141,8 +141,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     GridMeasurements meas;
     grid_measurements_unpack(meas_u, &meas);
-    pll_compute_output(&self, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.i_c_ab,
-                       meas.u_g_ab, &out);
+    pll_compute_output(&self, meas.i_c_ab, meas.u_g_ab, &out);
+    /* Voltage for the control laws (GridConverterControlSystem.get_feedback) */
+    out.u_c = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
     double y[FBK_WIDTH];
     gfl_feedbacks_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {

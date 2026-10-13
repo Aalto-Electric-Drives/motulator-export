@@ -795,7 +795,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5);\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\nT_s = P(0, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5); /* k_pred */\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\nT_s = P(0, 0);\n"
         Show          off
       }
       Parameter {
@@ -905,7 +905,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5);\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\n\nself_init = self;\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5); /* k_pred */\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\n\nself_init = self;\n"
         Show          off
       }
       Parameter {
@@ -1294,7 +1294,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "PLL (motulator)"
-      MaskDescription "Phase-locked loop with the filtered PCC voltage magnitude (PLL), giving the feedback signals fbk in its coordinates from the measurements and the realized converter voltage."
+      MaskDescription "Phase-locked loop with the filtered PCC voltage magnitude (PLL), giving the feedback signals fbk in its coordinates from the measurements. The output fbk.u_c is the realized converter voltage u_c_ab averaged over the previous and ongoing periods (GridConverterControlSystem.get_feedback)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1517,7 +1517,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 13; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nGridMeasurements meas;\ngrid_measurements_unpack(meas_u, &meas);\npll_compute_output(&self, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.i_c_ab,\n                   meas.u_g_ab, &out);\ndouble y[FBK_WIDTH];\ngfl_feedbacks_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 13; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nGridMeasurements meas;\ngrid_measurements_unpack(meas_u, &meas);\npll_compute_output(&self, meas.i_c_ab, meas.u_g_ab, &out);\n/* Voltage for the control laws (GridConverterControlSystem.get_feedback) */\nout.u_c = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));\ndouble y[FBK_WIDTH];\ngfl_feedbacks_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -2711,17 +2711,17 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfl_current_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfl_current_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic double T_s; /* Sampling period */\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         ""
+        Value         "T_s = P(0, 0);\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nGFLFeedbacks fbk;\ngfl_feedbacks_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
+        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nGFLFeedbacks fbk;\ngfl_feedbacks_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates, its angle advanced by\n * k_comp*T_s*w_c (k_comp = 1.5 of the controller) */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nu_c_ref_ab *= cexp(I * 1.5 * T_s * fbk.w_c);\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
         Show          off
       }
       Parameter {

@@ -134,6 +134,7 @@ typedef struct {
 
 typedef struct {
     PWM pwm;
+    double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     IMCurrentVectorController vector_ctrl;
     PIController speed_ctrl;
     /* Workspace variables passed from the output to the update function */

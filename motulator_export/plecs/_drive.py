@@ -79,7 +79,7 @@ def _check_supported_speed_control(
         raise NotImplementedError("Speed-control mode with SpeedController required")
     if type(ctrl).modulate is not VectorControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl.pwm, d_err=dead_time)
+    _check_supported_pwm(ctrl.pwm, ctrl.k_comp, d_err=dead_time)
 
 
 def speed_ctrl_values(

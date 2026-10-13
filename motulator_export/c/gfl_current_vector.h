@@ -45,7 +45,7 @@ typedef struct {
 /* Feedback signals (PLLOutputs) */
 typedef struct {
     double complex i_c;      /* Converter current in controller coordinates */
-    double complex u_c;      /* Realized converter voltage */
+    double complex u_c;      /* Converter voltage (set by the control system) */
     double u_g;              /* Filtered PCC voltage magnitude */
     double complex u_g_meas; /* Measured PCC voltage */
     double theta_c;          /* Angle of the coordinate system */
@@ -75,11 +75,10 @@ typedef struct {
 } PLL;
 
 static void pll_init(PLL *self, double u_nom, double w_nom, double alpha_pll);
-/* Feedback signals from the realized converter voltage, the converter current, and
- * the PCC voltage in stationary coordinates (the field u_dc is not set) */
-static void pll_compute_output(const PLL *self, double complex u_c_ab,
-                               double complex i_c_ab, double complex u_g_ab,
-                               GFLFeedbacks *out);
+/* Feedback signals from the converter current and the PCC voltage in stationary
+ * coordinates (the fields u_c and u_dc are not set) */
+static void pll_compute_output(const PLL *self, double complex i_c_ab,
+                               double complex u_g_ab, GFLFeedbacks *out);
 static void pll_update(PLL *self, double T_s, const GFLFeedbacks *out);
 
 /* Current controller (CurrentController), a 2DOF PI controller with the gains from
@@ -104,6 +103,7 @@ typedef struct {
     ComplexPIController current_ctrl;
     PLL pll;
     PWM pwm;
+    double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     GFLFeedbacks fbk;
     GFLReferences ref;
 } GFLControlSystem;

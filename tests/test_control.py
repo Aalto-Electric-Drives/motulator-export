@@ -27,7 +27,9 @@ import numpy as np
 import pytest
 from motulator.drive import model
 from motulator.drive.control._base import VectorControlSystem
+from motulator.grid import control as grid_control
 from motulator.grid import model as grid_model
+from motulator.grid.control._gfm_observer import Observer
 
 from motulator_export.plecs import (
     _grid_control,
@@ -47,6 +49,7 @@ from tests.matlab import block_params
 from tests.monolithic import MonolithicBlock, sfunction_params
 from tests.netlist import Netlist
 from tests.test_simulink import (
+    BASE,
     GFL_INPUTS,
     GFM_INPUTS,
     IM_INPUTS,
@@ -341,3 +344,33 @@ def test_init_script() -> None:
     assert "cfg.R_a = " in init
     assert "cfg.i_d_max = " in init
     assert np.isfinite(values["i_d_max"])
+
+
+@pytest.mark.parametrize("k_v", [None, 0.7], ids=["default_k_v", "k_v"])
+@pytest.mark.parametrize(
+    "alpha_o", [2 * np.pi * 50, 2 * np.pi * 37.5, 123.456, np.pi * 1e3 / 3, 1540.35]
+)
+def test_observer_bandwidth(alpha_o: float, k_v: float | None) -> None:
+    """The observer bandwidth of grid-forming control, which motulator stores only as
+    the observer gain, should be identified such that the mask of the observer gives
+    the same gain, keeping the default k_v."""
+    cfg = grid_control.ObserverBasedGridFormingControllerCfg(
+        i_max=1.3 * BASE.i,
+        L=0.35 * BASE.L,
+        R=0.05 * BASE.Z,
+        alpha_o=alpha_o,
+        k_v=k_v,
+        u_nom=BASE.u,
+        w_nom=BASE.w,
+    )
+    gfm = grid_control.ObserverBasedGridFormingController(cfg)
+    values = grid.export_values(grid_control.GridConverterControlSystem(gfm))
+    assert values["k_v"] == k_v
+    if k_v is None:
+        assert values["alpha_o"] == alpha_o
+    params = block_params(
+        _grid_control.GFM_BLOCK.netlist(), init_script("gfm", values), VALUES
+    )
+    path = "ObserverBasedGridFormingController/Observer"
+    u_nom, w_nom, L, alpha, T_s, R = params[path]
+    assert Observer(u_nom, w_nom, L, alpha, T_s, R).k_o == gfm.observer.k_o

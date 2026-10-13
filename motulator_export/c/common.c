@@ -220,6 +220,34 @@ static double complex current_limiter(double i_max, double complex i)
     return i;
 }
 
+/* PowerReferenceLimiter ---------------------------------------------------- */
+
+static void power_reference_limiter_init(PowerReferenceLimiter *self, double i_d_max,
+                                         double alpha_l, double u_nom)
+{
+    self->i_d_max = i_d_max;
+    self->alpha_l = alpha_l;
+    self->p_max = 1.5 * u_nom * i_d_max;
+}
+
+static double power_reference_limiter_compute_output(const PowerReferenceLimiter *self,
+                                                     double p_g_ref)
+{
+    return copysign(fmin(fabs(p_g_ref), self->p_max), p_g_ref);
+}
+
+static void power_reference_limiter_update(PowerReferenceLimiter *self, double T_s,
+                                           double complex u_c, double complex i_c,
+                                           double complex i_cn)
+{
+    double abs_u_c = fmax(cabs(u_c), 1e-6);
+    double i_q = cimag(u_c * conj(i_c)) / abs_u_c;
+    double i_d_max = fmax(self->i_d_max - cabs(i_cn), 0.0);
+    double i_d_lim_sqr = fmax(i_d_max * i_d_max - i_q * i_q, 0.0);
+    double p_max = 1.5 * abs_u_c * sqrt(i_d_lim_sqr);
+    self->p_max += T_s * self->alpha_l * (p_max - self->p_max);
+}
+
 /* SpeedController ---------------------------------------------------------- */
 
 static PIController speed_controller(double J, double alpha_s, double alpha_i,
@@ -327,9 +355,9 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
 
 /* PWM ---------------------------------------------------------------------- */
 
-static void pwm_init(PWM *self, double k_comp)
+static void pwm_init(PWM *self, double k_pred)
 {
-    self->k_comp = k_comp;
+    self->k_pred = k_pred;
     self->mme = 0;
     self->t_d = 0.0;
     self->T_s = 0.0;
@@ -442,21 +470,16 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double w, double complex i_c_ab,
                                          double d_abc[3])
 {
-    /* Advance the angle due to the computational and ZOH (PWM) delays */
-    double theta_comp = self->k_comp * T_s * w;
-    u_c_ref_ab = cexp(I * theta_comp) * u_c_ref_ab;
-
     /* Duty ratios */
     pwm_duty_ratios(u_c_ref_ab, u_dc, self->mme, d_abc);
     double d_ref[3] = {d_abc[0], d_abc[1], d_abc[2]};
 
-    /* Compensate for the duty-ratio error using the predicted currents (the prediction
-     * factor k_pred of motulator equals k_comp, both being 1.5) */
+    /* Compensate for the duty-ratio error using the predicted currents */
     int compensate = self->t_d > 0.0 && self->feedforward;
     double i_c_abc[3];
     if (compensate) {
         double d_err[3];
-        complex2abc(cexp(I * theta_comp) * i_c_ab, i_c_abc);
+        complex2abc(cexp(I * self->k_pred * T_s * w) * i_c_ab, i_c_abc);
         dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, self->i_0,
                         d_err);
         for (int k = 0; k < 3; k++) {

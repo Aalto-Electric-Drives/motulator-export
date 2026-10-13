@@ -44,10 +44,10 @@ static GFMFeedbacks out;
 static GFMObserver self_init;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 3, 2};
-static const int FEEDTHROUGH[] = {1, 1, 1};
-static const int OUTPUT_WIDTHS[] = {12};
-#define NUM_INPUTS 3
+static const int INPUT_WIDTHS[] = {1, 3, 2, 2};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int OUTPUT_WIDTHS[] = {14};
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 6
 
@@ -85,8 +85,8 @@ static void mdlInitializeSizes(SimStruct *S)
         }
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
-    if (ParamDim(5, 0) * ParamDim(5, 1) != 1
-        || !(ParamRealData(5, 0) > 0.0)) {
+    if (ParamDim(4, 0) * ParamDim(4, 1) != 1
+        || !(ParamRealData(4, 0) > 0.0)) {
         SetErrorMessage("The sampling period must be a positive scalar.");
         return;
     }
@@ -95,7 +95,7 @@ static void mdlInitializeSizes(SimStruct *S)
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, ParamRealData(5, 0));
+    ssSetSampleTime(S, 0, ParamRealData(4, 0));
     ssSetOffsetTime(S, 0, 0.0);
 }
 
@@ -111,23 +111,24 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(2) != 1) {
-        SetErrorMessage("alpha_o must be a scalar.");
-        return;
-    }
-    if (PDIM(3) != 1) {
         SetErrorMessage("L must be a scalar.");
         return;
     }
-    if (PDIM(4) != 1) {
-        SetErrorMessage("R must be a scalar.");
+    if (PDIM(3) != 1) {
+        SetErrorMessage("alpha_o must be a scalar.");
         return;
     }
-    if (PDIM(5) != 1) {
+    if (PDIM(4) != 1) {
         SetErrorMessage("T_s must be a scalar.");
         return;
     }
-    gfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0));
-    T_s = P(5, 0);
+    if (PDIM(5) != 1) {
+        SetErrorMessage("R must be a scalar.");
+        return;
+    }
+    gfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0),
+                      P(5, 0));
+    T_s = P(4, 0);
 
     self_init = self;
 }
@@ -137,7 +138,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     UNUSED_ARG(tid);
     /* Disabled: the algorithm is not run */
     if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 12; k++) {
+        for (int k = 0; k < 14; k++) {
             OutputSignal(0, k) = 0.0;
         }
         return;
@@ -149,7 +150,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     GFMMeasurements meas;
     gfm_measurements_unpack(meas_u, &meas);
-    gfm_observer_compute_output(&self, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.i_c_ab, &out);
+    gfm_observer_compute_output(&self, complex_from(InputSignal(3, 0), InputSignal(3, 1)), meas.i_c_ab, &out);
+    /* Voltage for the control laws (GridConverterControlSystem.get_feedback) */
+    out.u_c = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
     double y[FBK_WIDTH];
     gfm_feedbacks_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {

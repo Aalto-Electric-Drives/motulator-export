@@ -12,9 +12,9 @@ with a mask of the arguments of its class (see `_control`):
   before and after the current limiter: the current reference from the power
   references and the power references corresponding to the limited current
 - Grid-forming control: ObserverBasedGridFormingController(cfg), containing the
-  `Observer`, the `CurrentLimiter`, and the blocks of its `compute_output` before
-  and after the current limiter: the current reference (with the state of the
-  active-power limitation, updated in `update`) and the voltage reference
+  `Observer`, the `PowerReferenceLimiter`, the `CurrentLimiter`, and the blocks of
+  its `compute_output` before and after the current limiter: the current reference
+  from the limited active-power reference and the voltage reference
 
 The mask initializations of the inner controllers resolve the defaults of their
 configurations. The masks of the top-level classes refer to the variables of the
@@ -28,6 +28,7 @@ from typing import Any
 from motulator_export.plecs._common import ENABLE
 from motulator_export.plecs._control import (
     SAMPLING,
+    T_S,
     Signals,
     abc_input,
     assign,
@@ -123,8 +124,9 @@ def _pll() -> CBlock:
     mask = Mask(
         "PLL (motulator)",
         "Phase-locked loop with the filtered PCC voltage magnitude (PLL), giving the "
-        "feedback signals fbk in its coordinates from the measurements and the "
-        "realized converter voltage.",
+        "feedback signals fbk in its coordinates from the measurements. The output "
+        "fbk.u_c is the realized converter voltage u_c_ab averaged over the previous "
+        "and ongoing periods (GridConverterControlSystem.get_feedback).",
         [
             Param(
                 "u_nom",
@@ -143,8 +145,10 @@ def _pll() -> CBlock:
     start += "T_s = P(3, 0);\n"
     output = (
         GFL_SIGNALS.read(1, "meas")
-        + f"pll_compute_output(&self, {complex_in(2)}, meas.i_c_ab,\n"
-        "                   meas.u_g_ab, &out);\n" + GFL_SIGNALS.write(0, "fbk", "out")
+        + "pll_compute_output(&self, meas.i_c_ab, meas.u_g_ab, &out);\n"
+        "/* Voltage for the control laws (GridConverterControlSystem.get_feedback) */\n"
+        f"out.u_c = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        + GFL_SIGNALS.write(0, "fbk", "out")
     )
     fbk = GFL_SIGNALS.width("fbk")
     return CBlock(
@@ -417,8 +421,11 @@ def _observer() -> CBlock:
     """Disturbance observer (Observer)."""
     mask = Mask(
         "Observer (motulator)",
-        "Disturbance observer (Observer), giving the feedback signals fbk in its "
-        "coordinates from the measurements and the realized converter voltage.",
+        "Disturbance observer (Observer), designed directly in discrete time, giving "
+        "the feedback signals fbk in its coordinates from the measurements. The "
+        "observer uses the voltage u_c_zoh_ab of the ongoing sampling period, and the "
+        "output fbk.u_c is the voltage u_c_ab averaged over the previous and ongoing "
+        "periods (GridConverterControlSystem.get_feedback).",
         [
             Param(
                 "u_nom",
@@ -428,27 +435,35 @@ def _observer() -> CBlock:
             Param(
                 "w_nom", "w_nom: Nominal grid angular frequency (rad/s)", "cfg.w_nom"
             ),
-            Param("alpha_o", "alpha_o: Observer gain (rad/s)", "cfg.alpha_o"),
             Param("L", "L: Total inductance estimate (H)", "cfg.L"),
-            Param("R", "R: Total series resistance estimate (Ω)", "cfg.R"),
+            Param("alpha_o", "alpha_o: Observer bandwidth (rad/s)", "cfg.alpha_o"),
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
+            Param("R", "R: Total series resistance estimate (Ω)", "cfg.R"),
         ],
     )
     params = mask_params(mask)
     start = (
         checks(params, params)
-        + "gfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0));\n"
-        "T_s = P(5, 0);\n"
+        + "gfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0),\n"
+        "                  P(5, 0));\n"
+        "T_s = P(4, 0);\n"
     )
     output = (
         GFM_SIGNALS.read(1, "meas")
-        + f"gfm_observer_compute_output(&self, {complex_in(2)}, meas.i_c_ab, &out);\n"
+        + f"gfm_observer_compute_output(&self, {complex_in(3)}, meas.i_c_ab, &out);\n"
+        "/* Voltage for the control laws (GridConverterControlSystem.get_feedback) */\n"
+        f"out.u_c = cexp(-I * out.theta_c) * {complex_in(2)};\n"
         + GFM_SIGNALS.write(0, "fbk", "out")
     )
     fbk = GFM_SIGNALS.width("fbk")
     return CBlock(
         "Observer",
-        [Port(ENABLE, 1), GFM_SIGNALS.port("meas"), Port("u_c_ab", 2)],
+        [
+            Port(ENABLE, 1),
+            GFM_SIGNALS.port("meas"),
+            Port("u_c_ab", 2),
+            Port("u_c_zoh_ab", 2),
+        ],
         [Port("out", fbk)],
         GFM_SIGNALS.class_code(
             "GFMObserver",
@@ -464,58 +479,101 @@ def _observer() -> CBlock:
     )
 
 
-def _gfm_current_reference() -> CBlock:
-    """
-    References ref.p_g (the limited active-power reference) and ref.v_c, and the
-    current reference before the current limiter (compute_output), and the update
-    of the active-power limitation with the voltage reference ref.u_c.
-    """
-    params = ["R_a", "k_v", "k_c", "i_d_max", "alpha_l", "u_nom", "T_s"]
+def _power_reference_limiter() -> CBlock:
+    """Limiter of the active-power reference (PowerReferenceLimiter)."""
+    mask = Mask(
+        "PowerReferenceLimiter (motulator)",
+        "Limiter of the active-power reference (PowerReferenceLimiter): the maximum "
+        "active power is computed from the voltage reference u_c and the current "
+        "i_c, prioritizing the reactive current, and low-pass filtered (update, with "
+        "ref.u_c and fbk.i_c). Without i_d_max, the active-power reference is not "
+        "limited, as ObserverBasedGridFormingController has no limiter then.",
+        [
+            Param(
+                "i_d_max",
+                "i_d_max: Maximum active current (A), peak value, [] = no limiter",
+                "i_d_max",
+            ),
+            Param(
+                "alpha_l",
+                "alpha_l: Bandwidth of the low-pass filter (rad/s)",
+                "alpha_l",
+            ),
+            Param(
+                "u_nom",
+                "u_nom: Nominal grid voltage (V), line-to-neutral peak value",
+                "u_nom",
+            ),
+            T_S,
+        ],
+    )
+    params = mask_params(mask)
     start = (
-        checks(params, ["R_a", "k_v", "k_c", "alpha_l", "u_nom", "T_s"])
-        + "self.R_a = P(0, 0);\n"
-        "self.k_v = P(1, 0);\n"
-        "self.k_c = P(2, 0);\n"
-        "self.i_d_max = PARAM(3);\n"
-        "self.alpha_l = P(4, 0);\n"
-        "/* Initial maximum active power (inf without the power limitation) */\n"
-        "self.p_max = isnan(self.i_d_max) ? INFINITY : 1.5 * P(5, 0) * self.i_d_max;\n"
-        "T_s = P(6, 0);\n"
+        checks(params, ["alpha_l", "u_nom", "T_s"])
+        + "/* No limiter without i_d_max */\n"
+        "limit = PDIM(0) > 0;\n"
+        "if (limit) {\n"
+        "    power_reference_limiter_init(&self, P(0, 0), P(1, 0), P(2, 0));\n"
+        "}\n"
+        "T_s = P(3, 0);\n"
     )
     output = (
-        GFM_SIGNALS.read(4, "fbk", declare=False) + "GFMReferences ref = {0};\n"
-        "gfm_current_reference(&self, InputSignal(1, 0), InputSignal(2, 0), &fbk,\n"
+        "double p_g_ref = InputSignal(1, 0);\n"
+        "if (limit) {\n"
+        "    p_g_ref = power_reference_limiter_compute_output(&self, p_g_ref);\n"
+        "}\n"
+        "OutputSignal(0, 0) = p_g_ref;\n"
+    )
+    update = (
+        "if (limit) {\n"
+        f"    power_reference_limiter_update(&self, T_s, {complex_in(2)},\n"
+        f"                                   {complex_in(3)}, 0.0);\n"
+        "}\n"
+    )
+    return CBlock(
+        "PowerReferenceLimiter",
+        [Port(ENABLE, 1), Port("p_g_ref", 1), Port("u_c", 2), Port("i_c", 2)],
+        [Port("p_g_ref_lim", 1)],
+        GFM_SIGNALS.class_code(
+            "PowerReferenceLimiter",
+            start,
+            output,
+            update,
+            SAMPLING + "static int limit; /* Limiter used (i_d_max given) */\n",
+        ),
+        params,
+        GFM_SIGNALS.sfunction("power_reference_limiter"),
+        feedthrough=[1, 1, 0, 0],
+        mask=mask,
+    )
+
+
+def _gfm_current_reference() -> CBlock:
+    """
+    References ref.p_g and ref.v_c, and the current reference before the current
+    limiter (compute_output), from the limited active-power reference.
+    """
+    params = ["R_a", "k_v", "k_c"]
+    start = (
+        checks(params, params) + "self.R_a = P(0, 0);\n"
+        "self.k_v = P(1, 0);\n"
+        "self.k_c = P(2, 0);\n"
+    )
+    output = (
+        GFM_SIGNALS.read(2, "fbk") + "GFMReferences ref = {0};\n"
+        "gfm_current_reference(&self, InputSignal(0, 0), InputSignal(1, 0), &fbk,\n"
         "                      &ref);\n"
         "OutputSignal(0, 0) = ref.p_g;\n"
         "OutputSignal(1, 0) = ref.v_c;\n" + complex_out(2, "ref.i_c")
     )
-    update = (
-        "/* Active-power limitation with the voltage reference ref.u_c */\n"
-        "GFMReferences ref = {0};\n"
-        f"ref.u_c = {complex_in(3)};\n"
-        "gfm_power_limit_update(&self, T_s, &ref, &fbk);\n"
-    )
     return CBlock(
         "compute_output",
-        [
-            Port(ENABLE, 1),
-            Port("p_g_ref", 1),
-            Port("v_c_ref", 1),
-            Port("u_c", 2),
-            GFM_SIGNALS.port("fbk"),
-        ],
+        [Port("p_g_ref", 1), Port("v_c_ref", 1), GFM_SIGNALS.port("fbk")],
         [Port("p_g", 1), Port("v_c", 1), Port("i_c", 2)],
-        GFM_SIGNALS.class_code(
-            "GFMController",
-            start,
-            output,
-            update,
-            SAMPLING + "static GFMFeedbacks fbk;\n",
-            (1, 1, 2),
-        ),
+        GFM_SIGNALS.class_code("GFMController", start, output, disabled=None),
         params,
         GFM_SIGNALS.sfunction("current_reference"),
-        feedthrough=[1, 1, 1, 0, 1],
+        sample_time=None,
     )
 
 
@@ -557,6 +615,7 @@ GFM_INIT = (
     "k_c = cfg.alpha_c*cfg.L;\n"
     "% Other parameters of compute_output\n"
     "R = cfg.R;\n"
+    "% PowerReferenceLimiter (none without i_d_max)\n"
     "i_d_max = cfg.i_d_max;\n"
     "alpha_l = cfg.alpha_l;\n"
     "u_nom = cfg.u_nom;\n"
@@ -579,8 +638,7 @@ def _gfm_controller() -> Subsystem:
         "default). The mask initialization resolves the defaults and passes the "
         "parameters to the blocks inside it, as ObserverBasedGridFormingController. "
         "The blocks compute_output and voltage_reference are its compute_output "
-        "before and after the current limiter, and compute_output updates the "
-        "active-power limitation.",
+        "before and after the current limiter.",
         [
             Param(
                 "cfg",
@@ -599,11 +657,16 @@ def _gfm_controller() -> Subsystem:
             Port("v_c_ref", 1),
             sig.port("meas"),
             Port("u_c_ab", 2),
+            Port("u_c_zoh_ab", 2),
         ],
         [sig.port("fbk"), sig.port("ref")],
         [
             _observer(),
+            sig.selector("fbk", "i_c", complex_=True),
+            Tag("Goto i_c", "i_c", 2, goto=True),
             Tag("From u_c", "u_c", 2, goto=False),
+            Tag("From i_c", "i_c", 2, goto=False),
+            _power_reference_limiter(),
             _gfm_current_reference(),
             current_limiter(sig),
             _gfm_voltage_reference(),
@@ -615,15 +678,20 @@ def _gfm_controller() -> Subsystem:
         ],
         [
             (ENABLE, "Observer:enable"),
-            (ENABLE, "compute_output:enable"),
+            (ENABLE, "PowerReferenceLimiter:enable"),
             ("meas", "Observer:meas"),
             ("u_c_ab", "Observer:u_c_ab"),
+            ("u_c_zoh_ab", "Observer:u_c_zoh_ab"),
+            ("Observer:out", "fbk.i_c:u"),
             ("Observer:out", "compute_output:fbk"),
             ("Observer:out", "voltage_reference:fbk"),
             ("Observer:out", "fbk"),
-            ("p_g_ref", "compute_output:p_g_ref"),
+            ("fbk.i_c:y", "Goto i_c"),
+            ("p_g_ref", "PowerReferenceLimiter:p_g_ref"),
+            ("From u_c", "PowerReferenceLimiter:u_c"),
+            ("From i_c", "PowerReferenceLimiter:i_c"),
+            ("PowerReferenceLimiter:p_g_ref_lim", "compute_output:p_g_ref"),
             ("v_c_ref", "compute_output:v_c_ref"),
-            ("From u_c", "compute_output:u_c"),
             ("compute_output:i_c", "CurrentLimiter:i"),
             ("CurrentLimiter:i_lim", "voltage_reference:i_c"),
             ("CurrentLimiter:i_lim", "Mux ref:i_c"),
@@ -634,21 +702,26 @@ def _gfm_controller() -> Subsystem:
             ("Mux ref:y", "ref"),
         ],
         columns=[
-            ["p_g_ref", "v_c_ref", "meas", "u_c_ab", ENABLE],
-            ["Observer"],
+            ["p_g_ref", "v_c_ref", "meas", "u_c_ab", "u_c_zoh_ab", ENABLE],
+            ["From i_c", "Observer"],
             ["From u_c"],
-            ["compute_output"],
+            ["PowerReferenceLimiter", "fbk.i_c"],
+            ["compute_output", "Goto i_c"],
             ["CurrentLimiter"],
             ["voltage_reference"],
             ["Mux ref", "Goto u_c"],
             ["ref", "fbk"],
         ],
         align={
-            "p_g_ref": "compute_output:p_g_ref-2",
-            "v_c_ref": "compute_output:v_c_ref-1",
-            "From u_c": "compute_output:u_c",
+            "p_g_ref": "PowerReferenceLimiter:p_g_ref",
+            "From u_c": "PowerReferenceLimiter:u_c",
+            "From i_c": "PowerReferenceLimiter:i_c",
+            "compute_output:v_c_ref": "PowerReferenceLimiter:i_c+2",
+            "v_c_ref": "compute_output:v_c_ref",
             "Observer:out": "compute_output:fbk+2",
             "meas": "Observer:meas",
+            "fbk.i_c:u": "Observer:out+1",
+            "Goto i_c": "fbk.i_c:y",
             "CurrentLimiter:i": "compute_output:i_c",
             "voltage_reference:i_c": "CurrentLimiter:i_lim",
             "Mux ref:u_c": "voltage_reference:u_c",
