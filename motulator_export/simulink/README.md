@@ -64,17 +64,17 @@ The control systems limit the measured DC-bus voltage to at least 1 V (`U_DC_MIN
 
 ## Agreement with *motulator*
 
-Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.9.0 and MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2), at the level of the PLECS models (cf. [examples/README.md](../../examples/README.md)).
+Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.11.0 and MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2), at the level of the PLECS models (cf. [examples/README.md](../../examples/README.md)).
 
 | Script                               | System model                               | Control system                                               |
 | ------------------------------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc_simulink.py`          | w_M 7.0e-6, tau_M 4.4e-6, i_s_ab 2.7e-6    | w_M 5.4e-6, tau_M 4.6e-6, tau_M_ref 4.6e-6, psi_s_ref 2.0e-8 |
-| `im_2kw_cvc_simulink.py`             | w_M 7.2e-7, tau_M 2.4e-6, i_s_ab 8.5e-7    | w_M 4.4e-6, tau_M 2.8e-6, tau_M_ref 3.3e-6, psi_R 3.2e-8     |
-| `im_2kw_vhz_simulink.py`             | w_M 3.2e-6, tau_M 6.9e-6, i_s_ab 2.5e-6    | w_s 7.9e-6, tau_M 8.1e-6, tau_M_ref 3.6e-7, psi_s 2.9e-8     |
-| `im_2kw_vhz_simulink.py --open-loop` | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 9.2e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 0                         |
-| `pmsyrm_6kw_gn_fvc_simulink.py`      | w_M 4.0e-4, tau_M 1.9e-3, i_s_ab 6.9e-4    |                                                              |
+| `ipmsm_2kw_fvc_simulink.py`          | w_M 1.1e-6, tau_M 2.3e-6, i_s_ab 9.9e-7    | w_M 3.4e-6, tau_M 2.3e-6, tau_M_ref 2.5e-6, psi_s_ref 1.1e-8 |
+| `im_2kw_cvc_simulink.py`             | w_M 6.2e-7, tau_M 2.1e-6, i_s_ab 8.4e-7    | w_M 3.9e-6, tau_M 2.5e-6, tau_M_ref 2.9e-6, psi_R 2.7e-8     |
+| `im_2kw_vhz_simulink.py`             | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
+| `im_2kw_vhz_simulink.py --open-loop` | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 4.4e-16                   |
+| `pmsyrm_6kw_gn_fvc_simulink.py`      | w_M 4.3e-4, tau_M 2.0e-3, i_s_ab 7.3e-4    |                                                              |
 | `gfl_10kva_lcl_simulink.py`          | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 2.8e-13                   |
-| `gfm_13kva_do_simulink.py`           | i_c_ab 9.4e-7, i_c_a 7.8e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
+| `gfm_13kva_do_simulink.py`           | i_c_ab 1.3e-6, i_c_a 1.2e-6                | p_g 5.2e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 0                |
 
 The simulation of the IPMSM drive takes about 1.5 s in the normal mode (about 100 000 solver steps, mostly at the switching instants located by the zero-crossing detection) and 0.6 s in the accelerator mode, plus about 1 s of initialization.
 Most of the run time of a comparison script is the start of MATLAB, the build of the model, and the compilation of the MATLAB Function block.
