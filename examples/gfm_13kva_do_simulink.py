@@ -5,7 +5,9 @@
 This script builds the grid converter system of `gfm_13kva_do.py` in motulator and
 writes a MATLAB script (simulink/build_gfm_13kva_do.m) that builds the Simulink
 model. If the MATLAB Engine API for Python is installed, it runs the script,
-simulates the model and motulator, and compares the results.
+simulates the model and motulator, and compares the results. With --matlab, the
+blocks of the control system are MATLAB Function blocks instead of S-functions
+(simulink/build_gfm_13kva_do_matlab.m).
 
 Run from the repository root:
 
@@ -33,10 +35,18 @@ from motulator_export.simulink import grid
 if __name__ == "__main__":
     mdl, ctrl = build_system()
     T_s = cast(control.ObserverBasedGridFormingController, ctrl.inner_ctrl).T_s
-    path = Path(__file__).parent / "simulink" / "gfm_13kva_do.slx"
+    code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
+    name = "gfm_13kva_do_matlab" if code == "matlab" else "gfm_13kva_do"
+    path = Path(__file__).parent / "simulink" / f"{name}.slx"
     path.parent.mkdir(exist_ok=True)
     script = grid.write_model(
-        path, mdl, ctrl, T_STOP, p_g_ref=sampled_step(P_G_REF, T_s), v_c_ref=V_C_REF
+        path,
+        mdl,
+        ctrl,
+        T_STOP,
+        p_g_ref=sampled_step(P_G_REF, T_s),
+        v_c_ref=V_C_REF,
+        code=code,
     )
     print(f"Wrote {script}")
     try:

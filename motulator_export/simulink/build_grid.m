@@ -5,7 +5,10 @@ function build_grid(s)
 %   motulator_export.simulink.grid, with the fields
 %
 %     name      Model name
+%     code      'c' (the blocks of the control system are S-functions) or
+%               'matlab' (MATLAB Function blocks)
 %     folder    Folder of the model, the S-functions, and their compiled versions
+%               (or the functions of the MATLAB Function blocks)
 %     init_script  Script in the folder defining the parameters (converter,
 %               ac_filter, ac_source, and the control system) in the base
 %               workspace, see blocks.new_model
@@ -28,10 +31,16 @@ function build_grid(s)
 %   The blocks are aligned with the ports they connect to, so that the lines are
 %   straight, and the feedback lines are drawn through given corners.
 
-sfunctions = cellstr(s.control.sfunction);
+% The S-functions of the blocks of the control system (none with the MATLAB Function
+% blocks)
+sfunctions = s.control.sfunction;
+if ~isempty(sfunctions)
+    sfunctions = cellstr(sfunctions);
+end
 for k = 1:numel(sfunctions)
     blocks.compile(sfunctions{k}, s.folder);
 end
+s.control.folder = s.folder;
 slx = blocks.new_model(s);
 sys = s.name;
 cs = s.control.name;

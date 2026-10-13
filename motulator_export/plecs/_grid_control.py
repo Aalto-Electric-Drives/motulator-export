@@ -45,13 +45,16 @@ from motulator_export.plecs._control import (
     pwm_init,
 )
 from motulator_export.plecs._netlist import (
+    COMPLEX,
     CBlock,
     Mask,
+    MCode,
     Mux,
     Param,
     Port,
     Subsystem,
     Tag,
+    required,
 )
 
 GFL_SIGNALS = Signals(
@@ -166,6 +169,16 @@ def _pll() -> CBlock:
         params,
         GFL_SIGNALS.sfunction("pll"),
         mask=mask,
+        mcode=MCode(
+            start="self = pll_init(p.u_nom, p.w_nom, p.alpha_pll);\n",
+            output="out = pll_compute_output(self, meas.i_c_ab, meas.u_g_ab);\n"
+            "% Voltage for the control laws (GridConverterControlSystem.get_feedback)\n"
+            "out.u_c = exp(-1i*out.theta_c)*u_c_ab;\n",
+            update="self = pll_update(self, p.T_s, out);\n",
+            inputs={"meas": GFL_SIGNALS.vector("meas"), "u_c_ab": COMPLEX},
+            outputs={"out": GFL_SIGNALS.vector("fbk")},
+            checks=required(*params),
+        ),
     )
 
 
@@ -185,6 +198,13 @@ def _gfl_current_reference() -> CBlock:
         ["cfg.T_s"],
         GFL_SIGNALS.sfunction("current_reference"),
         sample_time="cfg.T_s",
+        mcode=MCode(
+            output="% Current reference from the power references and the PCC voltage\n"
+            "i_c = gfl_current_reference(p_g_ref, q_g_ref, u_g);\n",
+            outputs={"i_c": COMPLEX},
+            checks=required("T_s"),
+            disabled=None,
+        ),
     )
 
 
@@ -208,6 +228,13 @@ def _gfl_power_reference() -> CBlock:
         ["cfg.T_s"],
         GFL_SIGNALS.sfunction("power_reference"),
         sample_time="cfg.T_s",
+        mcode=MCode(
+            output="[p_g, q_g] = gfl_power_references(i_lim, u_g);\ni_c = i_lim;\n",
+            inputs={"i_lim": COMPLEX},
+            outputs={"i_c": COMPLEX},
+            checks=required("T_s"),
+            disabled=None,
+        ),
     )
 
 
@@ -261,6 +288,15 @@ def _gfl_current_controller() -> CBlock:
         params,
         GFL_SIGNALS.sfunction("current_controller"),
         mask=mask,
+        mcode=MCode(
+            start="self = gfl_current_controller(p.L, p.alpha_c, p.alpha_i);\n",
+            output="[self, u_c] = complex_pi_compute_output(self, i_c_ref, fbk.i_c, "
+            "fbk.u_g);\n",
+            update="self = complex_pi_update(self, p.T_s, fbk.u_c, fbk.w_c);\n",
+            inputs={"i_c_ref": COMPLEX, "fbk": GFL_SIGNALS.vector("fbk")},
+            outputs={"u_c": COMPLEX},
+            checks=required("L", "alpha_c", "T_s"),
+        ),
     )
 
 
@@ -476,6 +512,22 @@ def _observer() -> CBlock:
         params,
         GFM_SIGNALS.sfunction("observer"),
         mask=mask,
+        mcode=MCode(
+            start="self = gfm_observer_init(p.u_nom, p.w_nom, p.L, p.alpha_o, p.T_s, "
+            "p.R);\n",
+            output="out = gfm_observer_compute_output(self, u_c_zoh_ab, "
+            "meas.i_c_ab);\n"
+            "% Voltage for the control laws (GridConverterControlSystem.get_feedback)\n"
+            "out.u_c = exp(-1i*out.theta_c)*u_c_ab;\n",
+            update="self = gfm_observer_update(self, p.T_s, out);\n",
+            inputs={
+                "meas": GFM_SIGNALS.vector("meas"),
+                "u_c_ab": COMPLEX,
+                "u_c_zoh_ab": COMPLEX,
+            },
+            outputs={"out": GFM_SIGNALS.vector("fbk")},
+            checks=required(*params),
+        ),
     )
 
 
@@ -545,6 +597,20 @@ def _power_reference_limiter() -> CBlock:
         GFM_SIGNALS.sfunction("power_reference_limiter"),
         feedthrough=[1, 1, 0, 0],
         mask=mask,
+        mcode=MCode(
+            start="% No limiter without i_d_max (the state is then not used)\n"
+            "self = power_reference_limiter_init(p.i_d_max, p.alpha_l, p.u_nom);\n",
+            output="if isnan(p.i_d_max)\n"
+            "    p_g_ref_lim = p_g_ref;\n"
+            "else\n"
+            "    p_g_ref_lim = power_reference_limiter_compute_output(self, p_g_ref);\n"
+            "end\n",
+            update="if ~isnan(p.i_d_max)\n"
+            "    self = power_reference_limiter_update(self, p.T_s, u_c, i_c, 0);\n"
+            "end\n",
+            inputs={"u_c": COMPLEX, "i_c": COMPLEX},
+            checks=required("alpha_l", "u_nom", "T_s"),
+        ),
     )
 
 
@@ -574,6 +640,17 @@ def _gfm_current_reference() -> CBlock:
         params,
         GFM_SIGNALS.sfunction("current_reference"),
         sample_time=None,
+        mcode=MCode(
+            output="ref = gfm_current_reference(p.R_a, p.k_v, p.k_c, p_g_ref, "
+            "v_c_ref, fbk);\n"
+            "p_g = ref.p_g;\n"
+            "v_c = ref.v_c;\n"
+            "i_c = ref.i_c;\n",
+            inputs={"fbk": GFM_SIGNALS.vector("fbk")},
+            outputs={"i_c": COMPLEX},
+            checks=required(*params),
+            disabled=None,
+        ),
     )
 
 
@@ -596,6 +673,13 @@ def _gfm_voltage_reference() -> CBlock:
         params,
         GFM_SIGNALS.sfunction("voltage_reference"),
         sample_time=None,
+        mcode=MCode(
+            output="u_c = gfm_voltage_reference(p.k_c, p.R, i_c, fbk);\n",
+            inputs={"i_c": COMPLEX, "fbk": GFM_SIGNALS.vector("fbk")},
+            outputs={"u_c": COMPLEX},
+            checks=required(*params),
+            disabled=None,
+        ),
     )
 
 

@@ -4,7 +4,7 @@ Export [*motulator*](https://github.com/Aalto-Electric-Drives/motulator) drive s
 
 You build a system in *motulator*, as usual, and get a ready-to-run simulation model of it:
 
-- **The same control code in both tools.** The control algorithms of *motulator* are ported to C, and the same C code runs in C-Script blocks in PLECS and in generated S-functions in Simulink. The C port is tested against *motulator* step by step.
+- **The same control code in both tools.** The control algorithms of *motulator* are ported to C, and the same C code runs in C-Script blocks in PLECS and in generated S-functions in Simulink. The C port is tested against *motulator* step by step. In Simulink, the blocks can instead be MATLAB Function blocks running a MATLAB port of the same code, which needs no C compiler.
 - **The structure of *motulator*.** Each class of the control system (e.g., `FluxVectorController`, `SpeedFluxObserver`, `FluxObserver`, `SpeedController`, and `PWM`) is a block with a mask of the arguments of its class, in the hierarchy of *motulator*. The masks of the composite classes pass the parameters to the blocks inside them as the constructors of *motulator* do, so a class can be replaced or studied on its own.
 - **Parameters as in *motulator*.** The parameters are defined in the model initialization as in a *motulator* example: the structs of the API (e.g., `par` of `SynchronousMachinePars`, `cfg` of `FluxVectorControllerCfg`, `speed_ctrl`, and `pwm`), with `[]` for the defaults. You can change the parameters without Python; the models only refer to the C sources of the package.
 - **Verified against *motulator*.** The system model (the machine, the mechanics, the converter, and the grid) is built from native blocks, and the example scripts simulate each system in both tools and in *motulator*. The results agree to about 1e-6 relative to the signal magnitudes (1e-4 with the GradNet models, which *motulator* evaluates in single precision).
@@ -27,7 +27,7 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 
 - Python 3.12 or later. The package installs *motulator* 0.11.0 or later.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
-- **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
+- **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks (`code="matlab"`) need no C compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 
 ## Getting started
 
@@ -47,7 +47,7 @@ python examples/ipmsm_2kw_fvc_simulink.py
 ```
 
 - **PLECS**: open `examples/ipmsm_2kw_fvc.plecs` in PLECS and start the simulation. The scope shows the speed, the torque, the currents, and the flux linkage.
-- **Simulink**: in MATLAB, run `examples/simulink/build_ipmsm_2kw_fvc.m`. It compiles the S-functions of the control system and saves `ipmsm_2kw_fvc.slx`, which runs the initialization script `init_ipmsm_2kw_fvc.m` (the parameters) after loading and at the start of each simulation.
+- **Simulink**: in MATLAB, run `examples/simulink/build_ipmsm_2kw_fvc.m`. It compiles the S-functions of the control system and saves `ipmsm_2kw_fvc.slx`, which runs the initialization script `init_ipmsm_2kw_fvc.m` (the parameters) after loading and at the start of each simulation. With `--matlab`, the script writes the model with MATLAB Function blocks (`build_ipmsm_2kw_fvc_matlab.m`, saving `ipmsm_2kw_fvc_matlab.slx`), which needs no C compiler.
 
 If PLECS (with the RPC interface) or the MATLAB Engine API is available, the scripts also simulate the system in the tool and in *motulator* and print the maximum differences.
 
@@ -83,6 +83,7 @@ simulink.sm.write_model("ipmsm.slx", mdl, ctrl, w_M_ref, tau_L, 1.2, speed_ctrl_
 ```
 
 This writes the PLECS model `ipmsm.plecs` and, for Simulink, the scripts `build_ipmsm.m` and `init_ipmsm.m` with the C sources of the S-functions (`sfun_*.c`) in the same folder.
+With `code="matlab"`, the Simulink model has MATLAB Function blocks instead, whose functions (`mfun_*.m`) are written in the folder and copied into the model.
 The speed controller of *motulator* stores only its gains, so its arguments are given (`speed_ctrl_args`).
 V/Hz control (`control.VHzControlSystem`, see `examples/im_2kw_vhz.py`) has no speed controller: `plecs.im.write_model("im_vhz.plecs", mdl, ctrl, w_M_ref, tau_L, 1.6)`.
 

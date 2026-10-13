@@ -43,7 +43,17 @@ from motulator_export.plecs._control import (
     speed_observer,
     vector_control_system,
 )
-from motulator_export.plecs._netlist import CBlock, Mask, Mux, Param, Port, Subsystem
+from motulator_export.plecs._netlist import (
+    COMPLEX,
+    CBlock,
+    Mask,
+    MCode,
+    Mux,
+    Param,
+    Port,
+    Subsystem,
+    required,
+)
 
 SIGNALS = Signals(
     (
@@ -137,6 +147,38 @@ def _par_code(i: int) -> str:
     )
 
 
+# The machine model par in the MATLAB code from the parameters PAR_PARAMS
+M_PAR_FUNCTION = """\
+function par = machine_pars(p)
+%MACHINE_PARS Machine model from the parameters par_* and gn_* of the block:
+%   SaturatedSynchronousMachinePars with a GradNet flux map, or
+%   SynchronousMachinePars with constant inductances.
+if isnan(p.gn_in_dim)
+    par = synchronous_machine_pars(p.par_n_p, p.par_R_s, p.par_L_d, p.par_L_q, ...
+        p.par_psi_f, gradnet_placeholder());
+else
+    flux_map = gradnet(p.gn_in_dim, p.gn_mu_dim, p.gn_W, p.gn_b, p.gn_mu_log, ...
+        p.gn_bias, p.gn_activation, p.gn_beta_log, p.gn_p, p.gn_in_base, ...
+        p.gn_out_base);
+    par = saturated_synchronous_machine_pars(p.par_n_p, p.par_R_s, flux_map);
+end
+end
+"""
+M_PAR_CHECKS = (
+    *required("par_n_p", "par_R_s"),
+    (
+        "isnan(p.gn_in_dim) && any(isnan([p.par_L_d(:); p.par_L_q(:); "
+        "p.par_psi_f(:)]))",
+        "L_d, L_q, and psi_f needed without a flux map.",
+    ),
+)
+M_PAR = (
+    "% Machine model: SaturatedSynchronousMachinePars with a GradNet flux map, or\n"
+    "% SynchronousMachinePars with constant inductances\n"
+    "par = machine_pars(p);\n"
+)
+
+
 # %%
 # Blocks of the classes
 def _flux_observer() -> CBlock:
@@ -207,6 +249,41 @@ def _flux_observer() -> CBlock:
         f"out.u_s = cexp(-I * out.theta_c) * {complex_in(2)};\n"
         + SIGNALS.write(0, "fbk", "out")
     )
+    mcode = MCode(
+        start=M_PAR + "k_o = p.k_o;\n"
+        "if isnan(k_o(1))\n"
+        "    % Poles at zero speed at s = 0 and s = -2*sigma0\n"
+        "    L_s0 = incr_ind_mat(par, complex(0));\n"
+        "    k_o(1) = 0.25*par.R_s*(1/L_s0.L_dd + 1/L_s0.L_qq);\n"
+        "end\n"
+        "self = flux_observer_init(par, p.k_theta, k_o);\n",
+        output="if p.h == 0\n"
+        "    out = flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, w_M, "
+        "0, 0);\n"
+        "else\n"
+        "    % Position error from the measured rotor angle (compute_feedback)\n"
+        "    n_p = self.par.n_p;\n"
+        "    eps = wrap(n_p*meas.theta_M - self.theta_m)/n_p;\n"
+        "    out = flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, w_M, "
+        "eps, p.h);\n"
+        "end\n"
+        "% Voltage for the control laws (DriveControlSystem.get_feedback)\n"
+        "out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n",
+        update="self = flux_observer_update(self, p.T_s, out);\n",
+        inputs={
+            "meas": SIGNALS.vector("meas"),
+            "u_s_ab": COMPLEX,
+            "u_s_zoh_ab": COMPLEX,
+        },
+        outputs={"out": SIGNALS.vector("fbk")},
+        functions=M_PAR_FUNCTION,
+        checks=(
+            *required("k_theta", "h", "T_s"),
+            ("numel(p.k_o) ~= 2", "k_o must be [k0 k1]."),
+            ("~isnan(p.k_f(1)) && p.k_f(1) ~= 0", "Only k_f = [] (zero) supported."),
+            *M_PAR_CHECKS,
+        ),
+    )
     return CBlock(
         "FluxObserver",
         [
@@ -228,6 +305,7 @@ def _flux_observer() -> CBlock:
         params,
         SIGNALS.sfunction("flux_observer"),
         mask=mask,
+        mcode=mcode,
     )
 
 
@@ -403,6 +481,17 @@ def _reference_generator() -> CBlock:
         SIGNALS.sfunction("reference_generator"),
         sample_time=None,
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = reference_gen_init(par, p.i_s_max, p.psi_s_min, "
+            "p.psi_s_max, p.k_u, p.k_mtpv);\n",
+            output="% Flux and limited torque references (ref.psi_s, ref.tau_M)\n"
+            "[psi_s_ref, tau_M_lim] = reference_gen_compute_flux_and_torque_refs( ...\n"
+            "    self, tau_M_ref, w_m, u_dc);\n"
+            "ref = [psi_s_ref; tau_M_lim];\n",
+            functions=M_PAR_FUNCTION,
+            checks=(*required("i_s_max", "psi_s_max", "k_u", "k_mtpv"), *M_PAR_CHECKS),
+            disabled=None,
+        ),
     )
 
 
@@ -458,6 +547,20 @@ def _flux_torque_controller() -> CBlock:
         params,
         SIGNALS.sfunction("flux_torque_controller"),
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = flux_torque_ctrl_init(par, p.alpha_psi, "
+            "p.alpha_tau, p.alpha_i);\n",
+            output="[self, u_s] = flux_torque_ctrl_compute_output(self, ref(1), "
+            "ref(2), fbk);\n",
+            update="self = flux_torque_ctrl_update(self, p.T_s, fbk);\n",
+            inputs={"fbk": SIGNALS.vector("fbk")},
+            outputs={"u_s": COMPLEX},
+            functions=M_PAR_FUNCTION,
+            checks=(
+                *required("alpha_psi", "alpha_tau", "alpha_i", "T_s"),
+                *M_PAR_CHECKS,
+            ),
+        ),
     )
 
 

@@ -12,6 +12,7 @@ addpath(fullfile(here, '..', '..', 'motulator_export', 'simulink'));
 s = struct();
 s.folder = here;
 s.name = 'im_2kw_vhz';
+s.code = 'c';
 s.init_script = 'init_im_2kw_vhz';
 s.machine = 'im';
 s.enable = 1.0;

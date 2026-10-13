@@ -46,6 +46,8 @@ from motulator_export.plecs._control import (
     vhz_control_system,
 )
 from motulator_export.plecs._im_control import (
+    M_PAR,
+    M_PAR_CHECKS,
     PAR,
     PAR_DESCRIPTION,
     PAR_FIELDS,
@@ -53,7 +55,17 @@ from motulator_export.plecs._im_control import (
     PAR_PROMPT,
     _par_code,
 )
-from motulator_export.plecs._netlist import CBlock, Mask, Mux, Param, Port, Subsystem
+from motulator_export.plecs._netlist import (
+    COMPLEX,
+    CBlock,
+    Mask,
+    MCode,
+    Mux,
+    Param,
+    Port,
+    Subsystem,
+    required,
+)
 
 SIGNALS = Signals(
     ("common.c", "im_current_vector.c", "im_flux_vector.c"),
@@ -152,6 +164,34 @@ def _flux_observer() -> CBlock:
         params,
         SIGNALS.sfunction("flux_observer"),
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = im_flux_observer_init(par, true);\n"
+            "% Unit observer gain if k_o = 1, else the default\n"
+            "self.unit_gain = ~isnan(p.k_o);\n"
+            "self.psi_s = complex(p.psi_s0);\n",
+            output="% The rotor speed is the speed reference, without the external "
+            "speed\n"
+            "% error signal\n"
+            "out = im_flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, "
+            "w_M, 0, p.h);\n"
+            "% Voltage for the control laws (DriveControlSystem.get_feedback)\n"
+            "out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n",
+            update="self = im_flux_observer_update(self, p.T_s, out);\n",
+            inputs={
+                "meas": SIGNALS.vector("meas"),
+                "u_s_ab": COMPLEX,
+                "u_s_zoh_ab": COMPLEX,
+            },
+            outputs={"out": SIGNALS.vector("fbk")},
+            checks=(
+                *required("h", "psi_s0", "T_s"),
+                (
+                    "~isnan(p.k_o(1)) && (numel(p.k_o) ~= 1 || p.k_o(1) ~= 1)",
+                    "Only k_o = [] (the default) or 1 supported.",
+                ),
+                *M_PAR_CHECKS,
+            ),
+        ),
     )
 
 
@@ -179,6 +219,12 @@ def _torque_filter() -> CBlock:
         SIGNALS.sfunction("torque_filter"),
         feedthrough=[1, 0],
         sample_time="cfg.T_s",
+        mcode=MCode(
+            start="% Low-pass-filtered torque estimate\nself = 0;\n",
+            output="tau_M_lpf = self;\n",
+            update="self = self + p.T_s*p.alpha_f*(tau_M - self);\n",
+            checks=required("alpha_f", "T_s"),
+        ),
     )
 
 
@@ -235,6 +281,22 @@ def _reference_generator() -> CBlock:
         SIGNALS.sfunction("reference_generator"),
         sample_time=None,
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = im_flux_reference_gen_init(par, p.psi_s_nom, "
+            "p.i_s_max, p.tau_M_max, ...\n"
+            "    p.k_u, p.k_b);\n",
+            output="% Flux and limited torque references (ref.psi_s, ref.tau_M)\n"
+            "[psi_s_ref, tau_M_lim] = im_reference_gen_flux_and_torque(self, "
+            "tau_M_ref, ...\n"
+            "    fbk.w_s, abs(fbk.psi_R), u_dc);\n"
+            "ref = [psi_s_ref; tau_M_lim];\n",
+            inputs={"fbk": SIGNALS.vector("fbk")},
+            checks=(
+                *required("psi_s_nom", "i_s_max", "tau_M_max", "k_u", "k_b"),
+                *M_PAR_CHECKS,
+            ),
+            disabled=None,
+        ),
     )
 
 
@@ -283,6 +345,16 @@ def _flux_torque_controller() -> CBlock:
         SIGNALS.sfunction("flux_torque_controller"),
         sample_time=None,
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = im_flux_torque_ctrl_init(par, p.alpha_psi, "
+            "p.alpha_tau);\n",
+            output="u_s = im_flux_torque_ctrl_compute_output(self, ref(1), ref(2), "
+            "fbk);\n",
+            inputs={"fbk": SIGNALS.vector("fbk")},
+            outputs={"u_s": COMPLEX},
+            checks=(*required("alpha_psi", "alpha_tau"), *M_PAR_CHECKS),
+            disabled=None,
+        ),
     )
 
 

@@ -2,6 +2,7 @@
 
 Each script builds a system of a *motulator* example, writes the PLECS model (`*.plecs` in this directory), and, if PLECS Standalone is running with the RPC interface enabled, simulates the system in both *motulator* and PLECS and prints the maximum differences.
 The scripts `*_simulink.py` do the same for Simulink, writing the build and initialization scripts of the models in `simulink/`; see [the Simulink export](../motulator_export/simulink/README.md).
+With `--matlab`, the blocks of the control system are MATLAB Function blocks running the MATLAB port of the control algorithms instead of S-functions (the models `simulink/*_matlab.slx`), which need no C compiler.
 
 | Script                    | System                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -12,6 +12,7 @@ addpath(fullfile(here, '..', '..', 'motulator_export', 'simulink'));
 s = struct();
 s.folder = here;
 s.name = 'gfl_10kva_lcl';
+s.code = 'c';
 s.init_script = 'init_gfl_10kva_lcl';
 s.ac_filter = 'lcl';
 s.refs = { ...

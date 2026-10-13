@@ -7,7 +7,9 @@ MATLAB scripts (simulink/build_im_2kw_vhz.m and simulink/init_im_2kw_vhz.m) that
 build and parametrize the Simulink model. If the MATLAB Engine API for Python is
 installed, it runs the build script, simulates the model and motulator, and compares
 the results. With --open-loop, the control system is pure open-loop V/Hz control
-(simulink/build_im_2kw_vhz_open_loop.m), see `im_2kw_vhz.py`.
+(simulink/build_im_2kw_vhz_open_loop.m), see `im_2kw_vhz.py`. With --matlab, the
+blocks of the control system are MATLAB Function blocks instead of S-functions
+(simulink/build_im_2kw_vhz_matlab.m).
 
 Run from the repository root:
 
@@ -38,10 +40,12 @@ if __name__ == "__main__":
     # Speed reference switching at the same sample as in motulator
     T_s = cast(control.ObserverBasedVHzController, ctrl.vhz_ctrl).cfg.T_s
     w_M_ref = sampled_step(W_M_REF, T_s)
+    code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
     name = "im_2kw_vhz_open_loop" if open_loop else "im_2kw_vhz"
+    name += "_matlab" if code == "matlab" else ""
     path = Path(__file__).parent / "simulink" / f"{name}.slx"
     path.parent.mkdir(exist_ok=True)
-    script = im.write_model(path, mdl, ctrl, w_M_ref, TAU_L, T_STOP)
+    script = im.write_model(path, mdl, ctrl, w_M_ref, TAU_L, T_STOP, code=code)
     print(f"Wrote {script}")
     try:
         import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]

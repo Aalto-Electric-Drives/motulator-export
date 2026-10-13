@@ -23,6 +23,7 @@ classes of the control methods are in `_sm_control`, `_im_control`, and
 
 """
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -35,6 +36,7 @@ from motulator_export.plecs._common import (
     C_DIR,
     C_GRADNET_PARAMS,
     C_PARAMS,
+    C_SOURCES,
     C_U_DC_MIN,
     ENABLE,
     ENABLE_DESCRIPTION,
@@ -47,13 +49,18 @@ from motulator_export.plecs._common import (
     monitored_code,
 )
 from motulator_export.plecs._netlist import (
+    COMPLEX,
     CBlock,
     Mask,
+    MCode,
     Param,
     Port,
     Selector,
+    SignalVector,
     Subsystem,
     Tag,
+    m_variable,
+    required,
 )
 from motulator_export.plecs._schematic import _fmt
 
@@ -97,15 +104,47 @@ def complex_out(port: int, value: str) -> str:
     )
 
 
-def checks(params: list[str], required: list[str]) -> str:
+def checks(params: list[str], scalars: list[str]) -> str:
     """C code checking that the required parameters are scalars."""
     return "".join(
         f"if (PDIM({params.index(p)}) != 1) {{\n"
         f'    SetErrorMessage("{p} must be a scalar.");\n'
         "    return;\n"
         "}\n"
-        for p in required
+        for p in scalars
     )
+
+
+def c_to_matlab(code: str, inputs: list[Port]) -> str:
+    """
+    MATLAB code of the C expressions and declarations of the measurements and the
+    monitored signals: the functions of complex.h and the inputs InputSignal(k, j)
+    (named by the ports) translated, the types of the declarations removed, and the
+    comments converted.
+    """
+    names = {
+        "cabs": "abs",
+        "creal": "real",
+        "cimag": "imag",
+        "carg": "angle",
+        "cexp": "exp",
+        "fmax": "max",
+        "fmin": "min",
+    }
+
+    def signal(m: re.Match[str]) -> str:
+        port = inputs[int(m[1])]
+        return port.name if port.width == 1 else f"{port.name}({int(m[2]) + 1})"
+
+    out = re.sub(r"InputSignal\((\d+), (\d+)\)", signal, code)
+    out = re.sub(r"\b(" + "|".join(names) + r")\(", lambda m: names[m[1]] + "(", out)
+    out = re.sub(r"\bI \* ", "1i*", out)
+    out = re.sub(r"\bU_DC_MIN\b", "1", out)
+    out = re.sub(r"^double (complex )?", "", out, flags=re.M)
+    out = re.sub(r"/\* (.*?) \*/", r"% \1", out)
+    if re.search(r"InputSignal|\bdouble\b|/\*|\bI\b", out):
+        raise ValueError(f"Cannot translate the C code: {code}")
+    return out
 
 
 def mask_params(mask: Mask, expanded: dict[str, list[str]] | None = None) -> list[str]:
@@ -160,6 +199,20 @@ class Signals:
     def port(self, vector: str) -> Port:
         """Port of a signal vector."""
         return Port(vector, self.width(vector))
+
+    def vector(self, vector: str) -> SignalVector:
+        """Signal vector in the MATLAB code, its fields from the C header."""
+        macro = self.macro(vector)
+        found = []
+        for header in self.headers:
+            text = (C_SOURCES / header).read_text()
+            found = re.findall(rf"^#define {macro}_(\w+) (\d+)$", text, re.M)
+            if found:
+                break
+        indices = sorted((int(k), n) for n, k in found if n != "WIDTH")
+        ends = [k for k, _ in indices[1:]] + [self.width(vector)]
+        fields = tuple((n, end - k) for (k, n), end in zip(indices, ends, strict=True))
+        return SignalVector(self.vectors[vector][1], fields)
 
     def selector(self, vector: str, name: str, complex_: bool = False) -> Selector:
         """Selector of a field of a signal vector, e.g., "fbk.w_M"."""
@@ -284,6 +337,19 @@ def speed_controller(sig: Signals) -> CBlock:
         "/* The limited torque reference ref.tau_M (anti-windup) */\n"
         "pi_update(&self, T_s, InputSignal(2, 0));\n"
     )
+    mcode = MCode(
+        start="% No torque limit without tau_M_max\n"
+        "tau_M_max = p.tau_M_max;\n"
+        "if isnan(tau_M_max)\n"
+        "    tau_M_max = Inf;\n"
+        "end\n"
+        "self = speed_controller(p.J, p.alpha_s, p.alpha_i, tau_M_max);\n",
+        output="% Torque reference\n"
+        "[self, tau_M_ref] = pi_compute_output(self, w_M_ref, w_M, 0);\n",
+        update="% The limited torque reference ref.tau_M (anti-windup)\n"
+        "self = pi_update(self, p.T_s, tau_M);\n",
+        checks=required("J", "alpha_s", "T_s"),
+    )
     return CBlock(
         "SpeedController",
         [Port(ENABLE, 1), Port("w_M", 1), Port("tau_M", 1), Port("w_M_ref", 1)],
@@ -293,6 +359,7 @@ def speed_controller(sig: Signals) -> CBlock:
         sig.sfunction("speed_controller"),
         feedthrough=[1, 1, 0, 1],
         mask=mask,
+        mcode=mcode,
     )
 
 
@@ -344,6 +411,13 @@ def pwm(sig: Signals) -> Subsystem:
         "pwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\n"
         "pwm_set_min_pulse(&self, P(4, 0));\n"
     )
+    m_start = (
+        "self = pwm_init(1.5); % k_pred\n"
+        "self = pwm_set_overmodulation(self, p.mme);\n"
+        "self = pwm_set_dead_time(self, p.t_d, p.T_s, p.i_0, p.feedforward);\n"
+        "self = pwm_set_min_pulse(self, p.d_min);\n"
+    )
+    m_checks = required(*params)
     meas = sig.port("meas")
     output = (
         sig.read(1, "meas") + "double d_abc[3];\n"
@@ -360,6 +434,14 @@ def pwm(sig: Signals) -> Subsystem:
         ),
         params,
         sig.sfunction("pwm"),
+        mcode=MCode(
+            start=m_start,
+            output="[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, "
+            "meas.u_dc, w, meas.i_c_ab);\n",
+            inputs={"meas": sig.vector("meas"), "u_c_ref_ab": COMPLEX},
+            checks=m_checks,
+            disabled=0.5,
+        ),
     )
     output = (
         sig.read(1, "meas")
@@ -385,6 +467,19 @@ def pwm(sig: Signals) -> Subsystem:
         params,
         sig.sfunction("pwm_realized_voltage"),
         feedthrough=[1, 1, 0],
+        mcode=MCode(
+            start=m_start,
+            output="% Average of the previous and the ongoing periods, and of the "
+            "ongoing period\n"
+            "u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);\n"
+            "u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, "
+            "false);\n",
+            update="% The duty ratios of the next period\n"
+            "self = pwm_update(self, d_abc);\n",
+            inputs={"meas": sig.vector("meas")},
+            outputs={"u_c_ab": COMPLEX, "u_c_zoh_ab": COMPLEX},
+            checks=m_checks,
+        ),
     )
     return Subsystem(
         "PWM",
@@ -456,6 +551,17 @@ def speed_observer(sig: Signals) -> CBlock:
         sig.sfunction("speed_observer"),
         feedthrough=[1, 0, 0],
         mask=mask,
+        mcode=MCode(
+            start="% The mechanical system model is not used without J\n"
+            "J = p.J;\n"
+            "if isnan(J)\n"
+            "    J = 0;\n"
+            "end\n"
+            "self = speed_observer_init(p.k_w, p.k_tau, J);\n",
+            output="w_M = self.w_M;\ntau_L = self.tau_L;\n",
+            update="self = speed_observer_update(self, p.T_s, eps, tau_M);\n",
+            checks=required("k_w", "k_tau", "T_s"),
+        ),
     )
 
 
@@ -481,6 +587,13 @@ def current_limiter(sig: Signals) -> CBlock:
         sig.sfunction("current_limiter"),
         sample_time=None,
         mask=mask,
+        mcode=MCode(
+            output="i_lim = current_limiter(p.i_max, i);\n",
+            inputs={"i": COMPLEX},
+            outputs={"i_lim": COMPLEX},
+            checks=required("i_max"),
+            disabled=None,
+        ),
     )
 
 
@@ -515,6 +628,12 @@ def rate_limiter(sig: Signals) -> CBlock:
         params,
         sig.sfunction("rate_limiter"),
         mask=mask,
+        mcode=MCode(
+            start="self = rate_limiter_init(p.rate_limit);\n",
+            output="y = rate_limiter_compute_output(self, p.T_s, u);\n",
+            update="self = rate_limiter_update(self, y);\n",
+            checks=required(*params),
+        ),
     )
 
 
@@ -612,6 +731,13 @@ def get_measurement(
         + "".join(f"meas.{n} = {v};\n" for n, v in fields)
         + sig.write(0, "meas", "meas")
     )
+    m_fields = ", ...\n    ".join(f"'{n}', {c_to_matlab(v, inputs)}" for n, v in fields)
+    mcode = MCode(
+        output="% Measurements, the DC-bus voltage limited to U_DC_MIN = 1 V\n"
+        f"meas = struct( ...\n    {m_fields});\n",
+        outputs={"meas": sig.vector("meas")},
+        disabled=None,
+    )
     return CBlock(
         "get_measurement",
         inputs,
@@ -619,6 +745,7 @@ def get_measurement(
         sig.function_code(output, workspace=C_U_DC_MIN),
         ["T_s"],
         sig.sfunction("get_measurement"),
+        mcode=mcode,
     )
 
 
@@ -649,6 +776,17 @@ def modulate(sig: Signals, u: str) -> CBlock:
         + complex_out(0, "u_c_ref_ab")
         + "OutputSignal(1, 0) = fbk.w_c;\n"
     )
+    mcode = MCode(
+        output="% Voltage reference in stationary coordinates, its angle advanced by\n"
+        f"% k_comp*T_s*w_c (k_comp = {K_COMP} of the controller)\n"
+        f"u_c_ref_ab = exp(1i*fbk.theta_c)*{u};\n"
+        f"u_c_ref_ab = u_c_ref_ab*exp(1i*{K_COMP}*p.T_s*fbk.w_c);\n"
+        "w = fbk.w_c;\n",
+        inputs={"fbk": sig.vector("fbk"), u: COMPLEX},
+        outputs={"u_c_ref_ab": COMPLEX},
+        checks=required("T_s"),
+        disabled=None,
+    )
     return CBlock(
         "modulate",
         [sig.port("fbk"), Port(u, 2)],
@@ -656,6 +794,7 @@ def modulate(sig: Signals, u: str) -> CBlock:
         sig.function_code(output, "T_s = P(0, 0);\n", SAMPLING),
         ["T_s"],
         sig.sfunction("modulate"),
+        mcode=mcode,
     )
 
 
@@ -675,13 +814,25 @@ def monitor(
         + sig.read(2, "ref")
         + monitored_code(outputs, monitored, prelude=prelude, first=0)
     )
+    ports = [Port(ENABLE, 1), sig.port("fbk"), sig.port("ref"), *inputs]
+    m_output = "% Monitored signals\n" + c_to_matlab(prelude, ports)
+    for name, signals in outputs.items():
+        values = [c_to_matlab(monitored[n], ports) for n in signals]
+        line = f"{m_variable(name)} = [{'; '.join(values)}];\n"
+        if len(line) > 84:  # One value per line
+            line = f"{m_variable(name)} = [ ...\n    " + ";\n    ".join(values) + "];\n"
+        m_output += line
+    mcode = MCode(
+        output=m_output, inputs={"fbk": sig.vector("fbk"), "ref": sig.vector("ref")}
+    )
     return CBlock(
         MONITOR,
-        [Port(ENABLE, 1), sig.port("fbk"), sig.port("ref"), *inputs],
+        ports,
         [Port(name, len(signals)) for name, signals in outputs.items()],
         block_enable_code(code, [], [len(v) for v in outputs.values()], 0.0),
         ["T_s"],
         sig.sfunction("monitored_signals"),
+        mcode=mcode,
     )
 
 

@@ -5,7 +5,10 @@ function build_drive(s)
 %   motulator_export.simulink, with the fields
 %
 %     name      Model name
+%     code      'c' (the blocks of the control system are S-functions) or
+%               'matlab' (MATLAB Function blocks)
 %     folder    Folder of the model, the S-functions, and their compiled versions
+%               (or the functions of the MATLAB Function blocks)
 %     init_script  Script in the folder defining the parameters (the system model
 %               and the control system) in the base workspace, see blocks.new_model
 %     machine   'sm' (synchronous machine), 'gn' (synchronous machine with a GradNet
@@ -31,11 +34,16 @@ function build_drive(s)
 %   The blocks are aligned with the ports they connect to, so that the lines are
 %   straight, and the feedback lines are drawn through given corners.
 
-% The S-functions of the blocks of the control system
-sfunctions = cellstr(s.control.sfunction);
+% The S-functions of the blocks of the control system (none with the MATLAB Function
+% blocks)
+sfunctions = s.control.sfunction;
+if ~isempty(sfunctions)
+    sfunctions = cellstr(sfunctions);
+end
 for k = 1:numel(sfunctions)
     blocks.compile(sfunctions{k}, s.folder);
 end
+s.control.folder = s.folder;
 slx = blocks.new_model(s);
 sys = s.name;
 cs = s.control.name;
@@ -51,7 +59,11 @@ switch s.machine
     case 'sm'
         add_synchronous_machine([sys '/Machine'], [680 0 780 120]);
     case 'gn'
-        add_gradnet_machine([sys '/Machine'], [680 0 780 120], s);
+        if isfield(s, 'code') && strcmp(s.code, 'matlab')
+            add_gradnet_machine_mfunction([sys '/Machine'], [680 0 780 120], s);
+        else
+            add_gradnet_machine([sys '/Machine'], [680 0 780 120], s);
+        end
     case 'im'
         add_induction_machine([sys '/Machine'], [680 0 780 80]);
 end
@@ -205,6 +217,17 @@ set_param([blk '/i_s_abc'], 'Port', '1');
 set_param([blk '/tau_M'], 'Port', '2');
 end
 
+function add_gradnet_machine_mfunction(blk, pos, s)
+% Synchronous machine with a GradNet current map with spatial harmonics
+% (SpatialSaturatedSynchronousMachinePars), modeled by the MATLAB function
+% mfun_gradnet_machine (the MATLAB port of the code of the PLECS model) with the
+% stator flux linkage in rotor coordinates as the state, whose initial value is
+% machine.psi_f. Its parameters are in the struct machine of the initialization
+% script.
+add_machine(blk, pos, '', 'psi_s_dq', '[machine.psi_f; 0]', ...
+    {'w_M', 'theta_M'}, '', s.folder);
+end
+
 function add_induction_machine(blk, pos)
 % Induction machine with constant parameters, the inverse-Gamma model with the
 % stator and rotor flux linkages in stator coordinates as the states. The model is
@@ -229,31 +252,43 @@ add_machine(blk, pos, script, 'psi', 'zeros(4, 1)', {'w_M'}, ...
     '[machine.n_p machine.R_s machine.R_R machine.L_sgm machine.L_M]');
 end
 
-function add_machine(blk, pos, script, state, ic, inputs, par)
+function add_machine(blk, pos, script, state, ic, inputs, par, folder)
 % Machine subsystem: a MATLAB Function block computing the derivatives of the
 % flux linkages (the state of an integrator), the phase currents, and the torque
 % from the stator voltage, the state, the inputs (the rotor speed and angle), and
-% the parameters
+% the parameters par (a Constant block). With the folder, the function is
+% mfun_gradnet_machine of the folder, whose parameters are the struct machine.
 add(blk, 'built-in/Subsystem', pos);
 fcn = [blk '/Machine model'];
 height = 44*(numel(inputs) + 3);
-add(fcn, 'simulink/User-Defined Functions/MATLAB Function', [230 40 350 40 + height]);
-root = sfroot;
-chart = root.find('-isa', 'Stateflow.EMChart', 'Path', fcn);
-chart.Script = strjoin(script', newline);
+if nargin < 8
+    add(fcn, 'simulink/User-Defined Functions/MATLAB Function', ...
+        [230 40 350 40 + height]);
+    root = sfroot;
+    chart = root.find('-isa', 'Stateflow.EMChart', 'Path', fcn);
+    chart.Script = strjoin(script', newline);
+else
+    blocks.add_mfunction(fcn, [230 40 350 40 + height], folder, ...
+        'mfun_gradnet_machine', '', [2 3 1], 'machine');
+end
 % The state is integrated to the left of the function, with the feedback line above
 add([blk '/u_s_ab'], 'built-in/Inport', [140 0 170 14]);
 add([blk '/' state], 'built-in/Integrator', [140 0 170 30], 'InitialCondition', ic);
 for k = 1:numel(inputs)
     add([blk '/' inputs{k}], 'built-in/Inport', [40 0 70 14]);
 end
-add([blk '/par'], 'built-in/Constant', [40 0 180 20], 'Value', par);
+if ~isempty(par)
+    add([blk '/par'], 'built-in/Constant', [40 0 180 20], 'Value', par);
+end
 % The 3x1 currents as a 1-D vector for the S-function input
 add([blk '/1-D'], 'built-in/Reshape', [400 0 430 30], ...
     'OutputDimensionality', '1-D array');
 add([blk '/i_s_abc'], 'built-in/Outport', [480 0 510 14]);
 add([blk '/tau_M'], 'built-in/Outport', [480 0 510 14]);
-fcn_inputs = [{'u_s_ab', state}, inputs, {'par'}];
+fcn_inputs = [{'u_s_ab', state}, inputs];
+if ~isempty(par)
+    fcn_inputs{end + 1} = 'par';
+end
 for k = 1:numel(fcn_inputs)
     y = blocks.port_y(blk, 'Machine model', 'Inport', k);
     blocks.align(blk, fcn_inputs{k}, 'Outport', 1, y);
