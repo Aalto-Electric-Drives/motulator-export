@@ -44,20 +44,20 @@ The scripts close the model in PLECS before simulating it, since an open model i
 
 ## Agreement of the PLECS models with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.9.0 and PLECS 5.0 (2026-10-08).
+Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.10.0 and PLECS 5.0 (2026-10-13).
 *motulator* uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
 | Script                           | System model                               | Control system                                               |
 | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc.py`               | w_M 7.1e-6, tau_M 4.4e-6, i_s_ab 2.4e-6    | w_M 5.3e-6, tau_M 4.5e-6, tau_M_ref 4.4e-6, psi_s_ref 1.8e-8 |
-| `ipmsm_2kw_fvc.py --diode`       | w_M 9.3e-6, tau_M 6.1e-6, i_s_ab 2.7e-6    | w_M 7.6e-6, tau_M 6.0e-6, tau_M_ref 6.3e-6, psi_s_ref 1.7e-8 |
-| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.0e-4, tau_M 1.9e-3, i_s_ab 6.9e-4    |                                                              |
-| `im_2kw_cvc.py`                  | w_M 7.2e-7, tau_M 2.4e-6, i_s_ab 8.6e-7    | w_M 5.0e-6, tau_M 3.0e-6, tau_M_ref 3.7e-6, psi_R 3.4e-8     |
-| `im_2kw_dead_time_cvc.py`        | w_M 0.23, tau_M 0.75, i_s_ab 0.50          | w_M 1.4, tau_M 0.90, tau_M_ref 1.1, psi_R 7.1e-3             |
-| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.28, tau_M 0.45, i_s_ab 0.17          | w_M 0.61, tau_M 0.35, tau_M_ref 0.40, psi_R 6.1e-3           |
-| `im_2kw_vhz.py`                  | w_M 3.2e-6, tau_M 6.9e-6, i_s_ab 2.5e-6    | w_s 7.9e-6, tau_M 8.1e-6, tau_M_ref 3.6e-7, psi_s 2.9e-8     |
-| `im_2kw_vhz.py --open-loop`      | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 9.2e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 0                         |
+| `ipmsm_2kw_fvc.py`               | w_M 9.8e-7, tau_M 2.1e-6, i_s_ab 1.0e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
+| `ipmsm_2kw_fvc.py --diode`       | w_M 9.3e-6, tau_M 7.0e-6, i_s_ab 3.0e-6    | w_M 8.6e-6, tau_M 7.0e-6, tau_M_ref 7.1e-6, psi_s_ref 1.9e-8 |
+| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.2e-4, tau_M 2.0e-3, i_s_ab 7.4e-4    |                                                              |
+| `im_2kw_cvc.py`                  | w_M 6.5e-7, tau_M 2.3e-6, i_s_ab 7.6e-7    | w_M 4.2e-6, tau_M 2.5e-6, tau_M_ref 3.1e-6, psi_R 3.0e-8     |
+| `im_2kw_dead_time_cvc.py`        | w_M 0.24, tau_M 0.74, i_s_ab 0.44          | w_M 1.3, tau_M 0.88, tau_M_ref 1.0, psi_R 6.8e-3             |
+| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.10, tau_M 0.26, i_s_ab 0.11          | w_M 0.42, tau_M 0.25, tau_M_ref 0.31, psi_R 2.8e-3           |
+| `im_2kw_vhz.py`                  | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
+| `im_2kw_vhz.py --open-loop`      | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 2.2e-16                   |
 | `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
 | `gfm_13kva_do.py`                | i_c_ab 9.4e-7, i_c_a 7.8e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
 
@@ -65,7 +65,7 @@ The differences are in SI units; relative to the signal magnitudes, they are abo
 In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 1e-4 relative), since *motulator* evaluates the GradNets in single precision, see [the C port](../motulator_export/c/README.md).
 In `im_2kw_dead_time_cvc.py`, the differences are due to the switching transients during blanking, which *motulator* does not model in detail.
 *motulator* determines the state of a blanked leg from the current direction in the beginning of the blanking interval, whereas in PLECS, the current of a blanked leg cannot cross zero, since its diode turns off.
-At low speeds, this occurs often due to the current ripple near the zero crossings of the phase currents, and the sensorless low-speed operation amplifies the differences (e.g., 1.4 rad/s in the speed estimate during transients, compared with the speed reference of 7.9 rad/s).
+At low speeds, this occurs often due to the current ripple near the zero crossings of the phase currents, and the sensorless low-speed operation amplifies the differences (e.g., 1.3 rad/s in the speed estimate during transients, compared with the speed reference of 7.9 rad/s).
 Furthermore, at the first switching from zero currents, the blanked leg is open in PLECS.
-With `T_D = 1e-9` in the script, the differences are at the level of the other examples (e.g., w_M 1.4e-6, i_s_ab 8.5e-6, ctrl.w_M 3.7e-6), which verifies the export of the dead time and its compensation.
-With `--tanh` (`I_0 = 0.1` A, about half the peak-to-peak current ripple of 0.15–0.28 A), the compensation is less sensitive to these differences near the zero crossings: the differences in the currents, the torques, and the speed estimate are about a half or less of those with the signum function, whereas those in the speed and in the flux estimate are similar.
+With `T_D = 1e-9` in the script, the differences are at the level of the other examples (e.g., w_M 1.3e-6, i_s_ab 8.5e-6, ctrl.w_M 3.1e-6), which verifies the export of the dead time and its compensation.
+With `--tanh` (`I_0 = 0.1` A, about half the peak-to-peak current ripple of 0.15–0.28 A), the compensation is less sensitive to these differences near the zero crossings: the differences are about a half or less of those with the signum function.
