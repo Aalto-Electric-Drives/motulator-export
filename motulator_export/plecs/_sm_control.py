@@ -12,8 +12,8 @@ with a mask of the arguments of its class (see `_control`):
   `SpeedObserver` and the `FluxObserver`
 
 The mask initialization of the FluxVectorController resolves the defaults of
-`FluxVectorControllerCfg` and `FluxVectorController.__init__`, and that of the
-SpeedFluxObserver computes the gains of `create_speed_flux_observer` and
+`FluxVectorController.__init__`, and that of the SpeedFluxObserver resolves the
+defaults of `create_speed_flux_observer` and computes the gains of
 `SpeedFluxObserver.__init__`. The masks of the top-level classes refer to the
 variables of the model initialization (`init_script`): the machine model `par`, the
 configuration `cfg`, the speed controller `speed_ctrl`, and the PWM `pwm`. The
@@ -143,9 +143,12 @@ def _flux_observer() -> CBlock:
     """Flux observer (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
-        "Flux observer in estimated rotor coordinates (FluxObserver). In the sensored "
-        "mode (h = 1), the position error signal is computed from the measured rotor "
-        "angle (position_error)." + PAR_DESCRIPTION,
+        "Flux observer in estimated rotor coordinates (FluxObserver). The observer "
+        "uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output "
+        "fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods "
+        "(DriveControlSystem.get_feedback). In the sensored mode (h = 1), the position "
+        "error signal is computed from the measured rotor angle (compute_feedback)."
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param("k_theta", "k_theta: Rotor angle estimation gain (rad/s)", "k_theta"),
@@ -188,19 +191,21 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(1, "meas") + f"double complex u_s_ab = {complex_in(2)};\n"
-        f"double complex u_s_zoh_ab = {complex_in(3)};\n"
+        SIGNALS.read(1, "meas") + f"double complex u_s_zoh_ab = {complex_in(3)};\n"
         "double w_M = InputSignal(4, 0);\n"
         "if (h == 0.0) {\n"
-        "    flux_observer_compute_output(&self, u_s_ab, u_s_zoh_ab, meas.i_c_ab,\n"
-        "                                 w_M, 0.0, 0.0, &out);\n"
+        "    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,\n"
+        "                                 0.0, &out);\n"
         "} else {\n"
-        "    /* Position error from the measured rotor angle (position_error) */\n"
+        "    /* Position error from the measured rotor angle (compute_feedback) */\n"
         "    double n_p = self.par.n_p;\n"
         "    double eps = wrap(n_p * meas.theta_M - self.theta_m) / n_p;\n"
-        "    flux_observer_compute_output(&self, u_s_ab, u_s_zoh_ab, meas.i_c_ab,\n"
-        "                                 w_M, eps, h, &out);\n"
-        "}\n" + SIGNALS.write(0, "fbk", "out")
+        "    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps,\n"
+        "                                 h, &out);\n"
+        "}\n"
+        "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
+        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        + SIGNALS.write(0, "fbk", "out")
     )
     return CBlock(
         "FluxObserver",
@@ -229,6 +234,20 @@ def _flux_observer() -> CBlock:
 # Mask initialization of the SpeedFluxObserver: create_speed_flux_observer and
 # SpeedFluxObserver.__init__
 SFO_INIT = (
+    "% Default speed estimation poles of create_speed_flux_observer\n"
+    "% (default_alpha_o). With J, the triple pole at alpha_o/sqrt(3) keeps the\n"
+    "% speed gain about the same.\n"
+    "alpha_o_obs = alpha_o;\n"
+    "if isempty(alpha_o_obs)\n"
+    "  if sensorless\n"
+    "    alpha_o_obs = 2*pi*50;\n"
+    "  else\n"
+    "    alpha_o_obs = 2*pi*400;\n"
+    "  end\n"
+    "  if ~isempty(J)\n"
+    "    alpha_o_obs = alpha_o_obs/sqrt(3);\n"
+    "  end\n"
+    "end\n"
     "% Default observer gain of create_speed_flux_observer, k_o(w_m) = k0 +\n"
     "% k1*abs(w_m) (k0 = NaN: sigma0 of the machine model, see the FluxObserver)\n"
     "k_o_obs = k_o;\n"
@@ -239,15 +258,17 @@ SFO_INIT = (
     "    k_o_obs = [2*pi*15 0];\n"
     "  end\n"
     "end\n"
-    "% Gains for critically damped dynamics (SpeedFluxObserver.__init__)\n"
+    "% Gains for critically damped dynamics (SpeedFluxObserver.__init__), the\n"
+    "% pole matched to the sampling period (matched_pole)\n"
+    "alpha_o_obs = -expm1(-alpha_o_obs*T_s)/T_s;\n"
     "if isempty(J)\n"
-    "  k_theta = 2*alpha_o;\n"
-    "  k_w = alpha_o^2;\n"
+    "  k_theta = 2*alpha_o_obs;\n"
+    "  k_w = alpha_o_obs^2;\n"
     "  k_tau = 0;\n"
     "else\n"
-    "  k_theta = 3*alpha_o;\n"
-    "  k_w = 3*alpha_o^2;\n"
-    "  k_tau = J*alpha_o^3;\n"
+    "  k_theta = 3*alpha_o_obs;\n"
+    "  k_w = 3*alpha_o_obs^2;\n"
+    "  k_tau = J*alpha_o_obs^3;\n"
     "end\n"
     "% Weight of the measured rotor angle in the FluxObserver (position_error)\n"
     "h = 1 - sensorless;\n"
@@ -259,11 +280,16 @@ def _speed_flux_observer() -> Subsystem:
     mask = Mask(
         "SpeedFluxObserver (motulator)",
         "Flux observer with speed estimation, created by create_speed_flux_observer. "
-        "The mask initialization computes the gains of the SpeedObserver and the "
-        "FluxObserver inside it, as in SpeedFluxObserver." + PAR_DESCRIPTION,
+        "The mask initialization resolves the defaults of create_speed_flux_observer "
+        "and computes the gains of the SpeedObserver and the FluxObserver inside it, "
+        "as in SpeedFluxObserver." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
-            Param("alpha_o", "alpha_o: Speed estimation pole (rad/s)", "alpha_o"),
+            Param(
+                "alpha_o",
+                "alpha_o: Speed estimation poles (rad/s), [] = default",
+                "cfg.alpha_o",
+            ),
             Param(
                 "k_o",
                 "k_o: Observer gain [k0 k1], k_o(w_m) = k0 + k1*abs(w_m), [] = default",
@@ -435,21 +461,8 @@ def _flux_torque_controller() -> CBlock:
     )
 
 
-# Mask initialization of the FluxVectorController: FluxVectorControllerCfg and
-# FluxVectorController.__init__
+# Mask initialization of the FluxVectorController: FluxVectorController.__init__
 FVC_INIT = (
-    "% Default of alpha_o (FluxVectorControllerCfg.__post_init__)\n"
-    "alpha_o = cfg.alpha_o;\n"
-    "if isempty(alpha_o)\n"
-    "  if cfg.sensorless\n"
-    "    alpha_o = 2*pi*50;\n"
-    "  else\n"
-    "    alpha_o = 2*pi*400;\n"
-    "  end\n"
-    "  if ~isempty(cfg.J)\n"
-    "    alpha_o = alpha_o/3;\n"
-    "  end\n"
-    "end\n"
     "% Defaults of FluxVectorController.__init__\n"
     "alpha_psi = cfg.alpha_psi;\n"
     "if isempty(alpha_psi)\n"

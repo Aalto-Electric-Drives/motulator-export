@@ -339,7 +339,7 @@ def pwm(sig: Signals) -> Subsystem:
     )
     params = mask_params(mask, {"overmodulation": ["mme"]})
     start = (
-        checks(params, params) + "pwm_init(&self, 1.5);\n"
+        checks(params, params) + "pwm_init(&self, 1.5); /* k_pred */\n"
         "pwm_set_overmodulation(&self, (int)P(5, 0));\n"
         "pwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\n"
         "pwm_set_min_pulse(&self, P(4, 0));\n"
@@ -630,15 +630,22 @@ def abc_input(name: str, port: int) -> str:
     )
 
 
+# Angle-advance factor of the voltage reference, given by the controllers (k_comp)
+K_COMP = 1.5
+
+
 def modulate(sig: Signals, u: str) -> CBlock:
     """
     Voltage reference for the PWM (modulate): the voltage reference `u` (e.g.,
-    ref.u_s) in stationary coordinates, and the angular speed of the coordinates.
+    ref.u_s) in stationary coordinates, its angle advanced by `k_comp*T_s*w_c`, and
+    the angular speed of the coordinates.
     """
     output = (
         sig.read(0, "fbk")
-        + "/* Voltage reference in stationary coordinates */\n"
+        + "/* Voltage reference in stationary coordinates, its angle advanced by\n"
+        f" * k_comp*T_s*w_c (k_comp = {K_COMP} of the controller) */\n"
         + f"double complex u_c_ref_ab = cexp(I * fbk.theta_c) * {complex_in(1)};\n"
+        + f"u_c_ref_ab *= cexp(I * {K_COMP} * T_s * fbk.w_c);\n"
         + complex_out(0, "u_c_ref_ab")
         + "OutputSignal(1, 0) = fbk.w_c;\n"
     )
@@ -646,7 +653,7 @@ def modulate(sig: Signals, u: str) -> CBlock:
         "modulate",
         [sig.port("fbk"), Port(u, 2)],
         [Port("u_c_ref_ab", 2), Port("w", 1)],
-        sig.function_code(output),
+        sig.function_code(output, "T_s = P(0, 0);\n", SAMPLING),
         ["T_s"],
         sig.sfunction("modulate"),
     )
@@ -797,12 +804,13 @@ def grid_converter_control_system(
     T_s.
 
     The inputs are `enable`, the two references, and the inputs of the measurements.
-    The inner controller has the inputs `enable`, the references, `meas`, and
-    `u_c_ab`, and the outputs `fbk` and `ref`. The inputs of the monitored signals
-    are `enable`, `fbk`, and `ref`.
+    The inner controller has the inputs `enable`, the references, `meas`, `u_c_ab`,
+    and optionally `u_c_zoh_ab`, and the outputs `fbk` and `ref`. The inputs of the
+    monitored signals are `enable`, `fbk`, and `ref`.
 
     """
     ic = inner_ctrl.name
+    zoh = "u_c_zoh_ab" in [p.name for p in inner_ctrl.inputs]
     refs = [p.name for p in inputs[1:3]]
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals and the references to the monitored signals by tags
@@ -834,6 +842,7 @@ def grid_converter_control_system(
             ("get_measurement:meas", "PWM:meas"),
             ("get_measurement:meas", f"{ic}:meas"),
             ("PWM:u_c_ab", f"{ic}:u_c_ab"),
+            *([("PWM:u_c_zoh_ab", f"{ic}:u_c_zoh_ab")] if zoh else []),
             ("PWM:d_abc", "d_abc"),
             (f"{ic}:fbk", "Goto fbk"),
             (f"{ic}:fbk", "modulate:fbk"),
@@ -885,12 +894,13 @@ def vhz_control_system(
     The inputs are `enable`, the speed reference `w_M_ref`, and the inputs of the
     measurements. The speed reference is limited by the rate limiter. The V/Hz
     controller has the inputs `enable`, the rate-limited speed reference `w_M`,
-    `meas`, and `u_c_ab`, and the outputs `fbk` and `ref`. The inputs of the
-    monitored signals are `enable`, `fbk`, `ref`, and `w_M_ref` (the rate-limited
-    speed reference).
+    `meas`, `u_c_ab`, and optionally `u_c_zoh_ab`, and the outputs `fbk` and `ref`.
+    The inputs of the monitored signals are `enable`, `fbk`, `ref`, and `w_M_ref`
+    (the rate-limited speed reference).
 
     """
     vc = vhz_ctrl.name
+    zoh = "u_c_zoh_ab" in [p.name for p in vhz_ctrl.inputs]
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals, the references, and the rate-limited speed reference to
     # the monitored signals by tags
@@ -928,6 +938,7 @@ def vhz_control_system(
             ("get_measurement:meas", "PWM:meas"),
             ("get_measurement:meas", f"{vc}:meas"),
             ("PWM:u_c_ab", f"{vc}:u_c_ab"),
+            *([("PWM:u_c_zoh_ab", f"{vc}:u_c_zoh_ab")] if zoh else []),
             ("PWM:d_abc", "d_abc"),
             (f"{vc}:fbk", "Goto fbk"),
             (f"{vc}:fbk", "modulate:fbk"),

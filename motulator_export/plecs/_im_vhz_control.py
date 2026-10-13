@@ -89,8 +89,10 @@ def _flux_observer() -> CBlock:
         "created by create_vhz_observer: the rotor speed w_M is the rate-limited "
         "speed reference, and the external speed error signal is zero, with the "
         "weight h (1 in pure open-loop V/Hz control, which disables the model-based "
-        "correction). The initial stator flux estimate is psi_s0."
-        + VHZ_PAR_DESCRIPTION,
+        "correction). The initial stator flux estimate is psi_s0. The observer uses "
+        "the voltage u_s_zoh_ab of the ongoing sampling period, and the output "
+        "fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods "
+        "(DriveControlSystem.get_feedback)." + VHZ_PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -120,16 +122,24 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(1, "meas") + f"double complex u_s_ab = {complex_in(2)};\n"
+        SIGNALS.read(1, "meas") + f"double complex u_s_zoh_ab = {complex_in(3)};\n"
         "/* The rotor speed is the speed reference, without the external speed\n"
         " * error signal */\n"
-        "im_flux_observer_compute_output(&self, u_s_ab, meas.i_c_ab,\n"
-        "                                InputSignal(3, 0), 0.0, h, &out);\n"
+        "im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n"
+        "                                InputSignal(4, 0), 0.0, h, &out);\n"
+        "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
+        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(2)};\n"
         + SIGNALS.write(0, "fbk", "out")
     )
     return CBlock(
         "FluxObserver",
-        [Port(ENABLE, 1), SIGNALS.port("meas"), Port("u_s_ab", 2), Port("w_M", 1)],
+        [
+            Port(ENABLE, 1),
+            SIGNALS.port("meas"),
+            Port("u_s_ab", 2),
+            Port("u_s_zoh_ab", 2),
+            Port("w_M", 1),
+        ],
         [Port("out", SIGNALS.width("fbk"))],
         SIGNALS.class_code(
             "IMFluxObserver",
@@ -322,7 +332,13 @@ def _vhz_controller() -> Subsystem:
     )
     return Subsystem(
         "ObserverBasedVHzController",
-        [Port(ENABLE, 1), Port("w_M", 1), SIGNALS.port("meas"), Port("u_c_ab", 2)],
+        [
+            Port(ENABLE, 1),
+            Port("w_M", 1),
+            SIGNALS.port("meas"),
+            Port("u_c_ab", 2),
+            Port("u_c_zoh_ab", 2),
+        ],
         [SIGNALS.port("fbk"), SIGNALS.port("ref")],
         [
             _flux_observer(),
@@ -338,6 +354,7 @@ def _vhz_controller() -> Subsystem:
             (ENABLE, "tau_M_lpf:enable"),
             ("meas", "FluxObserver:meas"),
             ("u_c_ab", "FluxObserver:u_s_ab"),
+            ("u_c_zoh_ab", "FluxObserver:u_s_zoh_ab"),
             ("w_M", "FluxObserver:w_M"),
             ("meas", "meas.u_dc:u"),
             ("FluxObserver:out", "fbk.tau_M:u"),
@@ -353,7 +370,7 @@ def _vhz_controller() -> Subsystem:
             ("Mux ref:y", "ref"),
         ],
         columns=[
-            ["meas", "u_c_ab", "w_M", ENABLE],
+            ["meas", "u_c_ab", "u_c_zoh_ab", "w_M", ENABLE],
             ["FluxObserver"],
             ["meas.u_dc", "fbk.tau_M"],
             ["tau_M_lpf"],

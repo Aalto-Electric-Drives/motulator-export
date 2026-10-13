@@ -45,10 +45,10 @@ static IMObserverOutputs out;
 static IMFluxObserver self_init;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 4, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
-static const int OUTPUT_WIDTHS[] = {19};
-#define NUM_INPUTS 4
+static const int INPUT_WIDTHS[] = {1, 4, 2, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1, 1};
+static const int OUTPUT_WIDTHS[] = {21};
+#define NUM_INPUTS 5
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 8
 
@@ -150,7 +150,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     UNUSED_ARG(tid);
     /* Disabled: the algorithm is not run */
     if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 19; k++) {
+        for (int k = 0; k < 21; k++) {
             OutputSignal(0, k) = 0.0;
         }
         return;
@@ -162,12 +162,14 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     IMMeasurements meas;
     im_measurements_unpack(meas_u, &meas);
-    double complex u_s_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));
-    double w_M = InputSignal(3, 0);
+    double complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));
+    double w_M = InputSignal(4, 0);
     /* Speed error from the measured rotor speed in the sensored mode */
     double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;
-    im_flux_observer_compute_output(&self, u_s_ab, meas.i_c_ab, w_M, eps, h,
+    im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps, h,
                                     &out);
+    /* Voltage for the control laws (DriveControlSystem.get_feedback) */
+    out.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
     double y[FBK_WIDTH];
     im_observer_outputs_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {

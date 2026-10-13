@@ -93,6 +93,8 @@ def test_control_system(dll: ctypes.CDLL) -> None:
         u_abc = complex2abc(u_g_ab[k])
         u_line = [u_abc[0] - u_abc[1], u_abc[1] - u_abc[2]]  # Line-to-line voltages
         meas = Measurements(abc2complex(i_abc), abc2complex(u_abc), u_dc[k])
+        # External power references at the control time of motulator
+        p_g_ref, q_g_ref = 5e3 * (ctrl.t > 0.02), 4e3 * (ctrl.t > 0.04)
         fbk = cast(Any, ctrl.get_feedback(meas))
         ref = cast(Any, ctrl.compute_output(fbk))
         ctrl.update(ref, fbk)
@@ -104,7 +106,7 @@ def test_control_system(dll: ctypes.CDLL) -> None:
             ref.u_c.real,
             ref.u_c.imag,
         ]
-        dll.step(arr(i_abc), arr(u_line), d(u_dc[k]), d(ref.p_g), d(ref.q_g), out)
+        dll.step(arr(i_abc), arr(u_line), d(u_dc[k]), d(p_g_ref), d(q_g_ref), out)
         res_c[k] = np.array(out)
     names = ["d_a", "d_b", "d_c", "theta_c", "w_g", "u_g", "u_c_d", "u_c_q"]
     err = np.max(np.abs(res_c - res_py), axis=0)

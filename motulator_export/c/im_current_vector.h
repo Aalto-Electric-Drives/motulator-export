@@ -8,7 +8,8 @@
  *   motulator/drive/control/_im_current_vector.py CurrentController,
  *                                                 CurrentReferenceGenerator,
  *                                                 CurrentVectorController
- *   motulator/drive/control/_base.py              VectorControlSystem
+ *   motulator/drive/control/_base.py              DriveControlSystem,
+ *                                                 VectorControlSystem
  *   motulator/drive/control/_common.py            SpeedController, SpeedObserver
  *
  * The machine model parameters are the constant inverse-Γ parameters, and the
@@ -36,7 +37,9 @@ typedef struct {
 typedef struct {
     double u_dc;          /* DC-bus voltage */
     double complex i_s;   /* Stator current */
-    double complex u_s;   /* Stator voltage */
+    double complex u_s;   /* Stator voltage (previous and ongoing periods), set by
+                           * the control system for the control laws */
+    double complex u_s_zoh; /* Stator voltage (ongoing period) */
     double complex psi_s; /* Stator flux estimate */
     double complex psi_R; /* Rotor flux estimate */
     double tau_M;         /* Electromagnetic torque estimate */
@@ -62,7 +65,7 @@ typedef struct {
     double theta_c;
     /* Other memory variables */
     double T_s_old;
-    double complex old_i_s;
+    double complex psi_R_pred; /* Rotor flux predicted by the current model */
 } IMFluxObserver;
 
 typedef struct {
@@ -91,7 +94,7 @@ typedef struct {
     double alpha_o;
     double w_s_nom;
     double k_u;
-    double k_fw; /* NAN or 0 = default */
+    double k_fw;
     double J;
     int sensorless;
     double T_s;
@@ -131,6 +134,7 @@ typedef struct {
 
 typedef struct {
     PWM pwm;
+    double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     IMCurrentVectorController vector_ctrl;
     PIController speed_ctrl;
     /* Workspace variables passed from the output to the update function */
@@ -160,19 +164,20 @@ static void im_vector_control_system_update(IMVectorControlSystem *self);
 
 #define FBK_i_s 0
 #define FBK_u_s 2
-#define FBK_psi_s 4
-#define FBK_psi_R 6
-#define FBK_tau_M 8
-#define FBK_w_c 9
-#define FBK_w_s 10
-#define FBK_w_r 11
-#define FBK_w_m 12
-#define FBK_w_M 13
-#define FBK_theta_c 14
-#define FBK_e_o 15
-#define FBK_eps 17
-#define FBK_h 18
-#define FBK_WIDTH 19
+#define FBK_u_s_zoh 4
+#define FBK_psi_s 6
+#define FBK_psi_R 8
+#define FBK_tau_M 10
+#define FBK_w_c 11
+#define FBK_w_s 12
+#define FBK_w_r 13
+#define FBK_w_m 14
+#define FBK_w_M 15
+#define FBK_theta_c 16
+#define FBK_e_o 17
+#define FBK_eps 19
+#define FBK_h 20
+#define FBK_WIDTH 21
 
 #define REF_tau_M 0
 #define REF_i_s 1

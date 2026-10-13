@@ -137,11 +137,12 @@ static void compute_reference_luts(const SynchronousMachinePars *par, double i_s
         luts->tau_M_mtpv.y[k] = torque(par, i_s, psi_s);
     }
 
-    /* Current limit, from the MTPV (or pi, if no MTPV) to the MTPA current angle */
+    /* Current limit, from the MTPV current angle (or, if no MTPV, from pi for PM
+     * machines and pi/2 for machines without PMs) to the MTPA current angle */
     double gamma1 = carg(compute_mtpv_current(par, i_s_max));
     double gamma2 = carg(i_s_mtpa_max);
     if (isnan(gamma1)) {
-        gamma1 = M_PI;
+        gamma1 = (par->psi_f == 0.0) ? 0.5 * M_PI : M_PI;
     }
     luts->tau_M_cl.n = num;
     for (int k = 0; k < num; k++) {

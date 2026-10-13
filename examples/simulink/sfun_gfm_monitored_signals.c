@@ -38,7 +38,7 @@
 
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 12, 6};
+static const int INPUT_WIDTHS[] = {1, 14, 6};
 static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3, 2, 4, 1};
 #define NUM_INPUTS 3

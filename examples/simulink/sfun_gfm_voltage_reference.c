@@ -39,7 +39,7 @@
 static GFMController self;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {2, 12};
+static const int INPUT_WIDTHS[] = {2, 14};
 static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
 #define NUM_INPUTS 2

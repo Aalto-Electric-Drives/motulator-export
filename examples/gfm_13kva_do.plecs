@@ -205,7 +205,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1050, 350]
+        Location      [0, 0; 1060, 350]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -309,7 +309,7 @@ Plecs {
       Type          Output
       Name          "d_abc"
       Show          on
-      Position      [620, 245]
+      Position      [630, 245]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -756,7 +756,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5);\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\nT_s = P(0, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5); /* k_pred */\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\nT_s = P(0, 0);\n"
         Show          off
       }
       Parameter {
@@ -866,7 +866,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5);\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\n\nself_init = self;\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5); /* k_pred */\npwm_set_overmodulation(&self, (int)P(5, 0));\npwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\npwm_set_min_pulse(&self, P(4, 0));\n\nself_init = self;\n"
         Show          off
       }
       Parameter {
@@ -1046,17 +1046,17 @@ Plecs {
       Type          Subsystem
       Name          "ObserverBasedGridFormingController"
       Show          on
-      Position      [660, 90]
+      Position      [670, 100]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -60; 50, 60]
+      Frame         [-50, -70; 50, 70]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ObserverBasedGridFormingController (motulator)"
-      MaskDescription "Disturbance-observer-based grid-forming controller (ObserverBasedGridFormingController) in the power-control mode, with the transparent current limitation. The configuration cfg is a struct with the fields of ObserverBasedGridFormingControllerCfg ([] = None, i.e., the default). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as ObserverBasedGridFormingController. The blocks compute_output and voltage_reference are its compute_output before and after the current limiter, and compute_output updates the active-power limitation."
-      MaskInit      "% Defaults of ObserverBasedGridFormingControllerCfg.__post_init__\nR_a = cfg.R_a;\nif isempty(R_a)\n  R_a = 0.25*cfg.u_nom/cfg.i_max;\nend\nk_v = cfg.k_v;\nif isempty(k_v)\n  k_v = cfg.alpha_o/cfg.w_nom;\nend\n% Current-control gain (ObserverBasedGridFormingController.__init__)\nk_c = cfg.alpha_c*cfg.L;\n% Other parameters of compute_output\nR = cfg.R;\ni_d_max = cfg.i_d_max;\nalpha_l = cfg.alpha_l;\nu_nom = cfg.u_nom;\nT_s = cfg.T_s;\n"
+      MaskDescription "Disturbance-observer-based grid-forming controller (ObserverBasedGridFormingController) in the power-control mode, with the transparent current limitation. The configuration cfg is a struct with the fields of ObserverBasedGridFormingControllerCfg ([] = None, i.e., the default). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as ObserverBasedGridFormingController. The blocks compute_output and voltage_reference are its compute_output before and after the current limiter."
+      MaskInit      "% Defaults of R_a and k_v (ObserverBasedGridFormingController.__init__)\nR_a = cfg.R_a;\nif isempty(R_a)\n  R_a = 0.25*cfg.u_nom/cfg.i_max;\nend\nk_v = cfg.k_v;\nif isempty(k_v)\n  k_v = cfg.alpha_o/cfg.w_nom;\nend\n% Current-control gain (ObserverBasedGridFormingController.__init__)\nk_c = cfg.alpha_c*cfg.L;\n% Other parameters of compute_output\nR = cfg.R;\n% PowerReferenceLimiter (none without i_d_max)\ni_d_max = cfg.i_d_max;\nalpha_l = cfg.alpha_l;\nu_nom = cfg.u_nom;\nT_s = cfg.T_s;\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1071,27 +1071,32 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -40]
+        Position      [-50, -50]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -20]
+        Position      [-50, -30]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 0]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 20]
+        Position      [-50, 10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 40]
+        Position      [-50, 30]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 50]
         Direction     left
       }
       Terminal {
@@ -1105,7 +1110,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1125, 365]
+        Location      [0, 0; 1270, 420]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1114,7 +1119,7 @@ Plecs {
       Type          Input
       Name          "enable"
       Show          on
-      Position      [40, 320]
+      Position      [40, 375]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1133,7 +1138,7 @@ Plecs {
       Type          Input
       Name          "p_g_ref"
       Show          on
-      Position      [40, 70]
+      Position      [40, 90]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1152,7 +1157,7 @@ Plecs {
       Type          Input
       Name          "v_c_ref"
       Show          on
-      Position      [40, 115]
+      Position      [40, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1171,7 +1176,7 @@ Plecs {
       Type          Input
       Name          "meas"
       Show          on
-      Position      [40, 240]
+      Position      [40, 255]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1190,7 +1195,7 @@ Plecs {
       Type          Input
       Name          "u_c_ab"
       Show          on
-      Position      [40, 280]
+      Position      [40, 295]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1206,10 +1211,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "fbk"
+      Type          Input
+      Name          "u_c_zoh_ab"
       Show          on
-      Position      [1075, 240]
+      Position      [40, 335]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1226,9 +1231,9 @@ Plecs {
     }
     Component {
       Type          Output
-      Name          "ref"
+      Name          "fbk"
       Show          on
-      Position      [1075, 150]
+      Position      [1220, 260]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1244,19 +1249,38 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "ref"
+      Show          on
+      Position      [1220, 180]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "8"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          Subsystem
       Name          "Observer"
       Show          on
-      Position      [265, 240]
+      Position      [275, 260]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -25; 50, 25]
+      Frame         [-50, -30; 50, 30]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "Observer (motulator)"
-      MaskDescription "Disturbance observer (Observer), giving the feedback signals fbk in its coordinates from the measurements and the realized converter voltage."
+      MaskDescription "Disturbance observer (Observer), designed directly in discrete time, giving the feedback signals fbk in its coordinates from the measurements. The observer uses the voltage u_c_zoh_ab of the ongoing sampling period, and the output fbk.u_c is the voltage u_c_ab averaged over the previous and ongoing periods (GridConverterControlSystem.get_feedback)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1279,15 +1303,6 @@ Plecs {
         TabName       ""
       }
       Parameter {
-        Variable      "alpha_o"
-        Prompt        "alpha_o: Observer gain (rad/s)"
-        Type          FreeText
-        Value         "cfg.alpha_o"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
         Variable      "L"
         Prompt        "L: Total inductance estimate (H)"
         Type          FreeText
@@ -1297,10 +1312,10 @@ Plecs {
         TabName       ""
       }
       Parameter {
-        Variable      "R"
-        Prompt        base64 "UjogVG90YWwgc2VyaWVzIHJlc2lzdGFuY2UgZXN0aW1hdGUgKM6pKQ=="
+        Variable      "alpha_o"
+        Prompt        "alpha_o: Observer bandwidth (rad/s)"
         Type          FreeText
-        Value         "cfg.R"
+        Value         "cfg.alpha_o"
         Show          off
         Tunable       on
         TabName       ""
@@ -1314,19 +1329,33 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "R"
+        Prompt        base64 "UjogVG90YWwgc2VyaWVzIHJlc2lzdGFuY2UgZXN0aW1hdGUgKM6pKQ=="
+        Type          FreeText
+        Value         "cfg.R"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
-        Position      [-50, -10]
+        Position      [-50, -15]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 0]
+        Position      [-50, -5]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 10]
+        Position      [-50, 5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 15]
         Direction     left
       }
       Terminal {
@@ -1335,7 +1364,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 310, 160]
+        Location      [0, 0; 320, 200]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1398,10 +1427,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "out"
+      Type          Input
+      Name          "u_c_zoh_ab"
       Show          on
-      Position      [260, 55]
+      Position      [40, 155]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1417,14 +1446,33 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "out"
+      Show          on
+      Position      [270, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [165, 55]
+      Position      [175, 60]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -25; 50, 25]
+      Frame         [-50, -30; 50, 30]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -1432,12 +1480,12 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 3 2]"
+        Value         "[1 3 2 2]"
         Show          off
       }
       Parameter {
         Variable      "NumOutputs"
-        Value         "[12]"
+        Value         "[14]"
         Show          off
       }
       Parameter {
@@ -1457,7 +1505,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1]"
+        Value         "[1 1 1 1]"
         Show          off
       }
       Parameter {
@@ -1467,7 +1515,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "u_nom, w_nom, alpha_o, L, R, T_s"
+        Value         "u_nom, w_nom, L, alpha_o, T_s, R"
         Show          off
       }
       Parameter {
@@ -1492,12 +1540,12 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"u_nom must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"w_nom must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"alpha_o must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"R must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\ngfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0));\nT_s = P(5, 0);\n\nself_init = self;\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"u_nom must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"w_nom must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"L must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"alpha_o must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"R must be a scalar.\");\n    return;\n}\ngfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0),\n                  P(5, 0));\nT_s = P(4, 0);\n\nself_init = self;\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 12; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nGFMMeasurements meas;\ngfm_measurements_unpack(meas_u, &meas);\ngfm_observer_compute_output(&self, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.i_c_ab, &out);\ndouble y[FBK_WIDTH];\ngfm_feedbacks_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 14; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nGFMMeasurements meas;\ngfm_measurements_unpack(meas_u, &meas);\ngfm_observer_compute_output(&self, complex_from(InputSignal(3, 0), InputSignal(3, 1)), meas.i_c_ab, &out);\n/* Voltage for the control laws (GridConverterControlSystem.get_feedback) */\nout.u_c = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));\ndouble y[FBK_WIDTH];\ngfm_feedbacks_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -1552,18 +1600,64 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "u_c_zoh_ab"
+      SrcTerminal   1
+      Points        [100, 155; 100, 75]
+      DstComponent  "C-Script"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   4
+      SrcTerminal   5
       DstComponent  "out"
       DstTerminal   1
     }
       }
     }
     Component {
+      Type          SignalSelector
+      Name          "fbk.i_c"
+      Show          on
+      Position      [515, 295]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "InputWidth"
+        Value         "14"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputIndices"
+        Value         "[1 2]"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto i_c"
+      Show          off
+      Position      [670, 295]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "i_c"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
       Type          From
       Name          "From u_c"
       Show          off
-      Position      [370, 160]
+      Position      [380, 100]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1579,14 +1673,212 @@ Plecs {
       }
     }
     Component {
-      Type          CScript
-      Name          "compute_output"
+      Type          From
+      Name          "From i_c"
+      Show          off
+      Position      [245, 110]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "i_c"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "PowerReferenceLimiter"
       Show          on
-      Position      [560, 150]
+      Position      [550, 95]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -35; 50, 35]
+      Frame         [-50, -30; 50, 30]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "PowerReferenceLimiter (motulator)"
+      MaskDescription "Limiter of the active-power reference (PowerReferenceLimiter): the maximum active power is computed from the voltage reference u_c and the current i_c, prioritizing the reactive current, and low-pass filtered (update, with ref.u_c and fbk.i_c). Without i_d_max, the active-power reference is not limited, as ObserverBasedGridFormingController has no limiter then."
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "i_d_max"
+        Prompt        "i_d_max: Maximum active current (A), peak value, [] = no limiter"
+        Type          FreeText
+        Value         "i_d_max"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "alpha_l"
+        Prompt        "alpha_l: Bandwidth of the low-pass filter (rad/s)"
+        Type          FreeText
+        Value         "alpha_l"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "u_nom"
+        Prompt        "u_nom: Nominal grid voltage (V), line-to-neutral peak value"
+        Type          FreeText
+        Value         "u_nom"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "T_s"
+        Prompt        "T_s: Sampling period (s)"
+        Type          FreeText
+        Value         "T_s"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -15]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 15]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 0]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 320, 200]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "enable"
+      Show          on
+      Position      [40, 35]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "p_g_ref"
+      Show          on
+      Position      [40, 75]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_c"
+      Show          on
+      Position      [40, 115]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "i_c"
+      Show          on
+      Position      [40, 155]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "p_g_ref_lim"
+      Show          on
+      Position      [270, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "C-Script"
+      Show          on
+      Position      [175, 60]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -30; 50, 30]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -1594,7 +1886,158 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 1 1 2 12]"
+        Value         "[1 1 2 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1 0 0]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "i_d_max, alpha_l, u_nom, T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic PowerReferenceLimiter self;\nstatic double T_s; /* Sampling period */\nstatic int limit; /* Limiter used (i_d_max given) */\n\n/* Initial state, restored while the block is disabled */\nstatic PowerReferenceLimiter self_init;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "if (PDIM(1) != 1) {\n    SetErrorMessage(\"alpha_l must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"u_nom must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\n/* No limiter without i_d_max */\nlimit = PDIM(0) > 0;\nif (limit) {\n    power_reference_limiter_init(&self, P(0, 0), P(1, 0), P(2, 0));\n}\nT_s = P(3, 0);\n\nself_init = self;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 1; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    return;\n}\n\ndouble p_g_ref = InputSignal(1, 0);\nif (limit) {\n    p_g_ref = power_reference_limiter_compute_output(&self, p_g_ref);\n}\nOutputSignal(0, 0) = p_g_ref;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         "/* Disabled: reset the state */\nif (!(InputSignal(0, 0) > 0.0)) {\n    self = self_init;\n    return;\n}\n\nif (limit) {\n    power_reference_limiter_update(&self, T_s, complex_from(InputSignal(2, 0), InputSignal(2, 1)),\n                                   complex_from(InputSignal(3, 0), InputSignal(3, 1)), 0.0);\n}\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "enable"
+      SrcTerminal   1
+      Points        [70, 35; 70, 45]
+      DstComponent  "C-Script"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "p_g_ref"
+      SrcTerminal   1
+      Points        [80, 75; 80, 55]
+      DstComponent  "C-Script"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_c"
+      SrcTerminal   1
+      Points        [90, 115; 90, 65]
+      DstComponent  "C-Script"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "i_c"
+      SrcTerminal   1
+      Points        [100, 155; 100, 75]
+      DstComponent  "C-Script"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   5
+      DstComponent  "p_g_ref_lim"
+      DstTerminal   1
+    }
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "compute_output"
+      Show          on
+      Position      [700, 180]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -25; 50, 25]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[1 1 14]"
         Show          off
       }
       Parameter {
@@ -1619,17 +2062,17 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1 0 1]"
+        Value         "[1 1 1]"
         Show          off
       }
       Parameter {
         Variable      "Ts"
-        Value         "T_s"
+        Value         "-1"
         Show          off
       }
       Parameter {
         Variable      "Parameters"
-        Value         "R_a, k_v, k_c, i_d_max, alpha_l, u_nom, T_s"
+        Value         "R_a, k_v, k_c"
         Show          off
       }
       Parameter {
@@ -1649,22 +2092,22 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic GFMController self;\nstatic double T_s; /* Sampling period */\nstatic GFMFeedbacks fbk;\n\n/* Initial state, restored while the block is disabled */\nstatic GFMController self_init;\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic GFMController self;\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"R_a must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_v must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"k_c must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"alpha_l must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"u_nom must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nself.R_a = P(0, 0);\nself.k_v = P(1, 0);\nself.k_c = P(2, 0);\nself.i_d_max = PARAM(3);\nself.alpha_l = P(4, 0);\n/* Initial maximum active power (inf without the power limitation) */\nself.p_max = isnan(self.i_d_max) ? INFINITY : 1.5 * P(5, 0) * self.i_d_max;\nT_s = P(6, 0);\n\nself_init = self;\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"R_a must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_v must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"k_c must be a scalar.\");\n    return;\n}\nself.R_a = P(0, 0);\nself.k_v = P(1, 0);\nself.k_c = P(2, 0);\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Disabled: the algorithm is not run */\nif (!(InputSignal(0, 0) > 0.0)) {\n    for (int k = 0; k < 1; k++) {\n        OutputSignal(0, k) = 0.0;\n    }\n    for (int k = 0; k < 1; k++) {\n        OutputSignal(1, k) = 0.0;\n    }\n    for (int k = 0; k < 2; k++) {\n        OutputSignal(2, k) = 0.0;\n    }\n    return;\n}\n\ndouble fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(4, k);\n}\ngfm_feedbacks_unpack(fbk_u, &fbk);\nGFMReferences ref = {0};\ngfm_current_reference(&self, InputSignal(1, 0), InputSignal(2, 0), &fbk,\n                      &ref);\nOutputSignal(0, 0) = ref.p_g;\nOutputSignal(1, 0) = ref.v_c;\nOutputSignal(2, 0) = creal(ref.i_c);\nOutputSignal(2, 1) = cimag(ref.i_c);\n"
+        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(2, k);\n}\nGFMFeedbacks fbk;\ngfm_feedbacks_unpack(fbk_u, &fbk);\nGFMReferences ref = {0};\ngfm_current_reference(&self, InputSignal(0, 0), InputSignal(1, 0), &fbk,\n                      &ref);\nOutputSignal(0, 0) = ref.p_g;\nOutputSignal(1, 0) = ref.v_c;\nOutputSignal(2, 0) = creal(ref.i_c);\nOutputSignal(2, 1) = cimag(ref.i_c);\n"
         Show          off
       }
       Parameter {
         Variable      "UpdateFcn"
-        Value         "/* Disabled: reset the state */\nif (!(InputSignal(0, 0) > 0.0)) {\n    self = self_init;\n    return;\n}\n\n/* Active-power limitation with the voltage reference ref.u_c */\nGFMReferences ref = {0};\nref.u_c = complex_from(InputSignal(3, 0), InputSignal(3, 1));\ngfm_power_limit_update(&self, T_s, &ref, &fbk);\n"
+        Value         ""
         Show          off
       }
       Parameter {
@@ -1692,7 +2135,7 @@ Plecs {
       Type          Subsystem
       Name          "CurrentLimiter"
       Show          on
-      Position      [710, 160]
+      Position      [855, 190]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1899,7 +2342,7 @@ Plecs {
       Type          CScript
       Name          "voltage_reference"
       Show          on
-      Position      [865, 165]
+      Position      [1010, 195]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1911,7 +2354,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[2 12]"
+        Value         "[2 14]"
         Show          off
       }
       Parameter {
@@ -2009,7 +2452,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux ref"
       Show          off
-      Position      [995, 150]
+      Position      [1140, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2023,7 +2466,7 @@ Plecs {
       Type          Goto
       Name          "Goto u_c"
       Show          off
-      Position      [1010, 215]
+      Position      [1155, 245]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2042,7 +2485,7 @@ Plecs {
       Type          From
       Name          "From Observer.enable"
       Show          off
-      Position      [176, 230]
+      Position      [186, 245]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2059,9 +2502,9 @@ Plecs {
     }
     Component {
       Type          From
-      Name          "From compute_output.enable"
+      Name          "From PowerReferenceLimiter.enable"
       Show          off
-      Position      [471, 130]
+      Position      [461, 80]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2080,7 +2523,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [100, 320]
+      Position      [100, 375]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2104,9 +2547,9 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "From compute_output.enable"
+      SrcComponent  "From PowerReferenceLimiter.enable"
       SrcTerminal   1
-      DstComponent  "compute_output"
+      DstComponent  "PowerReferenceLimiter"
       DstTerminal   1
     }
     Connection {
@@ -2120,60 +2563,96 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_ab"
       SrcTerminal   1
-      Points        [135, 280; 135, 250]
+      Points        [135, 295; 135, 265]
       DstComponent  "Observer"
       DstTerminal   3
     }
     Connection {
       Type          Signal
+      SrcComponent  "u_c_zoh_ab"
+      SrcTerminal   1
+      Points        [145, 335; 145, 275]
+      DstComponent  "Observer"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "Observer"
-      SrcTerminal   4
-      Points        [420, 240]
+      SrcTerminal   5
+      Points        [420, 260]
       Branch {
-        Points        [420, 170]
-        DstComponent  "compute_output"
-        DstTerminal   5
+        Points        [420, 295]
+        DstComponent  "fbk.i_c"
+        DstTerminal   1
       }
       Branch {
-        Points        [790, 240]
+        Points        [615, 260]
         Branch {
-          Points        [790, 170]
-          DstComponent  "voltage_reference"
-          DstTerminal   2
+          Points        [615, 190]
+          DstComponent  "compute_output"
+          DstTerminal   3
         }
         Branch {
-          DstComponent  "fbk"
-          DstTerminal   1
+          Points        [935, 260]
+          Branch {
+            Points        [935, 200]
+            DstComponent  "voltage_reference"
+            DstTerminal   2
+          }
+          Branch {
+            DstComponent  "fbk"
+            DstTerminal   1
+          }
         }
       }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "fbk.i_c"
+      SrcTerminal   2
+      DstComponent  "Goto i_c"
+      DstTerminal   1
     }
     Connection {
       Type          Signal
       SrcComponent  "p_g_ref"
       SrcTerminal   1
-      Points        [430, 70; 430, 140]
-      DstComponent  "compute_output"
+      DstComponent  "PowerReferenceLimiter"
       DstTerminal   2
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "v_c_ref"
-      SrcTerminal   1
-      Points        [410, 115; 410, 150]
-      DstComponent  "compute_output"
-      DstTerminal   3
     }
     Connection {
       Type          Signal
       SrcComponent  "From u_c"
       SrcTerminal   1
-      DstComponent  "compute_output"
+      DstComponent  "PowerReferenceLimiter"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From i_c"
+      SrcTerminal   1
+      DstComponent  "PowerReferenceLimiter"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "PowerReferenceLimiter"
+      SrcTerminal   5
+      Points        [625, 95; 625, 170]
+      DstComponent  "compute_output"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "v_c_ref"
+      SrcTerminal   1
+      DstComponent  "compute_output"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "compute_output"
-      SrcTerminal   8
+      SrcTerminal   6
       DstComponent  "CurrentLimiter"
       DstTerminal   1
     }
@@ -2181,13 +2660,13 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentLimiter"
       SrcTerminal   2
-      Points        [780, 160]
+      Points        [925, 190]
       Branch {
         DstComponent  "voltage_reference"
         DstTerminal   1
       }
       Branch {
-        Points        [780, 120; 935, 120; 935, 155]
+        Points        [925, 150; 1080, 150; 1080, 185]
         DstComponent  "Mux ref"
         DstTerminal   4
       }
@@ -2195,16 +2674,16 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "compute_output"
-      SrcTerminal   6
-      Points        [625, 140; 625, 30; 965, 30; 965, 135]
+      SrcTerminal   4
+      Points        [770, 170; 770, 30; 1110, 30; 1110, 165]
       DstComponent  "Mux ref"
       DstTerminal   2
     }
     Connection {
       Type          Signal
       SrcComponent  "compute_output"
-      SrcTerminal   7
-      Points        [635, 150; 635, 40; 955, 40; 955, 145]
+      SrcTerminal   5
+      Points        [780, 180; 780, 40; 1100, 40; 1100, 175]
       DstComponent  "Mux ref"
       DstTerminal   3
     }
@@ -2212,13 +2691,13 @@ Plecs {
       Type          Signal
       SrcComponent  "voltage_reference"
       SrcTerminal   3
-      Points        [945, 165]
+      Points        [1090, 195]
       Branch {
         DstComponent  "Mux ref"
         DstTerminal   5
       }
       Branch {
-        Points        [945, 215]
+        Points        [1090, 245]
         DstComponent  "Goto u_c"
         DstTerminal   1
       }
@@ -2243,7 +2722,7 @@ Plecs {
       Type          Goto
       Name          "Goto fbk"
       Show          off
-      Position      [780, 45]
+      Position      [790, 55]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2262,7 +2741,7 @@ Plecs {
       Type          Goto
       Name          "Goto ref"
       Show          off
-      Position      [780, 160]
+      Position      [790, 170]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2281,7 +2760,7 @@ Plecs {
       Type          From
       Name          "From fbk"
       Show          off
-      Position      [780, 200]
+      Position      [790, 210]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2300,7 +2779,7 @@ Plecs {
       Type          From
       Name          "From ref"
       Show          off
-      Position      [780, 240]
+      Position      [790, 250]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2319,7 +2798,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.u_c"
       Show          on
-      Position      [775, 125]
+      Position      [785, 135]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2338,7 +2817,7 @@ Plecs {
       Type          CScript
       Name          "modulate"
       Show          on
-      Position      [960, 85]
+      Position      [970, 95]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2350,7 +2829,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[12 2]"
+        Value         "[14 2]"
         Show          off
       }
       Parameter {
@@ -2405,17 +2884,17 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gfm_observer.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic double T_s; /* Sampling period */\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         ""
+        Value         "T_s = P(0, 0);\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nGFMFeedbacks fbk;\ngfm_feedbacks_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
+        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nGFMFeedbacks fbk;\ngfm_feedbacks_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates, its angle advanced by\n * k_comp*T_s*w_c (k_comp = 1.5 of the controller) */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nu_c_ref_ab *= cexp(I * 1.5 * T_s * fbk.w_c);\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
         Show          off
       }
       Parameter {
@@ -2448,7 +2927,7 @@ Plecs {
       Type          CScript
       Name          "Monitored signals"
       Show          on
-      Position      [960, 200]
+      Position      [970, 210]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2460,7 +2939,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 12 6]"
+        Value         "[1 14 6]"
         Show          off
       }
       Parameter {
@@ -2577,7 +3056,7 @@ Plecs {
       Type          From
       Name          "From ObserverBasedGridFormingController.enable"
       Show          off
-      Position      [571, 50]
+      Position      [581, 50]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2596,7 +3075,7 @@ Plecs {
       Type          From
       Name          "From Monitored signals.enable"
       Show          off
-      Position      [871, 190]
+      Position      [881, 200]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2709,6 +3188,14 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "PWM"
+      SrcTerminal   6
+      Points        [540, 225; 540, 150]
+      DstComponent  "ObserverBasedGridFormingController"
+      DstTerminal   6
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "PWM"
       SrcTerminal   7
       DstComponent  "d_abc"
       DstTerminal   1
@@ -2716,10 +3203,10 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "ObserverBasedGridFormingController"
-      SrcTerminal   6
-      Points        [725, 80]
+      SrcTerminal   7
+      Points        [735, 90]
       Branch {
-        Points        [725, 45]
+        Points        [735, 55]
         DstComponent  "Goto fbk"
         DstTerminal   1
       }
@@ -2731,10 +3218,10 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "ObserverBasedGridFormingController"
-      SrcTerminal   7
-      Points        [735, 100; 735, 125]
+      SrcTerminal   8
+      Points        [745, 110; 745, 135]
       Branch {
-        Points        [735, 160]
+        Points        [745, 170]
         DstComponent  "Goto ref"
         DstTerminal   1
       }
@@ -2747,7 +3234,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.u_c"
       SrcTerminal   2
-      Points        [830, 125; 830, 90]
+      Points        [840, 135; 840, 100]
       DstComponent  "modulate"
       DstTerminal   2
     }
@@ -2755,7 +3242,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   3
-      Points        [1040, 80; 1040, 310; 300, 310; 300, 235]
+      Points        [1050, 90; 1050, 310; 300, 310; 300, 235]
       DstComponent  "PWM"
       DstTerminal   3
     }
@@ -2763,7 +3250,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   4
-      Points        [1030, 90; 1030, 300; 310, 300; 310, 255]
+      Points        [1040, 100; 1040, 300; 310, 300; 310, 255]
       DstComponent  "PWM"
       DstTerminal   4
     }
@@ -2778,7 +3265,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref"
       SrcTerminal   1
-      Points        [820, 240; 820, 210]
+      Points        [830, 250; 830, 220]
       DstComponent  "Monitored signals"
       DstTerminal   3
     }

@@ -75,6 +75,7 @@
         (net).out_base = P((i0) + 10, 0); \
     } while (0)
 
+static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
 static const int INPUT_WIDTHS[] = {22, 2};
@@ -135,6 +136,7 @@ static void mdlInitializeSampleTimes(SimStruct *S)
 #define MDL_START
 static void mdlStart(SimStruct *S)
 {
+    T_s = P(0, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
@@ -146,8 +148,10 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     ObserverOutputs fbk;
     observer_outputs_unpack(fbk_u, &fbk);
-    /* Voltage reference in stationary coordinates */
+    /* Voltage reference in stationary coordinates, its angle advanced by
+     * k_comp*T_s*w_c (k_comp = 1.5 of the controller) */
     double complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));
+    u_c_ref_ab *= cexp(I * 1.5 * T_s * fbk.w_c);
     OutputSignal(0, 0) = creal(u_c_ref_ab);
     OutputSignal(0, 1) = cimag(u_c_ref_ab);
     OutputSignal(1, 0) = fbk.w_c;

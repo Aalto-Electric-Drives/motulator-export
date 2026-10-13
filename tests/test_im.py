@@ -136,9 +136,9 @@ class CControlSystem(control.VectorControlSystem):
         self.T_s = cfg.T_s
         self.dll = dll
         # The defaults (None in motulator) are resolved in C from NaN: alpha_i,
-        # alpha_o, and the speed controller alpha_i
+        # alpha_o, k_fw, and the speed controller alpha_i
         c = [cfg.psi_s_nom, cfg.i_s_max, cfg.alpha_c, np.nan, np.nan]
-        c += [cfg.w_s_nom, cfg.k_u, cfg.k_fw, cast(float, cfg.J), cfg.sensorless]
+        c += [cfg.w_s_nom, cfg.k_u, np.nan, cast(float, cfg.J), cfg.sensorless]
         c += [cfg.T_s]
         p = [PAR.n_p, PAR.R_s, PAR.R_R, PAR.L_sgm, PAR.L_M]
         s = [*SPEED_CTRL.values(), np.nan, inf, t_d, i_0, ctrl.pwm.feedforward]

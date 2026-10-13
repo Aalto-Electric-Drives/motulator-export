@@ -4,7 +4,7 @@
  * Python counterparts:
  *   motulator/grid/control/_gfl_current_vector.py  PLL, CurrentController,
  *                                                  CurrentVectorController
- *   motulator/grid/control/_common.py              CurrentLimiter
+ *   motulator/grid/control/_common.py              CurrentLimiter, References
  *   motulator/grid/control/_base.py                GridConverterControlSystem
  *   motulator/common/control/_controllers.py       ComplexPIController
  *
@@ -24,7 +24,7 @@ typedef struct {
     double i_max;     /* Maximum current (A), peak value */
     double L;         /* Filter inductance (H) */
     double alpha_c;   /* Current-control bandwidth (rad/s) */
-    double alpha_i;   /* Integral-action bandwidth (rad/s) */
+    double alpha_i;   /* Integral-action bandwidth (rad/s), NAN = alpha_c */
     double u_nom;     /* Nominal grid voltage (V), line-to-neutral peak value */
     double w_nom;     /* Nominal grid angular frequency (rad/s) */
     double alpha_pll; /* PLL frequency-tracking bandwidth (rad/s) */
@@ -42,10 +42,10 @@ typedef struct {
     double u_dc;           /* DC-bus voltage (V) */
 } GridMeasurements;
 
-/* Feedback signals (PLLOutputSignals) */
+/* Feedback signals (PLLOutputs) */
 typedef struct {
     double complex i_c;      /* Converter current in controller coordinates */
-    double complex u_c;      /* Realized converter voltage */
+    double complex u_c;      /* Converter voltage (set by the control system) */
     double u_g;              /* Filtered PCC voltage magnitude */
     double complex u_g_meas; /* Measured PCC voltage */
     double theta_c;          /* Angle of the coordinate system */
@@ -75,15 +75,14 @@ typedef struct {
 } PLL;
 
 static void pll_init(PLL *self, double u_nom, double w_nom, double alpha_pll);
-/* Feedback signals from the realized converter voltage, the converter current, and
- * the PCC voltage in stationary coordinates (the field u_dc is not set) */
-static void pll_compute_output(const PLL *self, double complex u_c_ab,
-                               double complex i_c_ab, double complex u_g_ab,
-                               GFLFeedbacks *out);
+/* Feedback signals from the converter current and the PCC voltage in stationary
+ * coordinates (the fields u_c and u_dc are not set) */
+static void pll_compute_output(const PLL *self, double complex i_c_ab,
+                               double complex u_g_ab, GFLFeedbacks *out);
 static void pll_update(PLL *self, double T_s, const GFLFeedbacks *out);
 
 /* Current controller (CurrentController), a 2DOF PI controller with the gains from
- * the bandwidths and the inductance */
+ * the bandwidths and the inductance (alpha_i = NAN means alpha_c) */
 static ComplexPIController gfl_current_controller(double L, double alpha_c,
                                                   double alpha_i);
 
@@ -92,6 +91,11 @@ static ComplexPIController gfl_current_controller(double L, double alpha_c,
  * CurrentLimiter) */
 static double complex gfl_current_reference(double p_g_ref, double q_g_ref,
                                             double u_g);
+/* Power references corresponding to the limited current reference i_c_ref
+ * (CurrentVectorController.compute_output, after the CurrentLimiter), which are also
+ * used for the anti-windup of the DC-bus voltage controller */
+static void gfl_power_references(double complex i_c_ref, double u_g, double *p_g_ref,
+                                 double *q_g_ref);
 
 /* Control system (GridConverterControlSystem with CurrentVectorController) */
 typedef struct {
@@ -99,6 +103,7 @@ typedef struct {
     ComplexPIController current_ctrl;
     PLL pll;
     PWM pwm;
+    double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     GFLFeedbacks fbk;
     GFLReferences ref;
 } GFLControlSystem;

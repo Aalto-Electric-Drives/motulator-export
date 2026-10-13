@@ -11,7 +11,7 @@ static GFLControllerCfg gfl_controller_cfg(double i_max, double L)
     cfg.i_max = i_max;
     cfg.L = L;
     cfg.alpha_c = 2.0 * M_PI * 400.0;
-    cfg.alpha_i = cfg.alpha_c;
+    cfg.alpha_i = NAN;
     cfg.u_nom = sqrt(2.0 / 3.0) * 400.0;
     cfg.w_nom = 2.0 * M_PI * 50.0;
     cfg.alpha_pll = 2.0 * M_PI * 20.0;
@@ -30,9 +30,8 @@ static void pll_init(PLL *self, double u_nom, double w_nom, double alpha_pll)
     self->u_g = u_nom;
 }
 
-static void pll_compute_output(const PLL *self, double complex u_c_ab,
-                               double complex i_c_ab, double complex u_g_ab,
-                               GFLFeedbacks *out)
+static void pll_compute_output(const PLL *self, double complex i_c_ab,
+                               double complex u_g_ab, GFLFeedbacks *out)
 {
     out->theta_c = self->theta_c;
     out->w_g = self->w_g;
@@ -40,7 +39,6 @@ static void pll_compute_output(const PLL *self, double complex u_c_ab,
     /* Coordinate transformations */
     double complex rot = cexp(-I * out->theta_c);
     out->i_c = rot * i_c_ab;
-    out->u_c = rot * u_c_ab;
     out->u_g_meas = rot * u_g_ab;
     /* Filtered voltage magnitude */
     out->u_g = self->u_g;
@@ -67,6 +65,7 @@ static void pll_update(PLL *self, double T_s, const GFLFeedbacks *out)
 static ComplexPIController gfl_current_controller(double L, double alpha_c,
                                                   double alpha_i)
 {
+    alpha_i = isnan(alpha_i) ? alpha_c : alpha_i;
     ComplexPIController ctrl;
     double k_t = alpha_c * L;
     double k_i = alpha_c * alpha_i * L;
@@ -81,6 +80,14 @@ static double complex gfl_current_reference(double p_g_ref, double q_g_ref,
     return (p_g_ref - I * q_g_ref) / (1.5 * u_g);
 }
 
+static void gfl_power_references(double complex i_c_ref, double u_g, double *p_g_ref,
+                                 double *q_g_ref)
+{
+    double complex s_g_ref = 1.5 * u_g * conj(i_c_ref);
+    *p_g_ref = creal(s_g_ref);
+    *q_g_ref = cimag(s_g_ref);
+}
+
 /* GFLControlSystem --------------------------------------------------------- */
 
 static void gfl_control_system_init(GFLControlSystem *self, const GFLControllerCfg *cfg)
@@ -89,6 +96,7 @@ static void gfl_control_system_init(GFLControlSystem *self, const GFLControllerC
     self->current_ctrl = gfl_current_controller(cfg->L, cfg->alpha_c, cfg->alpha_i);
     pll_init(&self->pll, cfg->u_nom, cfg->w_nom, cfg->alpha_pll);
     pwm_init(&self->pwm, 1.5);
+    self->k_comp = 1.5; /* k_comp of CurrentVectorController */
 }
 
 static void gfl_control_system_compute_output(GFLControlSystem *self,
@@ -98,26 +106,31 @@ static void gfl_control_system_compute_output(GFLControlSystem *self,
     GFLFeedbacks *fbk = &self->fbk;
     GFLReferences *ref = &self->ref;
 
-    /* Feedback signals from the PLL */
+    /* Feedback signals from the PLL, which does not use the converter voltage. The
+     * control laws use the voltage averaged over the previous and ongoing periods. */
+    pll_compute_output(&self->pll, meas->i_c_ab, meas->u_g_ab, fbk);
     double complex u_c_ab =
         pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
-    pll_compute_output(&self->pll, u_c_ab, meas->i_c_ab, meas->u_g_ab, fbk);
+    fbk->u_c = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
     /* Current reference, limited to i_max (CurrentLimiter) */
     ref->T_s = self->cfg.T_s;
-    ref->p_g = p_g_ref;
-    ref->q_g = q_g_ref;
     ref->i_c = current_limiter(self->cfg.i_max,
                                gfl_current_reference(p_g_ref, q_g_ref, fbk->u_g));
+    /* Power references corresponding to the limited current, which are also used
+     * for the anti-windup of the DC-bus voltage controller */
+    gfl_power_references(ref->i_c, fbk->u_g, &ref->p_g, &ref->q_g);
 
     /* Voltage reference from the current controller, with the PCC voltage as the
      * feedforward */
     ref->u_c = complex_pi_compute_output(&self->current_ctrl, ref->i_c, fbk->i_c,
                                          fbk->u_g);
 
-    /* Duty ratios for the PWM */
+    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
+     * k_comp*T_s*w_c */
     double complex u_c_ab_ref = cexp(I * fbk->theta_c) * ref->u_c;
+    u_c_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_c_ab_ref, fbk->u_dc,
                                      fbk->w_c, meas->i_c_ab, ref->d_abc);
 }

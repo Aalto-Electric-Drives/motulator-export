@@ -40,9 +40,9 @@
 /* Ports and parameters of the C-Script */
 static const int INPUT_WIDTHS[] = {1, 1, 1};
 static const int FEEDTHROUGH[] = {1, 1, 1};
-static const int OUTPUT_WIDTHS[] = {1, 1, 2};
+static const int OUTPUT_WIDTHS[] = {2};
 #define NUM_INPUTS 3
-#define NUM_OUTPUTS 3
+#define NUM_OUTPUTS 1
 #define NUM_PARAMS 1
 
 static void mdlInitializeSizes(SimStruct *S)
@@ -101,13 +101,11 @@ static void mdlStart(SimStruct *S)
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    OutputSignal(0, 0) = InputSignal(0, 0);
-    OutputSignal(1, 0) = InputSignal(1, 0);
     /* Current reference from the power references and the PCC voltage */
     double complex i_c_ref =
         gfl_current_reference(InputSignal(0, 0), InputSignal(1, 0), InputSignal(2, 0));
-    OutputSignal(2, 0) = creal(i_c_ref);
-    OutputSignal(2, 1) = cimag(i_c_ref);
+    OutputSignal(0, 0) = creal(i_c_ref);
+    OutputSignal(0, 1) = cimag(i_c_ref);
 }
 
 static void mdlTerminate(SimStruct *S)

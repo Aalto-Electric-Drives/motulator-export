@@ -12,12 +12,12 @@ with a mask of the arguments of its class (see `_control`):
   `SpeedObserver` and the `FluxObserver`
 
 The mask initialization of the CurrentVectorController resolves the defaults of
-`CurrentVectorControllerCfg` and `CurrentController`, and that of the
-SpeedFluxObserver computes the gains of `SpeedFluxObserver.__init__`. The masks of
-the top-level classes refer to the variables of the model initialization
-(`init_script`): the machine model `par`, the configuration `cfg`, the speed
-controller `speed_ctrl`, and the PWM `pwm`. The signal vectors are defined in
-`im_current_vector.h`.
+`CurrentController`, and that of the SpeedFluxObserver resolves the defaults of
+`create_speed_flux_observer` and computes the gains of `SpeedFluxObserver.__init__`.
+The masks of the top-level classes refer to the variables of the model
+initialization (`init_script`): the machine model `par`, the configuration `cfg`,
+the speed controller `speed_ctrl`, and the PWM `pwm`. The signal vectors are defined
+in `im_current_vector.h`.
 
 """
 
@@ -119,10 +119,12 @@ def _flux_observer() -> CBlock:
     """Flux observer (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
-        "Reduced-order flux observer in synchronous coordinates (FluxObserver). In "
-        "the sensored mode (h = 1), the speed error signal is computed from the "
-        "measured rotor speed (CurrentVectorController.get_feedback)."
-        + PAR_DESCRIPTION,
+        "Reduced-order flux observer in synchronous coordinates (FluxObserver). The "
+        "observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the "
+        "output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing "
+        "periods (DriveControlSystem.get_feedback). In the sensored mode (h = 1), the "
+        "speed error signal is computed from the measured rotor speed "
+        "(compute_feedback)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -150,16 +152,25 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(1, "meas") + f"double complex u_s_ab = {complex_in(2)};\n"
-        "double w_M = InputSignal(3, 0);\n"
+        SIGNALS.read(1, "meas") + f"double complex u_s_zoh_ab = {complex_in(3)};\n"
+        "double w_M = InputSignal(4, 0);\n"
         "/* Speed error from the measured rotor speed in the sensored mode */\n"
         "double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\n"
-        "im_flux_observer_compute_output(&self, u_s_ab, meas.i_c_ab, w_M, eps, h,\n"
-        "                                &out);\n" + SIGNALS.write(0, "fbk", "out")
+        "im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps, h,\n"
+        "                                &out);\n"
+        "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
+        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        + SIGNALS.write(0, "fbk", "out")
     )
     return CBlock(
         "FluxObserver",
-        [Port(ENABLE, 1), SIGNALS.port("meas"), Port("u_s_ab", 2), Port("w_M", 1)],
+        [
+            Port(ENABLE, 1),
+            SIGNALS.port("meas"),
+            Port("u_s_ab", 2),
+            Port("u_s_zoh_ab", 2),
+            Port("w_M", 1),
+        ],
         [Port("out", SIGNALS.width("fbk"))],
         SIGNALS.class_code(
             "IMFluxObserver",
@@ -178,13 +189,28 @@ def _flux_observer() -> CBlock:
 # Mask initialization of the SpeedFluxObserver: create_speed_flux_observer and
 # SpeedFluxObserver.__init__
 SFO_INIT = (
-    "% Gains for critically damped dynamics (SpeedFluxObserver.__init__)\n"
+    "% Default speed estimation poles of create_speed_flux_observer. With J, the\n"
+    "% double pole at alpha_o/2 keeps the speed gain about the same.\n"
+    "alpha_o_obs = alpha_o;\n"
+    "if isempty(alpha_o_obs)\n"
+    "  if sensorless\n"
+    "    alpha_o_obs = 2*pi*60;\n"
+    "  else\n"
+    "    alpha_o_obs = 2*pi*400;\n"
+    "  end\n"
+    "  if ~isempty(J)\n"
+    "    alpha_o_obs = 0.5*alpha_o_obs;\n"
+    "  end\n"
+    "end\n"
+    "% Gains for critically damped dynamics (SpeedFluxObserver.__init__), the\n"
+    "% pole matched to the sampling period (matched_pole)\n"
+    "alpha_o_obs = -expm1(-alpha_o_obs*T_s)/T_s;\n"
     "if isempty(J)\n"
-    "  k_w = alpha_o;\n"
+    "  k_w = alpha_o_obs;\n"
     "  k_tau = 0;\n"
     "else\n"
-    "  k_w = 2*alpha_o;\n"
-    "  k_tau = J*alpha_o^2;\n"
+    "  k_w = 2*alpha_o_obs;\n"
+    "  k_tau = J*alpha_o_obs^2;\n"
     "end\n"
     "% Default observer gain of create_speed_flux_observer, and the weight of the\n"
     "% measured rotor speed in the FluxObserver\n"
@@ -198,12 +224,17 @@ def _speed_flux_observer() -> Subsystem:
     mask = Mask(
         "SpeedFluxObserver (motulator)",
         "Flux observer with speed estimation, created by create_speed_flux_observer "
-        "with the default observer gain k_o. The mask initialization computes the "
-        "gains of the SpeedObserver and the FluxObserver inside it, as in "
-        "SpeedFluxObserver." + PAR_DESCRIPTION,
+        "with the default observer gain k_o. The mask initialization resolves the "
+        "defaults of create_speed_flux_observer and computes the gains of the "
+        "SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver."
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
-            Param("alpha_o", "alpha_o: Speed estimation pole (rad/s)", "alpha_o"),
+            Param(
+                "alpha_o",
+                "alpha_o: Speed estimation poles (rad/s), [] = default",
+                "cfg.alpha_o",
+            ),
             Param(
                 "sensorless",
                 "sensorless: Sensorless mode (1) or sensored mode (0)",
@@ -216,7 +247,12 @@ def _speed_flux_observer() -> Subsystem:
     )
     return Subsystem(
         "SpeedFluxObserver",
-        [Port(ENABLE, 1), SIGNALS.port("meas"), Port("u_s_ab", 2)],
+        [
+            Port(ENABLE, 1),
+            SIGNALS.port("meas"),
+            Port("u_s_ab", 2),
+            Port("u_s_zoh_ab", 2),
+        ],
         [Port("out", SIGNALS.width("fbk"))],
         [
             _flux_observer(),
@@ -229,6 +265,7 @@ def _speed_flux_observer() -> Subsystem:
             (ENABLE, "SpeedObserver:enable"),
             ("meas", "FluxObserver:meas"),
             ("u_s_ab", "FluxObserver:u_s_ab"),
+            ("u_s_zoh_ab", "FluxObserver:u_s_zoh_ab"),
             ("SpeedObserver:w_M", "FluxObserver:w_M"),
             ("FluxObserver:out", "out"),
             ("FluxObserver:out", "fbk.eps:u"),
@@ -237,7 +274,7 @@ def _speed_flux_observer() -> Subsystem:
             ("fbk.tau_M:y", "SpeedObserver:tau_M"),
         ],
         columns=[
-            [ENABLE, "meas", "u_s_ab"],
+            [ENABLE, "meas", "u_s_ab", "u_s_zoh_ab"],
             ["FluxObserver"],
             ["fbk.eps", "fbk.tau_M"],
             ["SpeedObserver"],
@@ -386,17 +423,8 @@ def _current_controller() -> CBlock:
     )
 
 
-# Mask initialization of the CurrentVectorController: CurrentVectorControllerCfg and
-# CurrentController.__init__
+# Mask initialization of the CurrentVectorController: CurrentController.__init__
 CVC_INIT = (
-    "% Default of alpha_o (CurrentVectorControllerCfg.__post_init__)\n"
-    "alpha_o = cfg.alpha_o;\n"
-    "if isempty(alpha_o)\n"
-    "  alpha_o = 2*pi*60;\n"
-    "  if ~isempty(cfg.J)\n"
-    "    alpha_o = 0.5*alpha_o;\n"
-    "  end\n"
-    "end\n"
     "% Default of alpha_i (CurrentController.__init__)\n"
     "alpha_i = cfg.alpha_i;\n"
     "if isempty(alpha_i)\n"
@@ -436,6 +464,7 @@ def _current_vector_controller() -> Subsystem:
             Port("tau_M_ref", 1),
             SIGNALS.port("meas"),
             Port("u_c_ab", 2),
+            Port("u_c_zoh_ab", 2),
         ],
         [SIGNALS.port("fbk"), SIGNALS.port("ref")],
         [
@@ -454,6 +483,7 @@ def _current_vector_controller() -> Subsystem:
             (ENABLE, "CurrentController:enable"),
             ("meas", "SpeedFluxObserver:meas"),
             ("u_c_ab", "SpeedFluxObserver:u_s_ab"),
+            ("u_c_zoh_ab", "SpeedFluxObserver:u_s_zoh_ab"),
             ("meas", "meas.u_dc:u"),
             ("SpeedFluxObserver:out", "fbk.psi_R:u"),
             ("SpeedFluxObserver:out", "CurrentController:fbk"),
@@ -470,7 +500,7 @@ def _current_vector_controller() -> Subsystem:
             ("Mux ref:y", "ref"),
         ],
         columns=[
-            ["tau_M_ref", "meas", "u_c_ab", ENABLE],
+            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab", ENABLE],
             ["SpeedFluxObserver"],
             ["From u_s", "meas.u_dc", "fbk.psi_R"],
             [crg],

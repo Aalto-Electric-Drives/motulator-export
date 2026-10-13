@@ -8,7 +8,9 @@
  *                                            RateLimiter
  *   motulator/common/control/_pwm.py         PWM (MPE and MME overmodulation)
  *   motulator/common/utils/_dead_time.py     dead_time_error (with numpy.sign or tanh)
- *   motulator/drive/control/_common.py       SpeedController, SpeedObserver
+ *   motulator/grid/control/_common.py        CurrentLimiter, PowerReferenceLimiter
+ *   motulator/drive/control/_common.py       SpeedController, SpeedObserver,
+ *                                            hold_equivalent, matched_pole
  *
  * Complex space vectors use peak-value scaling, as in motulator.
  */
@@ -92,6 +94,29 @@ static void complex_pi_update(ComplexPIController *self, double T_s,
  * converter control) */
 static double complex current_limiter(double i_max, double complex i);
 
+/* Limiter of the active-power reference of the grid converter control
+ * (PowerReferenceLimiter): the maximum active power is computed from the voltage
+ * reference and the currents, prioritizing the reactive and the negative-sequence
+ * currents, and low-pass filtered */
+typedef struct {
+    double i_d_max; /* Maximum active current (A), peak value */
+    double alpha_l; /* Bandwidth of the low-pass filter (rad/s) */
+    double p_max;   /* State: the maximum active power */
+} PowerReferenceLimiter;
+
+/* The initial maximum active power is that at the nominal grid voltage u_nom */
+static void power_reference_limiter_init(PowerReferenceLimiter *self, double i_d_max,
+                                         double alpha_l, double u_nom);
+/* Limited active-power reference (__call__) */
+static double power_reference_limiter_compute_output(const PowerReferenceLimiter *self,
+                                                     double p_g_ref);
+/* Update the maximum active power from the converter voltage reference u_c, the
+ * converter current i_c (their positive-sequence components in unbalanced
+ * conditions), and the negative-sequence converter current i_cn */
+static void power_reference_limiter_update(PowerReferenceLimiter *self, double T_s,
+                                           double complex u_c, double complex i_c,
+                                           double complex i_cn);
+
 /* 2DOF PI speed controller (SpeedController); alpha_i = NAN means alpha_s */
 static PIController speed_controller(double J, double alpha_s, double alpha_i,
                                      double tau_M_max);
@@ -110,6 +135,20 @@ static void speed_observer_init(SpeedObserver *self, double k_w, double k_tau,
                                 double J);
 static void speed_observer_update(SpeedObserver *self, double T_s, double eps,
                                   double tau_M);
+
+/* Hold-equivalent discretization of a vector integrator in rotating coordinates
+ * (hold_equivalent): the coefficients discretize d(psi)/dt = u + v - 1j*w_c*psi,
+ * where psi is in coordinates rotating at w_c, u is constant in stator coordinates,
+ * and v is constant in the rotating coordinates over the sampling period. Then,
+ * psi(k+1) = Phi*(psi(k) + T_s*u(k)) + Gamma*v(k), with Phi = exp(-1j*w_c*T_s) and
+ * Gamma = (1 - Phi)/(1j*w_c). */
+static void hold_equivalent(double T_s, double w_c, double complex *Phi,
+                            double complex *Gamma);
+
+/* Pole for the gain formulas of estimators updated by the forward Euler method
+ * (matched_pole): (1 - exp(-alpha*T_s))/T_s, placing the discrete-time poles at
+ * exp(-alpha*T_s) */
+static double matched_pole(double alpha, double T_s);
 
 /* Rate limiter (RateLimiter), the falling rate limit being the negative rising one */
 typedef struct {
@@ -133,9 +172,10 @@ static void dead_time_error(const double i_abc[3], const double d_abc[3], double
  * (MME) overmodulation (pwm_set_overmodulation, MPE by default). Optionally,
  * the duty-ratio error due to the dead time is modeled (pwm_set_dead_time), which
  * corresponds to d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign) in motulator
- * with sign = tanh(i/i_0), or numpy.sign if i_0 = 0. */
+ * with sign = tanh(i/i_0), or numpy.sign if i_0 = 0. The angle of the voltage
+ * reference is not advanced here: the control systems compensate for the delays. */
 typedef struct {
-    double k_comp;
+    double k_pred;   /* Prediction factor of the currents for the compensation */
     int mme;         /* MME overmodulation (else MPE) */
     double t_d;      /* Dead time of the duty-ratio error model, 0 = no error model */
     double T_s;      /* Sampling period of the duty-ratio error model */
@@ -146,7 +186,7 @@ typedef struct {
     double d_abc[2][3]; /* Duty ratios of the previous and the ongoing periods */
 } PWM;
 
-static void pwm_init(PWM *self, double k_comp);
+static void pwm_init(PWM *self, double k_pred);
 static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
                               int feedforward);
 /* Overmodulation: MME if mme is nonzero, else MPE (overmodulation of PWM) */
@@ -167,8 +207,9 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
  * else that of the ongoing sampling period */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
                                            double u_dc, int average);
-/* Duty ratios and the limited voltage reference; the measured current i_c_ab is
- * used in the feedforward compensation of the duty-ratio error */
+/* Duty ratios and the limited voltage reference; the measured current i_c_ab,
+ * predicted by the angle k_pred*T_s*w, is used in the feedforward compensation of
+ * the duty-ratio error */
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
                                          double w, double complex i_c_ab,

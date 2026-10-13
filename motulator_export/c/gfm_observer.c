@@ -25,15 +25,20 @@ static GFMControllerCfg gfm_controller_cfg(double i_max, double L)
 
 /* Observer ----------------------------------------------------------------- */
 
-static void gfm_observer_init(GFMObserver *self, double u_nom, double w_nom,
-                              double alpha_o, double L, double R)
+static void gfm_observer_init(GFMObserver *self, double u_nom, double w_nom, double L,
+                              double alpha_o, double T_s, double R)
 {
-    self->alpha_o = alpha_o;
     self->L = L;
     self->R = R;
     self->w_g = w_nom;
+    /* Coefficients of the hold-equivalent model */
+    self->phi = cexp(-I * w_nom * T_s);
+    self->gamma_c = T_s * self->phi / L;
+    self->gamma_g = (self->phi - 1.0) / (I * w_nom * L);
+    self->k_o = (1.0 - exp(-alpha_o * T_s)) / self->gamma_g; /* Observer gain */
     self->theta_c = 0.0;
-    self->u_gp = u_nom;
+    self->u_g = u_nom;
+    self->i_c = 0.0;
 }
 
 static void gfm_observer_compute_output(const GFMObserver *self,
@@ -41,16 +46,16 @@ static void gfm_observer_compute_output(const GFMObserver *self,
                                         GFMFeedbacks *out)
 {
     out->theta_c = self->theta_c;
+    out->w_c = self->w_g;
 
     /* Measured values in synchronous coordinates */
     double complex rot = cexp(-I * out->theta_c);
     out->i_c = rot * i_c_ab;
-    out->u_c = rot * u_c_ab;
+    out->u_c_zoh = rot * u_c_ab;
 
-    /* Estimates of the quasi-static converter voltage and the grid voltage */
-    out->v_c = self->u_gp - (self->alpha_o - I * self->w_g) * self->L * out->i_c;
-    out->u_g = self->u_gp - self->alpha_o * self->L * out->i_c;
-    out->w_c = self->w_g;
+    /* Correct the predicted grid-voltage estimate */
+    out->u_g = self->u_g + self->k_o * (out->i_c - self->i_c);
+    out->v_c = out->u_g + I * self->w_g * self->L * out->i_c;
 
     /* Active and reactive powers */
     double complex s_g = 1.5 * out->u_g * conj(out->i_c);
@@ -60,7 +65,10 @@ static void gfm_observer_compute_output(const GFMObserver *self,
 
 static void gfm_observer_update(GFMObserver *self, double T_s, const GFMFeedbacks *out)
 {
-    self->u_gp += T_s * self->alpha_o * (out->u_c - out->v_c - self->R * out->i_c);
+    /* Predict the current, the grid voltage being constant in these coordinates */
+    self->i_c = self->phi * out->i_c + self->gamma_c * out->u_c_zoh +
+                self->gamma_g * (out->u_g + self->R * out->i_c);
+    self->u_g = out->u_g;
     self->theta_c = wrap(self->theta_c + T_s * self->w_g);
 }
 
@@ -68,23 +76,24 @@ static void gfm_observer_update(GFMObserver *self, double T_s, const GFMFeedback
 
 static void gfm_controller_init(GFMController *self, const GFMControllerCfg *cfg)
 {
-    gfm_observer_init(&self->observer, cfg->u_nom, cfg->w_nom, cfg->alpha_o, cfg->L,
-                      cfg->R);
+    gfm_observer_init(&self->observer, cfg->u_nom, cfg->w_nom, cfg->L, cfg->alpha_o,
+                      cfg->T_s, cfg->R);
     self->i_max = cfg->i_max;
     self->R_a = isnan(cfg->R_a) ? 0.25 * cfg->u_nom / cfg->i_max : cfg->R_a;
     self->k_v = isnan(cfg->k_v) ? cfg->alpha_o / cfg->w_nom : cfg->k_v;
     self->k_c = cfg->alpha_c * cfg->L;
-    self->i_d_max = cfg->i_d_max;
-    self->alpha_l = cfg->alpha_l;
-    self->p_max = isnan(cfg->i_d_max) ? INFINITY : 1.5 * cfg->u_nom * cfg->i_d_max;
+    self->power_limitation = !isnan(cfg->i_d_max);
+    if (self->power_limitation) {
+        power_reference_limiter_init(&self->power_limiter, cfg->i_d_max,
+                                     cfg->alpha_l, cfg->u_nom);
+    }
 }
 
 static void gfm_current_reference(const GFMController *self, double p_g_ref,
                                   double v_c_ref, const GFMFeedbacks *fbk,
                                   GFMReferences *ref)
 {
-    /* Limit the active-power reference */
-    ref->p_g = copysign(fmin(fabs(p_g_ref), self->p_max), p_g_ref);
+    ref->p_g = p_g_ref;
     ref->v_c = v_c_ref;
 
     /* Complex gains and the feedback correction for the grid-forming mode */
@@ -105,21 +114,6 @@ static void gfm_voltage_reference(const GFMController *self, const GFMFeedbacks 
     ref->u_c = e_c + fbk->v_c + self->observer.R * fbk->i_c;
 }
 
-static void gfm_power_limit_update(GFMController *self, double T_s,
-                                   const GFMReferences *ref, const GFMFeedbacks *fbk)
-{
-    if (isnan(self->i_d_max)) {
-        return;
-    }
-    /* Maximum active power, prioritizing the reactive current */
-    double abs_u_c = fmax(cabs(ref->u_c), 1e-6);
-    double i_q = cimag(ref->u_c * conj(fbk->i_c)) / abs_u_c;
-    double i_d_max_sqr = self->i_d_max * self->i_d_max;
-    double i_d_lim_sqr = fmin(fmax(i_d_max_sqr - i_q * i_q, 0.0), i_d_max_sqr);
-    double p_max = 1.5 * abs_u_c * sqrt(i_d_lim_sqr);
-    self->p_max += T_s * self->alpha_l * (p_max - self->p_max);
-}
-
 /* GFMControlSystem --------------------------------------------------------- */
 
 static void gfm_control_system_init(GFMControlSystem *self,
@@ -128,6 +122,7 @@ static void gfm_control_system_init(GFMControlSystem *self,
     self->cfg = *cfg;
     gfm_controller_init(&self->ctrl, cfg);
     pwm_init(&self->pwm, 1.5);
+    self->k_comp = 1.5; /* k_comp of ObserverBasedGridFormingController */
 }
 
 static void gfm_control_system_compute_output(GFMControlSystem *self,
@@ -137,20 +132,31 @@ static void gfm_control_system_compute_output(GFMControlSystem *self,
     GFMFeedbacks *fbk = &self->fbk;
     GFMReferences *ref = &self->ref;
 
-    /* Feedback signals from the observer */
+    /* Feedback signals from the observer, which uses the voltage of the ongoing
+     * sampling period, while the control laws use the voltage averaged over the
+     * previous and ongoing periods */
     double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
     gfm_observer_compute_output(&self->ctrl.observer, u_c_ab, meas->i_c_ab, fbk);
+    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    fbk->u_c = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* References, with the transparent current limitation (CurrentLimiter) */
+    /* References, with the limited active-power reference (PowerReferenceLimiter)
+     * and the transparent current limitation (CurrentLimiter) */
     ref->T_s = self->cfg.T_s;
+    if (self->ctrl.power_limitation) {
+        p_g_ref = power_reference_limiter_compute_output(&self->ctrl.power_limiter,
+                                                         p_g_ref);
+    }
     gfm_current_reference(&self->ctrl, p_g_ref, v_c_ref, fbk, ref);
     ref->i_c = current_limiter(self->ctrl.i_max, ref->i_c);
     gfm_voltage_reference(&self->ctrl, fbk, ref);
 
-    /* Duty ratios for the PWM */
+    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
+     * k_comp*T_s*w_c */
     double complex u_c_ab_ref = cexp(I * fbk->theta_c) * ref->u_c;
+    u_c_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_c_ab_ref, fbk->u_dc,
                                      fbk->w_c, meas->i_c_ab, ref->d_abc);
 }
@@ -160,7 +166,10 @@ static void gfm_control_system_update(GFMControlSystem *self)
     double T_s = self->ref.T_s;
     pwm_update(&self->pwm, self->ref.d_abc);
     gfm_observer_update(&self->ctrl.observer, T_s, &self->fbk);
-    gfm_power_limit_update(&self->ctrl, T_s, &self->ref, &self->fbk);
+    if (self->ctrl.power_limitation) {
+        power_reference_limiter_update(&self->ctrl.power_limiter, T_s, self->ref.u_c,
+                                       self->fbk.i_c, 0.0);
+    }
 }
 
 /* Signal vectors of the modular control system ---------------------------- */
@@ -188,6 +197,7 @@ static void gfm_feedbacks_pack(const GFMFeedbacks *fbk, double y[FBK_WIDTH])
 {
     SET_COMPLEX(y, FBK_i_c, fbk->i_c);
     SET_COMPLEX(y, FBK_u_c, fbk->u_c);
+    SET_COMPLEX(y, FBK_u_c_zoh, fbk->u_c_zoh);
     SET_COMPLEX(y, FBK_v_c, fbk->v_c);
     SET_COMPLEX(y, FBK_u_g, fbk->u_g);
     y[FBK_p_g] = fbk->p_g;
@@ -200,6 +210,7 @@ static void gfm_feedbacks_unpack(const double u[FBK_WIDTH], GFMFeedbacks *fbk)
 {
     fbk->i_c = COMPLEX_AT(u, FBK_i_c);
     fbk->u_c = COMPLEX_AT(u, FBK_u_c);
+    fbk->u_c_zoh = COMPLEX_AT(u, FBK_u_c_zoh);
     fbk->v_c = COMPLEX_AT(u, FBK_v_c);
     fbk->u_g = COMPLEX_AT(u, FBK_u_g);
     fbk->p_g = u[FBK_p_g];

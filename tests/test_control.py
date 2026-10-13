@@ -21,10 +21,15 @@ import ctypes
 from collections.abc import Callable, Iterator
 from typing import Any
 
+import motulator.drive.control.im as im_control
+import motulator.drive.control.sm as sm_control
 import numpy as np
 import pytest
 from motulator.drive import model
+from motulator.drive.control._base import VectorControlSystem
+from motulator.grid import control as grid_control
 from motulator.grid import model as grid_model
+from motulator.grid.control._gfm_observer import Observer
 
 from motulator_export.plecs import (
     _grid_control,
@@ -44,11 +49,14 @@ from tests.matlab import block_params
 from tests.monolithic import MonolithicBlock, sfunction_params
 from tests.netlist import Netlist
 from tests.test_simulink import (
+    BASE,
     GFL_INPUTS,
     GFM_INPUTS,
     IM_INPUTS,
+    IM_PAR,
     IM_SPEED,
     SM_INPUTS,
+    SM_PAR,
     SM_SPEED,
     VHZ_CASES,
     VHZ_IDS,
@@ -286,6 +294,48 @@ def test_parameter_errors(compiled: Compiled) -> None:
     net.sfun_terminate()
 
 
+@pytest.mark.parametrize("J", [None, 0.015], ids=["without_J", "with_J"])
+@pytest.mark.parametrize("sensorless", [True, False], ids=["sensorless", "sensored"])
+def test_observer_gains(sensorless: bool, J: float | None) -> None:
+    """The masks should give the observer gains of motulator, with the default speed
+    estimation poles matched to the sampling period."""
+    # Flux-vector control of a synchronous machine
+    sm_par = model.SynchronousMachinePars(**SM_PAR)
+    cfg = sm_control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=sensorless, J=J)
+    fvc = sm_control.FluxVectorController(sm_par, cfg)
+    ctrl = VectorControlSystem(fvc, sm_control.SpeedController(**SM_SPEED))
+    values, _ = sm.export_values(ctrl, SM_SPEED)
+    params = block_params(
+        _sm_control.FVC_BLOCK.netlist(), init_script("fvc", values), VALUES
+    )
+    obs = fvc.observer
+    path = "FluxVectorController/SpeedFluxObserver/"
+    assert params[path + "FluxObserver"][0] == pytest.approx(
+        obs.flux_observer.k_theta, rel=1e-14
+    )
+    k = params[path + "SpeedObserver"][:2]
+    assert k == pytest.approx(
+        [obs.speed_observer.k_w, obs.speed_observer.k_tau], rel=1e-14
+    )
+
+    # Current-vector control of an induction machine
+    im_par = model.InductionMachineInvGammaPars(**IM_PAR)
+    cfg = im_control.CurrentVectorControllerCfg(
+        psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless, J=J
+    )
+    cvc = im_control.CurrentVectorController(im_par, cfg)
+    ctrl = VectorControlSystem(cvc, im_control.SpeedController(**IM_SPEED))
+    values = im.export_values(ctrl, IM_SPEED)
+    params = block_params(
+        _im_control.CVC_BLOCK.netlist(), init_script("cvc", values), VALUES
+    )
+    obs = cvc.observer
+    k = params["CurrentVectorController/SpeedFluxObserver/SpeedObserver"][:2]
+    assert k == pytest.approx(
+        [obs.speed_observer.k_w, obs.speed_observer.k_tau], rel=1e-14
+    )
+
+
 def test_init_script() -> None:
     """The model initialization should define the parameters as in motulator."""
     build, _ = gfm_system(True)
@@ -294,3 +344,33 @@ def test_init_script() -> None:
     assert "cfg.R_a = " in init
     assert "cfg.i_d_max = " in init
     assert np.isfinite(values["i_d_max"])
+
+
+@pytest.mark.parametrize("k_v", [None, 0.7], ids=["default_k_v", "k_v"])
+@pytest.mark.parametrize(
+    "alpha_o", [2 * np.pi * 50, 2 * np.pi * 37.5, 123.456, np.pi * 1e3 / 3, 1540.35]
+)
+def test_observer_bandwidth(alpha_o: float, k_v: float | None) -> None:
+    """The observer bandwidth of grid-forming control, which motulator stores only as
+    the observer gain, should be identified such that the mask of the observer gives
+    the same gain, keeping the default k_v."""
+    cfg = grid_control.ObserverBasedGridFormingControllerCfg(
+        i_max=1.3 * BASE.i,
+        L=0.35 * BASE.L,
+        R=0.05 * BASE.Z,
+        alpha_o=alpha_o,
+        k_v=k_v,
+        u_nom=BASE.u,
+        w_nom=BASE.w,
+    )
+    gfm = grid_control.ObserverBasedGridFormingController(cfg)
+    values = grid.export_values(grid_control.GridConverterControlSystem(gfm))
+    assert values["k_v"] == k_v
+    if k_v is None:
+        assert values["alpha_o"] == alpha_o
+    params = block_params(
+        _grid_control.GFM_BLOCK.netlist(), init_script("gfm", values), VALUES
+    )
+    path = "ObserverBasedGridFormingController/Observer"
+    u_nom, w_nom, L, alpha, T_s, R = params[path]
+    assert Observer(u_nom, w_nom, L, alpha, T_s, R).k_o == gfm.observer.k_o

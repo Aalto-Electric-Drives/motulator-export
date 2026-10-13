@@ -38,30 +38,30 @@ s.control.netlist.blocks = { ...
     'i_s_abc', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '3'}
     'u_dc', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '4'}
     'w_M', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '5'}
-    'd_abc', 'Outport', [1000.0 371.0 1030.0 385.0], {'Port', '1'}
-    'signals', 'Outport', [1715.0 338.0 1745.0 352.0], {'Port', '2'}
+    'd_abc', 'Outport', [1015.0 371.0 1045.0 385.0], {'Port', '1'}
+    'signals', 'Outport', [1730.0 348.0 1760.0 362.0], {'Port', '2'}
     'get_measurement', 'S-Function', [265.0 170.0 405.0 260.0], {'FunctionName', 'sfun_cvc_get_measurement', 'Parameters', '1'}
-    'Goto fbk', 'Goto', [1215.0 103.0 1285.0 117.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto ref', 'Goto', [1215.0 268.0 1285.0 282.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto fbk', 'Goto', [1230.0 113.0 1300.0 127.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto ref', 'Goto', [1230.0 278.0 1300.0 292.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'From fbk', 'From', [265.0 78.0 335.0 92.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref', 'From', [265.0 133.0 335.0 147.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'From fbk 2', 'From', [1215.0 323.0 1285.0 337.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
-    'From ref 2', 'From', [1215.0 378.0 1285.0 392.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'fbk.w_M', 'Selector', [450.0 70.0 500.0 100.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[14]', 'InputPortWidth', '19'}
+    'From fbk 2', 'From', [1230.0 333.0 1300.0 347.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
+    'From ref 2', 'From', [1230.0 388.0 1300.0 402.0], {'GotoTag', 'ref', 'ShowName', 'off'}
+    'fbk.w_M', 'Selector', [450.0 70.0 500.0 100.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[16]', 'InputPortWidth', '21'}
     'ref.tau_M', 'Selector', [450.0 125.0 500.0 155.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1]', 'InputPortWidth', '5'}
     'SpeedController', 'S-Function', [695.0 40.0 835.0 160.0], {'FunctionName', 'sfun_cvc_speed_controller', 'Parameters', '1, 1, 1, 1, 1'}
     'PWM', 'Subsystem', [695.0 245.0 835.0 405.0], {'ContentPreviewEnabled', 'off'}
-    'CurrentVectorController', 'Subsystem', [1000.0 115.0 1140.0 275.0], {'ContentPreviewEnabled', 'off'}
-    'ref.u_s', 'Selector', [1215.0 215.0 1265.0 245.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[4 5]', 'InputPortWidth', '5'}
-    'modulate', 'S-Function', [1450.0 140.0 1590.0 200.0], {'FunctionName', 'sfun_cvc_modulate', 'Parameters', '1'}
-    'Monitored signals', 'S-Function', [1450.0 285.0 1590.0 405.0], {'FunctionName', 'sfun_cvc_monitored_signals', 'Parameters', '1'}
-    'Mux signals', 'Mux', [1668.0 285.0 1673.0 405.0], {'Inputs', '[2 2 2 4]', 'ShowName', 'off'}
+    'CurrentVectorController', 'Subsystem', [1015.0 115.0 1155.0 315.0], {'ContentPreviewEnabled', 'off'}
+    'ref.u_s', 'Selector', [1230.0 225.0 1280.0 255.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[4 5]', 'InputPortWidth', '5'}
+    'modulate', 'S-Function', [1465.0 150.0 1605.0 210.0], {'FunctionName', 'sfun_cvc_modulate', 'Parameters', '1'}
+    'Monitored signals', 'S-Function', [1465.0 295.0 1605.0 415.0], {'FunctionName', 'sfun_cvc_monitored_signals', 'Parameters', '1'}
+    'Mux signals', 'Mux', [1678.0 295.0 1683.0 415.0], {'Inputs', '[2 2 2 4]', 'ShowName', 'off'}
     'From SpeedController.enable', 'From', [600.0 48.0 670.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From PWM.enable', 'From', [600.0 258.0 670.0 272.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From CurrentVectorController.enable', 'From', [905.0 128.0 975.0 142.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From Monitored signals.enable', 'From', [1355.0 293.0 1425.0 307.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'From CurrentVectorController.enable', 'From', [920.0 128.0 990.0 142.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'From Monitored signals.enable', 'From', [1370.0 303.0 1440.0 317.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From SpeedController.w_M_ref', 'From', [600.0 138.0 670.0 152.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
-    'From Monitored signals.w_M_ref', 'From', [1355.0 383.0 1425.0 397.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
+    'From Monitored signals.w_M_ref', 'From', [1370.0 393.0 1440.0 407.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
     'Goto enable', 'Goto', [110.0 78.0 180.0 92.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto w_M_ref', 'Goto', [110.0 133.0 180.0 147.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/enable', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '1'}
@@ -76,34 +76,36 @@ s.control.netlist.blocks = { ...
     'PWM/From compute_output.enable', 'From', [260.0 108.0 330.0 122.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/From get_realized_voltage.enable', 'From', [550.0 48.0 620.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'CurrentVectorController/enable', 'Inport', [40.0 413.0 70.0 427.0], {'Port', '1'}
+    'CurrentVectorController/enable', 'Inport', [40.0 448.0 70.0 462.0], {'Port', '1'}
     'CurrentVectorController/tau_M_ref', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
-    'CurrentVectorController/meas', 'Inport', [40.0 303.0 70.0 317.0], {'Port', '3'}
-    'CurrentVectorController/u_c_ab', 'Inport', [40.0 358.0 70.0 372.0], {'Port', '4'}
-    'CurrentVectorController/fbk', 'Outport', [1440.0 303.0 1470.0 317.0], {'Port', '1'}
-    'CurrentVectorController/ref', 'Outport', [1440.0 115.0 1470.0 129.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [340.0 250.0 480.0 370.0], {'ContentPreviewEnabled', 'off'}
-    'CurrentVectorController/From u_s', 'From', [540.0 108.0 610.0 122.0], {'GotoTag', 'u_s', 'ShowName', 'off'}
-    'CurrentVectorController/meas.u_dc', 'Selector', [540.0 175.0 590.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
-    'CurrentVectorController/fbk.psi_R', 'Selector', [540.0 250.0 590.0 280.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[7 8]', 'InputPortWidth', '19'}
-    'CurrentVectorController/CurrentReferenceGenerator', 'S-Function', [775.0 40.0 915.0 190.0], {'FunctionName', 'sfun_cvc_current_reference_generator', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1'}
-    'CurrentVectorController/CurrentController', 'S-Function', [1095.0 107.0 1235.0 197.0], {'FunctionName', 'sfun_cvc_current_controller', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1'}
-    'CurrentVectorController/Mux ref', 'Mux', [1328.0 77.0 1333.0 167.0], {'Inputs', '[1 2 2]', 'ShowName', 'off'}
-    'CurrentVectorController/Goto u_s', 'Goto', [1325.0 208.0 1395.0 222.0], {'GotoTag', 'u_s', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'CurrentVectorController/From SpeedFluxObserver.enable', 'From', [245.0 263.0 315.0 277.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'CurrentVectorController/From CurrentReferenceGenerator.enable', 'From', [680.0 48.0 750.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'CurrentVectorController/From CurrentController.enable', 'From', [1000.0 115.0 1070.0 129.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'CurrentVectorController/Goto enable', 'Goto', [110.0 413.0 180.0 427.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'CurrentVectorController/meas', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '3'}
+    'CurrentVectorController/u_c_ab', 'Inport', [40.0 338.0 70.0 352.0], {'Port', '4'}
+    'CurrentVectorController/u_c_zoh_ab', 'Inport', [40.0 393.0 70.0 407.0], {'Port', '5'}
+    'CurrentVectorController/fbk', 'Outport', [1455.0 303.0 1485.0 317.0], {'Port', '1'}
+    'CurrentVectorController/ref', 'Outport', [1455.0 115.0 1485.0 129.0], {'Port', '2'}
+    'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [355.0 230.0 495.0 390.0], {'ContentPreviewEnabled', 'off'}
+    'CurrentVectorController/From u_s', 'From', [555.0 108.0 625.0 122.0], {'GotoTag', 'u_s', 'ShowName', 'off'}
+    'CurrentVectorController/meas.u_dc', 'Selector', [555.0 175.0 605.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
+    'CurrentVectorController/fbk.psi_R', 'Selector', [555.0 250.0 605.0 280.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[9 10]', 'InputPortWidth', '21'}
+    'CurrentVectorController/CurrentReferenceGenerator', 'S-Function', [790.0 40.0 930.0 190.0], {'FunctionName', 'sfun_cvc_current_reference_generator', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1'}
+    'CurrentVectorController/CurrentController', 'S-Function', [1110.0 107.0 1250.0 197.0], {'FunctionName', 'sfun_cvc_current_controller', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1'}
+    'CurrentVectorController/Mux ref', 'Mux', [1338.0 77.0 1343.0 167.0], {'Inputs', '[1 2 2]', 'ShowName', 'off'}
+    'CurrentVectorController/Goto u_s', 'Goto', [1340.0 208.0 1410.0 222.0], {'GotoTag', 'u_s', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'CurrentVectorController/From SpeedFluxObserver.enable', 'From', [260.0 243.0 330.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'CurrentVectorController/From CurrentReferenceGenerator.enable', 'From', [695.0 48.0 765.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'CurrentVectorController/From CurrentController.enable', 'From', [1015.0 115.0 1085.0 129.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'CurrentVectorController/Goto enable', 'Goto', [110.0 448.0 180.0 462.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'CurrentVectorController/SpeedFluxObserver/enable', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'CurrentVectorController/SpeedFluxObserver/meas', 'Inport', [40.0 98.0 70.0 112.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
-    'CurrentVectorController/SpeedFluxObserver/out', 'Outport', [955.0 93.0 985.0 107.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'S-Function', [355.0 40.0 495.0 160.0], {'FunctionName', 'sfun_cvc_flux_observer', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1'}
-    'CurrentVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [555.0 175.0 605.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[18]', 'InputPortWidth', '19'}
-    'CurrentVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [555.0 245.0 605.0 275.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[9]', 'InputPortWidth', '19'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'S-Function', [755.0 145.0 895.0 235.0], {'FunctionName', 'sfun_cvc_speed_observer', 'Parameters', '1, 1, 1, 1'}
-    'CurrentVectorController/SpeedFluxObserver/From FluxObserver.enable', 'From', [260.0 48.0 330.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'CurrentVectorController/SpeedFluxObserver/From SpeedObserver.enable', 'From', [660.0 153.0 730.0 167.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'CurrentVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
+    'CurrentVectorController/SpeedFluxObserver/out', 'Outport', [970.0 108.0 1000.0 122.0], {'Port', '1'}
+    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'S-Function', [370.0 40.0 510.0 190.0], {'FunctionName', 'sfun_cvc_flux_observer', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1'}
+    'CurrentVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [570.0 205.0 620.0 235.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[20]', 'InputPortWidth', '21'}
+    'CurrentVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [570.0 275.0 620.0 305.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'S-Function', [770.0 175.0 910.0 265.0], {'FunctionName', 'sfun_cvc_speed_observer', 'Parameters', '1, 1, 1, 1'}
+    'CurrentVectorController/SpeedFluxObserver/From FluxObserver.enable', 'From', [275.0 48.0 345.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'CurrentVectorController/SpeedFluxObserver/From SpeedObserver.enable', 'From', [675.0 183.0 745.0 197.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'CurrentVectorController/SpeedFluxObserver/Goto enable', 'Goto', [110.0 43.0 180.0 57.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     };
 s.control.netlist.aligns = { ...
@@ -149,7 +151,7 @@ s.control.netlist.aligns = { ...
     'CurrentVectorController', 'From CurrentReferenceGenerator.enable', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 1.0, 0.0
     'CurrentVectorController', 'From CurrentController.enable', 'Outport', 1.0, 'CurrentController', 'Inport', 1.0, 0.0
     'CurrentVectorController', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
-    'CurrentVectorController/SpeedFluxObserver', 'fbk.eps', 'Outport', 1.0, 'FluxObserver', 'Inport', 4.0, 45.0
+    'CurrentVectorController/SpeedFluxObserver', 'fbk.eps', 'Outport', 1.0, 'FluxObserver', 'Inport', 5.0, 45.0
     'CurrentVectorController/SpeedFluxObserver', 'SpeedObserver', 'Inport', 2.0, 'fbk.eps', 'Outport', 1.0, 0.0
     'CurrentVectorController/SpeedFluxObserver', 'out', 'Inport', 1.0, 'FluxObserver', 'Outport', 1.0, 0.0
     'CurrentVectorController/SpeedFluxObserver', 'From FluxObserver.enable', 'Outport', 1.0, 'FluxObserver', 'Inport', 1.0, 0.0
@@ -172,18 +174,19 @@ s.control.netlist.lines = { ...
     '', 'From ref/1', 'ref.tau_M/1', []
     '', 'fbk.w_M/1', 'SpeedController/2', []
     '', 'ref.tau_M/1', 'SpeedController/3', {'x', 525.0}
-    '', 'SpeedController/1', 'CurrentVectorController/2', {'x', 875.0}
+    '', 'SpeedController/1', 'CurrentVectorController/2', {'x', 890.0}
     '', 'PWM/1', 'CurrentVectorController/4', {'x', 860.0}
+    '', 'PWM/2', 'CurrentVectorController/5', {'x', 875.0}
     '', 'PWM/3', 'd_abc/1', []
-    '', 'CurrentVectorController/1', 'Goto fbk/1', {'x', 1165.0}
+    '', 'CurrentVectorController/1', 'Goto fbk/1', {'x', 1180.0}
     '', 'CurrentVectorController/1', 'modulate/1', []
-    '', 'CurrentVectorController/2', 'Goto ref/1', {'x', 1180.0}
-    '', 'CurrentVectorController/2', 'ref.u_s/1', {'x', 1180.0}
-    '', 'ref.u_s/1', 'modulate/2', {'x', 1325.0}
-    '', 'modulate/1', 'PWM/3', {'x', 1630.0, 'y', 460.0, 'x', 555.0}
-    '', 'modulate/2', 'PWM/4', {'x', 1615.0, 'y', 445.0, 'x', 570.0}
+    '', 'CurrentVectorController/2', 'Goto ref/1', {'x', 1195.0}
+    '', 'CurrentVectorController/2', 'ref.u_s/1', {'x', 1195.0}
+    '', 'ref.u_s/1', 'modulate/2', {'x', 1340.0}
+    '', 'modulate/1', 'PWM/3', {'x', 1645.0, 'y', 470.0, 'x', 555.0}
+    '', 'modulate/2', 'PWM/4', {'x', 1630.0, 'y', 455.0, 'x', 570.0}
     '', 'From fbk 2/1', 'Monitored signals/2', []
-    '', 'From ref 2/1', 'Monitored signals/3', {'x', 1310.0}
+    '', 'From ref 2/1', 'Monitored signals/3', {'x', 1325.0}
     '', 'Monitored signals/1', 'Mux signals/1', []
     '', 'Monitored signals/2', 'Mux signals/2', []
     '', 'Monitored signals/3', 'Mux signals/3', []
@@ -207,31 +210,33 @@ s.control.netlist.lines = { ...
     'CurrentVectorController', 'From CurrentController.enable/1', 'CurrentController/1', []
     'CurrentVectorController', 'meas/1', 'SpeedFluxObserver/2', []
     'CurrentVectorController', 'u_c_ab/1', 'SpeedFluxObserver/3', {'x', 200.0}
-    'CurrentVectorController', 'meas/1', 'meas.u_dc/1', {'x', 215.0}
-    'CurrentVectorController', 'SpeedFluxObserver/1', 'fbk.psi_R/1', {'x', 505.0}
-    'CurrentVectorController', 'SpeedFluxObserver/1', 'CurrentController/3', {'x', 970.0}
+    'CurrentVectorController', 'u_c_zoh_ab/1', 'SpeedFluxObserver/4', {'x', 215.0}
+    'CurrentVectorController', 'meas/1', 'meas.u_dc/1', {'x', 230.0}
+    'CurrentVectorController', 'SpeedFluxObserver/1', 'fbk.psi_R/1', {'x', 520.0}
+    'CurrentVectorController', 'SpeedFluxObserver/1', 'CurrentController/3', {'x', 985.0}
     'CurrentVectorController', 'SpeedFluxObserver/1', 'fbk/1', []
     'CurrentVectorController', 'tau_M_ref/1', 'CurrentReferenceGenerator/2', []
-    'CurrentVectorController', 'fbk.psi_R/1', 'CurrentReferenceGenerator/5', {'x', 650.0}
+    'CurrentVectorController', 'fbk.psi_R/1', 'CurrentReferenceGenerator/5', {'x', 665.0}
     'CurrentVectorController', 'From u_s/1', 'CurrentReferenceGenerator/3', []
-    'CurrentVectorController', 'meas.u_dc/1', 'CurrentReferenceGenerator/4', {'x', 635.0}
+    'CurrentVectorController', 'meas.u_dc/1', 'CurrentReferenceGenerator/4', {'x', 650.0}
     'CurrentVectorController', 'CurrentReferenceGenerator/2', 'CurrentController/2', []
-    'CurrentVectorController', 'CurrentReferenceGenerator/1', 'Mux ref/1', {'x', 940.0, 'y', 50.0, 'x', 1275.0}
-    'CurrentVectorController', 'CurrentReferenceGenerator/2', 'Mux ref/2', {'x', 955.0, 'y', 65.0, 'x', 1260.0}
+    'CurrentVectorController', 'CurrentReferenceGenerator/1', 'Mux ref/1', {'x', 955.0, 'y', 50.0, 'x', 1290.0}
+    'CurrentVectorController', 'CurrentReferenceGenerator/2', 'Mux ref/2', {'x', 970.0, 'y', 65.0, 'x', 1275.0}
     'CurrentVectorController', 'CurrentController/1', 'Mux ref/3', []
-    'CurrentVectorController', 'CurrentController/1', 'Goto u_s/1', {'x', 1290.0}
+    'CurrentVectorController', 'CurrentController/1', 'Goto u_s/1', {'x', 1305.0}
     'CurrentVectorController', 'Mux ref/1', 'ref/1', []
     'CurrentVectorController', 'enable/1', 'Goto enable/1', []
     'CurrentVectorController/SpeedFluxObserver', 'From FluxObserver.enable/1', 'FluxObserver/1', []
     'CurrentVectorController/SpeedFluxObserver', 'From SpeedObserver.enable/1', 'SpeedObserver/1', []
     'CurrentVectorController/SpeedFluxObserver', 'meas/1', 'FluxObserver/2', {'x', 200.0}
     'CurrentVectorController/SpeedFluxObserver', 'u_s_ab/1', 'FluxObserver/3', {'x', 215.0}
-    'CurrentVectorController/SpeedFluxObserver', 'SpeedObserver/1', 'FluxObserver/4', {'x', 920.0, 'y', 315.0, 'x', 230.0}
+    'CurrentVectorController/SpeedFluxObserver', 'u_s_zoh_ab/1', 'FluxObserver/4', {'x', 230.0}
+    'CurrentVectorController/SpeedFluxObserver', 'SpeedObserver/1', 'FluxObserver/5', {'x', 935.0, 'y', 345.0, 'x', 245.0}
     'CurrentVectorController/SpeedFluxObserver', 'FluxObserver/1', 'out/1', []
-    'CurrentVectorController/SpeedFluxObserver', 'FluxObserver/1', 'fbk.eps/1', {'x', 520.0}
-    'CurrentVectorController/SpeedFluxObserver', 'FluxObserver/1', 'fbk.tau_M/1', {'x', 520.0}
+    'CurrentVectorController/SpeedFluxObserver', 'FluxObserver/1', 'fbk.eps/1', {'x', 535.0}
+    'CurrentVectorController/SpeedFluxObserver', 'FluxObserver/1', 'fbk.tau_M/1', {'x', 535.0}
     'CurrentVectorController/SpeedFluxObserver', 'fbk.eps/1', 'SpeedObserver/2', []
-    'CurrentVectorController/SpeedFluxObserver', 'fbk.tau_M/1', 'SpeedObserver/3', {'x', 630.0}
+    'CurrentVectorController/SpeedFluxObserver', 'fbk.tau_M/1', 'SpeedObserver/3', {'x', 645.0}
     'CurrentVectorController/SpeedFluxObserver', 'enable/1', 'Goto enable/1', []
     };
 s.control.netlist.masks = { ...
@@ -267,14 +272,6 @@ s.control.netlist.masks = { ...
     'port_label(''output'', 2, ''u_c_zoh_ab'');', ...
     'port_label(''output'', 3, ''d_abc'');'}, newline)
     'CurrentVectorController', 'CurrentVectorController (motulator)', 'Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o and the continuous-time current controller only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as CurrentVectorController. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
-    '% Default of alpha_o (CurrentVectorControllerCfg.__post_init__)', ...
-    'alpha_o = cfg.alpha_o;', ...
-    'if isempty(alpha_o)', ...
-    '  alpha_o = 2*pi*60;', ...
-    '  if ~isempty(cfg.J)', ...
-    '    alpha_o = 0.5*alpha_o;', ...
-    '  end', ...
-    'end', ...
     '% Default of alpha_i (CurrentController.__init__)', ...
     'alpha_i = cfg.alpha_i;', ...
     'if isempty(alpha_i)', ...
@@ -288,23 +285,39 @@ s.control.netlist.masks = { ...
     'port_label(''input'', 2, ''tau_M_ref'');', ...
     'port_label(''input'', 3, ''meas'');', ...
     'port_label(''input'', 4, ''u_c_ab'');', ...
+    'port_label(''input'', 5, ''u_c_zoh_ab'');', ...
     'port_label(''output'', 1, ''fbk'');', ...
     'port_label(''output'', 2, ''ref'');'}, newline)
-    'CurrentVectorController/SpeedFluxObserver', 'SpeedFluxObserver (motulator)', 'Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
-    '% Gains for critically damped dynamics (SpeedFluxObserver.__init__)', ...
+    'CurrentVectorController/SpeedFluxObserver', 'SpeedFluxObserver (motulator)', 'Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
+    '% Default speed estimation poles of create_speed_flux_observer. With J, the', ...
+    '% double pole at alpha_o/2 keeps the speed gain about the same.', ...
+    'alpha_o_obs = alpha_o;', ...
+    'if isempty(alpha_o_obs)', ...
+    '  if sensorless', ...
+    '    alpha_o_obs = 2*pi*60;', ...
+    '  else', ...
+    '    alpha_o_obs = 2*pi*400;', ...
+    '  end', ...
+    '  if ~isempty(J)', ...
+    '    alpha_o_obs = 0.5*alpha_o_obs;', ...
+    '  end', ...
+    'end', ...
+    '% Gains for critically damped dynamics (SpeedFluxObserver.__init__), the', ...
+    '% pole matched to the sampling period (matched_pole)', ...
+    'alpha_o_obs = -expm1(-alpha_o_obs*T_s)/T_s;', ...
     'if isempty(J)', ...
-    '  k_w = alpha_o;', ...
+    '  k_w = alpha_o_obs;', ...
     '  k_tau = 0;', ...
     'else', ...
-    '  k_w = 2*alpha_o;', ...
-    '  k_tau = J*alpha_o^2;', ...
+    '  k_w = 2*alpha_o_obs;', ...
+    '  k_tau = J*alpha_o_obs^2;', ...
     'end', ...
     '% Default observer gain of create_speed_flux_observer, and the weight of the', ...
     '% measured rotor speed in the FluxObserver', ...
     'k_o = sensorless;', ...
     'h = 1 - sensorless;'}, newline), { ...
     'par', 'par: Machine model (InductionMachineInvGammaPars) as a struct', 'par'
-    'alpha_o', 'alpha_o: Speed estimation pole (rad/s)', 'alpha_o'
+    'alpha_o', 'alpha_o: Speed estimation poles (rad/s), [] = default', 'cfg.alpha_o'
     'sensorless', 'sensorless: Sensorless mode (1) or sensored mode (0)', 'cfg.sensorless'
     'J', 'J: Inertia (kgm^2), [] = the model not used', 'cfg.J'
     'T_s', 'T_s: Sampling period (s)', 'cfg.T_s'
@@ -313,6 +326,7 @@ s.control.netlist.masks = { ...
     'port_label(''input'', 1, ''enable'');', ...
     'port_label(''input'', 2, ''meas'');', ...
     'port_label(''input'', 3, ''u_s_ab'');', ...
+    'port_label(''input'', 4, ''u_s_zoh_ab'');', ...
     'port_label(''output'', 1, ''out'');'}, newline)
     'CurrentVectorController/CurrentReferenceGenerator', 'CurrentReferenceGenerator (motulator)', 'Current reference generator with field weakening (CurrentReferenceGenerator). The inputs are the torque reference, the unlimited voltage reference ref.u_s and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux estimate fbk.psi_R. The outputs are the limited torque reference and the current reference, transformed to the coordinates of the feedback signals (CurrentVectorController.compute_output). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
     '% Fields of the machine model par (InductionMachineInvGammaPars) for the', ...
@@ -356,7 +370,7 @@ s.control.netlist.masks = { ...
     'port_label(''input'', 2, ''i_s_ref'');', ...
     'port_label(''input'', 3, ''fbk'');', ...
     'port_label(''output'', 1, ''u_s'');'}, newline)
-    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'FluxObserver (motulator)', 'Reduced-order flux observer in synchronous coordinates (FluxObserver). In the sensored mode (h = 1), the speed error signal is computed from the measured rotor speed (CurrentVectorController.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
+    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'FluxObserver (motulator)', 'Reduced-order flux observer in synchronous coordinates (FluxObserver). The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In the sensored mode (h = 1), the speed error signal is computed from the measured rotor speed (compute_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
     '% Fields of the machine model par (InductionMachineInvGammaPars) for the', ...
     '% C-Script', ...
     'par_n_p = par.n_p;', ...
@@ -373,7 +387,8 @@ s.control.netlist.masks = { ...
     'port_label(''input'', 1, ''enable'');', ...
     'port_label(''input'', 2, ''meas'');', ...
     'port_label(''input'', 3, ''u_s_ab'');', ...
-    'port_label(''input'', 4, ''w_M'');', ...
+    'port_label(''input'', 4, ''u_s_zoh_ab'');', ...
+    'port_label(''input'', 5, ''w_M'');', ...
     'port_label(''output'', 1, ''out'');'}, newline)
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'SpeedObserver (motulator)', 'Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given.', '', { ...
     'k_w', 'k_w: Speed estimation gain', 'k_w'

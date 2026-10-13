@@ -357,17 +357,18 @@ def _jogs(
 CONVERTER_FRAME = "      Frame         [-25, -25; 25, 25]\n"
 
 
-def _check_supported_pwm(pwm: PWM, d_err: bool = False) -> None:
+def _check_supported_pwm(pwm: PWM, k_comp: float, d_err: bool = False) -> None:
     """
-    Raise an error if the PWM of the control system is not supported.
+    Raise an error if the PWM or the angle-advance factor `k_comp` of the voltage
+    reference (given by the controller) of the control system is not supported.
 
     The duty-ratio error model `d_err` is supported only if `d_err` is True.
 
     """
     if not isinstance(pwm, PWM) or pwm.overmodulation not in ("MPE", "MME"):
         raise NotImplementedError("Only the MPE and MME overmodulation supported")
-    if pwm.k_comp != 1.5:
-        raise NotImplementedError("Only k_comp = 1.5 supported")
+    if k_comp != 1.5:
+        raise NotImplementedError("Only k_comp = 1.5 of the controller supported")
     if pwm.k_pred != 1.5:
         raise NotImplementedError("Only k_pred = 1.5 supported")
     if pwm.d_err is not None and not d_err:

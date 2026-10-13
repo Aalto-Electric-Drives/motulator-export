@@ -125,7 +125,7 @@ static void mdlStart(SimStruct *S)
         SetErrorMessage("mme must be a scalar.");
         return;
     }
-    pwm_init(&self, 1.5);
+    pwm_init(&self, 1.5); /* k_pred */
     pwm_set_overmodulation(&self, (int)P(5, 0));
     pwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));
     pwm_set_min_pulse(&self, P(4, 0));

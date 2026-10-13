@@ -72,3 +72,21 @@ def test_unsupported_grid_filter(tmp_path: Path, gfl: bool) -> None:
                 tmp_path / path, mdl, ctrl, 0.1, StepSignal(0.02, 5e3), **refs
             )
     assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+def test_unsupported_k_comp(tmp_path: Path) -> None:
+    """Only the angle advance k_comp = 1.5 of the continuous-time controller designs
+    is supported."""
+    ctrl = gfm_system(False)[0]()[1]
+    ctrl.k_comp = 0.0
+    for tool, path in ((plecs, "grid.plecs"), (simulink, "grid.slx")):
+        with pytest.raises(NotImplementedError, match="k_comp"):
+            tool.grid.write_model(
+                tmp_path / path,
+                _grid_model(lcl=False),
+                ctrl,
+                0.1,
+                StepSignal(0.02, 5e3),
+                v_c_ref=BASE.u,
+            )
+    assert not list(tmp_path.iterdir())  # Nothing is written

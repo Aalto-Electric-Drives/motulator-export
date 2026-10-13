@@ -5,16 +5,16 @@ initializations of the control systems, for the tests without MATLAB and PLECS.
 The statements are assignments (also to the fields of structs) and if-elseif-else
 blocks, and the expressions are numbers, matrices, variables, fields, the
 arithmetic, comparison, and logical operators, and the functions isempty,
-isfield, isinf, and strcmp. The variables are resolved through the workspaces of
-the masks, as in Simulink, or only in the workspace of the innermost mask, as in
-PLECS (`block_params`).
+isfield, isinf, strcmp, sqrt, and expm1. The variables are resolved through the
+workspaces of the masks, as in Simulink, or only in the workspace of the innermost
+mask, as in PLECS (`block_params`).
 
 """
 
 import re
 from collections import ChainMap
 from collections.abc import MutableMapping
-from math import inf, nan, pi
+from math import expm1, inf, nan, pi, sqrt
 from typing import Any
 
 import numpy as np
@@ -225,6 +225,11 @@ def _call(name: str, args: list[Any]) -> Any:
         return float(np.all(np.isinf(args[0])))
     if name == "strcmp":
         return float(isinstance(args[0], str) and args[0] == args[1])
+    # Scalar functions, by the C library as in the C port
+    if name == "sqrt":
+        return sqrt(args[0])
+    if name == "expm1":
+        return expm1(args[0])
     raise NameError(name)
 
 

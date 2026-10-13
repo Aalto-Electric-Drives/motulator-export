@@ -40,7 +40,7 @@
 static IMFluxTorqueController self;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {2, 19};
+static const int INPUT_WIDTHS[] = {2, 21};
 static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
 #define NUM_INPUTS 2
