@@ -44,7 +44,7 @@ The scripts close the model in PLECS before simulating it, since an open model i
 
 ## Agreement of the PLECS models with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.10.0 and PLECS 5.0 (2026-10-13).
+Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.11.0 and PLECS 5.0 (2026-10-13).
 *motulator* uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
@@ -59,7 +59,7 @@ After a change in the writers or the C port, regenerate the models by running th
 | `im_2kw_vhz.py`                  | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
 | `im_2kw_vhz.py --open-loop`      | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 2.2e-16                   |
 | `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
-| `gfm_13kva_do.py`                | i_c_ab 9.4e-7, i_c_a 7.8e-7                | p_g 3.9e-4, q_g 4.0e-4, v_c 2.7e-6, theta_c 0                |
+| `gfm_13kva_do.py`                | i_c_ab 1.2e-6, i_c_a 1.2e-6                | p_g 4.9e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 0                |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
 In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 1e-4 relative), since *motulator* evaluates the GradNets in single precision, see [the C port](../motulator_export/c/README.md).
