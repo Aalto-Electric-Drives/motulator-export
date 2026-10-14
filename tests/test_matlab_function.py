@@ -252,7 +252,9 @@ class Harnesses:
         n = len(inputs)
         t = np.maximum(np.arange(n + 1) - 0.5, 0) * T_s
         u = np.vstack((inputs, inputs[-1]))
-        self.eng.workspace["u"] = matlab.double(np.column_stack((t, u)).tolist())
+        # Without the Engine API, pyright takes the module tests/matlab.py
+        table = np.column_stack((t, u)).tolist()
+        self.eng.workspace["u"] = matlab.double(table)  # pyright: ignore[reportAttributeAccessIssue]
         stop = (len(inputs) - 1) * T_s
         self.eng.eval(
             f"out = sim('{name}', 'LoadExternalInput', 'on', 'ExternalInput', 'u', "

@@ -294,7 +294,9 @@ def simulate(
         if build:
             eng.run(str(path.with_name(f"build_{path.stem}.m")), nargout=0)
         eng.addpath(str(path.parent), nargout=0)
-        eng.workspace["t_eval"] = matlab.double(np.asarray(t_eval, float).tolist())
+        # Without the Engine API, pyright takes the folder matlab (the MATLAB port)
+        times = np.asarray(t_eval, float).tolist()
+        eng.workspace["t_eval"] = matlab.double(times)  # pyright: ignore[reportAttributeAccessIssue]
         eng.eval(
             f"out = sim({_m(path.stem)}, 'OutputOption', "
             "'SpecifiedOutputTimes', 'OutputTimes', 't_eval');",
