@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nconverter.u_dc = 540;\nconverter.t_d = 2e-06;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Current-vector control (CurrentVectorControllerCfg)\ncfg.psi_s_nom = 0.987615948229323;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_c = 2*pi*200;\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.w_s_nom = 2*pi*50;\ncfg.k_u = 0.95;\ncfg.k_fw = [];\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 2*pi*4;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n% compensation, the minimum duty ratio of a switching leg, and the\n% overmodulation ('MPE' or 'MME')\npwm.t_d = 2e-06;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\nconverter.t_d = 2e-06;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Current-vector control (CurrentVectorControllerCfg)\ncfg.psi_s_nom = 0.987615948229323;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_c = 2*pi*200;\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.w_s_nom = 2*pi*50;\ncfg.k_u = 0.95;\ncfg.k_fw = [];\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 2*pi*4;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n% compensation, the minimum duty ratio of a switching leg, and the\n% overmodulation ('MPE' or 'MME')\npwm.t_d = 2e-06;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
     Location      [0, 0; 1020, 520]
     ZoomFactor    1
@@ -4734,12 +4734,12 @@ Plecs {
       }
       Parameter {
         Variable      "wm0"
-        Value         "0"
+        Value         "mechanics.w_M0"
         Show          off
       }
       Parameter {
         Variable      "thm0"
-        Value         "0"
+        Value         "mechanics.theta_M0"
         Show          off
       }
       Parameter {

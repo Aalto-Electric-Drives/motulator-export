@@ -226,8 +226,8 @@ def _add_im(sch: _Schematic) -> None:
         "J": "mechanics.J",
         "F": "0",
         "p": "machine.n_p",
-        "wm0": "0",
-        "thm0": "0",
+        "wm0": "mechanics.w_M0",
+        "thm0": "mechanics.theta_M0",
         "is0": "[0 0]",
         "psisdq0": "[0 0]",
     }

@@ -62,6 +62,7 @@ from motulator_export.plecs._common import (
     _add_dc_bus,
     _add_delay,
     _add_pwm,
+    _check_initial_states,
     _check_supported_pwm,
     _write_model,
 )
@@ -96,6 +97,13 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
         raise NotImplementedError("Converter dead time not supported")
     if len(mdl.delay.data) != 1:
         raise NotImplementedError("Only the computational delay of one sample")
+    # The capacitor voltage of the LCL filter is exported, the other states start
+    # from their initial values
+    states = [("ac_source.state.exp_j_theta_g", src.state.exp_j_theta_g, 1 + 0j)]
+    states.append(("ac_filter.state.i_c_ab", f.state.i_c_ab, 0j))
+    if isinstance(f, LCLFilter):
+        states.append(("ac_filter.state.i_g_ab", f.state.i_g_ab, 0j))
+    _check_initial_states(states)
 
 
 def _check_supported(

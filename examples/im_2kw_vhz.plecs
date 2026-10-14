@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Observer-based V/Hz control (ObserverBasedVHzControllerCfg)\ncfg.psi_s_nom = 1.0395957349782348;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_psi = 2*pi*100;\ncfg.alpha_tau = 2*pi*20;\ncfg.alpha_f = 2*pi*1;\ncfg.k_u = 0.9;\ncfg.k_b = 0.9;\ncfg.T_s = 0.00025;\n% Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2\nslew_rate = 2*pi*120;\n% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n% compensation, the minimum duty ratio of a switching leg, and the\n% overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.overmodulation = 'MME';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Observer-based V/Hz control (ObserverBasedVHzControllerCfg)\ncfg.psi_s_nom = 1.0395957349782348;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_psi = 2*pi*100;\ncfg.alpha_tau = 2*pi*20;\ncfg.alpha_f = 2*pi*1;\ncfg.k_u = 0.9;\ncfg.k_b = 0.9;\ncfg.T_s = 0.00025;\n% Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2\nslew_rate = 2*pi*120;\n% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n% compensation, the minimum duty ratio of a switching leg, and the\n% overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.overmodulation = 'MME';\n"
   Schematic {
     Location      [0, 0; 940, 520]
     ZoomFactor    1
@@ -3626,12 +3626,12 @@ Plecs {
       }
       Parameter {
         Variable      "wm0"
-        Value         "0"
+        Value         "mechanics.w_M0"
         Show          off
       }
       Parameter {
         Variable      "thm0"
-        Value         "0"
+        Value         "mechanics.theta_M0"
         Show          off
       }
       Parameter {

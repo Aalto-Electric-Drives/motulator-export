@@ -375,6 +375,22 @@ def _check_supported_pwm(pwm: PWM, k_comp: float, d_err: bool = False) -> None:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
 
 
+def _check_initial_states(states: list[tuple[str, complex, complex]]) -> None:
+    """
+    Raise an error if a state of the system model, given as (name, value, initial
+    value), is not at its initial value: the exported models start from the initial
+    values of motulator (e.g., after a simulation, the states are the final ones),
+    except the exported states (the speed and the angle of the mechanics, and the
+    capacitor voltage of the LCL filter).
+    """
+    for name, value, initial in states:
+        if abs(value - initial) > 1e-9 * max(abs(initial), 1.0):
+            raise NotImplementedError(
+                f"Only the initial value {initial:.6g} of {name} supported, not "
+                f"{value:.6g}"
+            )
+
+
 def _add_pwm(sch: _Schematic, T_s: float | str) -> None:
     """
     Add the carrier comparison (PLECS Symmetrical PWM), fed by the delayed duty ratios.

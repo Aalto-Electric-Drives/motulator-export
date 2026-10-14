@@ -12,14 +12,25 @@ Run from the repository root:
 import re
 from math import inf
 from pathlib import Path
+from typing import Any
 
 import motulator.grid.model as grid_model
+import numpy as np
 import pytest
+from motulator.drive import model
 
 from motulator_export import StepSignal, plecs, sampled_step, simulink
 from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
-from tests.test_simulink import BASE, gfl_system, gfm_system
+from tests.test_simulink import (
+    BASE,
+    IM_SPEED,
+    SM_SPEED,
+    gfl_system,
+    gfm_system,
+    im_system,
+    sm_system,
+)
 
 
 @pytest.mark.parametrize(
@@ -105,6 +116,77 @@ def test_load_torque_steps(several: bool) -> None:
         assert re.search(r'Variable\s+"K"\s+Value\s+"\[1\.0 1\.0\]"', gain), gain
     else:
         assert sch.connections[(("tau_L", 1), "Signal")] == load
+
+
+def _drive(sm: bool) -> tuple[Any, Any, dict[str, float]]:
+    """Drive with carrier comparison, its control system, and its speed controller."""
+    if sm:
+        mdl, ctrl = sm_system(True, 0.0)[0]()
+    else:
+        mdl, ctrl = im_system(True, 0.0, 0.0)[0]()
+    drive = model.Drive(mdl.machine, mdl.mechanics, mdl.converter, pwm=True)
+    return drive, ctrl, SM_SPEED if sm else IM_SPEED
+
+
+DRIVE_REFS = (StepSignal(0.1, 50.0), StepSignal(0.2, 5.0), 0.3)
+
+
+def test_initial_mechanics(tmp_path: Path) -> None:
+    """The initial speed and angle of the mechanics should be exported."""
+    mdl, ctrl, speed = _drive(sm=True)
+    mdl.mechanics.state.w_M = 50.0 + 0j
+    mdl.mechanics.state.exp_j_theta_M = np.exp(0.25j)
+    # The rotor angle of the machine model corresponds to that of the mechanics
+    mdl.machine.state.exp_j_theta_m = np.exp(0.25j * mdl.machine.par.n_p)
+    plecs.sm.write_model(tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, speed)
+    simulink.sm.write_model(tmp_path / "drive.slx", mdl, ctrl, *DRIVE_REFS, speed)
+    model_plecs = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+    for text in (model_plecs, (tmp_path / "init_drive.m").read_text(encoding="utf-8")):
+        assert "mechanics.w_M0 = 50;" in text
+        assert "mechanics.theta_M0 = 0.25;" in text
+    assert '"mechanics.w_M0"' in model_plecs  # The initial speed of the machine
+
+
+@pytest.mark.parametrize(
+    "case", ["sm_flux", "sm_angle", "im_flux", "grid_current", "grid_angle"]
+)
+def test_unsupported_initial_states(tmp_path: Path, case: str) -> None:
+    """The states other than those of the mechanics and the capacitor voltage of the
+    LCL filter should be at their initial values, since they are not exported."""
+    if case.startswith(("sm", "im")):
+        mdl, ctrl, speed = _drive(sm=case.startswith("sm"))
+        if case == "sm_flux":
+            mdl.machine.state.psi_s_dq = 0.4 + 0.1j
+        elif case == "sm_angle":  # Not n_p times the angle of the mechanics
+            mdl.mechanics.state.exp_j_theta_M = 1j
+        else:
+            mdl.machine.state.psi_r_ab = 0.1 + 0j
+        match = {"sm_flux": "psi_s_dq", "sm_angle": "exp_j_theta_m"}.get(
+            case, "psi_r_ab"
+        )
+        for tool, path in ((plecs, "drive.plecs"), (simulink, "drive.slx")):
+            module = tool.sm if case.startswith("sm") else tool.im
+            with pytest.raises(NotImplementedError, match=match):
+                module.write_model(tmp_path / path, mdl, ctrl, *DRIVE_REFS, speed)
+    else:
+        ctrl = gfl_system()[0]()[1]
+        mdl: Any = _grid_model(lcl=True)
+        if case == "grid_current":
+            mdl.ac_filter.state.i_g_ab = 1 + 0j
+        else:
+            mdl.ac_source.state.exp_j_theta_g = 1j
+        match = "i_g_ab" if case == "grid_current" else "exp_j_theta_g"
+        for tool, path in ((plecs, "grid.plecs"), (simulink, "grid.slx")):
+            with pytest.raises(NotImplementedError, match=match):
+                tool.grid.write_model(
+                    tmp_path / path,
+                    mdl,
+                    ctrl,
+                    0.1,
+                    StepSignal(0.02, 5e3),
+                    q_g_ref=StepSignal(0.04, 4e3),
+                )
+    assert not list(tmp_path.iterdir())  # Nothing is written
 
 
 def test_unsupported_k_comp(tmp_path: Path) -> None:

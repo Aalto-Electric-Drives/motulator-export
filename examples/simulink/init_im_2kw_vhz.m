@@ -12,6 +12,8 @@ machine.R_R = 2.1;
 machine.L_sgm = 0.021;
 machine.L_M = 0.224;
 mechanics.J = 0.015;
+mechanics.w_M0 = 0;
+mechanics.theta_M0 = 0;
 converter.u_dc = 540;
 
 %% Control system ([] = None, the default)

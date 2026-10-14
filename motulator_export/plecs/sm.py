@@ -375,8 +375,8 @@ def _add_pmsm(sch: _Schematic) -> None:
         "J": "mechanics.J",
         "F": "0",
         "p": "machine.n_p",
-        "wm0": "0",
-        "thm0": "0",
+        "wm0": "mechanics.w_M0",
+        "thm0": "mechanics.theta_M0",
         "is0": "[0 0]",
     }
     sch.component(
@@ -454,7 +454,7 @@ def _add_gradnet_machine(sch: _Schematic) -> None:
     )
     sensor = {"SecondFlange": "1"}
     sub.component("RotationalSpeedSensor", "w_M", (660, 230), sensor, direction="left")
-    sensor = {"SecondFlange": "1", "theta0": "0"}
+    sensor = {"SecondFlange": "1", "theta0": "mechanics.theta_M0"}
     sub.component("AngleSensor", "theta_M", (720, 230), sensor, direction="left")
     taps = [([(720, 300)], [(("theta_M", 1), [])]), ([(660, 300)], [(("w_M", 1), [])])]
     sub.bus(("flange", 1), "Rotational", taps + [([(600, 300)], [(("Torque", 1), [])])])

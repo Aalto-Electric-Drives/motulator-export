@@ -88,6 +88,8 @@ V/Hz control (`control.VHzControlSystem`, see `examples/im_2kw_vhz.py`) has no s
 
 The modules `sm` (synchronous machine drives), `im` (induction machine drives), and `grid` (grid converter systems) are the same in `plecs` and `simulink`.
 A system that is not supported raises `NotImplementedError` before any file is written.
+The models start from the state of the system model: the initial speed and angle of the mechanics (`mdl.mechanics.state`, the variables `mechanics.w_M0` and `mechanics.theta_M0`) and the initial capacitor voltage of the LCL filter are exported, and the other states must be at their initial values (as after creating the system model, but not after a simulation in *motulator*).
+The rotor angle of a synchronous machine model (`mdl.machine.state.exp_j_theta_m`) must then be `n_p` times the angle of the mechanics.
 
 ## Simulating from Python
 
