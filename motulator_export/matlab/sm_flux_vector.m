@@ -75,16 +75,19 @@ self.psi_s = Phi*(psi_s + T_s*out.u_s_zoh) - Gamma*par.R_s*out.i_s;
 self.theta_m = wrap(self.theta_m + T_s*out.w_c);
 end
 
-function self = reference_gen_init(par, i_s_max, psi_s_min, psi_s_max, k_u, k_mtpv)
+function self = reference_gen_init(par, psi_s_min, psi_s_max, k_u, k_mtpv, luts)
 %REFERENCE_GEN_INIT Flux and torque reference generator based on precomputed lookup
-%   tables (ReferenceGenerator); psi_s_min = NaN means psi_f.
+%   tables (ReferenceGenerator); psi_s_min = NaN means psi_f. The tables luts are
+%   the 16-by-6 matrix of compute_reference_luts (sm_control_loci.m), computed
+%   outside the block by sm_reference_luts.m in the mask initialization.
 if isnan(psi_s_min)
     psi_s_min = par.psi_f;
 end
-luts = compute_reference_luts(par, i_s_max);
 self = struct('k_u', k_u, 'k_mtpv', k_mtpv, 'psi_s_min', psi_s_min, ...
-    'psi_s_max', psi_s_max, 'psi_s_mtpa', luts.psi_s_mtpa, ...
-    'tau_M_cl', luts.tau_M_cl, 'tau_M_mtpv', luts.tau_M_mtpv);
+    'psi_s_max', psi_s_max, ...
+    'psi_s_mtpa', struct('x', luts(:, 1), 'y', luts(:, 2)), ...
+    'tau_M_cl', struct('x', luts(:, 3), 'y', luts(:, 4)), ...
+    'tau_M_mtpv', struct('x', luts(:, 5), 'y', luts(:, 6)));
 end
 
 function psi = reference_gen_max_flux(self, w_m, u_dc)

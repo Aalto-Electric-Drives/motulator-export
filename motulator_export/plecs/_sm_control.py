@@ -432,14 +432,55 @@ def _speed_flux_observer() -> Subsystem:
     )
 
 
+# The lookup tables of the loci of the ReferenceGenerator: computed by the mask
+# initialization in Simulink (the function sm_reference_luts.m next to the model),
+# or by the C-Script block at its start in PLECS
+LUTS_INIT = (
+    "% Lookup tables of the loci: empty, so the block computes them at the start\n"
+    "luts = [];\n"
+)
+LUTS_SIMULINK_INIT = (
+    "% Lookup tables of the loci by sm_reference_luts.m next to the model\n"
+    "luts = sm_reference_luts(par, i_s_max);\n"
+)
+
+
+def _luts_code(i: int) -> str:
+    """C code reading the lookup tables of the loci from the parameter i, if given."""
+    return (
+        "/* Lookup tables of the loci: given (sm_reference_luts.m in Simulink), or\n"
+        " * computed at the start if empty (PLECS) */\n"
+        "ReferenceLUTs luts_given;\n"
+        "const ReferenceLUTs *luts = NULL;\n"
+        f"if (PDIM({i}) > 0) {{\n"
+        f"    if (PDIM({i}) != 6 * NUM_LOCUS) {{\n"
+        '        SetErrorMessage("luts must be a 16-by-6 matrix (sm_reference_luts.m) '
+        'or empty.");\n'
+        "        return;\n"
+        "    }\n"
+        "    LUT *tables[3] = {&luts_given.psi_s_mtpa, &luts_given.tau_M_cl,\n"
+        "                      &luts_given.tau_M_mtpv};\n"
+        "    for (int t = 0; t < 3; t++) {\n"
+        "        tables[t]->n = NUM_LOCUS;\n"
+        "        for (int k = 0; k < NUM_LOCUS; k++) {\n"
+        f"            tables[t]->x[k] = P({i}, 2 * t * NUM_LOCUS + k);\n"
+        f"            tables[t]->y[k] = P({i}, (2 * t + 1) * NUM_LOCUS + k);\n"
+        "        }\n"
+        "    }\n"
+        "    luts = &luts_given;\n"
+        "}\n"
+    )
+
+
 def _reference_generator() -> CBlock:
     """Flux and torque reference generator (ReferenceGenerator)."""
     mask = Mask(
         "ReferenceGenerator (motulator)",
         "Flux and torque reference generator (ReferenceGenerator) with the lookup "
-        "tables of the MTPA, MTPV, and current-limit loci, computed at the start. "
-        "The output ref is [psi_s tau_M], the flux reference and the limited torque "
-        "reference." + PAR_DESCRIPTION,
+        "tables of the MTPA, MTPV, and current-limit loci, computed by the function "
+        "sm_reference_luts.m next to the model in the mask initialization (Simulink) "
+        "or by the block at the start (PLECS). The output ref is [psi_s tau_M], the "
+        "flux reference and the limited torque reference." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param("i_s_max", "i_s_max: Maximum stator current (A)", "cfg.i_s_max"),
@@ -452,17 +493,19 @@ def _reference_generator() -> CBlock:
             Param("k_u", "k_u: Voltage utilization factor", "cfg.k_u"),
             Param("k_mtpv", "k_mtpv: MTPV margin", "cfg.k_mtpv"),
         ],
-        init=PAR_INIT,
+        init=PAR_INIT + LUTS_INIT,
+        simulink_init=LUTS_SIMULINK_INIT,
     )
-    params = mask_params(mask, PAR)
+    params = [*mask_params(mask, PAR), "luts"]
     i = {p: k for k, p in enumerate(params)}
     start = (
         checks(params, ["i_s_max", "psi_s_max", "k_u", "k_mtpv"])
         + _par_code(i["par_n_p"])
+        + _luts_code(i["luts"])
         + f"reference_gen_init(&self, &par, P({i['i_s_max']}, 0), "
         f"PARAM({i['psi_s_min']}),\n"
         f"                   P({i['psi_s_max']}, 0), P({i['k_u']}, 0), "
-        f"P({i['k_mtpv']}, 0));\n"
+        f"P({i['k_mtpv']}, 0), luts);\n"
     )
     output = (
         "/* Flux and limited torque references (ref.psi_s, ref.tau_M) */\n"
@@ -482,14 +525,23 @@ def _reference_generator() -> CBlock:
         sample_time=None,
         mask=mask,
         mcode=MCode(
-            start=M_PAR + "self = reference_gen_init(par, p.i_s_max, p.psi_s_min, "
-            "p.psi_s_max, p.k_u, p.k_mtpv);\n",
+            start=M_PAR + "% Lookup tables of the loci from the mask initialization "
+            "(sm_reference_luts.m)\n"
+            "self = reference_gen_init(par, p.psi_s_min, p.psi_s_max, p.k_u, "
+            "p.k_mtpv, p.luts);\n",
             output="% Flux and limited torque references (ref.psi_s, ref.tau_M)\n"
             "[psi_s_ref, tau_M_lim] = reference_gen_compute_flux_and_torque_refs( ...\n"
             "    self, tau_M_ref, w_m, u_dc);\n"
             "ref = [psi_s_ref; tau_M_lim];\n",
             functions=M_PAR_FUNCTION,
-            checks=(*required("i_s_max", "psi_s_max", "k_u", "k_mtpv"), *M_PAR_CHECKS),
+            checks=(
+                *required("i_s_max", "psi_s_max", "k_u", "k_mtpv"),
+                *M_PAR_CHECKS,
+                (
+                    "~isequal(size(p.luts), [16, 6])",
+                    "luts must be a 16-by-6 matrix (sm_reference_luts.m).",
+                ),
+            ),
             disabled=None,
         ),
     )

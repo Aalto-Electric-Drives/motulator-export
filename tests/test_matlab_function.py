@@ -22,7 +22,7 @@ from the repository root:
 import ctypes
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -42,7 +42,10 @@ from motulator_export.plecs._common import ControlBlock
 from motulator_export.plecs._control import VALUES
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
 from motulator_export.simulink._common import write_script
-from motulator_export.simulink._mfunction import block_mfunction
+from motulator_export.simulink._mfunction import (
+    block_mfunction,
+    reference_luts_mfunction,
+)
 from motulator_export.simulink._render import wrapper
 from tests.c_port import arr
 from tests.matlab import block_params
@@ -347,3 +350,33 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     # current-vector control is sensitive already at the start, with zero flux)
     assert np.all(np.sum(compared[n_loop:, :3], axis=0) >= 100)
     assert np.all(err <= tol)
+
+
+@pytest.mark.parametrize("gradnet", [False, True], ids=["constant", "gradnet"])
+def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> None:
+    """
+    The lookup tables of sm_reference_luts.m (called by the mask initialization of
+    the ReferenceGenerator in Simulink) should be those of the reference generator
+    of motulator at their sample points, within the single precision of the GradNet
+    flux map of motulator.
+    """
+    if gradnet:
+        ctrl, speed = gradnet_control_system()
+    else:
+        ctrl, speed = sm_system(True, 0.0)[0]()[1], SM_SPEED
+    values, flux_map = sm.export_values(ctrl, speed)
+    rg = cast(Any, ctrl.vector_ctrl).reference_gen
+    eng = harnesses.eng
+    eng.addpath(str(reference_luts_mfunction().write(tmp_path).parent), nargout=0)
+    # The struct par of a previous initialization (e.g., with a flux map) is cleared
+    eng.eval("clear par cfg", nargout=0)
+    eng.eval(init_script("fvc", values, flux_map), nargout=0)
+    luts = np.asarray(eng.eval("sm_reference_luts(par, cfg.i_s_max)"))
+    assert luts.shape == (16, 6)
+    tables = [(rg.psi_s_mtpa, "psi_s_mtpa"), (rg.tau_M_cl, "tau_M_cl")]
+    tables.append((rg.tau_M_mtpv, "tau_M_mtpv"))
+    for i, (f, name) in enumerate(tables):
+        x, y = luts[:, 2 * i], luts[:, 2 * i + 1]
+        err = np.max(np.abs(f(x) - y)) / np.max(np.abs(y))
+        print(f"  {name}: max relative error {err:.3g}")
+        assert err < (1e-5 if gradnet else 1e-12)

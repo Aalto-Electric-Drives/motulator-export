@@ -51,27 +51,20 @@ function d_err = dead_time_error(i_abc, d_abc, t_d, T_s, i_0)
 %DEAD_TIME_ERROR Duty-ratio error due to the dead time t_d (dead_time_error), T_s
 %   being the half carrier period. The current direction is sign = tanh(i/i_0), or
 %   the signum function (numpy.sign) if i_0 = 0.
-d_err = zeros(3, 1);
-for k = 1:3
-    % Switching-cycle averaged on-times of the upper and lower switches
-    % (averaged_gate_signals)
-    d = d_abc(k);
-    if d > 0 && d < 1
-        delta = t_d/(2*T_s);
-    else
-        delta = 0;
-    end
-    q_hi = max(d - delta, 0);
-    q_lo = max(1 - d - delta, 0);
-    b = 1 - q_hi - q_lo;
-    % Current direction: tanh(i/i_0), or the signum function if i_0 = 0
-    if i_0 > 0
-        s = tanh(i_abc(k)/i_0);
-    else
-        s = sign(i_abc(k));
-    end
-    d_err(k) = d - q_hi - 0.5*b*(1 - s);
+d = d_abc(:);
+% Switching-cycle averaged on-times of the upper and lower switches
+% (averaged_gate_signals), the dead time affecting only the switching legs
+delta = (t_d/(2*T_s))*(d > 0 & d < 1);
+q_hi = max(d - delta, 0);
+q_lo = max(1 - d - delta, 0);
+b = 1 - q_hi - q_lo;
+% Current direction: tanh(i/i_0), or the signum function if i_0 = 0
+if i_0 > 0
+    s = tanh(i_abc(:)/i_0);
+else
+    s = sign(i_abc(:));
 end
+d_err = d - q_hi - 0.5*b.*(1 - s);
 end
 
 function self = pwm_init(k_pred)

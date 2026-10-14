@@ -30,104 +30,48 @@ end
 function net = gradnet(in_dim, mu_dim, W, b, mu_log, bias, activation, beta_log, ...
     p, in_base, out_base)
 %GRADNET GradNet from its parameters (the fields of the GradNet structs of the
-%   model initialization), W being an embed_dim-by-in_dim matrix.
+%   model initialization), W being an embed_dim-by-in_dim matrix. The field mu has
+%   the gains of the linear term, zero for the inputs beyond the first mu_dim.
+mu = zeros(size(W, 2), 1);
+n_mu = min(mu_dim, numel(mu_log));
+mu(1:n_mu) = exp(mu_log(1:n_mu));
 net = struct('in_dim', in_dim, 'mu_dim', mu_dim, 'embed_dim', size(W, 1), ...
-    'W', W, 'b', b(:), 'mu_log', zeros(size(W, 2), 1), 'bias', bias(:), ...
-    'activation', activation, 'beta_log', beta_log, 'p', p, 'in_base', in_base, ...
-    'out_base', out_base);
-for k = 1:min(mu_dim, numel(mu_log))
-    net.mu_log(k) = mu_log(k);
-end
+    'W', W, 'b', b(:), 'mu', mu, 'bias', bias(:), 'activation', activation, ...
+    'beta', exp(beta_log), 'p', p, 'in_base', in_base, 'out_base', out_base);
 end
 
 function [z, jac] = gradnet_forward(net, x, want_jac)
-%GRADNET_FORWARD GradNet.forward for a per-unit input x.
+%GRADNET_FORWARD GradNet.forward for a per-unit input x (a column vector).
 %   If want_jac is true, the Jacobian matrix (GradNet.jacobian) is computed too. The
 %   Jacobians of both activations are of the form c*(diag(d) - u*u^T), so the
 %   Jacobian of the network is diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u.
-% The sizes from the weights, which are constant in the code generation
-n = size(net.W, 1);
-m = size(net.W, 2);
-h = zeros(n, 1);
-d = zeros(n, 1);
-u = zeros(n, 1);
-beta = exp(net.beta_log);
-z = zeros(m, 1);
-jac = zeros(m, m);
-% Linear term (for the first mu_dim inputs) and bias
-for k = 1:m
-    if k <= net.mu_dim
-        mu = exp(net.mu_log(k));
-    else
-        mu = 0;
-    end
-    z(k) = mu*x(k) + net.bias(k);
-end
+W = net.W;
+beta = net.beta;
 % Module: W^T act(W x + b)
-for j = 1:n
-    w_x = net.b(j);
-    for k = 1:m
-        w_x = w_x + net.W(j, k)*x(k);
-    end
-    h(j) = beta*w_x;
-end
+h = beta*(W*x + net.b);
 if net.activation == 1
     % PNormGradient: x^q/(1 + sum(x^(q + 1)))^(q/(q + 1)) with q = p - 1
     q = net.p - 1;
-    norm_ = 1;
-    for j = 1:n
-        norm_ = norm_ + h(j)^(q + 1);
-    end
+    norm_ = 1 + sum(h.^(q + 1));
     norm_r = norm_^(q/(q + 1));
     c = beta*q/norm_r;
-    for j = 1:n
-        d(j) = h(j)^(q - 1);
-        u(j) = h(j)^q/sqrt(norm_);
-        h(j) = h(j)^q/norm_r;
-    end
+    d = h.^(q - 1);
+    u = h.^q/sqrt(norm_);
+    h = h.^q/norm_r;
 else
     % Softmax
-    h_max = h(1);
-    for j = 2:n
-        h_max = max(h_max, h(j));
-    end
-    sum_ = 0;
-    for j = 1:n
-        h(j) = exp(h(j) - h_max);
-        sum_ = sum_ + h(j);
-    end
+    h = exp(h - max(h));
+    h = h/sum(h);
     c = beta;
-    for j = 1:n
-        h(j) = h(j)/sum_;
-        d(j) = h(j);
-        u(j) = h(j);
-    end
+    d = h;
+    u = h;
 end
-for j = 1:n
-    for k = 1:m
-        z(k) = z(k) + net.W(j, k)*h(j);
-    end
-end
-if ~want_jac
-    return
-end
-v = zeros(m, 1);
-for k = 1:m
-    for j = 1:n
-        v(k) = v(k) + net.W(j, k)*u(j);
-    end
-end
-for k = 1:m
-    for l = 1:m
-        w_d_w = 0;
-        for j = 1:n
-            w_d_w = w_d_w + net.W(j, k)*d(j)*net.W(j, l);
-        end
-        jac(k, l) = c*(w_d_w - v(k)*v(l));
-    end
-    if k <= net.mu_dim
-        jac(k, k) = jac(k, k) + exp(net.mu_log(k));
-    end
+% Linear term (for the first mu_dim inputs), bias, and the module
+z = net.mu.*x + net.bias + W'*h;
+jac = zeros(size(W, 2));
+if want_jac
+    v = W'*u;
+    jac = diag(net.mu) + c*(W'*(d.*W) - v*v');
 end
 end
 
@@ -135,7 +79,7 @@ function y = gradnet_map(net, x)
 %GRADNET_MAP Evaluate the map (FluxMap or CurrentMap in motulator), symmetrized
 %   about the d-axis. The input and output are in SI units.
 % Evaluate at the input and its conjugate, and symmetrize about the d-axis
-x1 = [real(x)/net.in_base; imag(x)/net.in_base];
+x1 = [real(x); imag(x)]/net.in_base;
 x2 = [x1(1); -x1(2)];
 z1 = gradnet_forward(net, x1, false);
 z2 = gradnet_forward(net, x2, false);

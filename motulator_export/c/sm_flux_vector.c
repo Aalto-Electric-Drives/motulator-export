@@ -165,17 +165,20 @@ static void speed_flux_observer_update(SpeedFluxObserver *self, double T_s,
 static void reference_gen_init(ReferenceGenerator *self,
                                const SynchronousMachinePars *par, double i_s_max,
                                double psi_s_min, double psi_s_max, double k_u,
-                               double k_mtpv)
+                               double k_mtpv, const ReferenceLUTs *luts)
 {
     self->k_u = k_u;
     self->k_mtpv = k_mtpv;
     self->psi_s_min = isnan(psi_s_min) ? par->psi_f : psi_s_min;
     self->psi_s_max = psi_s_max;
-    ReferenceLUTs luts;
-    compute_reference_luts(par, i_s_max, &luts);
-    self->psi_s_mtpa = luts.psi_s_mtpa;
-    self->tau_M_cl = luts.tau_M_cl;
-    self->tau_M_mtpv = luts.tau_M_mtpv;
+    ReferenceLUTs computed;
+    if (luts == NULL) {
+        compute_reference_luts(par, i_s_max, &computed);
+        luts = &computed;
+    }
+    self->psi_s_mtpa = luts->psi_s_mtpa;
+    self->tau_M_cl = luts->tau_M_cl;
+    self->tau_M_mtpv = luts->tau_M_mtpv;
 }
 
 static double reference_gen_max_flux(const ReferenceGenerator *self, double w_m,
@@ -326,7 +329,7 @@ static void flux_vector_ctrl_init(FluxVectorController *self,
     self->T_s = cfg->T_s;
     self->sensorless = cfg->sensorless;
     reference_gen_init(&self->reference_gen, &par, cfg->i_s_max, cfg->psi_s_min,
-                       cfg->psi_s_max, cfg->k_u, cfg->k_mtpv);
+                       cfg->psi_s_max, cfg->k_u, cfg->k_mtpv, NULL);
     flux_torque_ctrl_init(&self->flux_torque_ctrl, par, alpha_psi, cfg->alpha_tau,
                           alpha_i);
     speed_flux_observer_init(&self->observer, par, alpha_o, cfg->T_s, k_o, J);

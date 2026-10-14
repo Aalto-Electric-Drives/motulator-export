@@ -20,7 +20,7 @@ import numpy as np
 
 from motulator_export.plecs._common import MONITOR, ControlBlock, StepSignal, _fmt_mask
 from motulator_export.plecs._schematic import _fmt
-from motulator_export.simulink._mfunction import MFunction
+from motulator_export.simulink._mfunction import MFunction, path_functions
 from motulator_export.simulink._render import (
     ASCII,
     CODES,
@@ -206,7 +206,9 @@ def write_script(
     netlist = block.netlist()
     ctrl_sfuns = sfunctions(netlist) if code == "c" else []
     ctrl_mfuns = mfunctions(netlist) if code == "matlab" else []
-    for f in (*ctrl_sfuns, *ctrl_mfuns, *other_functions):
+    # The functions called by the mask initializations (e.g., sm_reference_luts.m)
+    # are written next to the model with both codes
+    for f in (*ctrl_sfuns, *ctrl_mfuns, *path_functions(netlist), *other_functions):
         f.write(path.parent)
     try:
         src = Path(os.path.relpath(SIMULINK_SOURCES, path.resolve().parent))

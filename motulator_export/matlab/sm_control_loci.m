@@ -7,16 +7,10 @@
 %
 % Both SynchronousMachinePars and SaturatedSynchronousMachinePars (with a flux map)
 % are supported, see sm_parameters.m. The loci are computed at 16 points and stored
-% as lookup tables, as in ReferenceGenerator of motulator.
-
-function y = linspace_at(start, stop, num, k)
-%LINSPACE_AT Element k (zero-based) of numpy.linspace(start, stop, num).
-if k == num - 1
-    y = stop;
-else
-    y = k*((stop - start)/(num - 1)) + start;
-end
-end
+% as lookup tables, as in ReferenceGenerator of motulator. The tables are computed
+% by the function sm_reference_luts.m next to the Simulink model (written by
+% motulator_export.simulink), which the mask initialization of the block
+% ReferenceGenerator calls, so that the block does not compute them at its start.
 
 function [y, i_s] = mtpa_cond(gamma, d)
 %MTPA_COND Condition of the MTPA current angle gamma, d.magnitude being the current
@@ -99,32 +93,29 @@ tau = 1.5*par.n_p*imag(i_s*conj(psi_s));
 end
 
 function luts = compute_reference_luts(par, i_s_max)
-%COMPUTE_REFERENCE_LUTS Lookup tables of the ReferenceGenerator: the MTPA flux
+%COMPUTE_REFERENCE_LUTS Lookup tables of the ReferenceGenerator as the columns of a
+%   16-by-6 matrix (the sample points and the values of each table): the MTPA flux
 %   magnitude vs. the torque, the current-limit torque vs. the flux magnitude, and
 %   the MTPV torque vs. the flux magnitude.
 num = 16;
-lut = struct('x', zeros(num, 1), 'y', zeros(num, 1));
-luts = struct('psi_s_mtpa', lut, 'tau_M_cl', lut, 'tau_M_mtpv', lut);
-i_s_mtpa_max = complex(0);
-psi_s_mtpa_max = complex(0);
+luts = zeros(num, 6);
 % MTPA locus
-for k = 0:num - 1
-    i_s_abs = linspace_at(0, i_s_max, num, k);
-    gamma = compute_mtpa_current_angle(par, i_s_abs);
-    i_s = i_s_abs*exp(1i*gamma);
+i_s_abs = linspace(0, i_s_max, num);
+i_s = complex(0);
+psi_s = complex(0);
+for k = 1:num
+    gamma = compute_mtpa_current_angle(par, i_s_abs(k));
+    i_s = i_s_abs(k)*exp(1i*gamma);
     psi_s = psi_s_dq(par, i_s);
-    luts.psi_s_mtpa.x(k + 1) = locus_torque(par, i_s, psi_s);
-    luts.psi_s_mtpa.y(k + 1) = abs(psi_s);
-    i_s_mtpa_max = i_s;
-    psi_s_mtpa_max = psi_s;
+    luts(k, 1:2) = [locus_torque(par, i_s, psi_s), abs(psi_s)];
 end
+i_s_mtpa_max = i_s;
 % MTPV limit
-for k = 0:num - 1
-    psi_s_abs = linspace_at(0, abs(psi_s_mtpa_max), num, k);
-    [delta, i_s] = compute_mtpv_flux_angle(par, psi_s_abs);
-    psi_s = psi_s_abs*exp(1i*delta);
-    luts.tau_M_mtpv.x(k + 1) = abs(psi_s);
-    luts.tau_M_mtpv.y(k + 1) = locus_torque(par, i_s, psi_s);
+psi_s_abs = linspace(0, abs(psi_s), num);
+for k = 1:num
+    [delta, i_s] = compute_mtpv_flux_angle(par, psi_s_abs(k));
+    psi_s = psi_s_abs(k)*exp(1i*delta);
+    luts(k, 5:6) = [abs(psi_s), locus_torque(par, i_s, psi_s)];
 end
 % Current limit, from the MTPV current angle (or, if no MTPV, from pi for PM
 % machines and pi/2 for machines without PMs) to the MTPA current angle
@@ -137,11 +128,10 @@ if isnan(gamma1)
         gamma1 = pi;
     end
 end
-for k = 0:num - 1
-    gamma = linspace_at(gamma1, gamma2, num, k);
-    i_s = i_s_max*exp(1i*gamma);
+gamma = linspace(gamma1, gamma2, num);
+for k = 1:num
+    i_s = i_s_max*exp(1i*gamma(k));
     psi_s = psi_s_dq(par, i_s);
-    luts.tau_M_cl.x(k + 1) = abs(psi_s);
-    luts.tau_M_cl.y(k + 1) = locus_torque(par, i_s, psi_s);
+    luts(k, 3:4) = [abs(psi_s), locus_torque(par, i_s, psi_s)];
 end
 end
