@@ -19,11 +19,9 @@ function net = gradnet(in_dim, mu_dim, W, b, mu_log, bias, activation, beta_log,
 %GRADNET GradNet from its parameters (the fields of the GradNet structs of the
 %   model initialization), W being an embed_dim-by-in_dim matrix. The field mu has
 %   the gains of the linear term, zero for the inputs beyond the first mu_dim.
-m = size(W, 2);
-mu = zeros(m, 1);
-for k = 1:min(mu_dim, numel(mu_log))
-    mu(k) = exp(mu_log(k));
-end
+mu = zeros(size(W, 2), 1);
+n_mu = min(mu_dim, numel(mu_log));
+mu(1:n_mu) = exp(mu_log(1:n_mu));
 net = struct('in_dim', in_dim, 'mu_dim', mu_dim, 'embed_dim', size(W, 1), ...
     'W', W, 'b', b(:), 'mu', mu, 'bias', bias(:), 'activation', activation, ...
     'beta', exp(beta_log), 'p', p, 'in_base', in_base, 'out_base', out_base);
