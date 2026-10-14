@@ -22,8 +22,8 @@ from motulator_export.plecs._common import (
     ControlBlock,
     StepSignal,
     _add_ctrl_output,
+    _add_step,
     _check_supported_pwm,
-    _step,
 )
 from motulator_export.plecs._schematic import _probe, _Schematic, _scope
 
@@ -149,7 +149,9 @@ def _add_mechanics(sch: _Schematic, tau_L: StepSignal, inertia: bool) -> None:
         sch.connect(("Inertia", 2), ("Load", 3), "Rotational")
     else:
         sch.connect(("Machine", 4), ("Load", 3), "Rotational")
-    sch.component("Step", "tau_L", (x_f - 70, y_load), _step(tau_L))
+    # Several steps are summed by a Gain block in front of the load
+    x_step = x_f - 70 if np.isscalar(tau_L.time) else x_f - 120
+    load_torque = _add_step(sch, "tau_L", tau_L, (x_step, y_load))
     sch.component(
         "ControlledTorque",
         "Load",
@@ -162,7 +164,7 @@ def _add_mechanics(sch: _Schematic, tau_L: StepSignal, inertia: bool) -> None:
         "RotationalReference", "Frame", (x_f, y_load + 45), direction="up", show=False
     )
     sch.connect(("Frame", 1), ("Load", 1), "Rotational")
-    sch.signal(("tau_L", 1), ("Load", 2))
+    sch.signal(load_torque, ("Load", 2))
 
 
 # Probe signals of the PLECS machines: (current, speed, angle, torque)

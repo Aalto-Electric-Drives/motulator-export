@@ -98,6 +98,11 @@ def write_model(
     path = Path(path)
     grid._check_supported(mdl, ctrl)
     block, values = grid.control_block(ctrl), grid.export_values(ctrl)
+    # The references are checked before anything is written
+    if block is grid.GFL_BLOCK and q_g_ref is None:
+        raise ValueError("q_g_ref is needed in grid-following control")
+    if block is not grid.GFL_BLOCK and v_c_ref is None:
+        raise ValueError("v_c_ref is needed in grid-forming control")
     variables = _plant_variables(mdl)
     script = write_init(
         path,
@@ -114,12 +119,10 @@ def write_model(
         ["p_g_ref", "step", _m_steps(p_g_ref)],
     ]
     if block is grid.GFL_BLOCK:
-        if q_g_ref is None:
-            raise ValueError("q_g_ref is needed in grid-following control")
+        assert q_g_ref is not None  # Checked above
         refs.append(["q_g_ref", "step", _m_steps(q_g_ref)])
     else:
-        if v_c_ref is None:
-            raise ValueError("v_c_ref is needed in grid-forming control")
+        assert v_c_ref is not None
         refs.append(["v_c_ref", "constant", float(v_c_ref)])
     # Scope: the powers, the converter currents, and the other monitored signals
     groups = list(block.outputs.items())

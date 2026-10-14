@@ -9,6 +9,7 @@ Run from the repository root:
 """
 
 # %%
+import re
 from math import inf
 from pathlib import Path
 
@@ -16,6 +17,8 @@ import motulator.grid.model as grid_model
 import pytest
 
 from motulator_export import StepSignal, plecs, sampled_step, simulink
+from motulator_export.plecs._drive import _add_mechanics
+from motulator_export.plecs._schematic import _Schematic
 from tests.test_simulink import BASE, gfl_system, gfm_system
 
 
@@ -72,6 +75,36 @@ def test_unsupported_grid_filter(tmp_path: Path, gfl: bool) -> None:
                 tmp_path / path, mdl, ctrl, 0.1, StepSignal(0.02, 5e3), **refs
             )
     assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("gfl", [True, False], ids=["gfl", "gfm"])
+def test_missing_reference(tmp_path: Path, gfl: bool) -> None:
+    """Grid-following control needs q_g_ref, and grid-forming control v_c_ref, which
+    are checked before anything is written, so an existing model is kept."""
+    ctrl = (gfl_system() if gfl else gfm_system(False))[0]()[1]
+    for tool, path in ((plecs, "grid.plecs"), (simulink, "grid.slx")):
+        with pytest.raises(ValueError, match="q_g_ref" if gfl else "v_c_ref"):
+            tool.grid.write_model(
+                tmp_path / path, _grid_model(lcl=gfl), ctrl, 0.1, StepSignal(0.02, 5e3)
+            )
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("several", [False, True], ids=["one_step", "two_steps"])
+def test_load_torque_steps(several: bool) -> None:
+    """In PLECS, several steps of the load torque should be summed by a Gain block in
+    front of the load, as the steps of the references."""
+    sch = _Schematic()
+    tau_L = StepSignal([0.1, 0.2], [3.0, 7.0]) if several else StepSignal(0.1, 3.0)
+    _add_mechanics(sch, tau_L, inertia=True)
+    load = [(("Load", 2), [])]
+    if several:
+        assert sch.connections[(("tau_L", 1), "Signal")] == [(("tau_L sum", 1), [])]
+        assert sch.connections[(("tau_L sum", 2), "Signal")] == load
+        gain = next(item for item in sch.items if '"tau_L sum"' in item)
+        assert re.search(r'Variable\s+"K"\s+Value\s+"\[1\.0 1\.0\]"', gain), gain
+    else:
+        assert sch.connections[(("tau_L", 1), "Signal")] == load
 
 
 def test_unsupported_k_comp(tmp_path: Path) -> None:
