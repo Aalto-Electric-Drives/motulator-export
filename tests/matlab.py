@@ -4,16 +4,17 @@ initializations of the control systems, for the tests without MATLAB and PLECS.
 
 The statements are assignments (also to the fields of structs) and if-elseif-else
 blocks, and the expressions are numbers, matrices, variables, fields, the
-arithmetic, comparison, and logical operators, and the functions isempty,
-isfield, isinf, strcmp, sqrt, and expm1. The variables are resolved through the
-workspaces of the masks, as in Simulink, or only in the workspace of the innermost
-mask, as in PLECS (`block_params`).
+arithmetic, comparison, and logical operators, the functions isempty, isfield,
+isinf, strcmp, sqrt, and expm1, and the functions of the m-files next to the
+Simulink models (`FUNCTIONS`). The variables are resolved through the workspaces of
+the masks, as in Simulink, or only in the workspace of the innermost mask, as in
+PLECS (`block_params`).
 
 """
 
 import re
 from collections import ChainMap
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from math import expm1, inf, nan, pi, sqrt
 from typing import Any
 
@@ -216,21 +217,30 @@ def _binary(op: str, a: Any, b: Any) -> Any:
     return value.astype(float) if isinstance(value, np.ndarray) else float(value)
 
 
+# Functions of the m-files next to the Simulink models, called by the mask
+# initializations of Simulink (`Mask.simulink_init`). By default, the lookup tables
+# of the reference generator are empty, so that the block computes them, as in PLECS.
+FUNCTIONS: dict[str, Callable[..., Any]] = {
+    "sm_reference_luts": lambda par, i_s_max: np.zeros((0, 0))
+}
+
+
+# Built-in functions, the scalar ones by the C library as in the C port
+BUILTINS: dict[str, Callable[..., Any]] = {
+    "isempty": lambda x: float(not isinstance(x, dict) and np.size(x) == 0),
+    "isfield": lambda s, f: float(isinstance(s, dict) and f in s),
+    "isinf": lambda x: float(np.all(np.isinf(x))),
+    "strcmp": lambda a, b: float(isinstance(a, str) and a == b),
+    "sqrt": sqrt,
+    "expm1": expm1,
+}
+
+
 def _call(name: str, args: list[Any]) -> Any:
-    if name == "isempty":
-        return float(not isinstance(args[0], dict) and np.size(args[0]) == 0)
-    if name == "isfield":
-        return float(isinstance(args[0], dict) and args[1] in args[0])
-    if name == "isinf":
-        return float(np.all(np.isinf(args[0])))
-    if name == "strcmp":
-        return float(isinstance(args[0], str) and args[0] == args[1])
-    # Scalar functions, by the C library as in the C port
-    if name == "sqrt":
-        return sqrt(args[0])
-    if name == "expm1":
-        return expm1(args[0])
-    raise NameError(name)
+    f = FUNCTIONS.get(name) or BUILTINS.get(name)
+    if f is None:
+        raise NameError(name)
+    return f(*args)
 
 
 def evaluate(text: str, ws: MutableMapping) -> Any:
@@ -325,7 +335,7 @@ def block_params(
             if b.mask is not None:
                 params = {p.variable: evaluate(p.value, ws) for p in b.mask.params}
                 local = ChainMap(params) if plecs else ws.new_child(params)
-                run(b.mask.init, local)
+                run(b.mask.init + ("" if plecs else b.mask.simulink_init), local)
             name = f"{path}/{b.name}" if path else b.name
             if isinstance(b, CBlock):
                 out[name] = [evaluate(p, local) for p in b.params]

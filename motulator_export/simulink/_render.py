@@ -298,7 +298,8 @@ def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
         # The name of the function, as an S-function shows its name
         display = f"disp('{function_name(b)}');"
     params = [[m.variable, m.prompt.translate(ASCII), m.value] for m in mask.params]
-    return [path, mask.type, mask.description, mask.init, params, display]
+    init = mask.init + mask.simulink_init
+    return [path, mask.type, mask.description, init, params, display]
 
 
 def _block(b: Any) -> tuple[str, list[str]]:

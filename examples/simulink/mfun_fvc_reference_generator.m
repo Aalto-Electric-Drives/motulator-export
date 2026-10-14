@@ -8,7 +8,8 @@ if isempty(self)
     % Machine model: SaturatedSynchronousMachinePars with a GradNet flux map, or
     % SynchronousMachinePars with constant inductances
     par = machine_pars(p);
-    self = reference_gen_init(par, p.i_s_max, p.psi_s_min, p.psi_s_max, p.k_u, p.k_mtpv);
+    % Lookup tables of the loci from the mask initialization (sm_reference_luts.m)
+    self = reference_gen_init(par, p.psi_s_min, p.psi_s_max, p.k_u, p.k_mtpv, p.luts);
 end
 % Flux and limited torque references (ref.psi_s, ref.tau_M)
 [psi_s_ref, tau_M_lim] = reference_gen_compute_flux_and_torque_refs( ...
@@ -63,105 +64,19 @@ slope = (lut.y(hi) - lut.y(lo))/(lut.x(hi) - lut.x(lo));
 y = slope*(x - lut.x(lo)) + lut.y(lo);
 end
 
-function [x, aux] = brentq(f, xa, xb, data)
-%BRENTQ Brent's root finding in a bracketing interval [xa, xb].
-%   As scipy.optimize.brentq with the default tolerances (xtol = 2e-12, rtol =
-%   4*eps, maxiter = 100), used via scipy.optimize.root_scalar in motulator. The
-%   function is [y, aux] = f(x, data), and aux is that of the latest evaluation (a
-%   side effect of the function in motulator). The function values at the bracket
-%   ends must have opposite signs (or be zero), else x is NaN.
-xtol = 2e-12;
-rtol = 8.881784197001252e-16;
-xpre = xa;
-xcur = xb;
-xblk = 0;
-fblk = 0;
-spre = 0;
-scur = 0;
-[fpre, aux] = f(xpre, data);
-[fcur, aux] = f(xcur, data);
-if fpre == 0
-    x = xpre;
-    return
-end
-if fcur == 0
-    x = xcur;
-    return
-end
-if (fpre < 0) == (fcur < 0)
-    x = NaN; % No sign change
-    return
-end
-for i = 1:100
-    if fpre ~= 0 && fcur ~= 0 && (fpre < 0) ~= (fcur < 0)
-        xblk = xpre;
-        fblk = fpre;
-        spre = xcur - xpre;
-        scur = spre;
-    end
-    if abs(fblk) < abs(fcur)
-        xpre = xcur;
-        xcur = xblk;
-        xblk = xpre;
-        fpre = fcur;
-        fcur = fblk;
-        fblk = fpre;
-    end
-    delta = (xtol + rtol*abs(xcur))/2;
-    sbis = (xblk - xcur)/2;
-    if fcur == 0 || abs(sbis) < delta
-        x = xcur;
-        return
-    end
-    if abs(spre) > delta && abs(fcur) < abs(fpre)
-        if xpre == xblk
-            % Interpolate
-            stry = -fcur*(xcur - xpre)/(fcur - fpre);
-        else
-            % Extrapolate
-            dpre = (fpre - fcur)/(xpre - xcur);
-            dblk = (fblk - fcur)/(xblk - xcur);
-            stry = -fcur*(fblk*dblk - fpre*dpre)/(dblk*dpre*(fblk - fpre));
-        end
-        if 2*abs(stry) < min(abs(spre), 3*abs(sbis) - delta)
-            % Good short step
-            spre = scur;
-            scur = stry;
-        else
-            % Bisect
-            spre = sbis;
-            scur = sbis;
-        end
-    else
-        % Bisect
-        spre = sbis;
-        scur = sbis;
-    end
-    xpre = xcur;
-    fpre = fcur;
-    if abs(scur) > delta
-        xcur = xcur + scur;
-    elseif sbis > 0
-        xcur = xcur + delta;
-    else
-        xcur = xcur - delta;
-    end
-    [fcur, aux] = f(xcur, data);
-end
-x = xcur;
-end
-
 function net = gradnet(in_dim, mu_dim, W, b, mu_log, bias, activation, beta_log, ...
     p, in_base, out_base)
 %GRADNET GradNet from its parameters (the fields of the GradNet structs of the
-%   model initialization), W being an embed_dim-by-in_dim matrix.
-net = struct('in_dim', in_dim, 'mu_dim', mu_dim, 'embed_dim', size(W, 1), ...
-    'W', W, 'b', b(:), 'mu_log', zeros(size(W, 2), 1), 'bias', bias(:), ...
-    'activation', activation, 'beta_log', beta_log, 'p', p, 'in_base', in_base, ...
-    'out_base', out_base);
+%   model initialization), W being an embed_dim-by-in_dim matrix. The field mu has
+%   the gains of the linear term, zero for the inputs beyond the first mu_dim.
+m = size(W, 2);
+mu = zeros(m, 1);
 for k = 1:min(mu_dim, numel(mu_log))
-    net.mu_log(k) = mu_log(k);
+    mu(k) = exp(mu_log(k));
 end
+net = struct('in_dim', in_dim, 'mu_dim', mu_dim, 'embed_dim', size(W, 1), ...
+    'W', W, 'b', b(:), 'mu', mu, 'bias', bias(:), 'activation', activation, ...
+    'beta', exp(beta_log), 'p', p, 'in_base', in_base, 'out_base', out_base);
 end
 
 function net = gradnet_placeholder()
@@ -171,93 +86,37 @@ net = gradnet(2, 0, zeros(1, 2), 0, zeros(2, 1), zeros(2, 1), 2, 0, 1, 1, 1);
 end
 
 function [z, jac] = gradnet_forward(net, x, want_jac)
-%GRADNET_FORWARD GradNet.forward for a per-unit input x.
+%GRADNET_FORWARD GradNet.forward for a per-unit input x (a column vector).
 %   If want_jac is true, the Jacobian matrix (GradNet.jacobian) is computed too. The
 %   Jacobians of both activations are of the form c*(diag(d) - u*u^T), so the
 %   Jacobian of the network is diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u.
-% The sizes from the weights, which are constant in the code generation
-n = size(net.W, 1);
-m = size(net.W, 2);
-h = zeros(n, 1);
-d = zeros(n, 1);
-u = zeros(n, 1);
-beta = exp(net.beta_log);
-z = zeros(m, 1);
-jac = zeros(m, m);
-% Linear term (for the first mu_dim inputs) and bias
-for k = 1:m
-    if k <= net.mu_dim
-        mu = exp(net.mu_log(k));
-    else
-        mu = 0;
-    end
-    z(k) = mu*x(k) + net.bias(k);
-end
+W = net.W;
+beta = net.beta;
 % Module: W^T act(W x + b)
-for j = 1:n
-    w_x = net.b(j);
-    for k = 1:m
-        w_x = w_x + net.W(j, k)*x(k);
-    end
-    h(j) = beta*w_x;
-end
+h = beta*(W*x + net.b);
 if net.activation == 1
     % PNormGradient: x^q/(1 + sum(x^(q + 1)))^(q/(q + 1)) with q = p - 1
     q = net.p - 1;
-    norm_ = 1;
-    for j = 1:n
-        norm_ = norm_ + h(j)^(q + 1);
-    end
+    norm_ = 1 + sum(h.^(q + 1));
     norm_r = norm_^(q/(q + 1));
     c = beta*q/norm_r;
-    for j = 1:n
-        d(j) = h(j)^(q - 1);
-        u(j) = h(j)^q/sqrt(norm_);
-        h(j) = h(j)^q/norm_r;
-    end
+    d = h.^(q - 1);
+    u = h.^q/sqrt(norm_);
+    h = h.^q/norm_r;
 else
     % Softmax
-    h_max = h(1);
-    for j = 2:n
-        h_max = max(h_max, h(j));
-    end
-    sum_ = 0;
-    for j = 1:n
-        h(j) = exp(h(j) - h_max);
-        sum_ = sum_ + h(j);
-    end
+    h = exp(h - max(h));
+    h = h/sum(h);
     c = beta;
-    for j = 1:n
-        h(j) = h(j)/sum_;
-        d(j) = h(j);
-        u(j) = h(j);
-    end
+    d = h;
+    u = h;
 end
-for j = 1:n
-    for k = 1:m
-        z(k) = z(k) + net.W(j, k)*h(j);
-    end
-end
-if ~want_jac
-    return
-end
-v = zeros(m, 1);
-for k = 1:m
-    for j = 1:n
-        v(k) = v(k) + net.W(j, k)*u(j);
-    end
-end
-for k = 1:m
-    for l = 1:m
-        w_d_w = 0;
-        for j = 1:n
-            w_d_w = w_d_w + net.W(j, k)*d(j)*net.W(j, l);
-        end
-        jac(k, l) = c*(w_d_w - v(k)*v(l));
-    end
-    if k <= net.mu_dim
-        jac(k, k) = jac(k, k) + exp(net.mu_log(k));
-    end
+% Linear term (for the first mu_dim inputs), bias, and the module
+z = net.mu.*x + net.bias + W'*h;
+jac = zeros(size(W, 2));
+if want_jac
+    v = W'*u;
+    jac = diag(net.mu) + c*(W'*(d.*W) - v*v');
 end
 end
 
@@ -265,7 +124,7 @@ function y = gradnet_map(net, x)
 %GRADNET_MAP Evaluate the map (FluxMap or CurrentMap in motulator), symmetrized
 %   about the d-axis. The input and output are in SI units.
 % Evaluate at the input and its conjugate, and symmetrize about the d-axis
-x1 = [real(x)/net.in_base; imag(x)/net.in_base];
+x1 = [real(x); imag(x)]/net.in_base;
 x2 = [x1(1); -x1(2)];
 z1 = gradnet_forward(net, x1, false);
 z2 = gradnet_forward(net, x2, false);
@@ -278,21 +137,11 @@ function jac = gradnet_map_jacobian(net, x)
 %   of the map (CurrentMap.jacobian in motulator) in SI units.
 % Symmetrize as in gradnet_map: the conjugation flips the signs of the off-diagonal
 % elements
-x1 = [real(x)/net.in_base; imag(x)/net.in_base];
+x1 = [real(x); imag(x)]/net.in_base;
 x2 = [x1(1); -x1(2)];
 [~, jac1] = gradnet_forward(net, x1, true);
 [~, jac2] = gradnet_forward(net, x2, true);
-scale = 0.5*net.out_base/net.in_base;
-jac = zeros(2, 2);
-for k = 1:2
-    for l = 1:2
-        if k == l
-            jac(k, l) = scale*(jac1(k, l) + jac2(k, l));
-        else
-            jac(k, l) = scale*(jac1(k, l) - jac2(k, l));
-        end
-    end
-end
+jac = 0.5*(net.out_base/net.in_base)*(jac1 + [1, -1; -1, 1].*jac2);
 end
 
 function par = synchronous_machine_pars(n_p, R_s, L_d, L_q, psi_f, flux_map)
@@ -336,187 +185,19 @@ jac = gradnet_map_jacobian(par.flux_map, i_s);
 L = struct('L_dd', jac(1, 1), 'L_dq', jac(1, 2), 'L_qq', jac(2, 2));
 end
 
-function i_s = iterate_i_s_dq(par, psi_s)
-%ITERATE_I_S_DQ Stator current as a function of the stator flux linkage.
-if ~par.saturated
-    i_s = (real(psi_s) - par.psi_f)/par.L_d + 1i*imag(psi_s)/par.L_q;
-    return
-end
-% Newton's method with the incremental inductance matrix as the Jacobian (the root
-% is the same as with scipy.optimize.root in motulator)
-i_s = (real(psi_s) - par.psi_f)/par.L_d0 + 1i*imag(psi_s)/par.L_q0;
-for k = 1:50
-    err = psi_s_dq(par, i_s) - psi_s;
-    if abs(err) < 1e-12*(1 + abs(psi_s))
-        break
-    end
-    L = incr_ind_mat(par, i_s);
-    det_L = L.L_dd*L.L_qq - L.L_dq*L.L_dq;
-    d_i_d = (L.L_qq*real(err) - L.L_dq*imag(err))/det_L;
-    d_i_q = (L.L_dd*imag(err) - L.L_dq*real(err))/det_L;
-    i_s = i_s - (d_i_d + 1i*d_i_q);
-end
-end
-
-function psi_a = aux_flux(L, i_s, psi_s)
-%AUX_FLUX Auxiliary flux linkage.
-psi_a = psi_s - L.L_qq*real(i_s) - 1i*L.L_dd*imag(i_s) + 1i*L.L_dq*conj(i_s);
-end
-
-function i_a = aux_current(L, psi_s, i_s)
-%AUX_CURRENT Auxiliary current.
-det_L = L.L_dd*L.L_qq - L.L_dq*L.L_dq;
-i_a = (L.L_dd*real(psi_s) + 1i*L.L_qq*imag(psi_s) + 1i*L.L_dq*conj(psi_s))/det_L ...
-    - i_s;
-end
-
-function y = linspace_at(start, stop, num, k)
-%LINSPACE_AT Element k (zero-based) of numpy.linspace(start, stop, num).
-if k == num - 1
-    y = stop;
-else
-    y = k*((stop - start)/(num - 1)) + start;
-end
-end
-
-function [y, i_s] = mtpa_cond(gamma, d)
-%MTPA_COND Condition of the MTPA current angle gamma, d.magnitude being the current
-%   magnitude.
-i_s = d.magnitude*exp(1i*gamma);
-psi_s = psi_s_dq(d.par, i_s);
-L = incr_ind_mat(d.par, i_s);
-psi_a = aux_flux(L, i_s, psi_s);
-y = real(psi_a*conj(i_s));
-end
-
-function [y, i_s] = mtpv_flux_cond(delta, d)
-%MTPV_FLUX_COND Condition of the MTPV flux angle delta, d.magnitude being the flux
-%   magnitude. The current is returned as the side effect of motulator.
-psi_s = d.magnitude*exp(1i*delta);
-i_s = iterate_i_s_dq(d.par, psi_s);
-L = incr_ind_mat(d.par, i_s);
-i_a = aux_current(L, psi_s, i_s);
-y = real(i_a*conj(psi_s));
-end
-
-function [y, i_s] = mtpv_current_cond(gamma, d)
-%MTPV_CURRENT_COND Condition of the MTPV current angle gamma, d.magnitude being the
-%   current magnitude.
-i_s = d.magnitude*exp(1i*gamma);
-psi_s = psi_s_dq(d.par, i_s);
-L = incr_ind_mat(d.par, i_s);
-i_a = aux_current(L, psi_s, i_s);
-y = real(i_a*conj(psi_s));
-end
-
-function r = angle_range(par)
-%ANGLE_RANGE Range of the current or flux angle of the loci.
-if par.psi_f == 0
-    r = [0, 0.5*pi];
-else
-    r = [0.5*pi, pi];
-end
-end
-
-function gamma = compute_mtpa_current_angle(par, i_s_abs)
-%COMPUTE_MTPA_CURRENT_ANGLE MTPA current angle at the current magnitude.
-d = struct('par', par, 'magnitude', i_s_abs);
-r = angle_range(par);
-if mtpa_cond(r(1), d)*mtpa_cond(r(2), d) > 0
-    gamma = 0; % No root in the range
-    return
-end
-gamma = brentq(@mtpa_cond, r(1), r(2), d);
-end
-
-function [delta, i_s] = compute_mtpv_flux_angle(par, psi_s_abs)
-%COMPUTE_MTPV_FLUX_ANGLE MTPV flux angle and the current at the flux magnitude.
-d = struct('par', par, 'magnitude', psi_s_abs);
-r = angle_range(par);
-if mtpv_flux_cond(r(1), d)*mtpv_flux_cond(r(2), d) > 0
-    i_s = complex(NaN);
-    delta = NaN; % No root in the range
-    return
-end
-% The current at the latest evaluation, as in motulator
-[delta, i_s] = brentq(@mtpv_flux_cond, r(1), r(2), d);
-end
-
-function i_s = compute_mtpv_current(par, i_s_abs)
-%COMPUTE_MTPV_CURRENT MTPV current at the current magnitude, NaN if no MTPV.
-d = struct('par', par, 'magnitude', i_s_abs);
-r = angle_range(par);
-if mtpv_current_cond(r(1), d)*mtpv_current_cond(r(2), d) >= 0
-    i_s = complex(NaN); % No MTPV for this current
-    return
-end
-gamma = brentq(@mtpv_current_cond, r(1), r(2), d);
-i_s = i_s_abs*exp(1i*gamma);
-end
-
-function tau = locus_torque(par, i_s, psi_s)
-%LOCUS_TORQUE Electromagnetic torque.
-tau = 1.5*par.n_p*imag(i_s*conj(psi_s));
-end
-
-function luts = compute_reference_luts(par, i_s_max)
-%COMPUTE_REFERENCE_LUTS Lookup tables of the ReferenceGenerator: the MTPA flux
-%   magnitude vs. the torque, the current-limit torque vs. the flux magnitude, and
-%   the MTPV torque vs. the flux magnitude.
-num = 16;
-lut = struct('x', zeros(num, 1), 'y', zeros(num, 1));
-luts = struct('psi_s_mtpa', lut, 'tau_M_cl', lut, 'tau_M_mtpv', lut);
-i_s_mtpa_max = complex(0);
-psi_s_mtpa_max = complex(0);
-% MTPA locus
-for k = 0:num - 1
-    i_s_abs = linspace_at(0, i_s_max, num, k);
-    gamma = compute_mtpa_current_angle(par, i_s_abs);
-    i_s = i_s_abs*exp(1i*gamma);
-    psi_s = psi_s_dq(par, i_s);
-    luts.psi_s_mtpa.x(k + 1) = locus_torque(par, i_s, psi_s);
-    luts.psi_s_mtpa.y(k + 1) = abs(psi_s);
-    i_s_mtpa_max = i_s;
-    psi_s_mtpa_max = psi_s;
-end
-% MTPV limit
-for k = 0:num - 1
-    psi_s_abs = linspace_at(0, abs(psi_s_mtpa_max), num, k);
-    [delta, i_s] = compute_mtpv_flux_angle(par, psi_s_abs);
-    psi_s = psi_s_abs*exp(1i*delta);
-    luts.tau_M_mtpv.x(k + 1) = abs(psi_s);
-    luts.tau_M_mtpv.y(k + 1) = locus_torque(par, i_s, psi_s);
-end
-% Current limit, from the MTPV current angle (or, if no MTPV, from pi for PM
-% machines and pi/2 for machines without PMs) to the MTPA current angle
-gamma1 = angle(compute_mtpv_current(par, i_s_max));
-gamma2 = angle(i_s_mtpa_max);
-if isnan(gamma1)
-    if par.psi_f == 0
-        gamma1 = 0.5*pi;
-    else
-        gamma1 = pi;
-    end
-end
-for k = 0:num - 1
-    gamma = linspace_at(gamma1, gamma2, num, k);
-    i_s = i_s_max*exp(1i*gamma);
-    psi_s = psi_s_dq(par, i_s);
-    luts.tau_M_cl.x(k + 1) = abs(psi_s);
-    luts.tau_M_cl.y(k + 1) = locus_torque(par, i_s, psi_s);
-end
-end
-
-function self = reference_gen_init(par, i_s_max, psi_s_min, psi_s_max, k_u, k_mtpv)
+function self = reference_gen_init(par, psi_s_min, psi_s_max, k_u, k_mtpv, luts)
 %REFERENCE_GEN_INIT Flux and torque reference generator based on precomputed lookup
-%   tables (ReferenceGenerator); psi_s_min = NaN means psi_f.
+%   tables (ReferenceGenerator); psi_s_min = NaN means psi_f. The tables luts are
+%   the 16-by-6 matrix of compute_reference_luts (sm_control_loci.m), computed
+%   outside the block by sm_reference_luts.m in the mask initialization.
 if isnan(psi_s_min)
     psi_s_min = par.psi_f;
 end
-luts = compute_reference_luts(par, i_s_max);
 self = struct('k_u', k_u, 'k_mtpv', k_mtpv, 'psi_s_min', psi_s_min, ...
-    'psi_s_max', psi_s_max, 'psi_s_mtpa', luts.psi_s_mtpa, ...
-    'tau_M_cl', luts.tau_M_cl, 'tau_M_mtpv', luts.tau_M_mtpv);
+    'psi_s_max', psi_s_max, ...
+    'psi_s_mtpa', struct('x', luts(:, 1), 'y', luts(:, 2)), ...
+    'tau_M_cl', struct('x', luts(:, 3), 'y', luts(:, 4)), ...
+    'tau_M_mtpv', struct('x', luts(:, 5), 'y', luts(:, 6)));
 end
 
 function psi = reference_gen_max_flux(self, w_m, u_dc)

@@ -83,7 +83,7 @@ static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
 #define NUM_INPUTS 3
 #define NUM_OUTPUTS 1
-#define NUM_PARAMS 21
+#define NUM_PARAMS 22
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -164,8 +164,28 @@ static void mdlStart(SimStruct *S)
         par = synchronous_machine_pars(P(5, 0), P(6, 0), P(7, 0),
                                        P(8, 0), P(9, 0));
     }
+    /* Lookup tables of the loci: given (sm_reference_luts.m in Simulink), or
+     * computed at the start if empty (PLECS) */
+    ReferenceLUTs luts_given;
+    const ReferenceLUTs *luts = NULL;
+    if (PDIM(21) > 0) {
+        if (PDIM(21) != 6 * NUM_LOCUS) {
+            SetErrorMessage("luts must be a 16-by-6 matrix (sm_reference_luts.m) or empty.");
+            return;
+        }
+        LUT *tables[3] = {&luts_given.psi_s_mtpa, &luts_given.tau_M_cl,
+                          &luts_given.tau_M_mtpv};
+        for (int t = 0; t < 3; t++) {
+            tables[t]->n = NUM_LOCUS;
+            for (int k = 0; k < NUM_LOCUS; k++) {
+                tables[t]->x[k] = P(21, 2 * t * NUM_LOCUS + k);
+                tables[t]->y[k] = P(21, (2 * t + 1) * NUM_LOCUS + k);
+            }
+        }
+        luts = &luts_given;
+    }
     reference_gen_init(&self, &par, P(0, 0), PARAM(1),
-                       P(2, 0), P(3, 0), P(4, 0));
+                       P(2, 0), P(3, 0), P(4, 0), luts);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
