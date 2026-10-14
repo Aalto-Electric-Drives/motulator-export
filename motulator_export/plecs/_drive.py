@@ -15,15 +15,16 @@ from motulator.common.model._converter import (
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._common import SpeedController
-from motulator.drive.model import Drive, MechanicalSystem
+from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
 
 from motulator_export.plecs._common import (
     MACH,
     ControlBlock,
     StepSignal,
     _add_ctrl_output,
+    _add_step,
+    _check_initial_states,
     _check_supported_pwm,
-    _step,
 )
 from motulator_export.plecs._schematic import _probe, _Schematic, _scope
 
@@ -63,6 +64,46 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
             raise NotImplementedError("Only the dead time with sign=np.sign supported")
     if len(mdl.delay.data) != 1:
         raise NotImplementedError("Only the computational delay of one sample")
+    _check_initial_drive_states(mdl)
+
+
+def _check_initial_drive_states(mdl: Drive) -> None:
+    """
+    Raise an error if a state of the drive (other than the speed and the angle of
+    the mechanics, which are exported) is not at its initial value. The synchronous
+    machine model has its own rotor angle, which must be n_p times that of the
+    mechanics, as in the exported models.
+    """
+    machine = mdl.machine
+    mech = cast(MechanicalSystem, mdl.mechanics).state
+    exported = [
+        ("mechanics.state.w_M", mech.w_M),
+        ("mechanics.state.exp_j_theta_M", mech.exp_j_theta_M),
+    ]
+    states: list[tuple[str, complex, complex]]
+    if isinstance(machine, SynchronousMachine):
+        theta_M0 = np.angle(mech.exp_j_theta_M)
+        exp_j_theta_m0 = np.exp(1j * machine.par.n_p * theta_M0)
+        states = [
+            ("machine.state.psi_s_dq", machine.state.psi_s_dq, machine.par.psi_f),
+            (
+                "machine.state.exp_j_theta_m (n_p times the angle of the mechanics)",
+                machine.state.exp_j_theta_m,
+                exp_j_theta_m0,
+            ),
+        ]
+    else:
+        states = [
+            ("machine.state.psi_s_ab", machine.state.psi_s_ab, 0j),
+            ("machine.state.psi_r_ab", machine.state.psi_r_ab, 0j),
+        ]
+    conv = mdl.converter
+    if isinstance(conv, (CapacitiveDCBusConverter, FrequencyConverter)):
+        states.append(("converter.state.u_dc", conv.state.u_dc, conv.u_dc))
+    if isinstance(conv, FrequencyConverter):
+        states.append(("converter.state.i_L", conv.state.i_L, 0j))
+        states.append(("converter.state.exp_j_theta_g", conv.state.exp_j_theta_g, 1))
+    _check_initial_states(states, exported)
 
 
 def _check_supported_speed_control(
@@ -107,10 +148,16 @@ def speed_ctrl_values(
 
 
 def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
-    """Get the workspace variables of the mechanics and the converter."""
+    """
+    Get the workspace variables of the mechanics (with the initial speed and angle
+    of its state) and the converter.
+    """
     conv = mdl.converter
+    mech = cast(MechanicalSystem, mdl.mechanics)
     variables: list[tuple[str, Any]] = [
-        ("mechanics.J", cast(MechanicalSystem, mdl.mechanics).J),
+        ("mechanics.J", mech.J),
+        ("mechanics.w_M0", float(mech.state.w_M.real)),
+        ("mechanics.theta_M0", float(np.angle(mech.state.exp_j_theta_M))),
         ("converter.u_dc", conv.u_dc),
     ]
     if isinstance(conv, (CapacitiveDCBusConverter, FrequencyConverter)):
@@ -142,14 +189,20 @@ def _add_mechanics(sch: _Schematic, tau_L: StepSignal, inertia: bool) -> None:
             "Inertia",
             "Inertia",
             (x_f, y_f + 30),
-            {"J": "mechanics.J", "w0": "0", "theta0": "0"},
+            {
+                "J": "mechanics.J",
+                "w0": "mechanics.w_M0",
+                "theta0": "mechanics.theta_M0",
+            },
             label="east",
         )
         sch.connect(("Machine", 4), ("Inertia", 1), "Rotational")
         sch.connect(("Inertia", 2), ("Load", 3), "Rotational")
     else:
         sch.connect(("Machine", 4), ("Load", 3), "Rotational")
-    sch.component("Step", "tau_L", (x_f - 70, y_load), _step(tau_L))
+    # Several steps are summed by a Gain block in front of the load
+    x_step = x_f - 70 if np.isscalar(tau_L.time) else x_f - 120
+    load_torque = _add_step(sch, "tau_L", tau_L, (x_step, y_load))
     sch.component(
         "ControlledTorque",
         "Load",
@@ -162,7 +215,7 @@ def _add_mechanics(sch: _Schematic, tau_L: StepSignal, inertia: bool) -> None:
         "RotationalReference", "Frame", (x_f, y_load + 45), direction="up", show=False
     )
     sch.connect(("Frame", 1), ("Load", 1), "Rotational")
-    sch.signal(("tau_L", 1), ("Load", 2))
+    sch.signal(load_torque, ("Load", 2))
 
 
 # Probe signals of the PLECS machines: (current, speed, angle, torque)

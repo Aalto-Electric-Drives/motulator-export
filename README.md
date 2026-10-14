@@ -87,7 +87,9 @@ The speed controller of *motulator* stores only its gains, so its arguments are 
 V/Hz control (`control.VHzControlSystem`, see `examples/im_2kw_vhz.py`) has no speed controller: `plecs.im.write_model("im_vhz.plecs", mdl, ctrl, w_M_ref, tau_L, 1.6)`.
 
 The modules `sm` (synchronous machine drives), `im` (induction machine drives), and `grid` (grid converter systems) are the same in `plecs` and `simulink`.
-A system that is not supported raises `NotImplementedError` before any file is written.
+A system that is not supported raises `NotImplementedError`, and an invalid argument `ValueError`, before any file is written.
+
+The models start from the state of the system model. A drive can start at a given speed (e.g., `mdl.mechanics.state.w_M = 50.0`), but the other states (e.g., the flux linkages of the machine) are not exported, so write the models before simulating the system in *motulator*.
 
 ## Simulating from Python
 

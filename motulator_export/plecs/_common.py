@@ -375,6 +375,29 @@ def _check_supported_pwm(pwm: PWM, k_comp: float, d_err: bool = False) -> None:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
 
 
+def _check_initial_states(
+    states: list[tuple[str, complex, complex]],
+    exported: list[tuple[str, complex]] | None = None,
+) -> None:
+    """
+    Raise an error if a state of the system model, given as (name, value, initial
+    value), is not at its initial value: the exported models start from the initial
+    values of motulator (e.g., after a simulation, the states are the final ones),
+    except the exported states (name, value), e.g., the speed and the angle of the
+    mechanics and the capacitor voltage of the LCL filter. All the states must be
+    finite (e.g., not NaN after a failed simulation).
+    """
+    for name, value in [(n, v) for n, v, _ in states] + (exported or []):
+        if not np.isfinite(value):
+            raise ValueError(f"The state {name} is not finite: {value}")
+    for name, value, initial in states:
+        if abs(value - initial) > 1e-9 * max(abs(initial), 1.0):
+            raise NotImplementedError(
+                f"Only the initial value {initial:.6g} of {name} supported, not "
+                f"{value:.6g}"
+            )
+
+
 def _add_pwm(sch: _Schematic, T_s: float | str) -> None:
     """
     Add the carrier comparison (PLECS Symmetrical PWM), fed by the delayed duty ratios.
@@ -595,6 +618,21 @@ def _step(sig: StepSignal) -> dict[str, str]:
     return {k: _fmt(v) for k, v in params.items()} | {"DataType": "10"}
 
 
+def _add_step(sch: _Schematic, name: str, sig: StepSignal, pos: Point) -> Terminal:
+    """
+    Add the Step block of a step signal, and with several steps, the Gain block
+    summing them 50 to the right of it. Returns the terminal of the signal.
+    """
+    sch.component("Step", name, pos, _step(sig))
+    if np.isscalar(sig.time):
+        return (name, 1)
+    ones = _fmt([1.0] * len(np.atleast_1d(sig.time)))
+    gain = {"K": ones, "Multiplication": "2"}  # Matrix K*u
+    sch.component("Gain", f"{name} sum", (pos[0] + 50, pos[1]), gain, show=False)
+    sch.signal((name, 1), (f"{name} sum", 1))
+    return (f"{name} sum", 2)
+
+
 def _fmt_mask(value: Any) -> str:
     """Format a mask value, writing multiples of 2*pi as in motulator."""
     if isinstance(value, float) and value > 0 and not isinf(value):
@@ -711,13 +749,7 @@ def _add_control_system(
     for k, (name, src) in enumerate(sources):
         out: Terminal = (name, 1)
         if isinstance(src, StepSignal):
-            sch.component("Step", name, (60, y_src[k]), _step(src))
-            if not np.isscalar(src.time):
-                ones = _fmt([1.0] * len(np.atleast_1d(src.time)))
-                gain = {"K": ones, "Multiplication": "2"}  # Matrix K*u
-                sch.component("Gain", f"{name} sum", (110, y_src[k]), gain, show=False)
-                sch.signal((name, 1), (f"{name} sum", 1))
-                out = (f"{name} sum", 2)
+            out = _add_step(sch, name, src, (60, y_src[k]))
         elif isinstance(src, (int, float)):
             sch.component("Constant", name, (60, y_src[k]), {"Value": _fmt(src)})
         else:

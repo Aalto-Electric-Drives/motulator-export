@@ -1,5 +1,7 @@
 function add_mechanics(blk, pos)
 %ADD_MECHANICS Mechanical system without friction (MechanicalSystem).
+%   The initial speed and angle are mechanics.w_M0 and mechanics.theta_M0 of the
+%   initialization script.
 blocks.add(blk, 'built-in/Subsystem', pos);
 blocks.add([blk '/Sum'], 'built-in/Sum', [110 30 130 100], 'Inputs', '+-', ...
     'IconShape', 'rectangular');
@@ -8,9 +10,9 @@ blocks.add([blk '/tau_L'], 'built-in/Inport', [40 0 70 14]);
 blocks.add([blk '/Inverse inertia'], 'built-in/Gain', [160 0 210 30], ...
     'Gain', '1/mechanics.J');
 blocks.add([blk '/Integrator w_M'], 'built-in/Integrator', [240 0 270 30], ...
-    'InitialCondition', '0');
+    'InitialCondition', 'mechanics.w_M0');
 blocks.add([blk '/Integrator theta_M'], 'built-in/Integrator', [320 0 350 30], ...
-    'InitialCondition', '0');
+    'InitialCondition', 'mechanics.theta_M0');
 blocks.add([blk '/w_M'], 'built-in/Outport', [400 0 430 14]);
 blocks.add([blk '/theta_M'], 'built-in/Outport', [400 0 430 14]);
 y = blocks.port_y(blk, 'Sum', 'Outport', 1);
