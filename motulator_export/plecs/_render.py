@@ -13,9 +13,10 @@ from dataclasses import replace
 
 from motulator_export.plecs._netlist import (
     PLECS,
+    Block,
     CBlock,
+    Delay,
     Mask,
-    Mux,
     Placed,
     Point,
     Selector,
@@ -125,10 +126,10 @@ def schematic(sub: Subsystem) -> tuple[_Schematic, Point]:
     return sch, lay.size
 
 
-def _block(
-    sch: _Schematic, b: CBlock | Selector | Mux | Tag | Subsystem, p: Placed
-) -> None:
+def _block(sch: _Schematic, b: Block, p: Placed) -> None:
     """Add a block of the netlist."""
+    if isinstance(b, Delay):
+        raise NotImplementedError("Unit delays are only in the MATLAB Function blocks")
     pos = (p.x, p.y)
     if isinstance(b, CBlock) and b.mask is None:
         feedthrough = b.feedthrough or [1] * len(b.inputs)

@@ -5,7 +5,8 @@ This module writes a Simulink model of a motulator grid converter system with
 grid-following or grid-forming control, in the same way as
 `motulator_export.plecs.grid` writes a PLECS model. The blocks of the classes of
 the control system are the C-Script code of the PLECS model wrapped in S-functions,
-and the parameters are defined by the script `init_<model>.m` (see
+or MATLAB Function blocks running the MATLAB port of motulator (`code`), and the
+parameters are defined by the script `init_<model>.m` (see
 `motulator_export.simulink.sm`). The system model is built from basic Simulink
 blocks by `build_grid.m`: the AC filter (an LCL filter, or an L filter with the grid
 inductance) is modeled with space vectors in stationary coordinates, and the grid
@@ -58,6 +59,7 @@ def write_model(
     q_g_ref: StepSignal | None = None,
     v_c_ref: float | None = None,
     enable: StepSignal | float = 1.0,
+    code: str = "c",
 ) -> Path:
     """
     Write the MATLAB scripts that build the Simulink model of the grid converter
@@ -71,7 +73,7 @@ def write_model(
     path : str | Path
         Path of the model (.slx). The scripts `build_<model>.m` and
         `init_<model>.m` are written in the same folder, with the sources of the
-        S-functions.
+        S-functions (or of the MATLAB functions).
     mdl : GridConverterSystem
         Continuous-time system model.
     ctrl : GridConverterControlSystem
@@ -84,10 +86,12 @@ def write_model(
         Reactive power reference (VAr), needed in grid-following control.
     v_c_ref : float, optional
         Converter voltage magnitude reference (V), needed in grid-forming control.
-
     enable : StepSignal | float, optional
         Input `enable` of the control system, defaults to 1 (enabled), see
         `sm.write_model`.
+    code : str, optional
+        Code of the blocks of the control system, "c" (the default) or "matlab",
+        see `sm.write_model`.
 
     Returns
     -------
@@ -136,7 +140,7 @@ def write_model(
         ("scope", scope_indices(scope, grid._mdl_outputs(mdl), block.signals)),
     ]
     return write_script(
-        path, block, VALUES, fields, "build_grid", VALUES["T_s"], t_stop
+        path, block, VALUES, fields, "build_grid", VALUES["T_s"], t_stop, code=code
     )
 
 

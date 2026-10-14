@@ -12,6 +12,7 @@ addpath(fullfile(here, '..', '..', 'motulator_export', 'simulink'));
 s = struct();
 s.folder = here;
 s.name = 'ipmsm_2kw_fvc';
+s.code = 'c';
 s.init_script = 'init_ipmsm_2kw_fvc';
 s.machine = 'sm';
 s.enable = 1.0;

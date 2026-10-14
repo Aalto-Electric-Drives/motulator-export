@@ -10,6 +10,8 @@ function add_control_system(blk, c, pos)
 %     mask_init      Initialization commands of the mask
 %     netlist        Contents of the subsystem, see blocks.add_netlist
 %     sfunctions     Rows {path, parameters} of the S-functions
+%     folder         Folder of the functions of the MATLAB Function blocks (only
+%                    with MATLAB Function blocks)
 %
 %   The subsystem has the outputs 'd_abc' and 'signals' (the monitored signals).
 %   The ports of an S-function are created only if its parameters can be evaluated,
@@ -17,7 +19,11 @@ function add_control_system(blk, c, pos)
 %   after the masks are created.
 
 add(blk, 'built-in/Subsystem', pos);
-blocks.add_netlist(blk, c.netlist);
+net = c.netlist;
+if isfield(c, 'folder')
+    net.folder = c.folder;
+end
+blocks.add_netlist(blk, net);
 add_mask(blk, c);
 for k = 1:size(c.sfunctions, 1)
     set_param([blk '/' c.sfunctions{k, 1}], 'Parameters', c.sfunctions{k, 2});

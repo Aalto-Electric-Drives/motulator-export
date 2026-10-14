@@ -3,9 +3,11 @@
 =================================================
 
 This script builds the drive system of `im_2kw_cvc.py` in motulator and writes a
-MATLAB script (simulink/build_im_2kw_cvc.m) that builds the Simulink model. If
-the MATLAB Engine API for Python is installed, it runs the script, simulates the
-model and motulator, and compares the results.
+MATLAB script (simulink/build_im_2kw_cvc.m) that builds the Simulink model. If the
+MATLAB Engine API for Python is installed, it runs the script, simulates the model
+and motulator, and compares the results. With --matlab, the blocks of the control
+system are MATLAB Function blocks instead of S-functions
+(simulink/build_im_2kw_cvc_matlab.m).
 
 Run from the repository root:
 
@@ -35,9 +37,13 @@ if __name__ == "__main__":
     # Speed reference switching at the same sample as in motulator
     T_s = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg.T_s
     w_M_ref = sampled_step(W_M_REF, T_s)
-    path = Path(__file__).parent / "simulink" / "im_2kw_cvc.slx"
+    code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
+    name = "im_2kw_cvc_matlab" if code == "matlab" else "im_2kw_cvc"
+    path = Path(__file__).parent / "simulink" / f"{name}.slx"
     path.parent.mkdir(exist_ok=True)
-    script = im.write_model(path, mdl, ctrl, w_M_ref, TAU_L, T_STOP, SPEED_CTRL)
+    script = im.write_model(
+        path, mdl, ctrl, w_M_ref, TAU_L, T_STOP, SPEED_CTRL, code=code
+    )
     print(f"Wrote {script}")
     try:
         import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]

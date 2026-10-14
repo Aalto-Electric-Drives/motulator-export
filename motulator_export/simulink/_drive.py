@@ -19,6 +19,7 @@ from motulator_export.simulink._common import (
     simulate,
     write_script,
 )
+from motulator_export.simulink._mfunction import MFunction
 from motulator_export.simulink._sfunction import SFunction
 
 
@@ -44,11 +45,13 @@ def write_drive_model(
     w_M_ref: StepSignal,
     tau_L: StepSignal,
     t_stop: float,
-    sfunctions: Sequence[SFunction] = (),
+    functions: Sequence[SFunction | MFunction] = (),
     enable: StepSignal | float = 1.0,
+    code: str = "c",
 ) -> Path:
     """
-    Write the S-functions and the MATLAB script building the model of a drive.
+    Write the S-functions (or the MATLAB functions) and the MATLAB script building the
+    model of a drive.
 
     Parameters
     ----------
@@ -68,13 +71,16 @@ def write_drive_model(
         External load torque (Nm).
     t_stop : float
         Simulation stop time (s).
-    sfunctions : Sequence[SFunction], optional
+    functions : Sequence[SFunction | MFunction], optional
         S-function of the machine ("gn"), whose parameters are passed to the
-        builder.
+        builder, or its MATLAB function with `code` "matlab".
     enable : StepSignal | float, optional
         Input `enable` of the control system, defaults to 1 (enabled). While it is
         not positive, the duty ratios are 0.5 and the state of the control system is
         reset to its initial value.
+    code : str, optional
+        Code of the blocks of the control system: "c" (the C port in S-functions,
+        the default) or "matlab" (the MATLAB port in MATLAB Function blocks).
 
     Returns
     -------
@@ -100,10 +106,18 @@ def write_drive_model(
         ("tau_L", _m_steps(tau_L)),
         ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),
     ]
-    if sfunctions:
-        fields.append(("machine_params", sfunctions[0].params))
+    if functions and isinstance(functions[0], SFunction):
+        fields.append(("machine_params", functions[0].params))
     return write_script(
-        path, block, VALUES, fields, "build_drive", VALUES["T_s"], t_stop, sfunctions
+        path,
+        block,
+        VALUES,
+        fields,
+        "build_drive",
+        VALUES["T_s"],
+        t_stop,
+        functions,
+        code,
     )
 
 

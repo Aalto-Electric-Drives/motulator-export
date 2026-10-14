@@ -3,10 +3,10 @@ Netlists of the control systems and their layout.
 
 A control system is a hierarchy of subsystems that mirrors the classes of
 motulator: each class is a block, either a C-Script block (`CBlock`, an S-function
-in Simulink) or a subsystem of blocks (`Subsystem`). The signal vectors (e.g., the
-feedback signals `fbk`) are assembled by `Mux` blocks, and their fields are selected
-by `Selector` blocks, where motulator accesses the attributes. The netlist is
-independent of PLECS and Simulink.
+or a MATLAB Function block in Simulink) or a subsystem of blocks (`Subsystem`). The
+signal vectors (e.g., the feedback signals `fbk`) are assembled by `Mux` blocks, and
+their fields are selected by `Selector` blocks, where motulator accesses the
+attributes. The netlist is independent of PLECS and Simulink.
 
 The layout (`layout`) places the blocks of a subsystem in the columns given by its
 hints and aligns them vertically, so that the wires are straight, and routes the
@@ -59,10 +59,81 @@ class Mask:
     init: str = ""
 
 
+@dataclass(frozen=True)
+class SignalVector:
+    """
+    Signal vector (e.g., the feedback signals fbk) in the MATLAB code: the prefix of
+    its pack and unpack functions (e.g., observer_outputs for observer_outputs_pack
+    and observer_outputs_unpack) and its fields with their widths (1 for a real and
+    2 for a complex field), in their order in the vector.
+    """
+
+    prefix: str
+    fields: tuple[tuple[str, int], ...]
+
+    @property
+    def width(self) -> int:
+        return sum(w for _, w in self.fields)
+
+
+# Conversion of a two-element signal [real part; imaginary part] to a complex number
+COMPLEX = "complex"
+
+
+@dataclass(frozen=True)
+class MCode:
+    """
+    MATLAB code of a C block: the MATLAB port of its C code (see
+    `motulator_export/matlab`), run in a MATLAB Function block in Simulink (see
+    `simulink._mfunction`).
+
+    The code refers to the parameters of the block as the fields of the struct `p`,
+    named by the parameters (the last part of an expression, e.g., T_s for cfg.T_s),
+    an empty parameter ([], None in motulator) being NaN. The inputs and outputs are
+    the variables named by the ports, converted by `inputs` and `outputs` from and
+    to the signals: `COMPLEX` or a signal vector (as a struct). The start code
+    initializes the state `self` from the parameters (once), the output code
+    computes the outputs, and the update code updates the state, as the code
+    sections of the C-Script. The input `enable` (if `disabled` is not None) and the
+    reset of the state are added as in the C code. The checks are pairs of an error
+    condition and its message (in terms of p), evaluated in the mask
+    initialization.
+    """
+
+    output: str
+    start: str = ""
+    update: str = ""
+    inputs: dict[str, "SignalVector | str"] = field(default_factory=dict)
+    outputs: dict[str, "SignalVector | str"] = field(default_factory=dict)
+    functions: str = ""  # Local functions of the block
+    checks: tuple[tuple[str, str], ...] = ()
+    disabled: float | None = 0.0  # Outputs while disabled, None = no input enable
+
+
+def m_variable(port: str) -> str:
+    """
+    Variable of a port in the MATLAB code: its name, or for a name that is not an
+    identifier (an output of the monitored signals), e.g., speed_signals for
+    "Speed (w_M_ref, w_M)".
+    """
+    if port.isidentifier():
+        return port
+    name = port.partition(" (")[0]
+    return re.sub(r"\W+", "_", name).strip("_").lower() + "_signals"
+
+
+def required(*names: str) -> tuple[tuple[str, str], ...]:
+    """Checks of the MATLAB code that the parameters are scalars (not None)."""
+    return tuple(
+        (f"~isscalar(p.{n}) || isnan(p.{n})", f"{n} must be a scalar.") for n in names
+    )
+
+
 @dataclass
 class CBlock:
     """
-    C-Script block of PLECS or S-function of Simulink, running the C code.
+    C-Script block of PLECS or S-function of Simulink, running the C code, or a
+    MATLAB Function block of Simulink running the MATLAB code (`mcode`).
 
     The parameters are expressions in the workspace of its mask, or of the masks of
     the subsystems containing it. A block with a mask is a masked subsystem with the
@@ -78,6 +149,7 @@ class CBlock:
     feedthrough: list[int] | None = None  # Direct feedthrough, all inputs by default
     sample_time: str | None = "T_s"  # Expression of the sampling period, or inherited
     mask: Mask | None = None
+    mcode: MCode | None = None  # MATLAB code
 
 
 @dataclass
@@ -107,6 +179,23 @@ class Mux:
     @property
     def outputs(self) -> list[Port]:
         return [Port("y", sum(p.width for p in self.inputs))]
+
+
+@dataclass
+class Delay:
+    """Unit delay of a signal (in the MATLAB Function blocks of Simulink)."""
+
+    name: str
+    width: int
+    sample_time: str | None = None  # Expression of the sampling period, or inherited
+
+    @property
+    def inputs(self) -> list[Port]:
+        return [Port("u", self.width)]
+
+    @property
+    def outputs(self) -> list[Port]:
+        return [Port("y", self.width)]
 
 
 @dataclass
@@ -168,7 +257,7 @@ class Subsystem:
         raise KeyError(name)
 
 
-Block = CBlock | Selector | Mux | Tag | Subsystem
+Block = CBlock | Selector | Mux | Delay | Tag | Subsystem
 
 
 def leaves(sub: Subsystem, path: str = "") -> list[tuple[str, CBlock]]:
@@ -269,6 +358,7 @@ PLECS = Geometry(
         "selector": (30, 20),
         "goto": (40, 10),
         "from": (40, 10),
+        "delay": (30, 30),
     },
     widths={"cblock": 100, "subsystem": 100, "mux": 10},
     spacing={"cblock": 10, "mux": 10, "subsystem": 20},
@@ -289,6 +379,7 @@ SIMULINK = Geometry(
         "selector": (50, 30),
         "goto": (70, 14),
         "from": (70, 14),
+        "delay": (35, 30),
     },
     widths={"cblock": 140, "subsystem": 140, "mux": 5},
     spacing={},
@@ -313,6 +404,8 @@ def kind(b: Block) -> str:
         return "selector"
     if isinstance(b, Tag):
         return "goto" if b.goto else "from"
+    if isinstance(b, Delay):
+        return "delay"
     return "mux"
 
 

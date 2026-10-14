@@ -37,6 +37,7 @@ def write_model(
     t_stop: float,
     speed_ctrl_args: dict[str, float] | None = None,
     enable: StepSignal | float = 1.0,
+    code: str = "c",
 ) -> Path:
     """
     Write the MATLAB scripts that build the Simulink model, see `sm.write_model`.
@@ -65,7 +66,7 @@ def write_model(
         )
     block = im.control_block(ctrl)
     return write_drive_model(
-        path, block, script, "im", w_M_ref, tau_L, t_stop, enable=enable
+        path, block, script, "im", w_M_ref, tau_L, t_stop, enable=enable, code=code
     )
 
 

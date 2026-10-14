@@ -44,13 +44,16 @@ from motulator_export.plecs._control import (
     vector_control_system,
 )
 from motulator_export.plecs._netlist import (
+    COMPLEX,
     CBlock,
     Mask,
+    MCode,
     Mux,
     Param,
     Port,
     Subsystem,
     Tag,
+    required,
 )
 
 SIGNALS = Signals(
@@ -111,6 +114,15 @@ def _par_code(params: list[str]) -> str:
         f"P({i + 2}, 0),\n"
         f"                                    P({i + 3}, 0), P({i + 4}, 0)}};\n"
     )
+
+
+# The machine model par in the MATLAB code from the parameters PAR
+M_PAR = (
+    "% Machine model (InductionMachineInvGammaPars)\n"
+    "par = struct('n_p', p.par_n_p, 'R_s', p.par_R_s, 'R_R', p.par_R_R, ...\n"
+    "    'L_sgm', p.par_L_sgm, 'L_M', p.par_L_M);\n"
+)
+M_PAR_CHECKS = required(*PAR["par"])
 
 
 # %%
@@ -183,6 +195,27 @@ def _flux_observer() -> CBlock:
         params,
         SIGNALS.sfunction("flux_observer"),
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = im_flux_observer_init(par, p.k_o);\n",
+            output="% Speed error from the measured rotor speed in the sensored mode\n"
+            "if p.h == 0\n"
+            "    eps = 0;\n"
+            "else\n"
+            "    eps = meas.w_M - w_M;\n"
+            "end\n"
+            "out = im_flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, "
+            "w_M, eps, p.h);\n"
+            "% Voltage for the control laws (DriveControlSystem.get_feedback)\n"
+            "out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n",
+            update="self = im_flux_observer_update(self, p.T_s, out);\n",
+            inputs={
+                "meas": SIGNALS.vector("meas"),
+                "u_s_ab": COMPLEX,
+                "u_s_zoh_ab": COMPLEX,
+            },
+            outputs={"out": SIGNALS.vector("fbk")},
+            checks=(*required("k_o", "h", "T_s"), *M_PAR_CHECKS),
+        ),
     )
 
 
@@ -368,6 +401,22 @@ def _current_reference_generator() -> CBlock:
         SIGNALS.sfunction("current_reference_generator"),
         feedthrough=[1, 1, 0, 0, 1],
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = im_reference_gen_init(par, p.psi_s_nom, p.i_s_max, "
+            "p.w_s_nom, p.k_u, p.k_fw);\n",
+            output="[i_s_ref, tau_M] = im_reference_gen_compute_output(self, "
+            "tau_M_ref, abs(psi_R));\n"
+            "% Transform the reference to the same coordinates as the feedback\n"
+            "i_s = exp(1i*angle(psi_R))*i_s_ref;\n",
+            update="% Field weakening based on the unlimited voltage reference\n"
+            "self = im_reference_gen_update(self, p.T_s, u_s, u_dc);\n",
+            inputs={"u_s": COMPLEX, "psi_R": COMPLEX},
+            outputs={"i_s": COMPLEX},
+            checks=(
+                *required("psi_s_nom", "i_s_max", "w_s_nom", "k_u", "T_s"),
+                *M_PAR_CHECKS,
+            ),
+        ),
     )
 
 
@@ -420,6 +469,15 @@ def _current_controller() -> CBlock:
         params,
         SIGNALS.sfunction("current_controller"),
         mask=mask,
+        mcode=MCode(
+            start=M_PAR + "self = im_current_controller(par, p.alpha_c, p.alpha_i);\n",
+            output="[self, u_s] = complex_pi_compute_output(self, i_s_ref, fbk.i_s, "
+            "0);\n",
+            update="self = complex_pi_update(self, p.T_s, fbk.u_s, fbk.w_c);\n",
+            inputs={"i_s_ref": COMPLEX, "fbk": SIGNALS.vector("fbk")},
+            outputs={"u_s": COMPLEX},
+            checks=(*required("alpha_c", "alpha_i", "T_s"), *M_PAR_CHECKS),
+        ),
     )
 
 

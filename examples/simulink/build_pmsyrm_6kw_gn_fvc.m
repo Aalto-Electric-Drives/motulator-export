@@ -12,6 +12,7 @@ addpath(fullfile(here, '..', '..', 'motulator_export', 'simulink'));
 s = struct();
 s.folder = here;
 s.name = 'pmsyrm_6kw_gn_fvc';
+s.code = 'c';
 s.init_script = 'init_pmsyrm_6kw_gn_fvc';
 s.machine = 'gn';
 s.enable = 1.0;

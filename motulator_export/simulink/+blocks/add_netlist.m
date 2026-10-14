@@ -5,7 +5,9 @@ function add_netlist(blk, net)
 %
 %     blocks   Blocks {path, type, position, parameters}, the paths relative to
 %              BLK, a subsystem before its contents. The S-functions have dummy
-%              parameters until the mask of BLK exists.
+%              parameters until the mask of BLK exists. The parameters of a MATLAB
+%              Function block are {function, sample time, output widths}, see
+%              blocks.add_mfunction.
 %     aligns   Alignments {system, block, kind, number, target, kind, number,
 %              offset}: the block is moved vertically so that its port is at the
 %              height of the port of the target plus the offset.
@@ -13,21 +15,29 @@ function add_netlist(blk, net)
 %              'block/number' and the corners as in blocks.route.
 %     masks    Masks of the blocks of the classes {path, type, description,
 %              initialization, parameters {variable, prompt, value}, display}.
+%     folder   Folder of the files of the functions of the MATLAB Function blocks
+%              (only with MATLAB Function blocks)
 %
 %   The layout is computed by motulator_export, but Simulink places the ports of
 %   the blocks itself, so the blocks are aligned with the ports. The unconnected
-%   outputs of the S-functions and the subsystems are terminated.
+%   outputs of the S-functions, the MATLAB Function blocks, and the subsystems are
+%   terminated.
 
 types = struct('S_Function', 'built-in/S-Function', ...
     'Subsystem', 'built-in/Subsystem', 'Selector', 'built-in/Selector', ...
     'Mux', 'built-in/Mux', 'Goto', 'built-in/Goto', 'From', 'built-in/From', ...
-    'Inport', 'built-in/Inport', 'Outport', 'built-in/Outport');
+    'Inport', 'built-in/Inport', 'Outport', 'built-in/Outport', ...
+    'UnitDelay', 'built-in/UnitDelay');
 for k = 1:size(net.blocks, 1)
     [path, type, pos, params] = net.blocks{k, :};
     if isempty(params)
         params = {};
     end
-    blocks.add([blk '/' path], types.(strrep(type, '-', '_')), pos, params{:});
+    if strcmp(type, 'MATLAB Function')
+        blocks.add_mfunction([blk '/' path], pos, net.folder, params{:});
+    else
+        blocks.add([blk '/' path], types.(strrep(type, '-', '_')), pos, params{:});
+    end
 end
 for k = 1:size(net.aligns, 1)
     [sys, b, kind, n, t, t_kind, t_n, dy] = net.aligns{k, :};
@@ -54,11 +64,12 @@ for k = 1:size(net.masks, 1)
             'Prompt', params{j, 2}, 'Value', params{j, 3}, 'Tunable', 'off');
     end
 end
-% Terminate the unconnected outputs of the S-functions and the subsystems (e.g., the
-% realized voltage of the PWM over the ongoing period, if not used)
+% Terminate the unconnected outputs of the S-functions, the MATLAB Function blocks,
+% and the subsystems (e.g., the realized voltage of the PWM over the ongoing period,
+% if not used)
 for k = 1:size(net.blocks, 1)
     [path, type] = net.blocks{k, 1:2};
-    if ~any(strcmp(type, {'S-Function', 'Subsystem'}))
+    if ~any(strcmp(type, {'S-Function', 'MATLAB Function', 'Subsystem'}))
         continue
     end
     handles = get_param([blk '/' path], 'PortHandles');
