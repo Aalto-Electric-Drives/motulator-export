@@ -75,9 +75,14 @@ def _check_initial_drive_states(mdl: Drive) -> None:
     mechanics, as in the exported models.
     """
     machine = mdl.machine
+    mech = cast(MechanicalSystem, mdl.mechanics).state
+    exported = [
+        ("mechanics.state.w_M", mech.w_M),
+        ("mechanics.state.exp_j_theta_M", mech.exp_j_theta_M),
+    ]
     states: list[tuple[str, complex, complex]]
     if isinstance(machine, SynchronousMachine):
-        theta_M0 = np.angle(cast(MechanicalSystem, mdl.mechanics).state.exp_j_theta_M)
+        theta_M0 = np.angle(mech.exp_j_theta_M)
         exp_j_theta_m0 = np.exp(1j * machine.par.n_p * theta_M0)
         states = [
             ("machine.state.psi_s_dq", machine.state.psi_s_dq, machine.par.psi_f),
@@ -98,7 +103,7 @@ def _check_initial_drive_states(mdl: Drive) -> None:
     if isinstance(conv, FrequencyConverter):
         states.append(("converter.state.i_L", conv.state.i_L, 0j))
         states.append(("converter.state.exp_j_theta_g", conv.state.exp_j_theta_g, 1))
-    _check_initial_states(states)
+    _check_initial_states(states, exported)
 
 
 def _check_supported_speed_control(

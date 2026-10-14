@@ -189,6 +189,37 @@ def test_unsupported_initial_states(tmp_path: Path, case: str) -> None:
     assert not list(tmp_path.iterdir())  # Nothing is written
 
 
+@pytest.mark.parametrize("case", ["sm_flux", "mechanics_speed", "lcl_voltage"])
+def test_non_finite_states(tmp_path: Path, case: str) -> None:
+    """The states should be finite (e.g., not NaN after a failed simulation), also
+    those that are exported."""
+    if case == "lcl_voltage":
+        ctrl = gfl_system()[0]()[1]
+        mdl: Any = _grid_model(lcl=True)
+        mdl.ac_filter.state.u_f_ab = complex(np.nan, 0)
+        for tool, path in ((plecs, "grid.plecs"), (simulink, "grid.slx")):
+            with pytest.raises(ValueError, match="u_f_ab is not finite"):
+                tool.grid.write_model(
+                    tmp_path / path,
+                    mdl,
+                    ctrl,
+                    0.1,
+                    StepSignal(0.02, 5e3),
+                    q_g_ref=StepSignal(0.04, 4e3),
+                )
+    else:
+        mdl, ctrl, speed = _drive(sm=True)
+        if case == "sm_flux":
+            mdl.machine.state.psi_s_dq = complex(np.nan, 0)
+        else:
+            mdl.mechanics.state.w_M = complex(np.nan, 0)
+        match = "psi_s_dq" if case == "sm_flux" else "w_M"
+        for tool, path in ((plecs, "drive.plecs"), (simulink, "drive.slx")):
+            with pytest.raises(ValueError, match=f"{match} is not finite"):
+                tool.sm.write_model(tmp_path / path, mdl, ctrl, *DRIVE_REFS, speed)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
 def test_unsupported_k_comp(tmp_path: Path) -> None:
     """Only the angle advance k_comp = 1.5 of the continuous-time controller designs
     is supported."""

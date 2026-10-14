@@ -101,9 +101,11 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
     # from their initial values
     states = [("ac_source.state.exp_j_theta_g", src.state.exp_j_theta_g, 1 + 0j)]
     states.append(("ac_filter.state.i_c_ab", f.state.i_c_ab, 0j))
+    exported: list[tuple[str, complex]] = []
     if isinstance(f, LCLFilter):
         states.append(("ac_filter.state.i_g_ab", f.state.i_g_ab, 0j))
-    _check_initial_states(states)
+        exported.append(("ac_filter.state.u_f_ab", f.state.u_f_ab))
+    _check_initial_states(states, exported)
 
 
 def _check_supported(

@@ -375,14 +375,21 @@ def _check_supported_pwm(pwm: PWM, k_comp: float, d_err: bool = False) -> None:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
 
 
-def _check_initial_states(states: list[tuple[str, complex, complex]]) -> None:
+def _check_initial_states(
+    states: list[tuple[str, complex, complex]],
+    exported: list[tuple[str, complex]] | None = None,
+) -> None:
     """
     Raise an error if a state of the system model, given as (name, value, initial
     value), is not at its initial value: the exported models start from the initial
     values of motulator (e.g., after a simulation, the states are the final ones),
-    except the exported states (the speed and the angle of the mechanics, and the
-    capacitor voltage of the LCL filter).
+    except the exported states (name, value), e.g., the speed and the angle of the
+    mechanics and the capacitor voltage of the LCL filter. All the states must be
+    finite (e.g., not NaN after a failed simulation).
     """
+    for name, value in [(n, v) for n, v, _ in states] + (exported or []):
+        if not np.isfinite(value):
+            raise ValueError(f"The state {name} is not finite: {value}")
     for name, value, initial in states:
         if abs(value - initial) > 1e-9 * max(abs(initial), 1.0):
             raise NotImplementedError(
