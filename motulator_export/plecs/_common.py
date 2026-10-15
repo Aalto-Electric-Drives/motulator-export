@@ -17,11 +17,7 @@ from typing import Any
 
 import numpy as np
 from motulator.common.control._pwm import PWM
-from motulator.common.model._converter import (
-    CapacitiveDCBusConverter,
-    FrequencyConverter,
-    VoltageSourceConverter,
-)
+from motulator.common.model._converter import DCBus, DiodeBridgeDCBus
 
 from motulator_export.plecs._netlist import Subsystem
 from motulator_export.plecs._render import schematic
@@ -508,21 +504,22 @@ def _add_converter(sch: _Schematic, t_d: float = 0.0) -> None:
     sch.signal(gate, ("Converter", 4), [(x, CS[1]), (x, 20), (CONV[0] + 15, 20)])
 
 
-def _add_dc_bus(sch: _Schematic, conv: VoltageSourceConverter) -> None:
+def _add_dc_bus(sch: _Schematic, dc_bus: DCBus | None) -> None:
     """
-    Add the DC bus: a stiff voltage, a capacitor, or a diode bridge and LC.
+    Add the DC bus: a stiff voltage (without a DC-bus model), a capacitor (`DCBus`),
+    or a diode bridge and LC (`DiodeBridgeDCBus`).
 
     The circuits are not grounded (as in motulator, there is no zero sequence).
 
     """
     x_c, y_c = CONV
     sch.component("Voltmeter", "u_dc", (X_U_DC, y_c), direction="up", label="west")
-    if isinstance(conv, FrequencyConverter):
+    if isinstance(dc_bus, DiodeBridgeDCBus):
         _add_diode_bridge(sch)
         return
-    if isinstance(conv, CapacitiveDCBusConverter):
-        dc, typ, params = "C_dc", "Capacitor", {"C": "converter.C_dc"}
-        params["v_init"] = "converter.u_dc"
+    if dc_bus is not None:
+        dc, typ, params = "C_dc", "Capacitor", {"C": "dc_bus.C_dc"}
+        params["v_init"] = "dc_bus.u_dc0"
     else:
         dc, typ, params = "U_dc", "DCVoltageSource", {"V": "converter.u_dc"}
     sch.component(typ, dc, (X_DC, y_c), params, direction="up", label="west")
@@ -554,7 +551,7 @@ def _add_diode_bridge(sch: _Schematic) -> None:
             "ACVoltageSource",
             f"u_g{ph}",
             (240, y_c - 40 + 40 * k),
-            {"V": "converter.u_g", "w": "converter.w_g", "phi": f"pi/2 - {k}*2*pi/3"},
+            {"V": "dc_bus.u_g", "w": "dc_bus.w_g", "phi": f"pi/2 - {k}*2*pi/3"},
             label="north",
             show=k == 0,
         )
@@ -573,14 +570,14 @@ def _add_diode_bridge(sch: _Schematic) -> None:
         "Inductor",
         "L_dc",
         (450, Y_TOP),
-        {"L": "converter.L_dc", "i_init": "0"},
+        {"L": "dc_bus.L_dc", "i_init": "0"},
         direction="left",
     )
     sch.component(
         "Capacitor",
         "C_dc",
         (X_DC, y_c),
-        {"C": "converter.C_dc", "v_init": "converter.u_dc"},
+        {"C": "dc_bus.C_dc", "v_init": "dc_bus.u_dc0"},
         direction="up",
         label="west",
     )

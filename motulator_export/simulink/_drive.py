@@ -25,14 +25,16 @@ from motulator_export.simulink._sfunction import SFunction
 
 def check_supported_converter(mdl: Drive) -> None:
     """
-    Raise an error if the converter is not supported.
+    Raise an error if the converter or the DC bus is not supported.
 
-    The dead time is not modeled in the system model, but its compensation in the
-    control system is supported.
+    Only the stiff DC bus (no DC-bus model) is supported. The dead time is not modeled
+    in the system model, but its compensation in the control system is supported.
 
     """
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
+    if mdl.dc_bus is not None:
+        raise NotImplementedError("DC-bus model not supported, only a stiff DC bus")
     if cast(CarrierComparison, mdl.pwm).t_d != 0:
         raise NotImplementedError("Dead time not supported in the system model")
 

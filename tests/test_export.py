@@ -10,7 +10,7 @@ Run from the repository root:
 
 # %%
 import re
-from math import inf
+from math import inf, pi
 from pathlib import Path
 from typing import Any
 
@@ -118,13 +118,27 @@ def test_load_torque_steps(several: bool) -> None:
         assert sch.connections[(("tau_L", 1), "Signal")] == load
 
 
-def _drive(sm: bool) -> tuple[Any, Any, dict[str, float]]:
-    """Drive with carrier comparison, its control system, and its speed controller."""
+def _drive(sm: bool, dc_bus: str = "") -> tuple[Any, Any, dict[str, float]]:
+    """
+    Drive with carrier comparison, its control system, and its speed controller. The
+    DC bus is stiff, or a capacitor (`dc_bus` "capacitor") or a diode bridge with LC
+    ("diode") feeding the converter.
+    """
     if sm:
         mdl, ctrl = sm_system(True, 0.0)[0]()
     else:
         mdl, ctrl = im_system(True, 0.0, 0.0)[0]()
-    drive = model.Drive(mdl.machine, mdl.mechanics, mdl.converter, pwm=True)
+    converter = mdl.converter
+    bus = None
+    if dc_bus:
+        converter = model.VoltageSourceConverter()
+        if dc_bus == "diode":
+            bus = model.DiodeBridgeDCBus(
+                C_dc=235e-6, L_dc=2e-3, U_g=400, f_g=50, converters=[converter]
+            )
+        else:
+            bus = model.DCBus(C_dc=235e-6, u_dc=540, converters=[converter])
+    drive = model.Drive(mdl.machine, mdl.mechanics, converter, pwm=True, dc_bus=bus)
     return drive, ctrl, SM_SPEED if sm else IM_SPEED
 
 
@@ -135,9 +149,10 @@ def test_initial_mechanics(tmp_path: Path) -> None:
     """The initial speed and angle of the mechanics should be exported."""
     mdl, ctrl, speed = _drive(sm=True)
     mdl.mechanics.state.w_M = 50.0 + 0j
-    mdl.mechanics.state.exp_j_theta_M = np.exp(0.25j)
-    # The rotor angle of the machine model corresponds to that of the mechanics
-    mdl.machine.state.exp_j_theta_m = np.exp(0.25j * mdl.machine.par.n_p)
+    mdl.mechanics.state.theta_M = 0.25 + 0j
+    # The rotor angle of the machine model corresponds to that of the mechanics,
+    # modulo 2*pi
+    mdl.machine.state.theta_m = complex(0.25 * mdl.machine.par.n_p - 2 * pi)
     plecs.sm.write_model(tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, speed)
     simulink.sm.write_model(tmp_path / "drive.slx", mdl, ctrl, *DRIVE_REFS, speed)
     model_plecs = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
@@ -158,12 +173,10 @@ def test_unsupported_initial_states(tmp_path: Path, case: str) -> None:
         if case == "sm_flux":
             mdl.machine.state.psi_s_dq = 0.4 + 0.1j
         elif case == "sm_angle":  # Not n_p times the angle of the mechanics
-            mdl.mechanics.state.exp_j_theta_M = 1j
+            mdl.mechanics.state.theta_M = complex(0.5 * pi)
         else:
             mdl.machine.state.psi_r_ab = 0.1 + 0j
-        match = {"sm_flux": "psi_s_dq", "sm_angle": "exp_j_theta_m"}.get(
-            case, "psi_r_ab"
-        )
+        match = {"sm_flux": "psi_s_dq", "sm_angle": "theta_m"}.get(case, "psi_r_ab")
         for tool, path in ((plecs, "drive.plecs"), (simulink, "drive.slx")):
             module = tool.sm if case.startswith("sm") else tool.im
             with pytest.raises(NotImplementedError, match=match):
@@ -217,6 +230,66 @@ def test_non_finite_states(tmp_path: Path, case: str) -> None:
         for tool, path in ((plecs, "drive.plecs"), (simulink, "drive.slx")):
             with pytest.raises(ValueError, match=f"{match} is not finite"):
                 tool.sm.write_model(tmp_path / path, mdl, ctrl, *DRIVE_REFS, speed)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("sm", [True, False], ids=["sm", "im"])
+@pytest.mark.parametrize("dc_bus", ["capacitor", "diode"])
+def test_dc_bus(tmp_path: Path, sm: bool, dc_bus: str) -> None:
+    """The DC-bus models of the drives should be exported to PLECS, starting from the
+    DC-bus voltage of their state, and rejected in Simulink (only a stiff DC bus)."""
+    mdl, ctrl, speed = _drive(sm, dc_bus)
+    mdl.dc_bus.state.u_dc = 500.0 + 0j
+    module = plecs.sm if sm else plecs.im
+    module.write_model(tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, speed)
+    text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+    assert "dc_bus.u_dc0 = 500;" in text
+    assert '"dc_bus.C_dc"' in text and "converter.u_dc" not in text
+    assert ('"dc_bus.L_dc"' in text) == (dc_bus == "diode")
+    module = simulink.sm if sm else simulink.im
+    with pytest.raises(NotImplementedError, match="DC-bus model"):
+        module.write_model(tmp_path / "drive.slx", mdl, ctrl, *DRIVE_REFS, speed)
+    assert not (tmp_path / "drive.slx").exists()
+
+
+@pytest.mark.parametrize("case", ["shared", "external_current", "inductor_current"])
+def test_unsupported_dc_bus(tmp_path: Path, case: str) -> None:
+    """The DC bus should feed only the converter of the drive, without an external
+    current, and the states of the diode bridge should be at their initial values."""
+    mdl, ctrl, speed = _drive(True, "diode" if case == "inductor_current" else "cap")
+    if case == "shared":  # E.g., with an active front end
+        mdl.dc_bus.converters.append(model.VoltageSourceConverter())
+        match = "shared"
+    elif case == "external_current":
+        mdl.dc_bus.set_external_dc_current(1.0)
+        match = "External DC current"
+    else:
+        mdl.dc_bus.state.i_L = 1.0 + 0j
+        match = "i_L"
+    with pytest.raises(NotImplementedError, match=match):
+        plecs.sm.write_model(tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, speed)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+def test_unsupported_grid_dc_bus(tmp_path: Path) -> None:
+    """Only the stiff DC bus is supported in the grid converter systems."""
+    ctrl = gfl_system()[0]()[1]
+    ref = _grid_model(lcl=True)
+    converter = grid_model.VoltageSourceConverter()
+    dc_bus = grid_model.DCBus(C_dc=1e-3, u_dc=650, converters=[converter])
+    mdl = grid_model.GridConverterSystem(
+        converter, ref.ac_filter, ref.ac_source, pwm=True, dc_bus=dc_bus
+    )
+    for tool, path in ((plecs, "grid.plecs"), (simulink, "grid.slx")):
+        with pytest.raises(NotImplementedError, match="DC-bus model"):
+            tool.grid.write_model(
+                tmp_path / path,
+                mdl,
+                ctrl,
+                0.1,
+                StepSignal(0.02, 5e3),
+                q_g_ref=StepSignal(0.04, 4e3),
+            )
     assert not list(tmp_path.iterdir())  # Nothing is written
 
 

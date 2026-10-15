@@ -19,8 +19,9 @@ Currently supported:
   mode, with the active power reference given as a step and a constant converter
   voltage reference
 - Converter: carrier comparison (`pwm=True`) with the Symmetrical PWM block and the
-  ideal two-level converter of PLECS, a stiff DC bus (`VoltageSourceConverter`), and
-  the computational delay of one sampling period as a PLECS Delay block
+  ideal two-level converter of PLECS, a stiff DC bus (`VoltageSourceConverter`
+  without a DC-bus model), and the computational delay of one sampling period as a
+  PLECS Delay block
 - AC filter: LCL filter (`LCLFilter`) without resistances and grid impedance, or L
   filter (`LFilter`) with its series resistance and the grid inductance
 - Grid: balanced three-phase voltage source (`ThreePhaseSource`) with constant
@@ -77,6 +78,8 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
     """Raise an error if the system model is not supported."""
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
+    if mdl.dc_bus is not None:
+        raise NotImplementedError("DC-bus model not supported, only a stiff DC bus")
     f = mdl.ac_filter
     sensors = (mdl.converter.u_dc_sensor, f.i_c_sensor, f.u_g_sensor)
     if any(sensor is not None for sensor in sensors):
@@ -460,7 +463,7 @@ def write_model(
     _add_pwm(sch, T_s)
     sch.dx = DC_DX  # Space for the DC bus
     _add_converter(sch)
-    _add_dc_bus(sch, mdl.converter)
+    _add_dc_bus(sch, None)
     if lcl:
         _add_lcl_filter_and_grid(sch)
     else:

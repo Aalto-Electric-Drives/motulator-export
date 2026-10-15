@@ -22,11 +22,12 @@ Currently supported:
 - Mechanical system (`MechanicalSystem` without friction), with PLECS blocks
 - Converter: carrier comparison (`pwm=True` in `Drive`) with the Symmetrical PWM
   block and the ideal two-level converter of PLECS. The DC bus is stiff
-  (`VoltageSourceConverter`), capacitive (`CapacitiveDCBusConverter` without an
-  external DC current), or fed by a diode bridge with a DC-bus inductor and
-  capacitor (`FrequencyConverter`). The computational delay of one sampling period
-  is a PLECS Delay block. The dead time (`t_d` with `sign=np.sign`) is modeled as
-  in `motulator_export.plecs.im`.
+  (`VoltageSourceConverter` without a DC-bus model), capacitive (`DCBus`), or fed by
+  a diode bridge with a DC-bus inductor and capacitor (`DiodeBridgeDCBus`). The
+  DC-bus model feeds only the converter of the drive, without an external DC
+  current, and the capacitor voltage starts from the state of the model. The
+  computational delay of one sampling period is a PLECS Delay block. The dead time
+  (`t_d` with `sign=np.sign`) is modeled as in `motulator_export.plecs.im`.
 - Flux-vector control (`FluxVectorController`) in the sensorless or sensored mode,
   with `SynchronousMachinePars` or `SaturatedSynchronousMachinePars` (GradNet flux
   map), and a speed controller (`SpeedController`) in `VectorControlSystem`, with
@@ -42,7 +43,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
-from motulator.common.model._converter import FrequencyConverter
+from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._sm_flux_vector import (
@@ -568,11 +569,11 @@ def write_model(
         _add_blanking_time(sch)
     # The blanking time, the diode bridge, and its grid need space between the PWM and
     # the DC bus
-    sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
+    sch.dx = 320 if isinstance(mdl.dc_bus, DiodeBridgeDCBus) else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
     sch.dx += DC_DX
     _add_converter(sch, t_d)
-    _add_dc_bus(sch, mdl.converter)
+    _add_dc_bus(sch, mdl.dc_bus)
     if gradnet_plant:
         _add_gradnet_machine(sch)
     else:
