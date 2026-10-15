@@ -38,7 +38,7 @@ from motulator_export.plecs import (
     im,
     sm,
 )
-from motulator_export.plecs._common import ControlBlock
+from motulator_export.plecs._common import MONITOR, ControlBlock
 from motulator_export.plecs._control import VALUES
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
 from motulator_export.simulink._common import write_script
@@ -46,7 +46,7 @@ from motulator_export.simulink._mfunction import (
     block_mfunction,
     reference_luts_mfunction,
 )
-from motulator_export.simulink._render import wrapper
+from motulator_export.simulink._render import netlist_rows, with_signals, wrapper
 from tests.c_port import arr
 from tests.matlab import block_params
 from tests.netlist import Netlist
@@ -223,12 +223,9 @@ class Harnesses:
         self.tmp = tmp
         self.models: dict[str, Path] = {}
 
-    def simulate(
-        self, key: str, init: str, inputs: np.ndarray, T_s: float
-    ) -> np.ndarray:
-        """Simulate the control system with the initialization and the inputs."""
-        import matlab  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
-
+    def build(self, key: str, init: str) -> Path:
+        """The harness model of the control system, built with the initialization
+        when needed."""
         name = f"harness_{key}"
         if key not in self.models:
             folder = self.tmp.mktemp(key)
@@ -245,7 +242,24 @@ class Harnesses:
             )  # fmt: skip
             self.eng.run(str(script), nargout=0)
             self.models[key] = path
-        path = self.models[key]
+        return self.models[key]
+
+    def lines(self, key: str) -> set[tuple[str, ...]]:
+        """Connections of the lines in the control system of the built harness model
+        (system, source, destination), see `model_lines.m`."""
+        name = f"harness_{key}"
+        self.eng.load_system(str(self.models[key]), nargout=0)
+        rows = self.eng.model_lines(f"{name}/Control system")
+        return {tuple(row.split("|")) for row in rows}
+
+    def simulate(
+        self, key: str, init: str, inputs: np.ndarray, T_s: float
+    ) -> np.ndarray:
+        """Simulate the control system with the initialization and the inputs."""
+        import matlab  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+        name = f"harness_{key}"
+        path = self.build(key, init)
         path.with_name(f"init_{name}.m").write_text(init, encoding="utf-8")
         self.eng.eval(f"clear('init_{name}');", nargout=0)
         # The input of the sampling instant k at (k - 0.5)*T_s (k > 0), so that the
@@ -294,6 +308,25 @@ def replay(
         net.sfun_step(arr(u), y)
         out[k] = y
     return out
+
+
+@pytest.mark.parametrize(
+    "name", ["fvc_sensorless", "cvc_sensorless", f"vhz_{VHZ_IDS[0]}", "gfl", "gfm"]
+)
+def test_model_lines(harnesses: Harnesses, name: str) -> None:
+    """
+    The lines of the control system built in Simulink should connect the ports of the
+    netlist. The lines are drawn through the points of the layout, so a block whose
+    size differs from that of the layout (e.g., a MATLAB Function block resized by
+    Simulink) could make a line start from another port.
+    """
+    key, values, flux_map, _, _ = case(name)
+    harnesses.build(key, init_script(key, values, flux_map))
+    block, _ = SYSTEMS[key]
+    rows = netlist_rows(with_signals(block.netlist(), MONITOR), code="matlab")
+    expected = {(path, src, dst) for path, src, dst, _ in rows["lines"]}
+    assert len(expected) == len(rows["lines"])
+    assert harnesses.lines(key) == expected
 
 
 @pytest.mark.parametrize("name", CASES)
