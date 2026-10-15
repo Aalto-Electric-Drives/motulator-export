@@ -46,21 +46,21 @@ The scripts close the model in PLECS before simulating it, since an open model i
 
 ## Agreement of the PLECS models with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.11.0 and PLECS 5.0 (2026-10-13).
+Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.12.0 and PLECS 5.0 (2026-10-15).
 *motulator* uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
 | Script                           | System model                               | Control system                                               |
 | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc.py`               | w_M 9.8e-7, tau_M 2.1e-6, i_s_ab 1.0e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
-| `ipmsm_2kw_fvc.py --diode`       | w_M 9.3e-6, tau_M 7.0e-6, i_s_ab 3.0e-6    | w_M 8.6e-6, tau_M 7.0e-6, tau_M_ref 7.1e-6, psi_s_ref 1.9e-8 |
-| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.2e-4, tau_M 2.0e-3, i_s_ab 7.4e-4    |                                                              |
-| `im_2kw_cvc.py`                  | w_M 6.5e-7, tau_M 2.3e-6, i_s_ab 7.6e-7    | w_M 4.2e-6, tau_M 2.5e-6, tau_M_ref 3.1e-6, psi_R 3.0e-8     |
-| `im_2kw_dead_time_cvc.py`        | w_M 0.24, tau_M 0.74, i_s_ab 0.44          | w_M 1.3, tau_M 0.88, tau_M_ref 1.0, psi_R 6.8e-3             |
-| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.10, tau_M 0.26, i_s_ab 0.11          | w_M 0.42, tau_M 0.25, tau_M_ref 0.31, psi_R 2.8e-3           |
+| `ipmsm_2kw_fvc.py`               | w_M 9.3e-7, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
+| `ipmsm_2kw_fvc.py --diode`       | w_M 9.2e-6, tau_M 7.2e-6, i_s_ab 3.1e-6    | w_M 9.1e-6, tau_M 7.2e-6, tau_M_ref 7.4e-6, psi_s_ref 1.9e-8 |
+| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.2e-4, tau_M 2.0e-3, i_s_ab 7.3e-4    |                                                              |
+| `im_2kw_cvc.py`                  | w_M 6.5e-7, tau_M 2.4e-6, i_s_ab 9.7e-7    | w_M 4.3e-6, tau_M 3.1e-6, tau_M_ref 3.3e-6, psi_R 3.2e-8     |
+| `im_2kw_dead_time_cvc.py`        | w_M 0.23, tau_M 0.74, i_s_ab 0.44          | w_M 1.3, tau_M 0.88, tau_M_ref 1.0, psi_R 6.8e-3             |
+| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.10, tau_M 0.25, i_s_ab 0.11          | w_M 0.41, tau_M 0.25, tau_M_ref 0.31, psi_R 2.8e-3           |
 | `im_2kw_vhz.py`                  | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
 | `im_2kw_vhz.py --open-loop`      | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 2.2e-16                   |
-| `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
+| `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.1e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
 | `gfm_13kva_do.py`                | i_c_ab 1.2e-6, i_c_a 1.2e-6                | p_g 4.9e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 0                |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
