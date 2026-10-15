@@ -35,5 +35,6 @@ The files are collections of functions: the generator `../simulink/_mfunction.py
 They agree to about 1e-14 relative to the signal magnitudes (often exactly for hundreds of steps).
 In the vector control of the drives, the replayed inputs amplify the rounding errors exponentially (the observers see the voltages of the control system itself, but the recorded currents do not respond to them; in sensorless current-vector control, already from the start with zero flux), so each output is compared within its sensitivity, which the S-functions show with the inputs perturbed at the level of the rounding errors, until the sensitivity reaches 1e-6 relative to its magnitude.
 The differences stay below 1e-3 of the tolerances.
+The test also checks that the lines of the built models connect the ports of the netlists (`tests/model_lines.m`), since the lines are drawn through the points of the layout.
 The test needs MATLAB with the MATLAB Engine API for Python, so it is skipped in GitHub Actions; the C port is tested there against *motulator* step by step.
 The example scripts with `--matlab` (e.g., `python examples/ipmsm_2kw_fvc_simulink.py --matlab`) compare the closed-loop simulations with *motulator*.

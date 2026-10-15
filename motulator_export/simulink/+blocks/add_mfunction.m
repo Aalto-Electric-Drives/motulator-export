@@ -33,4 +33,8 @@ outputs = outputs(order);
 for k = 1:numel(widths)
     outputs(k).Props.Array.Size = num2str(widths(k));
 end
+% Simulink resizes the block when its code is set (by an amount depending on the
+% code), so its size is restored to that of the layout, at which the blocks are
+% aligned and the lines routed (a line starting at another port joins its line)
+set_param(blk, 'Position', pos);
 end
