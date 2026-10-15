@@ -89,12 +89,12 @@ The synchronous machine with a GradNet current map is a MATLAB Function block to
 
 ## Agreement with *motulator*
 
-Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.11.0 and MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2), at the level of the PLECS models (cf. [examples/README.md](../../examples/README.md)).
+Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.12.0 and MATLAB R2026a with the MinGW-w64 compiler add-on (gcc 14.2), at the level of the PLECS models (cf. [examples/README.md](../../examples/README.md)).
 
 | Script                               | System model                               | Control system                                               |
 | ------------------------------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc_simulink.py`          | w_M 1.1e-6, tau_M 2.3e-6, i_s_ab 9.9e-7    | w_M 3.4e-6, tau_M 2.3e-6, tau_M_ref 2.5e-6, psi_s_ref 1.1e-8 |
-| `im_2kw_cvc_simulink.py`             | w_M 6.2e-7, tau_M 2.1e-6, i_s_ab 8.4e-7    | w_M 3.9e-6, tau_M 2.5e-6, tau_M_ref 2.9e-6, psi_R 2.7e-8     |
+| `ipmsm_2kw_fvc_simulink.py`          | w_M 1.2e-6, tau_M 2.0e-6, i_s_ab 1.4e-6    | w_M 3.0e-6, tau_M 2.0e-6, tau_M_ref 2.2e-6, psi_s_ref 8.1e-9 |
+| `im_2kw_cvc_simulink.py`             | w_M 6.5e-7, tau_M 2.5e-6, i_s_ab 1.1e-6    | w_M 4.6e-6, tau_M 3.3e-6, tau_M_ref 3.5e-6, psi_R 3.2e-8     |
 | `im_2kw_vhz_simulink.py`             | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
 | `im_2kw_vhz_simulink.py --open-loop` | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 4.4e-16                   |
 | `pmsyrm_6kw_gn_fvc_simulink.py`      | w_M 4.3e-4, tau_M 2.0e-3, i_s_ab 7.3e-4    |                                                              |
