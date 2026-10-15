@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
-from motulator.common.model._converter import FrequencyConverter
+from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import CurrentVectorController
@@ -293,11 +293,11 @@ def write_model(
         _add_blanking_time(sch)
     # The blanking time, the diode bridge, and its grid need space between the PWM and
     # the DC bus
-    sch.dx = 320 if isinstance(mdl.converter, FrequencyConverter) else 0
+    sch.dx = 320 if isinstance(mdl.dc_bus, DiodeBridgeDCBus) else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
     sch.dx += DC_DX
     _add_converter(sch, t_d)
-    _add_dc_bus(sch, mdl.converter)
+    _add_dc_bus(sch, mdl.dc_bus)
     _add_im(sch)
     for k in range(3):
         sch.wire(("Converter", k + 1), ("Machine", k + 1))

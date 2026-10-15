@@ -25,7 +25,7 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 
 ## Requirements
 
-- Python 3.12 or later. The package installs *motulator* 0.11.0 or later.
+- Python 3.12 or later. The package installs *motulator* 0.12.0 or a later 0.12 release.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
 - **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks (`code="matlab"`) need no C compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 
@@ -134,7 +134,7 @@ The [examples](examples/) build the systems of the *motulator* examples, write t
 | Grid-following control with an LCL filter (without resistances and grid impedance)                      |  yes  |   yes    |
 | Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |   yes    |
 | Stiff DC bus                                                                                            |  yes  |   yes    |
-| Capacitive or diode-bridge-fed DC bus                                                                   |  yes  |    no    |
+| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     |  yes  |    no    |
 | Dead time of the converter in the system model (drives)                                                 |  yes  |    no    |
 | Dead-time compensation in the control system (drives)                                                   |  yes  |   yes    |
 

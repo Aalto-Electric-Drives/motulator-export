@@ -38,7 +38,7 @@ The scripts close the model in PLECS before simulating it, since an open model i
 - The synchronous machine is the PLECS permanent-magnet synchronous machine (`SynchronousMachinePars`) or a subsystem that looks like it (`SpatialSaturatedSynchronousMachinePars` with a GradNet current map with spatial harmonics): inside, a C-Script block computes the currents and the torque from the flux linkage, and they are injected with controlled current and torque sources.
 - The induction machine is the PLECS squirrel-cage induction machine, parametrized as the T model with zero rotor leakage inductance, which is identical to the inverse-Γ model of *motulator*.
 - The initial speed and angle of the machine (or of the inertia, and the angle sensor of the GradNet machine) are those of the mechanics of *motulator* (`mechanics.w_M0` and `mechanics.theta_M0` of the initialization commands).
-- The DC bus is a DC voltage source, a capacitor, or a diode bridge fed by the grid with a DC-bus inductor and capacitor (`FrequencyConverter`, zero grid inductance).
+- The DC bus is a DC voltage source (without a DC-bus model), a capacitor (`DCBus`), or a diode bridge fed by the grid with a DC-bus inductor and capacitor (`DiodeBridgeDCBus`, zero grid inductance). The DC-bus model feeds only the converter of the drive, and its capacitor voltage starts from the state of the model.
 - The AC filter of the grid converter is an LCL filter or an L filter with its series resistance and the grid inductance (`LFilter`), with the grid as three AC voltage sources.
 - The circuits are not grounded: as in the space-vector models of *motulator*, there is no zero-sequence path (grounding both the DC bus and the grid neutral would let the common-mode voltage of the converter drive a zero-sequence current).
 - Voltmeters and ammeters are used only for the signals fed back to the control system. The AC voltages are measured line to line (u_ab and u_bc), as in practice. The other signals, e.g., the inductor currents shown in the scope, are measured with PLECS probes.
@@ -46,21 +46,21 @@ The scripts close the model in PLECS before simulating it, since an open model i
 
 ## Agreement of the PLECS models with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.11.0 and PLECS 5.0 (2026-10-13).
+Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.12.0 and PLECS 5.0 (2026-10-15).
 *motulator* uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
 | Script                           | System model                               | Control system                                               |
 | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc.py`               | w_M 9.8e-7, tau_M 2.1e-6, i_s_ab 1.0e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
-| `ipmsm_2kw_fvc.py --diode`       | w_M 9.3e-6, tau_M 7.0e-6, i_s_ab 3.0e-6    | w_M 8.6e-6, tau_M 7.0e-6, tau_M_ref 7.1e-6, psi_s_ref 1.9e-8 |
-| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.2e-4, tau_M 2.0e-3, i_s_ab 7.4e-4    |                                                              |
-| `im_2kw_cvc.py`                  | w_M 6.5e-7, tau_M 2.3e-6, i_s_ab 7.6e-7    | w_M 4.2e-6, tau_M 2.5e-6, tau_M_ref 3.1e-6, psi_R 3.0e-8     |
-| `im_2kw_dead_time_cvc.py`        | w_M 0.24, tau_M 0.74, i_s_ab 0.44          | w_M 1.3, tau_M 0.88, tau_M_ref 1.0, psi_R 6.8e-3             |
-| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.10, tau_M 0.26, i_s_ab 0.11          | w_M 0.42, tau_M 0.25, tau_M_ref 0.31, psi_R 2.8e-3           |
+| `ipmsm_2kw_fvc.py`               | w_M 9.3e-7, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
+| `ipmsm_2kw_fvc.py --diode`       | w_M 9.2e-6, tau_M 7.2e-6, i_s_ab 3.1e-6    | w_M 9.1e-6, tau_M 7.2e-6, tau_M_ref 7.4e-6, psi_s_ref 1.9e-8 |
+| `pmsyrm_6kw_gn_fvc.py`           | w_M 4.2e-4, tau_M 2.0e-3, i_s_ab 7.3e-4    |                                                              |
+| `im_2kw_cvc.py`                  | w_M 6.5e-7, tau_M 2.4e-6, i_s_ab 9.7e-7    | w_M 4.3e-6, tau_M 3.1e-6, tau_M_ref 3.3e-6, psi_R 3.2e-8     |
+| `im_2kw_dead_time_cvc.py`        | w_M 0.23, tau_M 0.74, i_s_ab 0.44          | w_M 1.3, tau_M 0.88, tau_M_ref 1.0, psi_R 6.8e-3             |
+| `im_2kw_dead_time_cvc.py --tanh` | w_M 0.10, tau_M 0.25, i_s_ab 0.11          | w_M 0.41, tau_M 0.25, tau_M_ref 0.31, psi_R 2.8e-3           |
 | `im_2kw_vhz.py`                  | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
 | `im_2kw_vhz.py --open-loop`      | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 2.2e-16                   |
-| `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
+| `gfl_10kva_lcl.py`               | i_c_ab 3.1e-6, i_g_ab 2.1e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 1.2e-12                   |
 | `gfm_13kva_do.py`                | i_c_ab 1.2e-6, i_c_a 1.2e-6                | p_g 4.9e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 0                |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).

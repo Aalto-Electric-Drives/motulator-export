@@ -8,11 +8,13 @@ from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import (
-    CapacitiveDCBusConverter,
-    FrequencyConverter,
+    DCBus,
+    DiodeBridgeDCBus,
+    DiodeBridgeDCBusStates,
     VoltageSourceConverter,
 )
 from motulator.common.model._pwm import CarrierComparison
+from motulator.common.utils._utils import wrap
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._common import SpeedController
 from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
@@ -34,7 +36,8 @@ MDL_OUTPUTS = ["i_a", "i_b", "i_c", "w_M", "theta_M", "tau_M"]
 
 def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
     """
-    Raise an error if the mechanics, the converter, or the PWM is not supported.
+    Raise an error if the mechanics, the converter, the DC bus, or the PWM is not
+    supported.
 
     The dead time of the carrier comparison (`mdl.pwm.t_d`, by default that of the
     converter) is supported only if `dead_time` is True, and only with the
@@ -45,14 +48,10 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
         raise NotImplementedError("Only MechanicalSystem without friction supported")
     if mdl.lc_filter is not None:
         raise NotImplementedError("LC filter not supported")
-    if type(mdl.converter) not in (
-        VoltageSourceConverter,
-        CapacitiveDCBusConverter,
-        FrequencyConverter,
-    ):
-        raise NotImplementedError("Converter not supported")
-    if mdl.converter.inp.i_dc is not None:
-        raise NotImplementedError("External DC current not supported")
+    if type(mdl.converter) is not VoltageSourceConverter:
+        raise NotImplementedError("Only VoltageSourceConverter supported")
+    if mdl.dc_bus is not None:
+        _check_supported_dc_bus(mdl.dc_bus, mdl.converter)
     if mdl.machine.i_s_sensor is not None or mdl.converter.u_dc_sensor is not None:
         raise NotImplementedError("Sensor models not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
@@ -67,29 +66,43 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
     _check_initial_drive_states(mdl)
 
 
+def _check_supported_dc_bus(dc_bus: DCBus, converter: VoltageSourceConverter) -> None:
+    """
+    Raise an error if the DC bus is not supported: it must feed only the converter of
+    the drive (e.g., not an active front end), without an external DC current.
+    """
+    if type(dc_bus) not in (DCBus, DiodeBridgeDCBus):
+        raise NotImplementedError("Only DCBus and DiodeBridgeDCBus supported")
+    if dc_bus.converters != [converter]:
+        raise NotImplementedError("DC bus shared with other converters not supported")
+    if dc_bus.inp.i_dc is not None:
+        raise NotImplementedError("External DC current not supported")
+
+
 def _check_initial_drive_states(mdl: Drive) -> None:
     """
     Raise an error if a state of the drive (other than the speed and the angle of
-    the mechanics, which are exported) is not at its initial value. The synchronous
-    machine model has its own rotor angle, which must be n_p times that of the
-    mechanics, as in the exported models.
+    the mechanics and the DC-bus voltage, which are exported) is not at its initial
+    value. The synchronous machine model has its own rotor angle, which must be n_p
+    times that of the mechanics (modulo 2*pi), as in the exported models.
     """
     machine = mdl.machine
     mech = cast(MechanicalSystem, mdl.mechanics).state
     exported = [
         ("mechanics.state.w_M", mech.w_M),
-        ("mechanics.state.exp_j_theta_M", mech.exp_j_theta_M),
+        ("mechanics.state.theta_M", mech.theta_M),
     ]
     states: list[tuple[str, complex, complex]]
     if isinstance(machine, SynchronousMachine):
-        theta_M0 = np.angle(mech.exp_j_theta_M)
-        exp_j_theta_m0 = np.exp(1j * machine.par.n_p * theta_M0)
+        # The angle n_p*theta_M closest to the angle of the machine model
+        theta_m = machine.state.theta_m.real
+        theta_m0 = theta_m - wrap(theta_m - machine.par.n_p * mech.theta_M.real)
         states = [
             ("machine.state.psi_s_dq", machine.state.psi_s_dq, machine.par.psi_f),
             (
-                "machine.state.exp_j_theta_m (n_p times the angle of the mechanics)",
-                machine.state.exp_j_theta_m,
-                exp_j_theta_m0,
+                "machine.state.theta_m (n_p times the angle of the mechanics)",
+                theta_m,
+                theta_m0,
             ),
         ]
     else:
@@ -97,12 +110,13 @@ def _check_initial_drive_states(mdl: Drive) -> None:
             ("machine.state.psi_s_ab", machine.state.psi_s_ab, 0j),
             ("machine.state.psi_r_ab", machine.state.psi_r_ab, 0j),
         ]
-    conv = mdl.converter
-    if isinstance(conv, (CapacitiveDCBusConverter, FrequencyConverter)):
-        states.append(("converter.state.u_dc", conv.state.u_dc, conv.u_dc))
-    if isinstance(conv, FrequencyConverter):
-        states.append(("converter.state.i_L", conv.state.i_L, 0j))
-        states.append(("converter.state.exp_j_theta_g", conv.state.exp_j_theta_g, 1))
+    dc_bus = mdl.dc_bus
+    if dc_bus is not None:
+        exported.append(("dc_bus.state.u_dc", dc_bus.state.u_dc))
+    if isinstance(dc_bus, DiodeBridgeDCBus):
+        bridge = cast(DiodeBridgeDCBusStates, dc_bus.state)
+        states.append(("dc_bus.state.i_L", bridge.i_L, 0j))
+        states.append(("dc_bus.state.exp_j_theta_g", bridge.exp_j_theta_g, 1))
     _check_initial_states(states, exported)
 
 
@@ -150,24 +164,27 @@ def speed_ctrl_values(
 def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     """
     Get the workspace variables of the mechanics (with the initial speed and angle
-    of its state) and the converter.
+    of its state), the converter, and the DC bus (with the initial voltage of its
+    state).
     """
-    conv = mdl.converter
     mech = cast(MechanicalSystem, mdl.mechanics)
     variables: list[tuple[str, Any]] = [
         ("mechanics.J", mech.J),
         ("mechanics.w_M0", float(mech.state.w_M.real)),
-        ("mechanics.theta_M0", float(np.angle(mech.state.exp_j_theta_M))),
-        ("converter.u_dc", conv.u_dc),
+        ("mechanics.theta_M0", float(wrap(mech.state.theta_M.real))),
     ]
-    if isinstance(conv, (CapacitiveDCBusConverter, FrequencyConverter)):
-        variables += [("converter.C_dc", conv.C_dc)]
-    if isinstance(conv, FrequencyConverter):
-        variables += [("converter.L_dc", conv.L_dc)]
-        variables += [("converter.u_g", conv.u_g), ("converter.w_g", conv.w_g)]
+    dc_bus = mdl.dc_bus
+    if dc_bus is None:
+        variables += [("converter.u_dc", mdl.converter.u_dc)]
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         variables += [("converter.t_d", t_d)]
+    if dc_bus is not None:
+        variables += [("dc_bus.C_dc", dc_bus.C_dc)]
+        variables += [("dc_bus.u_dc0", float(dc_bus.state.u_dc.real))]
+    if isinstance(dc_bus, DiodeBridgeDCBus):
+        variables += [("dc_bus.L_dc", dc_bus.L_dc)]
+        variables += [("dc_bus.u_g", dc_bus.u_g), ("dc_bus.w_g", dc_bus.w_g)]
     return variables
 
 

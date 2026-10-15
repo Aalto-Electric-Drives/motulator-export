@@ -11,7 +11,7 @@ Run from the repository root:
     python examples/ipmsm_2kw_fvc.py [--diode]
 
 With --diode, the DC bus is fed by a diode bridge with a DC-bus inductor and
-capacitor (FrequencyConverter in motulator) instead of a stiff DC voltage
+capacitor (DiodeBridgeDCBus in motulator) instead of a stiff DC voltage
 (ipmsm_2kw_fvc_diode.plecs).
 
 """
@@ -45,13 +45,19 @@ def build_system(
     par = model.SynchronousMachinePars(
         n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
     )
+    if diode:
+        converter = model.VoltageSourceConverter()
+        dc_bus = model.DiodeBridgeDCBus(
+            C_dc=235e-6, L_dc=2e-3, U_g=400, f_g=50, converters=[converter]
+        )
+    else:
+        converter, dc_bus = model.VoltageSourceConverter(u_dc=540), None
     mdl = model.Drive(
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.FrequencyConverter(C_dc=235e-6, L_dc=2e-3, U_g=400, f_g=50)
-        if diode
-        else model.VoltageSourceConverter(u_dc=540),
+        converter,
         pwm=True,
+        dc_bus=dc_bus,
     )
     mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
     cfg = control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=True)

@@ -331,7 +331,7 @@ def test_plant(dll: ctypes.CDLL) -> None:
         )
         # motulator
         machine.state.psi_s_dq = psi
-        machine.state.exp_j_theta_m = np.exp(1j * 2 * theta_M)
+        machine.state.theta_m = complex(2 * theta_M)
         machine.inp.u_s_ab, machine.inp.w_M = u_s_ab, w_M
         machine.set_outputs(0.0)
         d_psi = machine.rhs(0.0)[0]
