@@ -342,10 +342,12 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     compared within their sensitivity, which the S-functions with the inputs
     perturbed at the level of the rounding errors (relative 1e-14) show: from the
     start of the closed loop and of the sequence with `enable` (which resets the
-    state), each output is compared until its sensitivity reaches 1e-6 relative to
-    its magnitude (after which the replay is meaningless), with the tolerance of
-    RTOL plus 100 times the sensitivity (the rounding errors of the MATLAB code grow
-    as the perturbation does).
+    state), the outputs are compared until the sensitivity of any of them reaches
+    1e-6 relative to its magnitude, after which the replay is meaningless (an output
+    that does not respond to the perturbation, e.g., the torque reference at its
+    limit, does not show that the states still agree). The tolerance is RTOL plus
+    100 times the sensitivity (the rounding errors of the MATLAB code grow as the
+    perturbation does).
     """
     key, values, flux_map, run, constant = case(name)
     net, _ = compiled(key)
@@ -365,23 +367,25 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     scale = np.maximum(np.max(np.abs(expected), axis=0), 1.0)
     sensitivity = np.abs(perturbed - expected)
     n_loop = len(closed_loop)
-    compared = np.zeros(sensitivity.shape, dtype=bool)
+    compared = np.zeros(len(inputs), dtype=bool)
     for a, b in [(0, n_loop), (n_loop, len(inputs))]:
-        conditioned = sensitivity[a:b] <= 1e-6 * scale
-        compared[a:b] = np.cumprod(conditioned, axis=0).astype(bool)
+        conditioned = np.all(sensitivity[a:b] <= 1e-6 * scale, axis=1)
+        compared[a:b] = np.cumprod(conditioned).astype(bool)
         sensitivity[a:b] = np.maximum.accumulate(sensitivity[a:b], axis=0)
-    err = np.where(compared, np.abs(actual - expected), 0.0)
+    err = np.where(compared[:, None], np.abs(actual - expected), 0.0)
     tol = RTOL * scale + 100 * sensitivity
+    print(
+        f"  steps compared: {np.sum(compared[:n_loop])} of {n_loop} and "
+        f"{np.sum(compared[n_loop:])} of {len(inputs) - n_loop}"
+    )
     for j, signal in enumerate(["d_a", "d_b", "d_c", *block.signals]):
         print(
             f"  {signal}: max error {np.max(err[:, j]):.3g} (scale {scale[j]:.3g}), "
-            f"max error/tolerance {np.max(err[:, j] / tol[:, j]):.2g}, steps "
-            f"compared {np.sum(compared[:n_loop, j])} of {n_loop} and "
-            f"{np.sum(compared[n_loop:, j])} of {len(inputs) - n_loop}"
+            f"max error/tolerance {np.max(err[:, j] / tol[:, j]):.2g}"
         )
-    # The duty ratios over the sequence with enable, at least (sensorless
-    # current-vector control is sensitive already at the start, with zero flux)
-    assert np.all(np.sum(compared[n_loop:, :3], axis=0) >= 100)
+    # The sequence with enable, at least (sensorless current-vector control is
+    # sensitive already at the start of the closed loop, with zero flux)
+    assert np.sum(compared[n_loop:]) >= 100
     assert np.all(err <= tol)
 
 
