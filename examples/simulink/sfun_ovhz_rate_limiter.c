@@ -41,14 +41,11 @@ static RateLimiter self;
 static double T_s; /* Sampling period */
 static double y;
 
-/* Initial state, restored while the block is disabled */
-static RateLimiter self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1};
-static const int FEEDTHROUGH[] = {1, 1};
+static const int INPUT_WIDTHS[] = {1};
+static const int FEEDTHROUGH[] = {1};
 static const int OUTPUT_WIDTHS[] = {1};
-#define NUM_INPUTS 2
+#define NUM_INPUTS 1
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 2
 
@@ -113,22 +110,12 @@ static void mdlStart(SimStruct *S)
     }
     rate_limiter_init(&self, P(0, 0));
     T_s = P(1, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
-    y = rate_limiter_compute_output(&self, T_s, InputSignal(1, 0));
+    y = rate_limiter_compute_output(&self, T_s, InputSignal(0, 0));
     OutputSignal(0, 0) = y;
 }
 
@@ -136,12 +123,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     rate_limiter_update(&self, y);
 }
 

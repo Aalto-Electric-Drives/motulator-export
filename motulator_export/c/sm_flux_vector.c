@@ -348,6 +348,18 @@ static void flux_vector_ctrl_compute_output(FluxVectorController *self,
                                                ref->tau_M, fbk);
 }
 
+static void flux_vector_ctrl_compute_standby_output(FluxVectorController *self,
+                                                    const ObserverOutputs *fbk,
+                                                    References *ref)
+{
+    /* The flux and torque controller tracks the estimated flux and torque */
+    ref->T_s = self->T_s;
+    ref->tau_M = fbk->tau_M;
+    ref->psi_s = cabs(fbk->psi_s);
+    ref->u_s = flux_torque_ctrl_compute_output(&self->flux_torque_ctrl, ref->psi_s,
+                                               ref->tau_M, fbk);
+}
+
 static void flux_vector_ctrl_update(FluxVectorController *self, const References *ref,
                                     const ObserverOutputs *fbk)
 {
@@ -368,39 +380,51 @@ static void vector_control_system_init(VectorControlSystem *self,
     self->speed_ctrl = speed_ctrl;
     self->speed_ctrl.u_i = 0.0;
     self->speed_ctrl.v = 0.0;
+    self->enabled = 1;
 }
 
 static void vector_control_system_compute_output(VectorControlSystem *self,
                                                  const Measurements *meas,
-                                                 double w_M_ref)
+                                                 double w_M_ref, int enabled)
 {
     ObserverOutputs *fbk = &self->fbk;
     References *ref = &self->ref;
+    self->enabled = enabled;
 
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. */
-    double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+     * averaged over the previous and ongoing periods. With blocked gates, both are
+     * the measured voltage. */
+    double complex u_c_ab_zoh = meas->u_c_ab;
+    double complex u_c_ab = meas->u_c_ab;
+    if (enabled) {
+        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
     const SpeedFluxObserver *observer = &self->vector_ctrl.observer;
     if (self->vector_ctrl.sensorless) {
-        speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, 0.0, 0.0,
-                                           fbk);
+        speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, 0.0,
+                                           0.0, fbk);
     } else {
         /* Position error from the measured rotor angle (compute_feedback) */
         double n_p = observer->flux_observer.par.n_p;
         double theta_m = observer->flux_observer.theta_m;
         double eps = wrap(n_p * meas->theta_M - theta_m) / n_p;
-        speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, eps, 1.0,
-                                           fbk);
+        speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
+                                           1.0, fbk);
     }
-    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* Speed controller and vector controller */
-    double tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
-    flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
+    /* Speed controller and vector controller, or with blocked gates, the standby
+     * output of the vector controller */
+    if (enabled) {
+        double tau_M_ref =
+            pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
+        flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
+    } else {
+        flux_vector_ctrl_compute_standby_output(&self->vector_ctrl, fbk, ref);
+    }
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
      * k_comp*T_s*w_c */
@@ -413,9 +437,11 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
 
 static void vector_control_system_update(VectorControlSystem *self)
 {
-    pwm_update(&self->pwm, self->ref.d_abc);
+    pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
     flux_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
-    pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
+    if (self->enabled) {
+        pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
+    }
 }
 
 /* Signal vectors of the modular control system ---------------------------- */
@@ -428,6 +454,8 @@ static void measurements_pack(const Measurements *meas, double y[MEAS_WIDTH])
     y[MEAS_i_c_ab + 1] = cimag(meas->i_c_ab);
     y[MEAS_u_dc] = meas->u_dc;
     y[MEAS_theta_M] = meas->theta_M;
+    y[MEAS_u_c_ab] = creal(meas->u_c_ab);
+    y[MEAS_u_c_ab + 1] = cimag(meas->u_c_ab);
 }
 
 static void measurements_unpack(const double u[MEAS_WIDTH], Measurements *meas)
@@ -435,6 +463,7 @@ static void measurements_unpack(const double u[MEAS_WIDTH], Measurements *meas)
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_dc = u[MEAS_u_dc];
     meas->theta_M = u[MEAS_theta_M];
+    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void observer_outputs_pack(const ObserverOutputs *fbk, double y[FBK_WIDTH])

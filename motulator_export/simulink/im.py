@@ -36,7 +36,6 @@ def write_model(
     tau_L: StepSignal,
     t_stop: float,
     speed_ctrl_args: dict[str, float] | None = None,
-    enable: StepSignal | float = 1.0,
     code: str = "c",
 ) -> Path:
     """
@@ -48,7 +47,7 @@ def write_model(
 
     """
     im._check_supported(mdl, ctrl)
-    check_supported_converter(mdl)
+    check_supported_converter(mdl, ctrl)
     path = Path(path)
     variables = im._plant_variables(mdl)
     if isinstance(ctrl, VHzControlSystem):
@@ -66,7 +65,7 @@ def write_model(
         )
     block = im.control_block(ctrl)
     return write_drive_model(
-        path, block, script, "im", w_M_ref, tau_L, t_stop, enable=enable, code=code
+        path, block, script, "im", w_M_ref, tau_L, t_stop, code=code
     )
 
 

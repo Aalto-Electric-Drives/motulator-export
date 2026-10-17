@@ -79,14 +79,11 @@ static FluxTorqueController self;
 static double T_s; /* Sampling period */
 static ObserverOutputs fbk;
 
-/* Initial state, restored while the block is disabled */
-static FluxTorqueController self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 2, 22};
-static const int FEEDTHROUGH[] = {1, 1, 1};
+static const int INPUT_WIDTHS[] = {2, 22};
+static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
-#define NUM_INPUTS 3
+#define NUM_INPUTS 2
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 20
 
@@ -177,28 +174,18 @@ static void mdlStart(SimStruct *S)
     flux_torque_ctrl_init(&self, par, P(0, 0), P(1, 0),
                           P(2, 0));
     T_s = P(3, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
     double fbk_u[FBK_WIDTH];
     for (int k = 0; k < FBK_WIDTH; k++) {
-        fbk_u[k] = InputSignal(2, k);
+        fbk_u[k] = InputSignal(1, k);
     }
     observer_outputs_unpack(fbk_u, &fbk);
     double complex u_s_ref =
-        flux_torque_ctrl_compute_output(&self, InputSignal(1, 0), InputSignal(1, 1), &fbk);
+        flux_torque_ctrl_compute_output(&self, InputSignal(0, 0), InputSignal(0, 1), &fbk);
     OutputSignal(0, 0) = creal(u_s_ref);
     OutputSignal(0, 1) = cimag(u_s_ref);
 }
@@ -207,12 +194,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     flux_torque_ctrl_update(&self, T_s, &fbk);
 }
 

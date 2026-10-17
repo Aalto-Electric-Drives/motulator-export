@@ -42,10 +42,10 @@
 #define U_DC_MIN 1.0
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {3, 1};
-static const int FEEDTHROUGH[] = {1, 1};
-static const int OUTPUT_WIDTHS[] = {3};
-#define NUM_INPUTS 2
+static const int INPUT_WIDTHS[] = {3, 1, 2};
+static const int FEEDTHROUGH[] = {1, 1, 1};
+static const int OUTPUT_WIDTHS[] = {5};
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 1
 
@@ -107,10 +107,14 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     UNUSED_ARG(tid);
     double i_s_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),
         InputSignal(0, 2)};
+    /* Line-to-line converter voltages u_ab and u_bc, used while the gates are
+     * blocked */
+    double u_c_line[2] = {InputSignal(2, 0), InputSignal(2, 1)};
     IMVHzMeasurements meas;
     /* Measurements, the DC-bus voltage limited to U_DC_MIN */
     meas.i_c_ab = abc2complex(i_s_abc);
     meas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);
+    meas.u_c_ab = line2complex(u_c_line);
     double y[VHZ_MEAS_WIDTH];
     im_vhz_measurements_pack(&meas, y);
     for (int k = 0; k < VHZ_MEAS_WIDTH; k++) {

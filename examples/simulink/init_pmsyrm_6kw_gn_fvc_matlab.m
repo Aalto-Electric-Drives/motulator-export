@@ -24,7 +24,7 @@ mechanics.J = 0.05;
 mechanics.w_M0 = 0;
 mechanics.theta_M0 = 0;
 converter.u_dc = 540;
-machine.psi_f = 0.41940664758134316;
+machine.psi_f = 0.41940667745392396;
 est_flux_map.in_dim = 2;
 est_flux_map.mu_dim = 2;
 est_flux_map.W = [0.23191547393798828 0.7141597270965576; -0.025929950177669525 -0.9112794399261475; -0.010305811651051044 -0.8421720862388611; 0.03868156671524048 -0.8726969361305237; 0.30549731850624084 -0.7517861723899841; -0.3793717324733734 0.014521950855851173; -0.06460209935903549 -0.008037250488996506; -0.4031597375869751 -0.05363720655441284; -0.2878606915473938 -0.7081606984138489; 0.032466739416122437 -0.048290081322193146; -0.03658173605799675 -0.004844237584620714; -0.046644821763038635 0.003735541831701994];
@@ -62,12 +62,15 @@ speed_ctrl.J = 0.05;
 speed_ctrl.alpha_s = 2*pi*4;
 speed_ctrl.alpha_i = [];
 speed_ctrl.tau_M_max = inf;
-% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,
-% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its
-% compensation, the minimum duty ratio of a switching leg, and the
-% overmodulation ('MPE' or 'MME')
+% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,
+% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if
+% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching
+% leg, the single update (1) or the double update (0) of the duty ratios,
+% and the overmodulation ('MPE' or 'MME')
 pwm.t_d = 0;
+pwm.u_th = 0;
 pwm.i_0 = 0;
 pwm.feedforward = 1;
 pwm.d_min = 0;
+pwm.single_update = 0;
 pwm.overmodulation = 'MPE';

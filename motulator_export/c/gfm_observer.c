@@ -127,31 +127,46 @@ static void gfm_control_system_init(GFMControlSystem *self,
 
 static void gfm_control_system_compute_output(GFMControlSystem *self,
                                               const GFMMeasurements *meas,
-                                              double p_g_ref, double v_c_ref)
+                                              double p_g_ref, double v_c_ref,
+                                              int enabled)
 {
     GFMFeedbacks *fbk = &self->fbk;
     GFMReferences *ref = &self->ref;
 
     /* Feedback signals from the observer, which uses the voltage of the ongoing
      * sampling period, while the control laws use the voltage averaged over the
-     * previous and ongoing periods */
-    double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
-    gfm_observer_compute_output(&self->ctrl.observer, u_c_ab, meas->i_c_ab, fbk);
-    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+     * previous and ongoing periods. With blocked gates, both are the measured
+     * voltage. */
+    double complex u_c_ab_zoh = meas->u_c_ab;
+    double complex u_c_ab = meas->u_c_ab;
+    if (enabled) {
+        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
+    gfm_observer_compute_output(&self->ctrl.observer, u_c_ab_zoh, meas->i_c_ab, fbk);
     fbk->u_c = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* References, with the limited active-power reference (PowerReferenceLimiter)
-     * and the transparent current limitation (CurrentLimiter) */
     ref->T_s = self->cfg.T_s;
-    if (self->ctrl.power_limitation) {
-        p_g_ref = power_reference_limiter_compute_output(&self->ctrl.power_limiter,
-                                                         p_g_ref);
+    if (enabled) {
+        /* References, with the limited active-power reference
+         * (PowerReferenceLimiter) and the transparent current limitation
+         * (CurrentLimiter) */
+        if (self->ctrl.power_limitation) {
+            p_g_ref = power_reference_limiter_compute_output(
+                &self->ctrl.power_limiter, p_g_ref);
+        }
+        gfm_current_reference(&self->ctrl, p_g_ref, v_c_ref, fbk, ref);
+        ref->i_c = current_limiter(self->ctrl.i_max, ref->i_c);
+        gfm_voltage_reference(&self->ctrl, fbk, ref);
+    } else {
+        /* Standby output: the voltage reference equals the estimated quasi-static
+         * converter voltage */
+        ref->p_g = fbk->p_g;
+        ref->v_c = cabs(fbk->v_c);
+        ref->i_c = fbk->i_c;
+        ref->u_c = fbk->v_c + self->ctrl.observer.R * fbk->i_c;
     }
-    gfm_current_reference(&self->ctrl, p_g_ref, v_c_ref, fbk, ref);
-    ref->i_c = current_limiter(self->ctrl.i_max, ref->i_c);
-    gfm_voltage_reference(&self->ctrl, fbk, ref);
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
      * k_comp*T_s*w_c */
@@ -164,7 +179,7 @@ static void gfm_control_system_compute_output(GFMControlSystem *self,
 static void gfm_control_system_update(GFMControlSystem *self)
 {
     double T_s = self->ref.T_s;
-    pwm_update(&self->pwm, self->ref.d_abc);
+    pwm_update(&self->pwm, T_s, self->ref.d_abc);
     gfm_observer_update(&self->ctrl.observer, T_s, &self->fbk);
     if (self->ctrl.power_limitation) {
         power_reference_limiter_update(&self->ctrl.power_limiter, T_s, self->ref.u_c,
@@ -185,12 +200,14 @@ static void gfm_measurements_pack(const GFMMeasurements *meas, double y[MEAS_WID
 {
     SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
     y[MEAS_u_dc] = meas->u_dc;
+    SET_COMPLEX(y, MEAS_u_c_ab, meas->u_c_ab);
 }
 
 static void gfm_measurements_unpack(const double u[MEAS_WIDTH], GFMMeasurements *meas)
 {
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_dc = u[MEAS_u_dc];
+    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void gfm_feedbacks_pack(const GFMFeedbacks *fbk, double y[FBK_WIDTH])

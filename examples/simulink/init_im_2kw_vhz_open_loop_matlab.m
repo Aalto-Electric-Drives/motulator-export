@@ -34,12 +34,15 @@ cfg.k_b = 0.9;
 cfg.T_s = 0.00025;
 % Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2
 slew_rate = 2*pi*60;
-% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,
-% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its
-% compensation, the minimum duty ratio of a switching leg, and the
-% overmodulation ('MPE' or 'MME')
+% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,
+% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if
+% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching
+% leg, the single update (1) or the double update (0) of the duty ratios,
+% and the overmodulation ('MPE' or 'MME')
 pwm.t_d = 0;
+pwm.u_th = 0;
 pwm.i_0 = 0;
 pwm.feedforward = 1;
 pwm.d_min = 0;
+pwm.single_update = 0;
 pwm.overmodulation = 'MME';

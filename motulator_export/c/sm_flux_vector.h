@@ -9,6 +9,7 @@
  *                                                 FluxVectorController
  *   motulator/drive/control/_base.py              DriveControlSystem,
  *                                                 VectorControlSystem
+ *   motulator/common/control/_base.py             ControlSystem (gate enable)
  *   motulator/drive/control/_common.py            FluxTorqueControllerBase,
  *                                                 SpeedController
  *
@@ -111,14 +112,20 @@ typedef struct {
     double complex i_c_ab; /* Converter current in stationary coordinates */
     double u_dc;
     double theta_M; /* Mechanical rotor angle, used only in the sensored mode */
+    double complex u_c_ab; /* Converter voltage, used only with blocked gates */
 } Measurements;
 
+/* Vector control system (VectorControlSystem). While the gates are blocked (the gate
+ * enable is zero, see ControlSystem.set_enable), the feedback voltage is the measured
+ * converter voltage, the controller computes its standby output, and the speed
+ * controller is not updated. */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     FluxVectorController vector_ctrl;
     PIController speed_ctrl;
     /* Workspace variables passed from the output to the update function */
+    int enabled; /* Gate enable */
     ObserverOutputs fbk;
     References ref;
 } VectorControlSystem;
@@ -150,9 +157,10 @@ static void vector_control_system_init(VectorControlSystem *self,
                                        SynchronousMachinePars par,
                                        const FluxVectorControllerCfg *cfg,
                                        PIController speed_ctrl);
+/* Output of the control loop, with the gate enable at the sampling instant */
 static void vector_control_system_compute_output(VectorControlSystem *self,
                                                  const Measurements *meas,
-                                                 double w_M_ref);
+                                                 double w_M_ref, int enabled);
 static void vector_control_system_update(VectorControlSystem *self);
 
 /* Signal vectors of the modular control system, in which each class is a block (see
@@ -165,7 +173,8 @@ static void vector_control_system_update(VectorControlSystem *self);
 #define MEAS_i_c_ab 0
 #define MEAS_u_dc 2
 #define MEAS_theta_M 3
-#define MEAS_WIDTH 4
+#define MEAS_u_c_ab 4
+#define MEAS_WIDTH 6
 
 #define FBK_i_s 0
 #define FBK_u_s 2

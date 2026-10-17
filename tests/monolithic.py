@@ -63,45 +63,6 @@ DUTY_RATIO_CODE = (
 )
 
 
-def enable_code(code: dict[str, str], outputs: dict[str, list[str]]) -> dict[str, str]:
-    """
-    Add the input `enable` (the first input) to the code sections of a C-Script.
-
-    While the input is not positive, the control algorithm is not run: the duty ratios
-    are 0.5 (zero voltage), the monitored signals are zero, and the state `ctrl` is
-    reset to its initial value.
-
-    """
-    match = re.search(r"^static (\w+) ctrl;$", code["Declarations"], re.M)
-    if match is None:
-        raise RuntimeError("State of the control system (ctrl) not found")
-    disabled = "if (!(InputSignal(0, 0) > 0.0)) {\n"
-    zeros = "".join(
-        f"    OutputSignal({i_out + 1}, {j}) = 0.0;\n"
-        for i_out, names in enumerate(outputs.values())
-        for j in range(len(names))
-    )
-    return code | {
-        "Declarations": code["Declarations"]
-        + "\n/* Initial state, restored while the control system is disabled */\n"
-        f"static {match.group(1)} ctrl_init;\n",
-        "StartFcn": code["StartFcn"] + "\nctrl_init = ctrl;\n",
-        "OutputFcn": "/* Disabled: zero voltage, the control algorithm is not run */\n"
-        + disabled
-        + "    for (int k = 0; k < 3; k++) {\n"
-        "        OutputSignal(0, k) = 0.5;\n"
-        "    }\n" + zeros + "    return;\n"
-        "}\n"
-        "\n" + code["OutputFcn"],
-        "UpdateFcn": "/* Disabled: reset the state */\n"
-        + disabled
-        + "    ctrl = ctrl_init;\n"
-        "    return;\n"
-        "}\n"
-        "\n" + code["UpdateFcn"],
-    }
-
-
 def parameter_checks(mask_params: list[MaskParam]) -> str:
     """C code checking that the required mask parameters are scalars."""
     return "".join(
@@ -150,9 +111,11 @@ SPEED_MASK_PARAMS = [
 TAB_PWM = "PWM (PWM)"
 PWM_MASK_PARAMS = [
     MaskParam("pwm_t_d", "t_d", TAB_PWM, "", True),
+    MaskParam("pwm_u_th", "u_th", TAB_PWM, "", True),
     MaskParam("pwm_i_0", "i_0", TAB_PWM, "", True),
     MaskParam("pwm_feedforward", "feedforward", TAB_PWM, "", True),
     MaskParam("pwm_d_min", "d_min", TAB_PWM, "", True),
+    MaskParam("pwm_single_update", "single_update", TAB_PWM, "", True),
 ]
 
 
@@ -169,13 +132,21 @@ def speed_controller_code(i: dict[str, int]) -> str:
 
 
 def pwm_code(i: dict[str, int]) -> str:
-    """C code setting the duty-ratio error model and the minimum pulses of the PWM."""
+    """
+    C code setting the duty-ratio error model, the minimum pulses, and the single
+    update of the PWM.
+    """
+    t_d, u_th, i_0, feedforward = (
+        i[f"pwm_{n}"] for n in ("t_d", "u_th", "i_0", "feedforward")
+    )
     return (
-        "/* Duty-ratio error model of the PWM (dead_time_error) */\n"
-        f"pwm_set_dead_time(&ctrl.pwm, P({i['pwm_t_d']}, 0), P({i['T_s']}, 0),\n"
-        f"                  P({i['pwm_i_0']}, 0), (int)P({i['pwm_feedforward']}, 0));\n"
+        "/* Duty-ratio error model of the PWM (InverterNonlinearity) */\n"
+        f"pwm_set_nonlinearity(&ctrl.pwm, P({t_d}, 0), P({u_th}, 0), P({i_0}, 0),\n"
+        f"                     (int)P({feedforward}, 0));\n"
         "/* Minimum duty ratio of a switching leg */\n"
         f"pwm_set_min_pulse(&ctrl.pwm, P({i['pwm_d_min']}, 0));\n"
+        "/* Single update of the duty ratios */\n"
+        f"pwm_set_single_update(&ctrl.pwm, (int)P({i['pwm_single_update']}, 0));\n"
     )
 
 
@@ -187,9 +158,12 @@ def _drive_output(meas_type: str, compute: str) -> str:
         "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
         "                     InputSignal(2, 2)};\n"
         "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
-        f"{meas_type} meas = {{abc2complex(i_s_abc), u_dc, InputSignal(4, 0)}};\n"
+        "double u_c_line[2] = {InputSignal(4, 0), InputSignal(4, 1)};\n"
+        f"{meas_type} meas = {{abc2complex(i_s_abc), u_dc, InputSignal(5, 0),\n"
+        "                     line2complex(u_c_line)};\n"
         "\n"
-        f"{compute}(&ctrl, &meas, w_M_ref);\n"
+        "/* The gate enable */\n"
+        f"{compute}(&ctrl, &meas, w_M_ref, InputSignal(0, 0) > 0.0);\n"
         "\n" + DUTY_RATIO_CODE
     )
 
@@ -281,7 +255,7 @@ def _sm_code() -> dict[str, str]:
         "OutputFcn": output,
         "UpdateFcn": "vector_control_system_update(&ctrl);\n",
     }
-    return enable_code(code, _sm_control.CTRL_OUTPUTS)
+    return code
 
 
 def _names(ports: list[Any]) -> list[str]:
@@ -375,7 +349,7 @@ def _im_code() -> dict[str, str]:
         "OutputFcn": output,
         "UpdateFcn": "im_vector_control_system_update(&ctrl);\n",
     }
-    return enable_code(code, _im_control.CTRL_OUTPUTS)
+    return code
 
 
 CVC = MonolithicBlock(
@@ -442,8 +416,12 @@ def _vhz_code() -> dict[str, str]:
         "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
         "                     InputSignal(2, 2)};\n"
         "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
-        "IMVHzMeasurements meas = {abc2complex(i_s_abc), u_dc};\n"
-        "im_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref);\n"
+        "double u_c_line[2] = {InputSignal(4, 0), InputSignal(4, 1)};\n"
+        "IMVHzMeasurements meas = {abc2complex(i_s_abc), u_dc, "
+        "line2complex(u_c_line)};\n"
+        "/* The gate enable */\n"
+        "im_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref,\n"
+        "                                     InputSignal(0, 0) > 0.0);\n"
         + DUTY_RATIO_CODE
         + monitored_code(
             _im_vhz_control.CTRL_OUTPUTS,
@@ -457,7 +435,7 @@ def _vhz_code() -> dict[str, str]:
         "OutputFcn": output,
         "UpdateFcn": "im_vhz_control_system_update(&ctrl);\n",
     }
-    return enable_code(code, _im_vhz_control.CTRL_OUTPUTS)
+    return code
 
 
 VHZ = MonolithicBlock(
@@ -517,10 +495,14 @@ def _gfl_code() -> dict[str, str]:
         "                     InputSignal(3, 2)};\n"
         "double u_g_line[2] = {InputSignal(4, 0), InputSignal(4, 1)};\n"
         "double u_dc = fmax(InputSignal(5, 0), U_DC_MIN);\n"
+        "double u_c_line[2] = {InputSignal(6, 0), InputSignal(6, 1)};\n"
         "GridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line),\n"
-        "                         u_dc};\n"
+        "                         u_dc, line2complex(u_c_line)};\n"
+        "/* The gate enable */\n"
         "gfl_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n"
-        "                                  InputSignal(2, 0));\n" + DUTY_RATIO_CODE
+        "                                  InputSignal(2, 0),\n"
+        "                                  InputSignal(0, 0) > 0.0);\n"
+        + DUTY_RATIO_CODE
     )
     monitored = {
         "p_g_ref": "ctrl.ref.p_g",
@@ -543,7 +525,7 @@ def _gfl_code() -> dict[str, str]:
         "OutputFcn": output + monitored_code(_grid_control.GFL_OUTPUTS, monitored),
         "UpdateFcn": "gfl_control_system_update(&ctrl);\n",
     }
-    return enable_code(code, _grid_control.GFL_OUTPUTS)
+    return code
 
 
 def _gfm_code() -> dict[str, str]:
@@ -560,9 +542,13 @@ def _gfm_code() -> dict[str, str]:
         "double i_c_abc[3] = {InputSignal(3, 0), InputSignal(3, 1),\n"
         "                     InputSignal(3, 2)};\n"
         "double u_dc = fmax(InputSignal(4, 0), U_DC_MIN);\n"
-        "GFMMeasurements meas = {abc2complex(i_c_abc), u_dc};\n"
+        "double u_c_line[2] = {InputSignal(5, 0), InputSignal(5, 1)};\n"
+        "GFMMeasurements meas = {abc2complex(i_c_abc), u_dc, line2complex(u_c_line)};\n"
+        "/* The gate enable */\n"
         "gfm_control_system_compute_output(&ctrl, &meas, InputSignal(1, 0),\n"
-        "                                  InputSignal(2, 0));\n" + DUTY_RATIO_CODE
+        "                                  InputSignal(2, 0),\n"
+        "                                  InputSignal(0, 0) > 0.0);\n"
+        + DUTY_RATIO_CODE
     )
     monitored = {
         "p_g_ref": "ctrl.ref.p_g",
@@ -584,7 +570,7 @@ def _gfm_code() -> dict[str, str]:
         "OutputFcn": output + monitored_code(_grid_control.GFM_OUTPUTS, monitored),
         "UpdateFcn": "gfm_control_system_update(&ctrl);\n",
     }
-    return enable_code(code, _grid_control.GFM_OUTPUTS)
+    return code
 
 
 GFL = MonolithicBlock(

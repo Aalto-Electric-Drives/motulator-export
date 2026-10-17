@@ -8,11 +8,20 @@ the RPC interface enabled, simulates both and compares the results.
 
 Run from the repository root:
 
-    python examples/ipmsm_2kw_fvc.py [--diode]
+    python examples/ipmsm_2kw_fvc.py [--diode | --blocked]
 
 With --diode, the DC bus is fed by a diode bridge with a DC-bus inductor and
 capacitor (DiodeBridgeDCBus in motulator) instead of a stiff DC voltage
 (ipmsm_2kw_fvc_diode.plecs).
+
+With --blocked, the gates of the converter are blocked before the start and during
+the operation, as in examples/drive/current_vector/plot_2kw_ipmsm_blocked_cvc.py
+(ipmsm_2kw_fvc_blocked.plecs). While the gates are blocked, the control system runs
+in standby: its observer tracks the machine using the measured converter voltage,
+and its flux and torque controller tracks the estimated flux and torque, from which
+the control continues when the gates are released. Under the load, the stator
+current decays through the diodes within a millisecond, after which the machine
+decelerates at open circuit, since its voltage is below the DC-bus voltage.
 
 """
 
@@ -35,6 +44,9 @@ T_STOP = 1.2
 W_M_REF = StepSignal(time=0.1, after=50.0)  # Speed reference (rad/s)
 TAU_L = StepSignal(time=0.7, after=10.0)  # Load torque (Nm)
 SPEED_CTRL = {"J": 0.015, "alpha_s": 25.0}  # Arguments of SpeedController
+# Gate enable with --blocked: released at 0.05 s, blocked under the load at 0.8 s,
+# and released at 0.83 s
+ENABLE = StepSignal(time=[0.05, 0.8, 0.83], after=[1.0, 0.0, 1.0], before=0.0)
 
 
 # %%
@@ -71,12 +83,19 @@ def build_system(
 if __name__ == "__main__":
     # Export the PLECS model (before simulating, since simulation changes the states)
     diode = "--diode" in sys.argv  # Diode bridge and DC-bus LC
+    blocked = "--blocked" in sys.argv  # Gates blocked at the start and later
     mdl, ctrl = build_system(diode)
     # Speed reference switching at the same sample as in motulator
     T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
     w_M_ref = sampled_step(W_M_REF, T_s)
+    suffix = "_diode" if diode else ""
+    if blocked:
+        # The gate enable of the control system, exported as its input enable,
+        # switching at the same samples in both
+        ctrl.set_enable(sampled_step(ENABLE, T_s))
+        suffix += "_blocked"
     path = sm.write_model(
-        Path(__file__).with_name(f"ipmsm_2kw_fvc{'_diode' if diode else ''}.plecs"),
+        Path(__file__).with_name(f"ipmsm_2kw_fvc{suffix}.plecs"),
         mdl,
         ctrl,
         w_M_ref,

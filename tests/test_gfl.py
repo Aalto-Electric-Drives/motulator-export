@@ -14,15 +14,15 @@ Run from the repository root (requires gcc):
 # %%
 import ctypes
 from math import pi
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import pytest
-from motulator.common.utils import abc2complex, complex2abc
+from motulator.common.utils import abc2complex, complex2abc, complex2line, line2complex
 from motulator.grid import control, utils
 from motulator.grid.control._base import Measurements
 
-from tests.c_port import arr, compile_library, d
+from tests.c_port import arr, compile_library, control_step, d
 
 CAPI = r"""
 #include "common.c"
@@ -43,10 +43,11 @@ void init(const double *c)
 }
 
 void step(const double *i_c_abc, const double *u_g_line, double u_dc, double p_g_ref,
-          double q_g_ref, double *out)
+          double q_g_ref, double enabled, const double *u_c_line, double *out)
 {
-    GridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line), u_dc};
-    gfl_control_system_compute_output(&ctrl, &meas, p_g_ref, q_g_ref);
+    GridMeasurements meas = {abc2complex(i_c_abc), line2complex(u_g_line), u_dc,
+                             line2complex(u_c_line)};
+    gfl_control_system_compute_output(&ctrl, &meas, p_g_ref, q_g_ref, (int)enabled);
     double o[8] = {ctrl.ref.d_abc[0], ctrl.ref.d_abc[1], ctrl.ref.d_abc[2],
                    ctrl.fbk.theta_c, ctrl.fbk.w_g, ctrl.fbk.u_g, creal(ctrl.ref.u_c),
                    cimag(ctrl.ref.u_c)};
@@ -64,7 +65,9 @@ def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 def test_control_system(dll: ctypes.CDLL) -> None:
-    """Grid-following control of the example for a sequence of measurements."""
+    """Grid-following control of the example for a sequence of measurements, also
+    while the gates are blocked (the standby output with the measured converter
+    voltage)."""
     nom = utils.NominalValues(U=400, I=14.5, f=50, P=10e3)
     base = utils.BaseValues.from_nominal(nom)
     cfg = control.CurrentVectorControllerCfg(
@@ -85,6 +88,10 @@ def test_control_system(dll: ctypes.CDLL) -> None:
     u_g_ab = base.u * np.exp(1j * theta_g)
     i_c_ab = (5 + 3j + 2 * np.exp(1j * 2 * pi * 250 * t)) * np.exp(1j * theta_g)
     u_dc = 650 + 20 * np.sin(2 * pi * 100 * t)
+    # The gates blocked at the start and during an interval, with the measured
+    # converter voltage
+    enabled = (t >= 0.005) & ((t < 0.03) | (t >= 0.045))
+    u_c_ab = u_g_ab + 20 * np.exp(1j * 2 * pi * 150 * t)
 
     out = (ctypes.c_double * 8)()
     res_c, res_py = np.zeros((n, 8)), np.zeros((n, 8))
@@ -92,12 +99,12 @@ def test_control_system(dll: ctypes.CDLL) -> None:
         i_abc = complex2abc(i_c_ab[k])
         u_abc = complex2abc(u_g_ab[k])
         u_line = [u_abc[0] - u_abc[1], u_abc[1] - u_abc[2]]  # Line-to-line voltages
-        meas = Measurements(abc2complex(i_abc), abc2complex(u_abc), u_dc[k])
+        u_c_line = complex2line(u_c_ab[k])
+        u_c = line2complex(u_c_line) if not enabled[k] else None
+        meas = Measurements(abc2complex(i_abc), abc2complex(u_abc), u_dc[k], u_c)
         # External power references at the control time of motulator
         p_g_ref, q_g_ref = 5e3 * (ctrl.t > 0.02), 4e3 * (ctrl.t > 0.04)
-        fbk = cast(Any, ctrl.get_feedback(meas))
-        ref = cast(Any, ctrl.compute_output(fbk))
-        ctrl.update(ref, fbk)
+        fbk, ref = control_step(ctrl, meas, bool(enabled[k]))
         res_py[k] = [
             *ref.d_abc,
             fbk.theta_c,
@@ -106,7 +113,16 @@ def test_control_system(dll: ctypes.CDLL) -> None:
             ref.u_c.real,
             ref.u_c.imag,
         ]
-        dll.step(arr(i_abc), arr(u_line), d(u_dc[k]), d(p_g_ref), d(q_g_ref), out)
+        dll.step(
+            arr(i_abc),
+            arr(u_line),
+            d(u_dc[k]),
+            d(p_g_ref),
+            d(q_g_ref),
+            d(enabled[k]),
+            arr(u_c_line),
+            out,
+        )
         res_c[k] = np.array(out)
     names = ["d_a", "d_b", "d_c", "theta_c", "w_g", "u_g", "u_c_d", "u_c_q"]
     err = np.max(np.abs(res_c - res_py), axis=0)

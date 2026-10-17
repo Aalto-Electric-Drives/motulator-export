@@ -4,38 +4,32 @@ function [u_c_ab_out, u_c_zoh_ab_out] = mfun_gfm_pwm_realized_voltage(enable, me
 %   the fields of the struct p (from the mask, [] as NaN). The state is in persistent
 %   variables. The inputs without direct feedthrough come through unit delays, so the
 %   update of the state with them is done at the next call.
-persistent self self_init pending enable_prev
+persistent self pending
 if isempty(self)
     self = pwm_init(1.5); % k_pred
     self = pwm_set_overmodulation(self, p.mme);
-    self = pwm_set_dead_time(self, p.t_d, p.T_s, p.i_0, p.feedforward);
+    self = pwm_set_nonlinearity(self, p.t_d, p.u_th, p.i_0, p.feedforward);
     self = pwm_set_min_pulse(self, p.d_min);
-    self_init = self;
+    self = pwm_set_single_update(self, p.single_update);
     pending = false;
-    enable_prev = 0;
 end
 % Update of the previous sampling period with its inputs (the inputs
 % d_abc through unit delays)
 if pending
-    if enable_prev > 0
-        % The duty ratios of the next period
-        self = pwm_update(self, d_abc);
-    else
-        self = self_init;
-    end
+    % The duty ratios of the next period
+    self = pwm_update(self, p.T_s, d_abc);
 end
 pending = true;
-enable_prev = enable;
-% Disabled: the algorithm is not run
-if ~(enable > 0)
-    u_c_ab_out = zeros(2, 1);
-    u_c_zoh_ab_out = zeros(2, 1);
-    return
-end
 meas = gfm_measurements_unpack(meas_in);
-% Average of the previous and the ongoing periods, and of the ongoing period
-u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);
-u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, false);
+% Average of the previous and the ongoing periods, and of the ongoing
+% period, or while the gates are blocked, the measured voltage
+if enable > 0
+    u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);
+    u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, false);
+else
+    u_c_ab = meas.u_c_ab;
+    u_c_zoh_ab = meas.u_c_ab;
+end
 u_c_ab_out = complex_out(u_c_ab);
 u_c_zoh_ab_out = complex_out(u_c_zoh_ab);
 end
@@ -44,7 +38,8 @@ function s = gfm_measurements_unpack(u)
 %GFM_MEASUREMENTS_UNPACK Struct of the signal vector u.
 s = struct( ...
     'i_c_ab', complex(u(1), u(2)), ...
-    'u_dc', u(3));
+    'u_dc', u(3), ...
+    'u_c_ab', complex(u(4), u(5)));
 end
 
 function u_ab = abc2complex(u)
@@ -62,14 +57,15 @@ function y = complex_out(z)
 y = [real(z); imag(z)];
 end
 
-function d_err = dead_time_error(i_abc, d_abc, t_d, T_s, i_0)
-%DEAD_TIME_ERROR Duty-ratio error due to the dead time t_d (dead_time_error), T_s
-%   being the half carrier period. The current direction is sign = tanh(i/i_0), or
-%   the signum function (numpy.sign) if i_0 = 0.
+function d_err = inverter_nonlinearity(t_d, u_th, i_0, i_abc, d_abc, u_dc, T_half)
+%INVERTER_NONLINEARITY Duty-ratio error due to the dead time t_d and the threshold
+%   voltage u_th of the power devices (InverterNonlinearity), u_dc being the DC-bus
+%   voltage and T_half the half carrier period. The current direction is sign =
+%   tanh(i/i_0), or the signum function (numpy.sign) if i_0 = 0.
 d = d_abc(:);
 % Switching-cycle averaged on-times of the upper and lower switches
 % (averaged_gate_signals), the dead time affecting only the switching legs
-delta = (t_d/(2*T_s))*(d > 0 & d < 1);
+delta = (t_d/(2*T_half))*(d > 0 & d < 1);
 q_hi = max(d - delta, 0);
 q_lo = max(1 - d - delta, 0);
 b = 1 - q_hi - q_lo;
@@ -79,27 +75,34 @@ if i_0 > 0
 else
     s = sign(i_abc(:));
 end
-d_err = d - q_hi - 0.5*b.*(1 - s);
+d_err = d - q_hi - 0.5*b.*(1 - s) + s*u_th/u_dc;
 end
 
 function self = pwm_init(k_pred)
 %PWM_INIT Space-vector PWM (PWM), with the prediction factor k_pred of the currents
 %   for the compensation of the duty-ratio error.
 %   The overmodulation is MPE or MME (pwm_set_overmodulation, MPE by default).
-%   Optionally, the duty-ratio error due to the dead time is modeled
-%   (pwm_set_dead_time), which corresponds to d_err = dead_time_error(i_abc, d_abc,
-%   t_d, T_s, sign) in motulator with sign = tanh(i/i_0), or numpy.sign if i_0 = 0.
-%   The angle of the voltage reference is not advanced here: the control systems
-%   compensate for the delays. The state d_abc has the duty ratios of the previous
-%   and the ongoing periods as its rows.
-self = struct('k_pred', k_pred, 'mme', 0, 't_d', 0, 'T_s', 0, 'i_0', 0, ...
-    'feedforward', 1, 'd_min', 0, 'd_abc', zeros(2, 3));
+%   Optionally, the duty-ratio error due to the dead time and the threshold voltage
+%   is modeled (pwm_set_nonlinearity), which corresponds to d_err =
+%   InverterNonlinearity(t_d, u_th, sign) in motulator with sign = tanh(i/i_0), or
+%   numpy.sign if i_0 = 0. The duty ratios are updated twice per carrier period, or
+%   once (pwm_set_single_update), which sets the half carrier period of the error
+%   model. The angle of the voltage reference is not advanced here: the control
+%   systems compensate for the delays. The state d_abc has the duty ratios of the
+%   previous and the ongoing periods as its rows, and T_half is the half carrier
+%   period of the previous period, assumed to apply also to the ongoing one: before
+%   the first duty ratios, the legs do not switch, and the infinite period gives no
+%   dead-time error.
+self = struct('k_pred', k_pred, 'mme', 0, 't_d', 0, 'u_th', 0, 'i_0', 0, ...
+    'feedforward', 1, 'd_min', 0, 'single_update', 0, 'd_abc', zeros(2, 3), ...
+    'T_half', Inf);
 end
 
-function self = pwm_set_dead_time(self, t_d, T_s, i_0, feedforward)
-%PWM_SET_DEAD_TIME Duty-ratio error model of the dead time t_d and its compensation.
+function self = pwm_set_nonlinearity(self, t_d, u_th, i_0, feedforward)
+%PWM_SET_NONLINEARITY Duty-ratio error model of the dead time t_d and the threshold
+%   voltage u_th (no error model if both are zero) and its compensation.
 self.t_d = t_d;
-self.T_s = T_s;
+self.u_th = u_th;
 self.i_0 = i_0;
 self.feedforward = feedforward;
 end
@@ -115,11 +118,38 @@ function self = pwm_set_min_pulse(self, d_min)
 self.d_min = d_min;
 end
 
+function self = pwm_set_single_update(self, single_update)
+%PWM_SET_SINGLE_UPDATE Single update (single_update of PWM) if single_update is
+%   nonzero.
+self.single_update = single_update;
+end
+
+function y = pwm_has_error_model(self)
+%PWM_HAS_ERROR_MODEL Error model of the PWM in use (d_err is not None).
+y = self.t_d > 0 || self.u_th > 0;
+end
+
+function T_half = pwm_half_period(self, T_s)
+%PWM_HALF_PERIOD Half carrier period (s) corresponding to the sampling period.
+if self.single_update
+    T_half = T_s/2;
+else
+    T_half = T_s;
+end
+end
+
 function u_ab = pwm_realized_voltage(self, i_c_ab, u_dc, average)
 %PWM_REALIZED_VOLTAGE Realized voltage from the duty ratios and the measured DC-bus
-%   voltage, corrected for the duty-ratio error using the measured current
-%   (get_realized_voltage): the average of the previous and the ongoing sampling
-%   periods if average is true, else that of the ongoing sampling period.
+%   voltage, corrected for the duty-ratio error using the measured current and the
+%   half carrier period of the previous period (get_realized_voltage): the average
+%   of the previous and the ongoing sampling periods if average is true, else that
+%   of the ongoing sampling period. With a discharged DC bus (u_dc <= 0), the
+%   voltage is zero.
+% A discharged DC bus, e.g., with blocked gates
+if u_dc <= 0
+    u_ab = complex(0);
+    return
+end
 i_abc = complex2abc(i_c_ab);
 if average
     k0 = 1;
@@ -128,18 +158,20 @@ else
 end
 q_ab = complex(0);
 for k = k0:2
-    q = abc2complex(self.d_abc(k, :));
-    if self.t_d > 0
-        d_err = dead_time_error(i_abc, self.d_abc(k, :), self.t_d, self.T_s, self.i_0);
-        q = q - abc2complex(d_err);
+    d = self.d_abc(k, :).';
+    if pwm_has_error_model(self)
+        d = d - inverter_nonlinearity(self.t_d, self.u_th, self.i_0, i_abc, d, ...
+            u_dc, self.T_half);
     end
-    q_ab = q_ab + q;
+    q_ab = q_ab + abc2complex(d);
 end
 u_ab = u_dc*q_ab/(3 - k0);
 end
 
-function self = pwm_update(self, d_abc)
-%PWM_UPDATE Store the duty ratios of the next sampling period.
+function self = pwm_update(self, T_s, d_abc)
+%PWM_UPDATE Store the duty ratios of the next sampling period and the half carrier
+%   period of the sampling period T_s.
 self.d_abc(1, :) = self.d_abc(2, :);
 self.d_abc(2, :) = reshape(d_abc, 1, 3);
+self.T_half = pwm_half_period(self, T_s);
 end

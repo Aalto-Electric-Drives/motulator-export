@@ -8,8 +8,7 @@ of motulator (`motulator_export/matlab`) used by the code are appended as local
 functions, so that the MATLAB Function block is self-contained. The function runs
 the code sections as the S-function runs the C-Script code: the outputs are
 computed from the inputs of the same sampling instant, and then the state is
-updated. While the input `enable` is not positive, the outputs have their disabled
-values and the state is reset to its initial value.
+updated.
 
 A MATLAB Function block has direct feedthrough from all its inputs, unlike the
 S-functions, whose inputs used only in the update of the state are not direct
@@ -248,8 +247,6 @@ def block_mfunction(block: CBlock) -> MFunction:
     delayed = delayed_inputs(block)
     if delayed and block.sample_time is None:
         raise ValueError(f"{block.name}: delayed inputs need a sample time")
-    if m.disabled is not None and block.inputs[0].name != "enable":
-        raise ValueError(f"{block.name}: the first input must be enable")
     params = block_params(block)
     args = [_arg(p.name, m.inputs, "in") for p in block.inputs]
     outs = [_arg(p.name, m.outputs, "out") for p in block.outputs]
@@ -261,16 +258,10 @@ def block_mfunction(block: CBlock) -> MFunction:
             "% Update of the previous sampling period with its inputs (the inputs\n"
             f"% {names} through unit delays)\n"
             "if pending\n"
-            "    if enable_prev > 0\n"
-            + _indent(_conversions(block, args, delayed) + m.update, 2)
-            + "    else\n"
-            "        self = self_init;\n"
-            "    end\n"
-            "end\n"
+            + _indent(_conversions(block, args, delayed) + m.update)
+            + "end\n"
             "pending = true;\n"
-            "enable_prev = enable;\n"
         )
-    body += _disabled_code(block, outs, reset=bool(m.update) and not delayed)
     body += _conversions(block, args, current) + m.output
     body += "".join(
         f"{outs[k]} = {_to_signal(m.outputs[p.name], m_variable(p.name))};\n"
@@ -320,32 +311,10 @@ def _state(m: MCode, delayed: list[int]) -> str:
         return ""
     state = ["self"]
     init = m.start
-    if m.disabled is not None and m.update:
-        state.append("self_init")
-        init += "self_init = self;\n"
     if delayed:
-        state += ["pending", "enable_prev"]
-        init += "pending = false;\nenable_prev = 0;\n"
+        state.append("pending")
+        init += "pending = false;\n"
     return f"persistent {' '.join(state)}\nif isempty(self)\n{_indent(init)}end\n"
-
-
-def _disabled_code(block: CBlock, outs: list[str], reset: bool) -> str:
-    """Code of the disabled block: its outputs, and the reset of its state."""
-    m = block.mcode
-    assert m is not None
-    if m.disabled is None:
-        return ""
-    values = "".join(
-        f"{o} = {_disabled(m.disabled, p.width)};\n"
-        for o, p in zip(outs, block.outputs, strict=True)
-    )
-    return (
-        "% Disabled: the algorithm is not run"
-        + (", and the state is reset\n" if reset else "\n")
-        + "if ~(enable > 0)\n"
-        + _indent(values + ("self = self_init;\n" if reset else "") + "return\n")
-        + "end\n"
-    )
 
 
 def _outputs(outs: list[str]) -> str:
@@ -355,14 +324,6 @@ def _outputs(outs: list[str]) -> str:
     if len(outs) == 1:
         return f"{outs[0]} = "
     return f"[{', '.join(outs)}] = "
-
-
-def _disabled(value: float, width: int) -> str:
-    """Disabled output value."""
-    v = f"{value:g}"
-    if width == 1:
-        return v
-    return f"zeros({width}, 1)" if value == 0 else f"{v}*ones({width}, 1)"
 
 
 def _header(block: CBlock, name: str, delayed: list[int]) -> str:

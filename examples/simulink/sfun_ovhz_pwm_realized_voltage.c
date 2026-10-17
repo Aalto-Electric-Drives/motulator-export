@@ -38,17 +38,15 @@
 #define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)
 
 static PWM self;
-
-/* Initial state, restored while the block is disabled */
-static PWM self_init;
+static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 3, 3};
+static const int INPUT_WIDTHS[] = {1, 5, 3};
 static const int FEEDTHROUGH[] = {1, 1, 0};
 static const int OUTPUT_WIDTHS[] = {2, 2};
 #define NUM_INPUTS 3
 #define NUM_OUTPUTS 2
-#define NUM_PARAMS 6
+#define NUM_PARAMS 8
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -110,55 +108,54 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(2) != 1) {
-        SetErrorMessage("i_0 must be a scalar.");
+        SetErrorMessage("u_th must be a scalar.");
         return;
     }
     if (PDIM(3) != 1) {
-        SetErrorMessage("feedforward must be a scalar.");
+        SetErrorMessage("i_0 must be a scalar.");
         return;
     }
     if (PDIM(4) != 1) {
-        SetErrorMessage("d_min must be a scalar.");
+        SetErrorMessage("feedforward must be a scalar.");
         return;
     }
     if (PDIM(5) != 1) {
+        SetErrorMessage("d_min must be a scalar.");
+        return;
+    }
+    if (PDIM(6) != 1) {
+        SetErrorMessage("single_update must be a scalar.");
+        return;
+    }
+    if (PDIM(7) != 1) {
         SetErrorMessage("mme must be a scalar.");
         return;
     }
     pwm_init(&self, 1.5); /* k_pred */
-    pwm_set_overmodulation(&self, (int)P(5, 0));
-    pwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));
-    pwm_set_min_pulse(&self, P(4, 0));
-
-    self_init = self;
+    pwm_set_overmodulation(&self, (int)P(7, 0));
+    pwm_set_nonlinearity(&self, P(1, 0), P(2, 0), P(3, 0), (int)P(4, 0));
+    pwm_set_min_pulse(&self, P(5, 0));
+    pwm_set_single_update(&self, (int)P(6, 0));
+    T_s = P(0, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(1, k) = 0.0;
-        }
-        return;
-    }
-
     double meas_u[VHZ_MEAS_WIDTH];
     for (int k = 0; k < VHZ_MEAS_WIDTH; k++) {
         meas_u[k] = InputSignal(1, k);
     }
     IMVHzMeasurements meas;
     im_vhz_measurements_unpack(meas_u, &meas);
-    /* Average of the previous and the ongoing periods, and of the
-     * ongoing period */
-    double complex u_c_ab =
-        pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);
-    double complex u_c_zoh_ab =
-        pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);
+    /* Average of the previous and the ongoing periods, and of the ongoing
+     * period, or while the gates are blocked, the measured voltage */
+    double complex u_c_ab = meas.u_c_ab;
+    double complex u_c_zoh_ab = meas.u_c_ab;
+    if (InputSignal(0, 0) > 0.0) {
+        u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);
+        u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);
+    }
     OutputSignal(0, 0) = creal(u_c_ab);
     OutputSignal(0, 1) = cimag(u_c_ab);
     OutputSignal(1, 0) = creal(u_c_zoh_ab);
@@ -169,18 +166,12 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     /* The duty ratios of the next period */
     double d_abc[3];
     for (int k = 0; k < 3; k++) {
         d_abc[k] = InputSignal(2, k);
     }
-    pwm_update(&self, d_abc);
+    pwm_update(&self, T_s, d_abc);
 }
 
 static void mdlTerminate(SimStruct *S)

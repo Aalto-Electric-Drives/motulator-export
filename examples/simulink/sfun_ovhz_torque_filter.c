@@ -41,14 +41,11 @@ static double self;
 static double T_s; /* Sampling period */
 static double alpha_f; /* Low-pass-filter bandwidth */
 
-/* Initial state, restored while the block is disabled */
-static double self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1};
-static const int FEEDTHROUGH[] = {1, 0};
+static const int INPUT_WIDTHS[] = {1};
+static const int FEEDTHROUGH[] = {0};
 static const int OUTPUT_WIDTHS[] = {1};
-#define NUM_INPUTS 2
+#define NUM_INPUTS 1
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 2
 
@@ -115,21 +112,11 @@ static void mdlStart(SimStruct *S)
     self = 0.0;
     alpha_f = P(0, 0);
     T_s = P(1, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
     OutputSignal(0, 0) = self;
 }
 
@@ -137,13 +124,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
-    self += T_s * alpha_f * (InputSignal(1, 0) - self);
+    self += T_s * alpha_f * (InputSignal(0, 0) - self);
 }
 
 static void mdlTerminate(SimStruct *S)

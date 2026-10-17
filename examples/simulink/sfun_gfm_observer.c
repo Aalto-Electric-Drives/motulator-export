@@ -40,14 +40,11 @@ static GFMObserver self;
 static double T_s; /* Sampling period */
 static GFMFeedbacks out;
 
-/* Initial state, restored while the block is disabled */
-static GFMObserver self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 3, 2, 2};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {5, 2, 2};
+static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {14};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 6
 
@@ -129,30 +126,20 @@ static void mdlStart(SimStruct *S)
     gfm_observer_init(&self, P(0, 0), P(1, 0), P(2, 0), P(3, 0), P(4, 0),
                       P(5, 0));
     T_s = P(4, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 14; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
     double meas_u[MEAS_WIDTH];
     for (int k = 0; k < MEAS_WIDTH; k++) {
-        meas_u[k] = InputSignal(1, k);
+        meas_u[k] = InputSignal(0, k);
     }
     GFMMeasurements meas;
     gfm_measurements_unpack(meas_u, &meas);
-    gfm_observer_compute_output(&self, complex_from(InputSignal(3, 0), InputSignal(3, 1)), meas.i_c_ab, &out);
+    gfm_observer_compute_output(&self, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.i_c_ab, &out);
     /* Voltage for the control laws (GridConverterControlSystem.get_feedback) */
-    out.u_c = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
+    out.u_c = cexp(-I * out.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));
     double y[FBK_WIDTH];
     gfm_feedbacks_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {
@@ -164,12 +151,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     gfm_observer_update(&self, T_s, &out);
 }
 

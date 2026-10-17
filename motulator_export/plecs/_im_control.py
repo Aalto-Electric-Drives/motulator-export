@@ -33,7 +33,9 @@ from motulator_export.plecs._control import (
     checks,
     complex_in,
     complex_out,
+    compute_standby_output,
     control_block,
+    converter_voltage_input,
     get_measurement,
     init_header,
     mask_params,
@@ -75,6 +77,7 @@ CTRL_INPUTS = [
     Port("w_M_ref", 1),
     Port("i_s_abc", 3),
     Port("u_dc", 1),
+    Port("u_c_line", 2),
     Port("w_M", 1),
 ]
 CTRL_OUTPUTS = {
@@ -164,20 +167,19 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(1, "meas") + f"double complex u_s_zoh_ab = {complex_in(3)};\n"
-        "double w_M = InputSignal(4, 0);\n"
+        SIGNALS.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
+        "double w_M = InputSignal(3, 0);\n"
         "/* Speed error from the measured rotor speed in the sensored mode */\n"
         "double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\n"
         "im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps, h,\n"
         "                                &out);\n"
         "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
-        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(1)};\n"
         + SIGNALS.write(0, "fbk", "out")
     )
     return CBlock(
         "FluxObserver",
         [
-            Port(ENABLE, 1),
             SIGNALS.port("meas"),
             Port("u_s_ab", 2),
             Port("u_s_zoh_ab", 2),
@@ -190,7 +192,6 @@ def _flux_observer() -> CBlock:
             output,
             "im_flux_observer_update(&self, T_s, &out);\n",
             workspace=SAMPLING + "static double h;\nstatic IMObserverOutputs out;\n",
-            outputs=(SIGNALS.width("fbk"),),
         ),
         params,
         SIGNALS.sfunction("flux_observer"),
@@ -280,12 +281,7 @@ def _speed_flux_observer() -> Subsystem:
     )
     return Subsystem(
         "SpeedFluxObserver",
-        [
-            Port(ENABLE, 1),
-            SIGNALS.port("meas"),
-            Port("u_s_ab", 2),
-            Port("u_s_zoh_ab", 2),
-        ],
+        [SIGNALS.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
         [Port("out", SIGNALS.width("fbk"))],
         [
             _flux_observer(),
@@ -294,8 +290,6 @@ def _speed_flux_observer() -> Subsystem:
             speed_observer(SIGNALS),
         ],
         [
-            (ENABLE, "FluxObserver:enable"),
-            (ENABLE, "SpeedObserver:enable"),
             ("meas", "FluxObserver:meas"),
             ("u_s_ab", "FluxObserver:u_s_ab"),
             ("u_s_zoh_ab", "FluxObserver:u_s_zoh_ab"),
@@ -307,7 +301,7 @@ def _speed_flux_observer() -> Subsystem:
             ("fbk.tau_M:y", "SpeedObserver:tau_M"),
         ],
         columns=[
-            [ENABLE, "meas", "u_s_ab", "u_s_zoh_ab"],
+            ["meas", "u_s_ab", "u_s_zoh_ab"],
             ["FluxObserver"],
             ["fbk.eps", "fbk.tau_M"],
             ["SpeedObserver"],
@@ -320,7 +314,6 @@ def _speed_flux_observer() -> Subsystem:
             "SpeedObserver:eps": "fbk.eps:y",
         },
         lanes={"FluxObserver:w_M": "below:0"},
-        tags=[ENABLE],
         mask=mask,
     )
 
@@ -370,10 +363,10 @@ def _current_reference_generator() -> CBlock:
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
-        f"double complex psi_R = {complex_in(4)};\n"
+        f"double complex psi_R = {complex_in(3)};\n"
         "double tau_M_ref;\n"
         "double complex i_s_ref;\n"
-        "im_reference_gen_compute_output(&self, InputSignal(1, 0), cabs(psi_R),\n"
+        "im_reference_gen_compute_output(&self, InputSignal(0, 0), cabs(psi_R),\n"
         "                                &i_s_ref, &tau_M_ref);\n"
         "/* Transform the reference to the same coordinates as the feedback */\n"
         "i_s_ref = cexp(I * carg(psi_R)) * i_s_ref;\n"
@@ -381,25 +374,19 @@ def _current_reference_generator() -> CBlock:
     )
     update = (
         "/* Field weakening based on the unlimited voltage reference */\n"
-        f"im_reference_gen_update(&self, T_s, {complex_in(2)},\n"
-        "                        InputSignal(3, 0));\n"
+        f"im_reference_gen_update(&self, T_s, {complex_in(1)},\n"
+        "                        InputSignal(2, 0));\n"
     )
     return CBlock(
         "CurrentReferenceGenerator",
-        [
-            Port(ENABLE, 1),
-            Port("tau_M_ref", 1),
-            Port("u_s", 2),
-            Port("u_dc", 1),
-            Port("psi_R", 2),
-        ],
+        [Port("tau_M_ref", 1), Port("u_s", 2), Port("u_dc", 1), Port("psi_R", 2)],
         [Port("tau_M", 1), Port("i_s", 2)],
         SIGNALS.class_code(
-            "IMCurrentReferenceGenerator", start, output, update, SAMPLING, (1, 2)
+            "IMCurrentReferenceGenerator", start, output, update, SAMPLING
         ),
         params,
         SIGNALS.sfunction("current_reference_generator"),
-        feedthrough=[1, 1, 0, 0, 1],
+        feedthrough=[1, 0, 0, 1],
         mask=mask,
         mcode=MCode(
             start=M_PAR + "self = im_reference_gen_init(par, p.psi_s_nom, p.i_s_max, "
@@ -450,13 +437,13 @@ def _current_controller() -> CBlock:
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
-        SIGNALS.read(2, "fbk", declare=False) + "double complex u_s_ref =\n"
-        f"    complex_pi_compute_output(&self, {complex_in(1)}, fbk.i_s, 0.0);\n"
+        SIGNALS.read(1, "fbk", declare=False) + "double complex u_s_ref =\n"
+        f"    complex_pi_compute_output(&self, {complex_in(0)}, fbk.i_s, 0.0);\n"
         + complex_out(0, "u_s_ref")
     )
     return CBlock(
         "CurrentController",
-        [Port(ENABLE, 1), Port("i_s_ref", 2), SIGNALS.port("fbk")],
+        [Port("i_s_ref", 2), SIGNALS.port("fbk")],
         [Port("u_s", 2)],
         SIGNALS.class_code(
             "ComplexPIController",
@@ -464,7 +451,6 @@ def _current_controller() -> CBlock:
             output,
             "complex_pi_update(&self, T_s, fbk.u_s, fbk.w_c);\n",
             workspace=SAMPLING + "static IMObserverOutputs fbk;\n",
-            outputs=(2,),
         ),
         params,
         SIGNALS.sfunction("current_controller"),
@@ -531,28 +517,35 @@ def _current_vector_controller() -> Subsystem:
             SIGNALS.selector("meas", "u_dc"),
             SIGNALS.selector("fbk", "psi_R", complex_=True),
             _current_reference_generator(),
+            # Standby: the current controller tracks the measured current
+            compute_standby_output(
+                SIGNALS,
+                [Port("tau_M", 1), Port("i_s", 2)],
+                ["0.0", "creal(fbk.i_s)", "cimag(fbk.i_s)"],
+            ),
             _current_controller(),
             Mux("Mux ref", [Port("tau_M", 1), Port("i_s", 2), Port("u_s", 2)]),
             Tag("Goto u_s", "u_s", 2, goto=True),
         ],
         [
-            (ENABLE, "SpeedFluxObserver:enable"),
-            (ENABLE, f"{crg}:enable"),
-            (ENABLE, "CurrentController:enable"),
+            (ENABLE, "compute_standby_output:enable"),
             ("meas", "SpeedFluxObserver:meas"),
             ("u_c_ab", "SpeedFluxObserver:u_s_ab"),
             ("u_c_zoh_ab", "SpeedFluxObserver:u_s_zoh_ab"),
             ("meas", "meas.u_dc:u"),
             ("SpeedFluxObserver:out", "fbk.psi_R:u"),
+            ("SpeedFluxObserver:out", "compute_standby_output:fbk"),
             ("SpeedFluxObserver:out", "CurrentController:fbk"),
             ("SpeedFluxObserver:out", "fbk"),
             ("tau_M_ref", f"{crg}:tau_M_ref"),
             ("fbk.psi_R:y", f"{crg}:psi_R"),
             ("From u_s", f"{crg}:u_s"),
             ("meas.u_dc:y", f"{crg}:u_dc"),
-            (f"{crg}:i_s", "CurrentController:i_s_ref"),
-            (f"{crg}:tau_M", "Mux ref:tau_M"),
-            (f"{crg}:i_s", "Mux ref:i_s"),
+            (f"{crg}:tau_M", "compute_standby_output:tau_M_in"),
+            (f"{crg}:i_s", "compute_standby_output:i_s_in"),
+            ("compute_standby_output:i_s", "CurrentController:i_s_ref"),
+            ("compute_standby_output:tau_M", "Mux ref:tau_M"),
+            ("compute_standby_output:i_s", "Mux ref:i_s"),
             ("CurrentController:u_s", "Mux ref:u_s"),
             ("CurrentController:u_s", "Goto u_s"),
             ("Mux ref:y", "ref"),
@@ -562,6 +555,7 @@ def _current_vector_controller() -> Subsystem:
             ["SpeedFluxObserver"],
             ["From u_s", "meas.u_dc", "fbk.psi_R"],
             [crg],
+            ["compute_standby_output"],
             ["CurrentController"],
             ["Mux ref", "Goto u_s"],
             ["ref", "fbk"],
@@ -573,7 +567,8 @@ def _current_vector_controller() -> Subsystem:
             "fbk.psi_R:y": f"{crg}:psi_R+2",
             "SpeedFluxObserver:out": "fbk.psi_R:u+1",
             "meas": "SpeedFluxObserver:meas",
-            "CurrentController:i_s_ref": f"{crg}:i_s",
+            "compute_standby_output:i_s_in": f"{crg}:i_s",
+            "CurrentController:i_s_ref": "compute_standby_output:i_s",
             "Mux ref:u_s": "CurrentController:u_s",
             "ref": "Mux ref:y",
             "fbk": "SpeedFluxObserver:out",
@@ -590,7 +585,7 @@ def _current_vector_controller() -> Subsystem:
 
 # %%
 MONITORED = {
-    "w_M_ref": "InputSignal(3, 0)",
+    "w_M_ref": "InputSignal(2, 0)",
     "w_M": "fbk.w_M",
     "tau_M_ref": "ref.tau_M",
     "tau_M": "fbk.tau_M",
@@ -611,9 +606,10 @@ def control_system() -> Subsystem:
         [
             ("i_c_ab", "abc2complex(i_s_abc)"),
             ("u_dc", "fmax(InputSignal(1, 0), U_DC_MIN)"),
-            ("w_M", "InputSignal(2, 0)"),
+            ("w_M", "InputSignal(3, 0)"),
+            ("u_c_ab", "line2complex(u_c_line)"),
         ],
-        abc_input("i_s_abc", 0),
+        abc_input("i_s_abc", 0) + converter_voltage_input(2),
     )
     signals = monitor(
         SIGNALS,

@@ -98,10 +98,8 @@ class MCode:
     to the signals: `COMPLEX` or a signal vector (as a struct). The start code
     initializes the state `self` from the parameters (once), the output code
     computes the outputs, and the update code updates the state, as the code
-    sections of the C-Script. The input `enable` (if `disabled` is not None) and the
-    reset of the state are added as in the C code. The checks are pairs of an error
-    condition and its message (in terms of p), evaluated in the mask
-    initialization.
+    sections of the C-Script. The checks are pairs of an error condition and its
+    message (in terms of p), evaluated in the mask initialization.
     """
 
     output: str
@@ -111,7 +109,6 @@ class MCode:
     outputs: dict[str, "SignalVector | str"] = field(default_factory=dict)
     functions: str = ""  # Local functions of the block
     checks: tuple[tuple[str, str], ...] = ()
-    disabled: float | None = 0.0  # Outputs while disabled, None = no input enable
 
 
 def m_variable(port: str) -> str:
