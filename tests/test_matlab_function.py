@@ -158,11 +158,17 @@ def case(name: str) -> Case:
         run = drive_run(build, signals, _sm_control.FVC_BLOCK, 0.3)
         return "fvc", values, None, run, SM_INPUTS
     if name.startswith("cvc"):
+        # With the dead time, the duty-ratio error of a clamped leg (d = 1) differs
+        # from its limit as d approaches 1 by t_d/(4*T_half)*(1 + s), and similarly at
+        # d = 0. With the threshold voltage pulling the compensated duty ratio inside
+        # the limits, the outputs then depend on the rounding of the clamping in the
+        # overmodulation, unless the current direction s is exactly +-1, as np.sign
+        # gives (i_0 = 0)
         args = {
             "cvc_sensorless": (True, 0.0, 0.0, 0.0, False, False),
             "cvc_sensored": (False, 0.0, 0.0, 0.0, False, False),
             "cvc_dead_time_tanh": (True, 2e-6, 0.5, 0.0, False, False),
-            "cvc_u_th_single": (True, 2e-6, 0.5, 1.0, True, False),
+            "cvc_u_th_single": (True, 2e-6, 0.0, 1.0, True, False),
             "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True),
         }[name]
         build, signals = im_system(*args)
