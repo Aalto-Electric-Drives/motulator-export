@@ -40,14 +40,11 @@ static ComplexPIController self;
 static double T_s; /* Sampling period */
 static IMObserverOutputs fbk;
 
-/* Initial state, restored while the block is disabled */
-static ComplexPIController self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 2, 21};
-static const int FEEDTHROUGH[] = {1, 1, 1};
+static const int INPUT_WIDTHS[] = {2, 21};
+static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
-#define NUM_INPUTS 3
+#define NUM_INPUTS 2
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 8
 
@@ -139,28 +136,18 @@ static void mdlStart(SimStruct *S)
                                         P(6, 0), P(7, 0)};
     self = im_current_controller(&par, P(0, 0), P(1, 0));
     T_s = P(2, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
     double fbk_u[FBK_WIDTH];
     for (int k = 0; k < FBK_WIDTH; k++) {
-        fbk_u[k] = InputSignal(2, k);
+        fbk_u[k] = InputSignal(1, k);
     }
     im_observer_outputs_unpack(fbk_u, &fbk);
     double complex u_s_ref =
-        complex_pi_compute_output(&self, complex_from(InputSignal(1, 0), InputSignal(1, 1)), fbk.i_s, 0.0);
+        complex_pi_compute_output(&self, complex_from(InputSignal(0, 0), InputSignal(0, 1)), fbk.i_s, 0.0);
     OutputSignal(0, 0) = creal(u_s_ref);
     OutputSignal(0, 1) = cimag(u_s_ref);
 }
@@ -169,12 +156,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     complex_pi_update(&self, T_s, fbk.u_s, fbk.w_c);
 }
 

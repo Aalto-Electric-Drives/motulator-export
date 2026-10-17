@@ -290,6 +290,16 @@ static void im_current_vector_ctrl_compute_output(IMCurrentVectorController *sel
     ref->u_s = complex_pi_compute_output(&self->current_ctrl, ref->i_s, fbk->i_s, 0.0);
 }
 
+static void im_current_vector_ctrl_compute_standby_output(
+    IMCurrentVectorController *self, const IMObserverOutputs *fbk, IMReferences *ref)
+{
+    /* The current controller tracks the measured current and voltage */
+    ref->T_s = self->T_s;
+    ref->tau_M = 0.0;
+    ref->i_s = fbk->i_s;
+    ref->u_s = complex_pi_compute_output(&self->current_ctrl, ref->i_s, fbk->i_s, 0.0);
+}
+
 static void im_current_vector_ctrl_update(IMCurrentVectorController *self,
                                           const IMReferences *ref,
                                           const IMObserverOutputs *fbk)
@@ -312,52 +322,69 @@ static void im_vector_control_system_init(IMVectorControlSystem *self,
     self->speed_ctrl = speed_ctrl;
     self->speed_ctrl.u_i = 0.0;
     self->speed_ctrl.v = 0.0;
+    self->enabled = 1;
+    self->i_c_ab_ff = 0.0;
 }
 
 static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
                                                     const IMMeasurements *meas,
-                                                    double w_M_ref)
+                                                    double w_M_ref, int enabled)
 {
     IMObserverOutputs *fbk = &self->fbk;
     IMReferences *ref = &self->ref;
+    self->enabled = enabled;
 
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. */
-    double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+     * averaged over the previous and ongoing periods. With blocked gates, both are
+     * the measured voltage. */
+    double complex u_c_ab_zoh = meas->u_c_ab;
+    double complex u_c_ab = meas->u_c_ab;
+    if (enabled) {
+        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
     const IMSpeedFluxObserver *observer = &self->vector_ctrl.observer;
     if (self->vector_ctrl.sensorless) {
-        im_speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, 0.0,
+        im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, 0.0,
                                               0.0, fbk);
     } else {
         /* Speed error from the measured rotor speed (compute_feedback) */
         double eps = meas->w_M - observer->speed_observer.w_M;
-        im_speed_flux_observer_compute_output(observer, u_c_ab, meas->i_c_ab, eps,
+        im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
                                               1.0, fbk);
     }
-    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* Speed controller and vector controller */
-    double tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
-    im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
+    /* Speed controller and vector controller, or with blocked gates, the standby
+     * output of the vector controller */
+    if (enabled) {
+        double tau_M_ref =
+            pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
+        im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
+    } else {
+        im_current_vector_ctrl_compute_standby_output(&self->vector_ctrl, fbk, ref);
+    }
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
      * k_comp*T_s*w_c */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
+    self->i_c_ab_ff = pwm_feedforward_current(&self->pwm, enabled, meas->i_c_ab);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
-                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
+                                     fbk->w_c, self->i_c_ab_ff, ref->d_abc);
     ref->w_M = w_M_ref;
 }
 
 static void im_vector_control_system_update(IMVectorControlSystem *self)
 {
-    pwm_update(&self->pwm, self->ref.d_abc);
+    pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
+    pwm_store_current(&self->pwm, self->i_c_ab_ff);
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
-    pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
+    if (self->enabled) {
+        pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
+    }
 }
 
 /* Signal vectors of the modular control system ---------------------------- */
@@ -374,6 +401,7 @@ static void im_measurements_pack(const IMMeasurements *meas, double y[MEAS_WIDTH
     SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
     y[MEAS_u_dc] = meas->u_dc;
     y[MEAS_w_M] = meas->w_M;
+    SET_COMPLEX(y, MEAS_u_c_ab, meas->u_c_ab);
 }
 
 static void im_measurements_unpack(const double u[MEAS_WIDTH], IMMeasurements *meas)
@@ -381,6 +409,7 @@ static void im_measurements_unpack(const double u[MEAS_WIDTH], IMMeasurements *m
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_dc = u[MEAS_u_dc];
     meas->w_M = u[MEAS_w_M];
+    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void im_observer_outputs_pack(const IMObserverOutputs *fbk, double y[FBK_WIDTH])

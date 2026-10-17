@@ -26,11 +26,16 @@ Currently supported:
   observer gain `k_o` in `VHzControlSystem`, including pure open-loop V/Hz control
   as its special case (`L_M = inf` in the machine model of the control system)
 - The MPE or MME overmodulation of the PWM (`overmodulation`, MME by default in V/Hz
-  control) and the minimum duty ratio (`d_min`)
-- Dead time of the converter (`t_d` with `sign=np.sign`), modeled with the Blanking
-  Time block and the IGBT converter of PLECS, and its compensation in the PWM
-  (`PWM(d_err=lambda i, d: dead_time_error(i, d, t_d, T_s, sign))` with
-  `sign=np.sign` or the smooth `sign=lambda i: np.tanh(i/i_0)`)
+  control), the minimum duty ratio (`d_min`), and the single update
+  (`single_update`)
+- Dead time and threshold voltage of the converter (`t_d` and `u_th` with
+  `sign=np.sign`), modeled with the Blanking Time block and the IGBT converter of
+  PLECS (with the threshold voltage, the IGBT converter with parasitics, whose
+  forward voltages are `u_th`), and their compensation in the PWM
+  (`PWM(d_err=InverterNonlinearity(t_d, u_th, sign))` with `sign=np.sign` or the
+  smooth `sign=lambda i: np.tanh(i/i_0)`)
+- Gate blocking (`set_enable`): the input `enable` of the control system, which
+  then runs in standby, and the gates of the IGBT converter blocked
 
 """
 
@@ -51,8 +56,10 @@ from motulator.drive.utils._parameters import (
 
 from motulator_export.plecs._common import (
     BLANKING_DX,
+    CONV,
     DC_DX,
     ENABLE,
+    GATE_DX,
     MACH,
     ControlBlock,
     StepSignal,
@@ -64,15 +71,19 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _check_supported_pwm,
     _write_model,
+    gate_enable,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._drive import (
+    CONVERTER_VOLTAGES,
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
     MDL_OUTPUTS,
+    MEAS_DX,
     _add_drive_outputs,
     _add_mechanics,
+    _add_phase_lines,
     _check_supported_plant,
     _check_supported_speed_control,
     mechanics_and_converter_variables,
@@ -128,7 +139,7 @@ def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
     if type(ctrl).modulate is not VHzControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl.pwm, ctrl.k_comp, d_err=True)
+    _check_supported_pwm(ctrl, d_err=True)
 
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
@@ -159,7 +170,7 @@ def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
         "k_b": cfg.k_b,
         "T_s": cfg.T_s,
         "slew_rate": ctrl.rate_limiter.rate_limit,
-        **pwm_values(ctrl.pwm, cfg.T_s),
+        **pwm_values(ctrl.pwm),
     }
 
 
@@ -190,7 +201,7 @@ def export_values(
         "sensorless": int(cfg.sensorless),
         "T_s": cfg.T_s,
         **speed_ctrl_values(ctrl, speed_ctrl_args),
-        **pwm_values(ctrl.pwm, cfg.T_s),
+        **pwm_values(ctrl.pwm),
     }
 
 
@@ -253,15 +264,15 @@ def write_model(
     t_stop: float,
     speed_ctrl_args: dict[str, float] | None = None,
     outputs: bool = False,
-    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write a PLECS model of the induction machine drive, see `sm.write_model`.
 
     The control system is current-vector control (`VectorControlSystem`, whose speed
     controller is given by `speed_ctrl_args`) or observer-based V/Hz control
-    (`VHzControlSystem`, without `speed_ctrl_args`), whose inputs are `enable`, the
-    speed reference, the phase currents, and the DC-bus voltage.
+    (`VHzControlSystem`, without `speed_ctrl_args`), whose inputs are `enable` (the
+    gate enable of `ctrl`), the speed reference, the phase currents, the DC-bus
+    voltage, and the converter voltages.
 
     """
     path = Path(path)
@@ -278,16 +289,17 @@ def write_model(
     T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
-        (ENABLE, enable),
+        (ENABLE, gate_enable(ctrl)),
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
+        ("u_c_line", CONVERTER_VOLTAGES),
     ]
     if block is CVC_BLOCK:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
     _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
-    _add_pwm(sch, T_s)
+    _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         _add_blanking_time(sch)
@@ -295,12 +307,13 @@ def write_model(
     # the DC bus
     sch.dx = 320 if isinstance(mdl.dc_bus, DiodeBridgeDCBus) else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
-    sch.dx += DC_DX
-    _add_converter(sch, t_d)
+    sch.dx += DC_DX + GATE_DX
+    _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
+    x_c = CONV[0] + 30 + sch.dx  # The AC terminals of the converter
+    sch.dx += MEAS_DX
     _add_im(sch)
-    for k in range(3):
-        sch.wire(("Converter", k + 1), ("Machine", k + 1))
+    _add_phase_lines(sch, x_c)
     _add_mechanics(sch, tau_L, inertia=False)
     _add_drive_outputs(sch, block, outputs)
     size = (880 + sch.dx, 520)

@@ -334,22 +334,23 @@ static void rate_limiter_update(RateLimiter *self, double y)
     self->old_y = y;
 }
 
-/* Dead time --------------------------------------------------------------- */
+/* Inverter nonlinearity ------------------------------------------------------ */
 
-static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
-                            double T_s, double i_0, double d_err[3])
+static void inverter_nonlinearity(double t_d, double u_th, double i_0,
+                                  const double i_abc[3], const double d_abc[3],
+                                  double u_dc, double T_half, double d_err[3])
 {
     for (int k = 0; k < 3; k++) {
         /* Switching-cycle averaged on-times of the upper and lower switches
          * (averaged_gate_signals) */
         double d = d_abc[k];
-        double delta = (d > 0.0 && d < 1.0) ? t_d / (2.0 * T_s) : 0.0;
+        double delta = (d > 0.0 && d < 1.0) ? t_d / (2.0 * T_half) : 0.0;
         double q_hi = fmax(d - delta, 0.0);
         double q_lo = fmax(1.0 - d - delta, 0.0);
         double b = 1.0 - q_hi - q_lo;
         /* Current direction: tanh(i/i_0), or the signum function if i_0 = 0 */
         double s = (i_0 > 0.0) ? tanh(i_abc[k] / i_0) : sign(i_abc[k]);
-        d_err[k] = d - q_hi - 0.5 * b * (1.0 - s);
+        d_err[k] = d - q_hi - 0.5 * b * (1.0 - s) + s * u_th / u_dc;
     }
 }
 
@@ -360,21 +361,26 @@ static void pwm_init(PWM *self, double k_pred)
     self->k_pred = k_pred;
     self->mme = 0;
     self->t_d = 0.0;
-    self->T_s = 0.0;
+    self->u_th = 0.0;
     self->i_0 = 0.0;
     self->feedforward = 1;
     self->d_min = 0.0;
+    self->single_update = 0;
     for (int k = 0; k < 3; k++) {
         self->d_abc[0][k] = 0.0;
         self->d_abc[1][k] = 0.0;
     }
+    /* Before the first duty ratios, the legs do not switch, and the infinite period
+     * gives no dead-time error */
+    self->T_half = INFINITY;
+    self->i_c_ab = 0.0;
 }
 
-static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
-                              int feedforward)
+static void pwm_set_nonlinearity(PWM *self, double t_d, double u_th, double i_0,
+                                 int feedforward)
 {
     self->t_d = t_d;
-    self->T_s = T_s;
+    self->u_th = u_th;
     self->i_0 = i_0;
     self->feedforward = feedforward;
 }
@@ -389,8 +395,25 @@ static void pwm_set_min_pulse(PWM *self, double d_min)
     self->d_min = d_min;
 }
 
+static void pwm_set_single_update(PWM *self, int single_update)
+{
+    self->single_update = single_update;
+}
+
+/* Error model of the PWM in use (d_err is not None) */
+static int pwm_has_error_model(const PWM *self)
+{
+    return self->t_d > 0.0 || self->u_th > 0.0;
+}
+
+/* Half carrier period (s) corresponding to the sampling period */
+static double pwm_half_period(const PWM *self, double T_s)
+{
+    return self->single_update ? T_s / 2.0 : T_s;
+}
+
 static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_ref[3],
-                             const double *i_abc)
+                             const double *i_abc, double u_dc, double T_half)
 {
     for (int k = 0; k < 3; k++) {
         double candidates[2]; /* The leg switching, the leg clamped */
@@ -409,7 +432,8 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
             double realized = candidates[j];
             if (i_abc != NULL) {
                 double d_err[3];
-                dead_time_error(i_abc, d_abc, self->t_d, self->T_s, self->i_0, d_err);
+                inverter_nonlinearity(self->t_d, self->u_th, self->i_0, i_abc, d_abc,
+                                      u_dc, T_half, d_err);
                 realized -= d_err[k];
             }
             errors[j] = fabs(realized - d_ref[k]);
@@ -421,18 +445,21 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
                                            double u_dc, int average)
 {
-    double i_abc[3], d_err[3];
+    double i_abc[3];
     complex2abc(i_c_ab, i_abc);
     int k0 = average ? 0 : 1;
     double complex q_ab = 0.0;
     for (int k = k0; k < 2; k++) {
-        double complex q = abc2complex(self->d_abc[k]);
-        if (self->t_d > 0.0) {
-            dead_time_error(i_abc, self->d_abc[k], self->t_d, self->T_s, self->i_0,
-                            d_err);
-            q -= abc2complex(d_err);
+        double d[3] = {self->d_abc[k][0], self->d_abc[k][1], self->d_abc[k][2]};
+        if (pwm_has_error_model(self)) {
+            double d_err[3];
+            inverter_nonlinearity(self->t_d, self->u_th, self->i_0, i_abc, d, u_dc,
+                                  self->T_half, d_err);
+            for (int j = 0; j < 3; j++) {
+                d[j] -= d_err[j];
+            }
         }
-        q_ab += q;
+        q_ab += abc2complex(d);
     }
     return u_dc * q_ab / (double)(2 - k0);
 }
@@ -470,18 +497,27 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double w, double complex i_c_ab,
                                          double d_abc[3])
 {
+    /* A discharged DC bus, e.g., with blocked gates before the precharge */
+    if (u_dc <= 0.0) {
+        for (int k = 0; k < 3; k++) {
+            d_abc[k] = 0.5;
+        }
+        return 0.0;
+    }
+
     /* Duty ratios */
     pwm_duty_ratios(u_c_ref_ab, u_dc, self->mme, d_abc);
     double d_ref[3] = {d_abc[0], d_abc[1], d_abc[2]};
 
     /* Compensate for the duty-ratio error using the predicted currents */
-    int compensate = self->t_d > 0.0 && self->feedforward;
+    int compensate = pwm_has_error_model(self) && self->feedforward;
+    double T_half = pwm_half_period(self, T_s);
     double i_c_abc[3];
     if (compensate) {
         double d_err[3];
         complex2abc(cexp(I * self->k_pred * T_s * w) * i_c_ab, i_c_abc);
-        dead_time_error(i_c_abc, d_abc, self->t_d, self->T_s, self->i_0,
-                        d_err);
+        inverter_nonlinearity(self->t_d, self->u_th, self->i_0, i_c_abc, d_abc, u_dc,
+                              T_half, d_err);
         for (int k = 0; k < 3; k++) {
             d_abc[k] = clip(d_abc[k] + d_err[k], 0.0, 1.0);
         }
@@ -489,17 +525,30 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
 
     /* Minimum pulses */
     if (self->d_min > 0.0) {
-        pwm_limit_pulses(self, d_abc, d_ref, compensate ? i_c_abc : NULL);
+        pwm_limit_pulses(self, d_abc, d_ref, compensate ? i_c_abc : NULL, u_dc,
+                         T_half);
     }
 
     /* Limited voltage reference, including the compensation */
     return abc2complex(d_abc) * u_dc;
 }
 
-static void pwm_update(PWM *self, const double d_abc[3])
+static void pwm_update(PWM *self, double T_s, const double d_abc[3])
 {
     for (int k = 0; k < 3; k++) {
         self->d_abc[0][k] = self->d_abc[1][k];
         self->d_abc[1][k] = d_abc[k];
     }
+    self->T_half = pwm_half_period(self, T_s);
+}
+
+static double complex pwm_feedforward_current(const PWM *self, int enabled,
+                                              double complex i_c_ab)
+{
+    return enabled ? i_c_ab : self->i_c_ab;
+}
+
+static void pwm_store_current(PWM *self, double complex i_c_ab)
+{
+    self->i_c_ab = i_c_ab;
 }

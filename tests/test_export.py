@@ -24,6 +24,7 @@ from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
 from tests.test_simulink import (
     BASE,
+    CURRENT_MAP,
     IM_SPEED,
     SM_SPEED,
     gfl_system,
@@ -308,4 +309,206 @@ def test_unsupported_k_comp(tmp_path: Path) -> None:
                 StepSignal(0.02, 5e3),
                 v_c_ref=BASE.u,
             )
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+def _im_drive(
+    t_d: float, u_th: float, single_update: bool, delay: int | None = None
+) -> tuple[Any, Any]:
+    """
+    Induction machine drive with carrier comparison, the dead time and the threshold
+    voltage, and single or double update, and its control system compensating for
+    them. The delay defaults to one sampling period.
+    """
+    mdl, ctrl = im_system(True, t_d, 0.0, u_th, single_update)[0]()
+    if delay is None:
+        delay = 2 if single_update else 1
+    drive = model.Drive(
+        mdl.machine,
+        mdl.mechanics,
+        mdl.converter,
+        pwm=True,
+        delay=delay,
+        single_update=single_update,
+    )
+    return drive, ctrl
+
+
+def test_threshold_voltage_single_update(tmp_path: Path) -> None:
+    """The threshold voltage should be exported to PLECS as the forward voltages of
+    the IGBT converter with parasitics, and single update as the carrier period T_s,
+    both also as the parameters of the PWM of the control system. In Simulink, they
+    are supported in the control system but not in the system model."""
+    mdl, ctrl = _im_drive(2e-6, 1.0, True)
+    plecs.im.write_model(tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, IM_SPEED)
+    text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+    assert (
+        r'"Components/Electrical/Converters/Detailed\\n2-Level\\nIGBT\\nConv."' in text
+    )
+    for var in ("Vf_igbt", "Vf_d"):
+        assert re.search(rf'Variable\s+"{var}"\s+Value\s+"converter.u_th"', text)
+    assert re.search(r'Variable\s+"fc"\s+Value\s+"1/cfg.T_s"', text)
+    for line in ("converter.u_th = 1;", "pwm.u_th = 1;", "pwm.single_update = 1;"):
+        assert line in text
+    with pytest.raises(NotImplementedError, match="threshold voltage"):
+        simulink.im.write_model(
+            tmp_path / "drive.slx", mdl, ctrl, *DRIVE_REFS, IM_SPEED
+        )
+    with pytest.raises(NotImplementedError, match="Single update"):
+        simulink.im.write_model(
+            tmp_path / "drive.slx",
+            _im_drive(0.0, 0.0, True)[0],
+            ctrl,
+            *DRIVE_REFS,
+            IM_SPEED,
+        )
+    # The control system with single update and the threshold voltage, with the
+    # system model with double update
+    mdl, _ = _im_drive(0.0, 0.0, False)
+    simulink.im.write_model(tmp_path / "drive.slx", mdl, ctrl, *DRIVE_REFS, IM_SPEED)
+    text = (tmp_path / "init_drive.m").read_text(encoding="utf-8")
+    assert "pwm.u_th = 1;" in text and "pwm.single_update = 1;" in text
+
+
+@pytest.mark.parametrize("single_update", [False, True], ids=["double", "single"])
+def test_unsupported_delay(tmp_path: Path, single_update: bool) -> None:
+    """The computational delay should be one sampling period: one half carrier period
+    with double update and two with single update."""
+    mdl, ctrl = _im_drive(0.0, 0.0, single_update, delay=1 if single_update else 2)
+    for tool, path in ((plecs, "drive.plecs"), (simulink, "drive.slx")):
+        with pytest.raises(NotImplementedError, match="computational delay"):
+            tool.im.write_model(tmp_path / path, mdl, ctrl, *DRIVE_REFS, IM_SPEED)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("case", ["sm", "sm_sign", "grid"])
+def test_threshold_voltage(tmp_path: Path, case: str) -> None:
+    """The threshold voltage of the converter is supported in the drives (with
+    `sign=np.sign`) of the PLECS export, and not in the grid converter systems and
+    the Simulink export."""
+    if case.startswith("sm"):
+        mdl, ctrl, speed = _drive(sm=True)
+        mdl.converter.u_th = 1.0
+        if case == "sm":
+            plecs.sm.write_model(
+                tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, speed
+            )
+            text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+            assert "converter.u_th = 1;" in text
+            (tmp_path / "drive.plecs").unlink()
+        else:
+            mdl.converter.sign = lambda i: np.tanh(i / 0.1)
+        for tool, path in ((plecs, "drive.plecs"), (simulink, "drive.slx")):
+            if tool is plecs and case == "sm":
+                continue
+            with pytest.raises(NotImplementedError, match="threshold voltage"):
+                tool.sm.write_model(tmp_path / path, mdl, ctrl, *DRIVE_REFS, speed)
+    else:
+        ctrl = gfl_system()[0]()[1]
+        mdl = _grid_model(lcl=True)
+        mdl.converter.u_th = 1.0
+        for tool, path in ((plecs, "grid.plecs"), (simulink, "grid.slx")):
+            with pytest.raises(NotImplementedError, match="threshold voltage"):
+                tool.grid.write_model(
+                    tmp_path / path,
+                    mdl,
+                    ctrl,
+                    0.1,
+                    StepSignal(0.02, 5e3),
+                    q_g_ref=StepSignal(0.04, 4e3),
+                )
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("system", ["sm", "grid"])
+def test_gate_enable(tmp_path: Path, system: str) -> None:
+    """
+    The gate enable of the control system (`set_enable`) should be exported to PLECS
+    as the input enable of the control system, also sampled to block the gates of the
+    converter, and rejected in Simulink (whose system model does not block the
+    gates). Only a constant and a StepSignal of 0 and 1 are supported.
+    """
+    enable = StepSignal([0.01, 0.2], [1.0, 0.0], before=0.0)
+    if system == "sm":
+        mdl, ctrl, speed = _drive(sm=True)
+
+        def write(tool: Any, path: str) -> None:
+            tool.sm.write_model(tmp_path / path, mdl, ctrl, *DRIVE_REFS, speed)
+
+    else:
+        mdl, ctrl = _grid_model(lcl=True), gfl_system()[0]()[1]
+
+        def write(tool: Any, path: str) -> None:
+            refs = {"q_g_ref": StepSignal(0.04, 4e3)}
+            tool.grid.write_model(
+                tmp_path / path, mdl, ctrl, 0.1, StepSignal(0.02, 5e3), **refs
+            )
+
+    ctrl.set_enable(enable)
+    write(plecs, "model.plecs")
+    text = (tmp_path / "model.plecs").read_text(encoding="utf-8")
+    assert re.search(r'Name\s+"enable"', text)  # The Step block of the gate enable
+    for name in ("Goto enable", "From enable", "Sampled enable", "Gate enable"):
+        assert f'"{name}"' in text
+    assert "2-Level\\\\nIGBT\\\\nConv." in text  # Blocking the gates
+    with pytest.raises(NotImplementedError, match="Gate blocking"):
+        write(simulink, "model.slx")
+    assert not (tmp_path / "model.slx").exists()
+    for bad, error in [
+        (lambda t: t > 0.01, NotImplementedError),
+        (StepSignal(0.01, 2.0, before=0.0), ValueError),
+        (0.5, NotImplementedError),
+    ]:
+        ctrl.set_enable(bad)
+        with pytest.raises(error):
+            write(plecs, "other.plecs")
+    assert not (tmp_path / "other.plecs").exists()
+
+
+def test_unsupported_single_update_grid(tmp_path: Path) -> None:
+    """Single update is supported in the system model of the PLECS export only."""
+    ctrl = gfl_system()[0]()[1]
+    ref = _grid_model(lcl=True)
+    mdl = grid_model.GridConverterSystem(
+        ref.converter,
+        ref.ac_filter,
+        ref.ac_source,
+        pwm=True,
+        delay=2,
+        single_update=True,
+    )
+    refs = (0.1, StepSignal(0.02, 5e3))
+    plecs.grid.write_model(
+        tmp_path / "grid.plecs", mdl, ctrl, *refs, q_g_ref=StepSignal(0.04, 4e3)
+    )
+    text = (tmp_path / "grid.plecs").read_text(encoding="utf-8")
+    assert re.search(r'Variable\s+"fc"\s+Value\s+"1/cfg.T_s"', text)
+    with pytest.raises(NotImplementedError, match="Single update"):
+        simulink.grid.write_model(
+            tmp_path / "grid.slx", mdl, ctrl, *refs, q_g_ref=StepSignal(0.04, 4e3)
+        )
+    assert not (tmp_path / "grid.slx").exists()
+
+
+def test_unsupported_gate_blocking_gradnet(tmp_path: Path) -> None:
+    """The gate blocking is not supported with the GradNet machine model, whose
+    controlled current sources would toggle the diodes of a blocked leg in PLECS."""
+    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
+
+    current_map = gn.CurrentMapWithHarmonics(
+        gn.load_gradnet(CURRENT_MAP, activation=gn.Softmax)
+    )
+    par = model.SpatialSaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, magnetic_map_fcn=current_map
+    )
+    mdl = model.Drive(
+        model.SynchronousMachine(par),
+        model.MechanicalSystem(J=0.015),
+        model.VoltageSourceConverter(u_dc=540),
+        pwm=True,
+    )
+    ctrl = sm_system(True, 0.0)[0]()[1]
+    ctrl.set_enable(StepSignal(0.01, 1.0, before=0.0))
+    with pytest.raises(NotImplementedError, match="GradNet"):
+        plecs.sm.write_model(tmp_path / "drive.plecs", mdl, ctrl, *DRIVE_REFS, SM_SPEED)
     assert not list(tmp_path.iterdir())  # Nothing is written

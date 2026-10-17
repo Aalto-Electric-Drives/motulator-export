@@ -17,8 +17,17 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from motulator.common.model._base import Model
+from motulator.drive.control._base import DriveControlSystem
+from motulator.grid.control._base import GridConverterControlSystem
 
-from motulator_export.plecs._common import MONITOR, ControlBlock, StepSignal, _fmt_mask
+from motulator_export.plecs._common import (
+    MONITOR,
+    ControlBlock,
+    StepSignal,
+    _fmt_mask,
+    gate_enable,
+)
 from motulator_export.plecs._schematic import _fmt
 from motulator_export.simulink._mfunction import MFunction, path_functions
 from motulator_export.simulink._render import (
@@ -33,6 +42,22 @@ from motulator_export.simulink._render import (
 from motulator_export.simulink._sfunction import SFunction
 
 SIMULINK_SOURCES = Path(__file__).parent
+
+
+def check_supported_model(
+    mdl: Model, ctrl: DriveControlSystem | GridConverterControlSystem
+) -> None:
+    """
+    Raise an error if the system model updates the duty ratios once per carrier
+    period or the control system blocks the gates (`set_enable`), which the ideal
+    converter of the system model does not model.
+    """
+    if mdl.single_update:
+        raise NotImplementedError("Single update not supported in the system model")
+    if gate_enable(ctrl) != 1:
+        raise NotImplementedError(
+            "Gate blocking (set_enable) not supported in the system model"
+        )
 
 
 def _m_str(text: str) -> str:

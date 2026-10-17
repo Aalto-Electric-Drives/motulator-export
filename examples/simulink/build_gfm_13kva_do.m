@@ -28,23 +28,24 @@ s.scope = { ...
     'Angle', [13.0]
     };
 s.control.name = 'Grid-forming control';
-s.control.sfunction = {'sfun_gfm_get_measurement', 'sfun_gfm_pwm', 'sfun_gfm_pwm_realized_voltage', 'sfun_gfm_observer', 'sfun_gfm_power_reference_limiter', 'sfun_gfm_current_reference', 'sfun_gfm_current_limiter', 'sfun_gfm_voltage_reference', 'sfun_gfm_modulate', 'sfun_gfm_monitored_signals'};
+s.control.sfunction = {'sfun_gfm_get_measurement', 'sfun_gfm_pwm', 'sfun_gfm_pwm_realized_voltage', 'sfun_gfm_observer', 'sfun_gfm_power_reference_limiter', 'sfun_gfm_current_reference', 'sfun_gfm_current_limiter', 'sfun_gfm_standby_output', 'sfun_gfm_voltage_reference', 'sfun_gfm_modulate', 'sfun_gfm_monitored_signals'};
 s.control.mask_type = 'GridConverterControlSystem (motulator)';
-s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. While the input enable is not positive, the duty ratios are 0.5 and the state is reset to its initial value.';
+s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the gates of the converter are blocked, and the control system computes its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'GridConverterControlSystem', 'cfg.T_s'
     };
 s.control.mask_init = '';
-s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_dc'};
+s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_dc', 'u_c_line'};
 s.control.netlist.blocks = { ...
     'enable', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'p_g_ref', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'v_c_ref', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'i_c_abc', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
     'u_dc', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
+    'u_c_line', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
     'd_abc', 'Outport', [905.0 381.0 935.0 395.0], {'Port', '1'}
-    'signals', 'Outport', [1620.0 268.0 1650.0 282.0], {'Port', '2'}
-    'get_measurement', 'S-Function', [250.0 195.0 390.0 255.0], {'FunctionName', 'sfun_gfm_get_measurement', 'Parameters', '1'}
+    'signals', 'Outport', [1530.0 298.0 1560.0 312.0], {'Port', '2'}
+    'get_measurement', 'S-Function', [250.0 180.0 390.0 270.0], {'FunctionName', 'sfun_gfm_get_measurement', 'Parameters', '1'}
     'PWM', 'Subsystem', [570.0 255.0 710.0 415.0], {'ContentPreviewEnabled', 'off'}
     'ObserverBasedGridFormingController', 'Subsystem', [905.0 40.0 1045.0 280.0], {'ContentPreviewEnabled', 'off'}
     'Goto fbk', 'Goto', [1120.0 48.0 1190.0 62.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -52,12 +53,11 @@ s.control.netlist.blocks = { ...
     'From fbk', 'From', [1120.0 268.0 1190.0 282.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref', 'From', [1120.0 323.0 1190.0 337.0], {'GotoTag', 'ref', 'ShowName', 'off'}
     'ref.u_c', 'Selector', [1120.0 160.0 1170.0 190.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
-    'modulate', 'S-Function', [1355.0 85.0 1495.0 145.0], {'FunctionName', 'sfun_gfm_modulate', 'Parameters', '1'}
-    'Monitored signals', 'S-Function', [1355.0 215.0 1495.0 335.0], {'FunctionName', 'sfun_gfm_monitored_signals', 'Parameters', '1'}
-    'Mux signals', 'Mux', [1568.0 215.0 1573.0 335.0], {'Inputs', '[3 2 4 1]', 'ShowName', 'off'}
+    'modulate', 'S-Function', [1265.0 85.0 1405.0 145.0], {'FunctionName', 'sfun_gfm_modulate', 'Parameters', '1'}
+    'Monitored signals', 'S-Function', [1265.0 245.0 1405.0 365.0], {'FunctionName', 'sfun_gfm_monitored_signals', 'Parameters', '1'}
+    'Mux signals', 'Mux', [1478.0 245.0 1483.0 365.0], {'Inputs', '[3 2 4 1]', 'ShowName', 'off'}
     'From PWM.enable', 'From', [475.0 268.0 545.0 282.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From ObserverBasedGridFormingController.enable', 'From', [810.0 53.0 880.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From Monitored signals.enable', 'From', [1260.0 228.0 1330.0 242.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'Goto enable', 'Goto', [110.0 43.0 180.0 57.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/enable', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '1'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
@@ -66,33 +66,33 @@ s.control.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [845.0 55.0 875.0 69.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [845.0 113.0 875.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [845.0 153.0 875.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'S-Function', [355.0 100.0 495.0 220.0], {'FunctionName', 'sfun_gfm_pwm', 'Parameters', '1, 1, 1, 1, 1, 1'}
-    'PWM/get_realized_voltage', 'S-Function', [645.0 40.0 785.0 130.0], {'FunctionName', 'sfun_gfm_pwm_realized_voltage', 'Parameters', '1, 1, 1, 1, 1, 1'}
+    'PWM/compute_output', 'S-Function', [355.0 100.0 495.0 220.0], {'FunctionName', 'sfun_gfm_pwm', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1'}
+    'PWM/get_realized_voltage', 'S-Function', [645.0 40.0 785.0 130.0], {'FunctionName', 'sfun_gfm_pwm_realized_voltage', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1'}
     'PWM/From compute_output.enable', 'From', [260.0 108.0 330.0 122.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/From get_realized_voltage.enable', 'From', [550.0 48.0 620.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'ObserverBasedGridFormingController/enable', 'Inport', [40.0 553.0 70.0 567.0], {'Port', '1'}
-    'ObserverBasedGridFormingController/p_g_ref', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
-    'ObserverBasedGridFormingController/v_c_ref', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '3'}
-    'ObserverBasedGridFormingController/meas', 'Inport', [40.0 388.0 70.0 402.0], {'Port', '4'}
-    'ObserverBasedGridFormingController/u_c_ab', 'Inport', [40.0 443.0 70.0 457.0], {'Port', '5'}
-    'ObserverBasedGridFormingController/u_c_zoh_ab', 'Inport', [40.0 498.0 70.0 512.0], {'Port', '6'}
-    'ObserverBasedGridFormingController/fbk', 'Outport', [1750.0 403.0 1780.0 417.0], {'Port', '1'}
-    'ObserverBasedGridFormingController/ref', 'Outport', [1750.0 283.0 1780.0 297.0], {'Port', '2'}
-    'ObserverBasedGridFormingController/Observer', 'S-Function', [340.0 350.0 480.0 470.0], {'FunctionName', 'sfun_gfm_observer', 'Parameters', '1, 1, 1, 1, 1, 1'}
-    'ObserverBasedGridFormingController/fbk.i_c', 'Selector', [745.0 440.0 795.0 470.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1 2]', 'InputPortWidth', '14'}
-    'ObserverBasedGridFormingController/Goto i_c', 'Goto', [960.0 448.0 1030.0 462.0], {'GotoTag', 'i_c', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'ObserverBasedGridFormingController/From u_c', 'From', [525.0 163.0 595.0 177.0], {'GotoTag', 'u_c', 'ShowName', 'off'}
-    'ObserverBasedGridFormingController/From i_c', 'From', [340.0 193.0 410.0 207.0], {'GotoTag', 'i_c', 'ShowName', 'off'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'S-Function', [745.0 95.0 885.0 215.0], {'FunctionName', 'sfun_gfm_power_reference_limiter', 'Parameters', '1, 1, 1, 1'}
-    'ObserverBasedGridFormingController/compute_output', 'S-Function', [960.0 245.0 1100.0 335.0], {'FunctionName', 'sfun_gfm_current_reference', 'Parameters', '1, 1, 1'}
-    'ObserverBasedGridFormingController/CurrentLimiter', 'S-Function', [1175.0 290.0 1315.0 350.0], {'FunctionName', 'sfun_gfm_current_limiter', 'Parameters', '1'}
-    'ObserverBasedGridFormingController/voltage_reference', 'S-Function', [1390.0 305.0 1530.0 365.0], {'FunctionName', 'sfun_gfm_voltage_reference', 'Parameters', '1, 1'}
-    'ObserverBasedGridFormingController/Mux ref', 'Mux', [1638.0 230.0 1643.0 350.0], {'Inputs', '[1 1 2 2]', 'ShowName', 'off'}
-    'ObserverBasedGridFormingController/Goto u_c', 'Goto', [1635.0 393.0 1705.0 407.0], {'GotoTag', 'u_c', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'ObserverBasedGridFormingController/From Observer.enable', 'From', [245.0 358.0 315.0 372.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'ObserverBasedGridFormingController/From PowerReferenceLimiter.enable', 'From', [650.0 103.0 720.0 117.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'ObserverBasedGridFormingController/Goto enable', 'Goto', [110.0 553.0 180.0 567.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'ObserverBasedGridFormingController/enable', 'Inport', [40.0 508.0 70.0 522.0], {'Port', '1'}
+    'ObserverBasedGridFormingController/p_g_ref', 'Inport', [40.0 103.0 70.0 117.0], {'Port', '2'}
+    'ObserverBasedGridFormingController/v_c_ref', 'Inport', [40.0 253.0 70.0 267.0], {'Port', '3'}
+    'ObserverBasedGridFormingController/meas', 'Inport', [40.0 343.0 70.0 357.0], {'Port', '4'}
+    'ObserverBasedGridFormingController/u_c_ab', 'Inport', [40.0 398.0 70.0 412.0], {'Port', '5'}
+    'ObserverBasedGridFormingController/u_c_zoh_ab', 'Inport', [40.0 453.0 70.0 467.0], {'Port', '6'}
+    'ObserverBasedGridFormingController/fbk', 'Outport', [1920.0 373.0 1950.0 387.0], {'Port', '1'}
+    'ObserverBasedGridFormingController/ref', 'Outport', [1920.0 273.0 1950.0 287.0], {'Port', '2'}
+    'ObserverBasedGridFormingController/Observer', 'S-Function', [250.0 335.0 390.0 425.0], {'FunctionName', 'sfun_gfm_observer', 'Parameters', '1, 1, 1, 1, 1, 1'}
+    'ObserverBasedGridFormingController/fbk.i_c', 'Selector', [565.0 410.0 615.0 440.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1 2]', 'InputPortWidth', '14'}
+    'ObserverBasedGridFormingController/Goto i_c', 'Goto', [780.0 418.0 850.0 432.0], {'GotoTag', 'i_c', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'ObserverBasedGridFormingController/From u_c', 'From', [435.0 133.0 505.0 147.0], {'GotoTag', 'u_c', 'ShowName', 'off'}
+    'ObserverBasedGridFormingController/From i_c', 'From', [250.0 163.0 320.0 177.0], {'GotoTag', 'i_c', 'ShowName', 'off'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'S-Function', [565.0 95.0 705.0 185.0], {'FunctionName', 'sfun_gfm_power_reference_limiter', 'Parameters', '1, 1, 1, 1'}
+    'ObserverBasedGridFormingController/compute_output', 'S-Function', [780.0 215.0 920.0 305.0], {'FunctionName', 'sfun_gfm_current_reference', 'Parameters', '1, 1, 1'}
+    'ObserverBasedGridFormingController/CurrentLimiter', 'S-Function', [995.0 260.0 1135.0 320.0], {'FunctionName', 'sfun_gfm_current_limiter', 'Parameters', '1'}
+    'ObserverBasedGridFormingController/compute_standby_output', 'S-Function', [1315.0 185.0 1455.0 335.0], {'FunctionName', 'sfun_gfm_standby_output', 'Parameters', ''}
+    'ObserverBasedGridFormingController/voltage_reference', 'S-Function', [1560.0 295.0 1700.0 355.0], {'FunctionName', 'sfun_gfm_voltage_reference', 'Parameters', '1, 1'}
+    'ObserverBasedGridFormingController/Mux ref', 'Mux', [1808.0 220.0 1813.0 340.0], {'Inputs', '[1 1 2 2]', 'ShowName', 'off'}
+    'ObserverBasedGridFormingController/Goto u_c', 'Goto', [1805.0 363.0 1875.0 377.0], {'GotoTag', 'u_c', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'ObserverBasedGridFormingController/From compute_standby_output.enable', 'From', [1220.0 193.0 1290.0 207.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'ObserverBasedGridFormingController/Goto enable', 'Goto', [110.0 508.0 180.0 522.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     };
 s.control.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedGridFormingController', 'Outport', 1.0, -45.0
@@ -103,12 +103,11 @@ s.control.netlist.aligns = { ...
     '', 'd_abc', 'Inport', 1.0, 'PWM', 'Outport', 3.0, 0.0
     '', 'ref.u_c', 'Outport', 1.0, 'modulate', 'Inport', 2.0, 45.0
     '', 'Goto ref', 'Inport', 1.0, 'ref.u_c', 'Inport', 1.0, 45.0
-    '', 'Monitored signals', 'Inport', 2.0, 'From fbk', 'Outport', 1.0, 0.0
+    '', 'Monitored signals', 'Inport', 1.0, 'From fbk', 'Outport', 1.0, 0.0
     '', 'Mux signals', 'Inport', 1.0, 'Monitored signals', 'Outport', 1.0, 0.0
     '', 'signals', 'Inport', 1.0, 'Mux signals', 'Outport', 1.0, 0.0
     '', 'From PWM.enable', 'Outport', 1.0, 'PWM', 'Inport', 1.0, 0.0
     '', 'From ObserverBasedGridFormingController.enable', 'Outport', 1.0, 'ObserverBasedGridFormingController', 'Inport', 1.0, 0.0
-    '', 'From Monitored signals.enable', 'Outport', 1.0, 'Monitored signals', 'Inport', 1.0, 0.0
     '', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
     'PWM', 'get_realized_voltage', 'Inport', 3.0, 'compute_output', 'Outport', 1.0, -45.0
     'PWM', 'u_c_ab', 'Inport', 1.0, 'get_realized_voltage', 'Outport', 1.0, 0.0
@@ -117,32 +116,32 @@ s.control.netlist.aligns = { ...
     'PWM', 'From compute_output.enable', 'Outport', 1.0, 'compute_output', 'Inport', 1.0, 0.0
     'PWM', 'From get_realized_voltage.enable', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 1.0, 0.0
     'PWM', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
-    'ObserverBasedGridFormingController', 'compute_output', 'Inport', 2.0, 'PowerReferenceLimiter', 'Inport', 4.0, 90.0
+    'ObserverBasedGridFormingController', 'compute_output', 'Inport', 2.0, 'PowerReferenceLimiter', 'Inport', 3.0, 90.0
     'ObserverBasedGridFormingController', 'CurrentLimiter', 'Inport', 1.0, 'compute_output', 'Outport', 3.0, 0.0
-    'ObserverBasedGridFormingController', 'voltage_reference', 'Inport', 1.0, 'CurrentLimiter', 'Outport', 1.0, 0.0
+    'ObserverBasedGridFormingController', 'compute_standby_output', 'Inport', 4.0, 'CurrentLimiter', 'Outport', 1.0, 0.0
+    'ObserverBasedGridFormingController', 'voltage_reference', 'Inport', 1.0, 'compute_standby_output', 'Outport', 3.0, 0.0
     'ObserverBasedGridFormingController', 'Mux ref', 'Inport', 4.0, 'voltage_reference', 'Outport', 1.0, 0.0
     'ObserverBasedGridFormingController', 'ref', 'Inport', 1.0, 'Mux ref', 'Outport', 1.0, 0.0
-    'ObserverBasedGridFormingController', 'p_g_ref', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 2.0, 0.0
+    'ObserverBasedGridFormingController', 'p_g_ref', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 1.0, 0.0
     'ObserverBasedGridFormingController', 'v_c_ref', 'Outport', 1.0, 'compute_output', 'Inport', 2.0, 0.0
-    'ObserverBasedGridFormingController', 'From i_c', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 4.0, 0.0
+    'ObserverBasedGridFormingController', 'From i_c', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 3.0, 0.0
     'ObserverBasedGridFormingController', 'Observer', 'Outport', 1.0, 'compute_output', 'Inport', 3.0, 90.0
-    'ObserverBasedGridFormingController', 'From u_c', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 3.0, 0.0
+    'ObserverBasedGridFormingController', 'From u_c', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 2.0, 0.0
     'ObserverBasedGridFormingController', 'fbk.i_c', 'Inport', 1.0, 'Observer', 'Outport', 1.0, 45.0
     'ObserverBasedGridFormingController', 'Goto i_c', 'Inport', 1.0, 'fbk.i_c', 'Outport', 1.0, 0.0
     'ObserverBasedGridFormingController', 'fbk', 'Inport', 1.0, 'Observer', 'Outport', 1.0, 0.0
-    'ObserverBasedGridFormingController', 'meas', 'Outport', 1.0, 'Observer', 'Inport', 2.0, 0.0
-    'ObserverBasedGridFormingController', 'From Observer.enable', 'Outport', 1.0, 'Observer', 'Inport', 1.0, 0.0
-    'ObserverBasedGridFormingController', 'From PowerReferenceLimiter.enable', 'Outport', 1.0, 'PowerReferenceLimiter', 'Inport', 1.0, 0.0
+    'ObserverBasedGridFormingController', 'meas', 'Outport', 1.0, 'Observer', 'Inport', 1.0, 0.0
+    'ObserverBasedGridFormingController', 'From compute_standby_output.enable', 'Outport', 1.0, 'compute_standby_output', 'Inport', 1.0, 0.0
     'ObserverBasedGridFormingController', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
     };
 s.control.netlist.lines = { ...
     '', 'From PWM.enable/1', 'PWM/1', []
     '', 'From ObserverBasedGridFormingController.enable/1', 'ObserverBasedGridFormingController/1', []
-    '', 'From Monitored signals.enable/1', 'Monitored signals/1', []
     '', 'p_g_ref/1', 'ObserverBasedGridFormingController/2', {'x', 735.0}
     '', 'v_c_ref/1', 'ObserverBasedGridFormingController/3', []
-    '', 'i_c_abc/1', 'get_measurement/1', {'x', 215.0}
+    '', 'i_c_abc/1', 'get_measurement/1', []
     '', 'u_dc/1', 'get_measurement/2', {'x', 200.0}
+    '', 'u_c_line/1', 'get_measurement/3', {'x', 215.0}
     '', 'get_measurement/1', 'PWM/2', {'x', 415.0}
     '', 'get_measurement/1', 'ObserverBasedGridFormingController/4', {'x', 750.0}
     '', 'PWM/1', 'ObserverBasedGridFormingController/5', {'x', 765.0}
@@ -153,10 +152,10 @@ s.control.netlist.lines = { ...
     '', 'ObserverBasedGridFormingController/2', 'Goto ref/1', []
     '', 'ObserverBasedGridFormingController/2', 'ref.u_c/1', {'x', 1085.0}
     '', 'ref.u_c/1', 'modulate/2', {'x', 1230.0}
-    '', 'modulate/1', 'PWM/3', {'x', 1535.0, 'y', 470.0, 'x', 430.0}
-    '', 'modulate/2', 'PWM/4', {'x', 1520.0, 'y', 455.0, 'x', 445.0}
-    '', 'From fbk/1', 'Monitored signals/2', []
-    '', 'From ref/1', 'Monitored signals/3', {'x', 1215.0}
+    '', 'modulate/1', 'PWM/3', {'x', 1445.0, 'y', 470.0, 'x', 430.0}
+    '', 'modulate/2', 'PWM/4', {'x', 1430.0, 'y', 455.0, 'x', 445.0}
+    '', 'From fbk/1', 'Monitored signals/1', []
+    '', 'From ref/1', 'Monitored signals/2', {'x', 1215.0}
     '', 'Monitored signals/1', 'Mux signals/1', []
     '', 'Monitored signals/2', 'Mux signals/2', []
     '', 'Monitored signals/3', 'Mux signals/3', []
@@ -174,40 +173,45 @@ s.control.netlist.lines = { ...
     'PWM', 'get_realized_voltage/1', 'u_c_ab/1', []
     'PWM', 'get_realized_voltage/2', 'u_c_zoh_ab/1', {'x', 810.0}
     'PWM', 'enable/1', 'Goto enable/1', []
-    'ObserverBasedGridFormingController', 'From Observer.enable/1', 'Observer/1', []
-    'ObserverBasedGridFormingController', 'From PowerReferenceLimiter.enable/1', 'PowerReferenceLimiter/1', []
-    'ObserverBasedGridFormingController', 'meas/1', 'Observer/2', []
-    'ObserverBasedGridFormingController', 'u_c_ab/1', 'Observer/3', {'x', 200.0}
-    'ObserverBasedGridFormingController', 'u_c_zoh_ab/1', 'Observer/4', {'x', 215.0}
-    'ObserverBasedGridFormingController', 'Observer/1', 'fbk.i_c/1', {'x', 620.0}
-    'ObserverBasedGridFormingController', 'Observer/1', 'compute_output/3', {'x', 910.0}
-    'ObserverBasedGridFormingController', 'Observer/1', 'voltage_reference/2', {'x', 1355.0}
+    'ObserverBasedGridFormingController', 'From compute_standby_output.enable/1', 'compute_standby_output/1', []
+    'ObserverBasedGridFormingController', 'meas/1', 'Observer/1', []
+    'ObserverBasedGridFormingController', 'u_c_ab/1', 'Observer/2', {'x', 200.0}
+    'ObserverBasedGridFormingController', 'u_c_zoh_ab/1', 'Observer/3', {'x', 215.0}
+    'ObserverBasedGridFormingController', 'Observer/1', 'fbk.i_c/1', {'x', 530.0}
+    'ObserverBasedGridFormingController', 'Observer/1', 'compute_output/3', {'x', 730.0}
+    'ObserverBasedGridFormingController', 'Observer/1', 'compute_standby_output/5', {'x', 1190.0}
+    'ObserverBasedGridFormingController', 'Observer/1', 'voltage_reference/2', {'x', 1480.0}
     'ObserverBasedGridFormingController', 'Observer/1', 'fbk/1', []
     'ObserverBasedGridFormingController', 'fbk.i_c/1', 'Goto i_c/1', []
-    'ObserverBasedGridFormingController', 'p_g_ref/1', 'PowerReferenceLimiter/2', []
-    'ObserverBasedGridFormingController', 'From u_c/1', 'PowerReferenceLimiter/3', []
-    'ObserverBasedGridFormingController', 'From i_c/1', 'PowerReferenceLimiter/4', []
-    'ObserverBasedGridFormingController', 'PowerReferenceLimiter/1', 'compute_output/1', {'x', 925.0}
+    'ObserverBasedGridFormingController', 'p_g_ref/1', 'PowerReferenceLimiter/1', []
+    'ObserverBasedGridFormingController', 'From u_c/1', 'PowerReferenceLimiter/2', []
+    'ObserverBasedGridFormingController', 'From i_c/1', 'PowerReferenceLimiter/3', []
+    'ObserverBasedGridFormingController', 'PowerReferenceLimiter/1', 'compute_output/1', {'x', 745.0}
     'ObserverBasedGridFormingController', 'v_c_ref/1', 'compute_output/2', []
     'ObserverBasedGridFormingController', 'compute_output/3', 'CurrentLimiter/1', []
-    'ObserverBasedGridFormingController', 'CurrentLimiter/1', 'voltage_reference/1', []
-    'ObserverBasedGridFormingController', 'CurrentLimiter/1', 'Mux ref/3', {'x', 1340.0, 'y', 265.0, 'x', 1555.0}
-    'ObserverBasedGridFormingController', 'compute_output/1', 'Mux ref/1', {'x', 1125.0, 'y', 40.0, 'x', 1600.0}
-    'ObserverBasedGridFormingController', 'compute_output/2', 'Mux ref/2', {'x', 1140.0, 'y', 55.0, 'x', 1585.0}
+    'ObserverBasedGridFormingController', 'compute_output/1', 'compute_standby_output/2', {'x', 945.0, 'y', 205.0, 'x', 1175.0}
+    'ObserverBasedGridFormingController', 'compute_output/2', 'compute_standby_output/3', {'x', 960.0, 'y', 220.0, 'x', 1160.0}
+    'ObserverBasedGridFormingController', 'CurrentLimiter/1', 'compute_standby_output/4', []
+    'ObserverBasedGridFormingController', 'compute_standby_output/3', 'voltage_reference/1', []
+    'ObserverBasedGridFormingController', 'compute_standby_output/3', 'Mux ref/3', {'x', 1525.0, 'y', 255.0, 'x', 1725.0}
+    'ObserverBasedGridFormingController', 'compute_standby_output/1', 'Mux ref/1', {'x', 1495.0, 'y', 40.0, 'x', 1770.0}
+    'ObserverBasedGridFormingController', 'compute_standby_output/2', 'Mux ref/2', {'x', 1510.0, 'y', 55.0, 'x', 1755.0}
     'ObserverBasedGridFormingController', 'voltage_reference/1', 'Mux ref/4', []
-    'ObserverBasedGridFormingController', 'voltage_reference/1', 'Goto u_c/1', {'x', 1570.0}
+    'ObserverBasedGridFormingController', 'voltage_reference/1', 'Goto u_c/1', {'x', 1740.0}
     'ObserverBasedGridFormingController', 'Mux ref/1', 'ref/1', []
     'ObserverBasedGridFormingController', 'enable/1', 'Goto enable/1', []
     };
 s.control.netlist.masks = { ...
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign) and its compensation, and the minimum pulses. The blocks inside are its methods compute_output and get_realized_voltage.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback, and the compensation uses the current of the latest sampling period with enabled gates.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'
-    't_d', 't_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s), 0 = None', 'pwm.t_d'
-    'i_0', 'i_0: Current scale (A) of sign = tanh(i/i_0) in dead_time_error, 0 = np.sign', 'pwm.i_0'
+    't_d', 't_d: Dead time (s) in d_err = InverterNonlinearity(t_d, u_th, sign)', 'pwm.t_d'
+    'u_th', 'u_th: Threshold voltage (V) in InverterNonlinearity (d_err = None if t_d = u_th = 0)', 'pwm.u_th'
+    'i_0', 'i_0: Current scale (A) of sign = tanh(i/i_0) in InverterNonlinearity, 0 = np.sign', 'pwm.i_0'
     'feedforward', 'feedforward: Compensate for d_err (1) or not (0)', 'pwm.feedforward'
     'd_min', 'd_min: Minimum duty ratio of a switching leg, 0 = no limit', 'pwm.d_min'
+    'single_update', 'single_update: Duty ratios updated once (1) or twice (0) per carrier period', 'pwm.single_update'
     'overmodulation', 'overmodulation: Overmodulation, ''MPE'' or ''MME''', 'pwm.overmodulation'
     }, strjoin({ ...
     'disp(''PWM'');', ...
@@ -257,10 +261,9 @@ s.control.netlist.masks = { ...
     'R', 'R: Total series resistance estimate (Ohm)', 'cfg.R'
     }, strjoin({ ...
     'disp(''Observer'');', ...
-    'port_label(''input'', 1, ''enable'');', ...
-    'port_label(''input'', 2, ''meas'');', ...
-    'port_label(''input'', 3, ''u_c_ab'');', ...
-    'port_label(''input'', 4, ''u_c_zoh_ab'');', ...
+    'port_label(''input'', 1, ''meas'');', ...
+    'port_label(''input'', 2, ''u_c_ab'');', ...
+    'port_label(''input'', 3, ''u_c_zoh_ab'');', ...
     'port_label(''output'', 1, ''out'');'}, newline)
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'PowerReferenceLimiter (motulator)', 'Limiter of the active-power reference (PowerReferenceLimiter): the maximum active power is computed from the voltage reference u_c and the current i_c, prioritizing the reactive current, and low-pass filtered (update, with ref.u_c and fbk.i_c). Without i_d_max, the active-power reference is not limited, as ObserverBasedGridFormingController has no limiter then.', '', { ...
     'i_d_max', 'i_d_max: Maximum active current (A), peak value, [] = no limiter', 'i_d_max'
@@ -269,10 +272,9 @@ s.control.netlist.masks = { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'
     }, strjoin({ ...
     'disp(''PowerReferenceLimiter'');', ...
-    'port_label(''input'', 1, ''enable'');', ...
-    'port_label(''input'', 2, ''p_g_ref'');', ...
-    'port_label(''input'', 3, ''u_c'');', ...
-    'port_label(''input'', 4, ''i_c'');', ...
+    'port_label(''input'', 1, ''p_g_ref'');', ...
+    'port_label(''input'', 2, ''u_c'');', ...
+    'port_label(''input'', 3, ''i_c'');', ...
     'port_label(''output'', 1, ''p_g_ref_lim'');'}, newline)
     'ObserverBasedGridFormingController/CurrentLimiter', 'CurrentLimiter (motulator)', 'Current limiter (CurrentLimiter): the magnitude of the current reference is limited to i_max.', '', { ...
     'i_max', 'i_max: Maximum current (A), peak value', 'cfg.i_max'
@@ -283,12 +285,13 @@ s.control.netlist.masks = { ...
     };
 s.control.sfunctions = { ...
     'get_measurement', 'double(T_s)'
-    'PWM/compute_output', 'double(T_s), double(t_d), double(i_0), double(feedforward), double(d_min), double(mme)'
-    'PWM/get_realized_voltage', 'double(T_s), double(t_d), double(i_0), double(feedforward), double(d_min), double(mme)'
+    'PWM/compute_output', 'double(T_s), double(t_d), double(u_th), double(i_0), double(feedforward), double(d_min), double(single_update), double(mme)'
+    'PWM/get_realized_voltage', 'double(T_s), double(t_d), double(u_th), double(i_0), double(feedforward), double(d_min), double(single_update), double(mme)'
     'ObserverBasedGridFormingController/Observer', 'double(u_nom), double(w_nom), double(L), double(alpha_o), double(T_s), double(R)'
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'double(i_d_max), double(alpha_l), double(u_nom), double(T_s)'
     'ObserverBasedGridFormingController/compute_output', 'double(R_a), double(k_v), double(k_c)'
     'ObserverBasedGridFormingController/CurrentLimiter', 'double(i_max)'
+    'ObserverBasedGridFormingController/compute_standby_output', ''
     'ObserverBasedGridFormingController/voltage_reference', 'double(k_c), double(R)'
     'modulate', 'double(T_s)'
     'Monitored signals', 'double(T_s)'

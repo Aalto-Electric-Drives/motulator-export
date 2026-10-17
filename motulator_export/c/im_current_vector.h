@@ -130,14 +130,19 @@ typedef struct {
     double complex i_c_ab; /* Converter current in stationary coordinates */
     double u_dc;
     double w_M; /* Mechanical rotor speed, used only in the sensored mode */
+    double complex u_c_ab; /* Converter voltage, used only with blocked gates */
 } IMMeasurements;
 
+/* Vector control system (VectorControlSystem), with the gate enable as in
+ * sm_flux_vector.h */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     IMCurrentVectorController vector_ctrl;
     PIController speed_ctrl;
     /* Workspace variables passed from the output to the update function */
+    int enabled; /* Gate enable */
+    double complex i_c_ab_ff; /* Current of the feedforward compensation */
     IMObserverOutputs fbk;
     IMReferences ref;
 } IMVectorControlSystem;
@@ -151,7 +156,7 @@ static void im_vector_control_system_init(IMVectorControlSystem *self,
                                           PIController speed_ctrl);
 static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
                                                     const IMMeasurements *meas,
-                                                    double w_M_ref);
+                                                    double w_M_ref, int enabled);
 static void im_vector_control_system_update(IMVectorControlSystem *self);
 
 /* Signal vectors of the modular control system (see sm_flux_vector.h): the
@@ -160,7 +165,8 @@ static void im_vector_control_system_update(IMVectorControlSystem *self);
 #define MEAS_i_c_ab 0
 #define MEAS_u_dc 2
 #define MEAS_w_M 3
-#define MEAS_WIDTH 4
+#define MEAS_u_c_ab 4
+#define MEAS_WIDTH 6
 
 #define FBK_i_s 0
 #define FBK_u_s 2

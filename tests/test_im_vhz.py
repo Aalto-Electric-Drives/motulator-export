@@ -4,8 +4,10 @@ Test the C port of induction machine V/Hz control against motulator.
 The 2.2-kW induction machine drive is simulated in closed loop with the observer-based
 V/Hz control system of motulator and with the C port, and the controller signals are
 compared at the sampling instants. Both observer-based V/Hz control and pure open-loop
-V/Hz control (`L_M = inf`) are tested, also with the dead time of the converter and its
-compensation and with the minimum pulses. PLECS is not needed.
+V/Hz control (`L_M = inf`) are tested, also with the dead time and the threshold
+voltage of the converter and their compensation, with single update, with the
+minimum pulses, and with the gates blocked at the start and during the operation.
+PLECS is not needed.
 
 Run from the repository root (requires gcc):
 
@@ -24,7 +26,7 @@ import motulator.drive.control.im as control
 import numpy as np
 import pytest
 from motulator.common.control._base import ControlSystem, TimeSeries
-from motulator.common.utils import complex2abc, dead_time_error
+from motulator.common.utils import complex2abc
 from motulator.drive import model, utils
 
 from tests.c_port import arr, compile_library, d
@@ -47,14 +49,16 @@ void init(const double *p, const double *c, double slew_rate, const double *pwm)
     cfg.k_b = c[6];
     cfg.T_s = c[7];
     im_vhz_control_system_init(&ctrl, par, &cfg, slew_rate);
-    pwm_set_dead_time(&ctrl.pwm, pwm[0], cfg.T_s, pwm[1], (int)pwm[2]);
-    pwm_set_min_pulse(&ctrl.pwm, pwm[3]);
+    pwm_set_nonlinearity(&ctrl.pwm, pwm[0], pwm[1], pwm[2], (int)pwm[3]);
+    pwm_set_min_pulse(&ctrl.pwm, pwm[4]);
+    pwm_set_single_update(&ctrl.pwm, (int)pwm[5]);
 }
 
-void step(const double *i_s_abc, double u_dc, double w_M_ref, double *out)
+void step(const double *i_s_abc, double u_dc, double w_M_ref, double enabled,
+          const double *u_c_ab, double *out)
 {
-    IMVHzMeasurements meas = {abc2complex(i_s_abc), u_dc};
-    im_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref);
+    IMVHzMeasurements meas = {abc2complex(i_s_abc), u_dc, u_c_ab[0] + I * u_c_ab[1]};
+    im_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref, (int)enabled);
     double o[9] = {ctrl.ref.d_abc[0],     ctrl.ref.d_abc[1], ctrl.ref.d_abc[2],
                    ctrl.ref.w_M,          ctrl.fbk.w_s,      ctrl.fbk.tau_M,
                    ctrl.ref.tau_M,        ctrl.ref.psi_s,    cabs(ctrl.fbk.psi_s)};
@@ -78,6 +82,7 @@ OPEN_LOOP_PAR = control.InductionMachineInvGammaPars(
 )
 SLEW_RATE = 2 * pi * 120  # Slew rate of the speed reference (mechanical rad/s^2)
 T_D = 2e-6  # Dead time (s)
+U_TH = 1.0  # Threshold voltage (V)
 I_0 = 0.5  # Current scale (A) of sign = tanh(i/i_0) in the dead-time compensation
 
 
@@ -87,13 +92,20 @@ def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 def build_system(
-    open_loop: bool, t_d: float = 0.0, d_min: float = 0.0
+    open_loop: bool,
+    t_d: float = 0.0,
+    d_min: float = 0.0,
+    u_th: float = 0.0,
+    single_update: bool = False,
+    blocked: bool = False,
 ) -> tuple[model.Drive, control.VHzControlSystem]:
     """Build the 2.2-kW drive with observer-based or pure open-loop V/Hz control."""
     mdl = model.Drive(
         model.InductionMachine(PAR),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
+        delay=2 if single_update else 1,  # One sampling period
+        single_update=single_update,
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * 0.5 * NOM.tau)
     if open_loop:
@@ -107,13 +119,16 @@ def build_system(
         )
         vhz_ctrl = control.ObserverBasedVHzController(PAR, cfg)
 
-    def dead_time(i: np.ndarray, d: np.ndarray) -> np.ndarray:
-        return dead_time_error(i, d, t_d, cfg.T_s, lambda x: np.tanh(x / I_0))
-
-    d_err = dead_time if t_d > 0 else None
-    pwm = control.PWM(overmodulation="MME", d_err=d_err, d_min=d_min)
+    d_err = None
+    if t_d > 0 or u_th > 0:
+        d_err = control.InverterNonlinearity(t_d, u_th, lambda x: np.tanh(x / I_0))
+    pwm = control.PWM(
+        overmodulation="MME", d_err=d_err, d_min=d_min, single_update=single_update
+    )
     ctrl = control.VHzControlSystem(vhz_ctrl, slew_rate=SLEW_RATE, pwm=pwm)
     ctrl.set_speed_ref(lambda t: (t > 0.1) * 0.8 * BASE.w_M)
+    if blocked:
+        ctrl.set_enable(lambda t: 0.02 <= t < 0.7 or t >= 0.72)
     return mdl, ctrl
 
 
@@ -125,6 +140,7 @@ class CControlSystem(control.VHzControlSystem):
     ) -> None:
         super().__init__(ctrl.vhz_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
+        self.set_enable(ctrl._enable)
         cfg = cast(control.ObserverBasedVHzController, ctrl.vhz_ctrl).cfg
         self.T_s = cfg.T_s
         self.dll = dll
@@ -133,17 +149,24 @@ class CControlSystem(control.VHzControlSystem):
         c = [cfg.psi_s_nom, cfg.i_s_max, cfg.alpha_psi, cfg.alpha_tau, cfg.alpha_f]
         c += [cfg.k_u, cfg.k_b, cfg.T_s]
         pwm = ctrl.pwm
-        t_d = 0.0 if pwm.d_err is None else T_D
-        i_0 = 0.0 if pwm.d_err is None else I_0
-        pwm_values = [t_d, i_0, pwm.feedforward, pwm.d_min]
+        d_err = cast(control.InverterNonlinearity | None, pwm.d_err)
+        t_d = 0.0 if d_err is None else d_err.t_d
+        u_th = 0.0 if d_err is None else d_err.u_th
+        i_0 = 0.0 if d_err is None else I_0
+        pwm_values = [t_d, u_th, i_0, pwm.feedforward, pwm.d_min, pwm.single_update]
         self.dll.init(arr(p), arr(c), d(ctrl.rate_limiter.rate_limit), arr(pwm_values))
         self.out = (ctypes.c_double * len(NAMES))()
 
     def run_control_loop(self, mdl: model.Drive) -> tuple[float, Sequence[float]]:
-        meas = self.get_measurement(mdl)
+        self.enabled = self.get_enable()
+        meas = self.get_measurement(mdl)  # The converter voltage with blocked gates
         w_M_ref = cast(Any, self.ext_ref.w_M)(self.t)
         i_abc = complex2abc(meas.i_c_ab)
-        self.dll.step(arr(i_abc), d(meas.u_dc), d(w_M_ref), self.out)
+        u_c = meas.u_c_ab or 0j
+        u = arr([u_c.real, u_c.imag])
+        self.dll.step(
+            arr(i_abc), d(meas.u_dc), d(w_M_ref), d(self.enabled), u, self.out
+        )
         out = np.array(self.out)
         self.save(self.t, out=SimpleNamespace(**dict(zip(NAMES, out, strict=True))))
         self.t = (self.t + self.T_s) % 1e9
@@ -154,21 +177,41 @@ class CControlSystem(control.VHzControlSystem):
 
 
 @pytest.mark.parametrize(
-    ("open_loop", "t_d", "d_min"),
+    ("open_loop", "t_d", "d_min", "u_th", "single_update", "blocked"),
     [
-        (False, 0.0, 0.0),
-        (True, 0.0, 0.0),
-        (False, T_D, 0.0),
-        (True, T_D, 0.0),
-        (False, T_D, 0.06),
+        (False, 0.0, 0.0, 0.0, False, False),
+        (True, 0.0, 0.0, 0.0, False, False),
+        (False, T_D, 0.0, 0.0, False, False),
+        (True, T_D, 0.0, 0.0, False, False),
+        (False, T_D, 0.06, 0.0, False, False),
+        (False, T_D, 0.06, U_TH, True, False),
+        # Without the dead time, see test_im.py
+        (False, 0.0, 0.0, U_TH, False, True),
+        (True, 0.0, 0.0, 0.0, False, True),
     ],
-    ids=["ovhz", "open_loop", "ovhz_dead_time", "open_loop_dead_time", "min_pulse"],
+    ids=[
+        "ovhz",
+        "open_loop",
+        "ovhz_dead_time",
+        "open_loop_dead_time",
+        "min_pulse",
+        "u_th_single",
+        "u_th_blocked",
+        "open_loop_blocked",
+    ],
 )
 def test_control_system(
-    dll: ctypes.CDLL, open_loop: bool, t_d: float, d_min: float
+    dll: ctypes.CDLL,
+    open_loop: bool,
+    t_d: float,
+    d_min: float,
+    u_th: float,
+    single_update: bool,
+    blocked: bool,
 ) -> None:
     """Closed-loop simulation of the 2.2-kW drive with motulator and with the C port."""
-    mdl, ctrl = build_system(open_loop, t_d, d_min)
+    args = (open_loop, t_d, d_min, u_th, single_update, blocked)
+    mdl, ctrl = build_system(*args)
     res_py = model.Simulation(mdl, ctrl).simulate(t_stop=1.0)
     fbk, ref = res_py.ctrl.fbk, res_py.ctrl.ref
     py = np.column_stack(
@@ -182,7 +225,7 @@ def test_control_system(
             np.abs(fbk.psi_s),
         ]
     )
-    mdl, ctrl = build_system(open_loop, t_d, d_min)
+    mdl, ctrl = build_system(*args)
     res_c = model.Simulation(mdl, CControlSystem(ctrl, dll, open_loop)).simulate(
         t_stop=1.0
     )

@@ -38,14 +38,15 @@
 
 static PWM self;
 static double T_s; /* Sampling period */
+static double complex i_c_ab_ff; /* Current of the compensation */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 5, 2, 1};
+static const int INPUT_WIDTHS[] = {1, 7, 2, 1};
 static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3};
 #define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
-#define NUM_PARAMS 6
+#define NUM_PARAMS 8
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -107,51 +108,63 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(2) != 1) {
-        SetErrorMessage("i_0 must be a scalar.");
+        SetErrorMessage("u_th must be a scalar.");
         return;
     }
     if (PDIM(3) != 1) {
-        SetErrorMessage("feedforward must be a scalar.");
+        SetErrorMessage("i_0 must be a scalar.");
         return;
     }
     if (PDIM(4) != 1) {
-        SetErrorMessage("d_min must be a scalar.");
+        SetErrorMessage("feedforward must be a scalar.");
         return;
     }
     if (PDIM(5) != 1) {
+        SetErrorMessage("d_min must be a scalar.");
+        return;
+    }
+    if (PDIM(6) != 1) {
+        SetErrorMessage("single_update must be a scalar.");
+        return;
+    }
+    if (PDIM(7) != 1) {
         SetErrorMessage("mme must be a scalar.");
         return;
     }
     pwm_init(&self, 1.5); /* k_pred */
-    pwm_set_overmodulation(&self, (int)P(5, 0));
-    pwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));
-    pwm_set_min_pulse(&self, P(4, 0));
+    pwm_set_overmodulation(&self, (int)P(7, 0));
+    pwm_set_nonlinearity(&self, P(1, 0), P(2, 0), P(3, 0), (int)P(4, 0));
+    pwm_set_min_pulse(&self, P(5, 0));
+    pwm_set_single_update(&self, (int)P(6, 0));
     T_s = P(0, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 3; k++) {
-            OutputSignal(0, k) = 0.5;
-        }
-        return;
-    }
-
     double meas_u[MEAS_WIDTH];
     for (int k = 0; k < MEAS_WIDTH; k++) {
         meas_u[k] = InputSignal(1, k);
     }
     GridMeasurements meas;
     grid_measurements_unpack(meas_u, &meas);
+    /* Measured current for the compensation, while the gates are blocked
+     * that of the latest sampling period with enabled gates */
+    i_c_ab_ff = pwm_feedforward_current(&self, InputSignal(0, 0) > 0.0,
+                                        meas.i_c_ab);
     double d_abc[3];
     pwm_compute_output(&self, T_s, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.u_dc,
-                       InputSignal(3, 0), meas.i_c_ab, d_abc);
+                       InputSignal(3, 0), i_c_ab_ff, d_abc);
     for (int k = 0; k < 3; k++) {
         OutputSignal(0, k) = d_abc[k];
     }
+}
+
+#define MDL_UPDATE
+static void mdlUpdate(SimStruct *S, int_T tid)
+{
+    UNUSED_ARG(tid);
+    pwm_store_current(&self, i_c_ab_ff);
 }
 
 static void mdlTerminate(SimStruct *S)

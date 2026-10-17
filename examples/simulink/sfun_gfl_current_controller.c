@@ -40,14 +40,11 @@ static ComplexPIController self;
 static double T_s; /* Sampling period */
 static GFLFeedbacks fbk;
 
-/* Initial state, restored while the block is disabled */
-static ComplexPIController self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 2, 13};
-static const int FEEDTHROUGH[] = {1, 1, 1};
+static const int INPUT_WIDTHS[] = {2, 13};
+static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
-#define NUM_INPUTS 3
+#define NUM_INPUTS 2
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 4
 
@@ -116,28 +113,18 @@ static void mdlStart(SimStruct *S)
     }
     self = gfl_current_controller(P(0, 0), P(1, 0), PARAM(2));
     T_s = P(3, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
     double fbk_u[FBK_WIDTH];
     for (int k = 0; k < FBK_WIDTH; k++) {
-        fbk_u[k] = InputSignal(2, k);
+        fbk_u[k] = InputSignal(1, k);
     }
     gfl_feedbacks_unpack(fbk_u, &fbk);
     double complex u_c_ref =
-        complex_pi_compute_output(&self, complex_from(InputSignal(1, 0), InputSignal(1, 1)), fbk.i_c, fbk.u_g);
+        complex_pi_compute_output(&self, complex_from(InputSignal(0, 0), InputSignal(0, 1)), fbk.i_c, fbk.u_g);
     OutputSignal(0, 0) = creal(u_c_ref);
     OutputSignal(0, 1) = cimag(u_c_ref);
 }
@@ -146,12 +133,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     complex_pi_update(&self, T_s, fbk.u_c, fbk.w_c);
 }
 

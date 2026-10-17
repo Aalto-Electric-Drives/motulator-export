@@ -20,11 +20,13 @@ from motulator.drive.control._common import SpeedController
 from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
 
 from motulator_export.plecs._common import (
+    CONV,
     MACH,
     ControlBlock,
     StepSignal,
     _add_ctrl_output,
     _add_step,
+    _check_delay,
     _check_initial_states,
     _check_supported_pwm,
 )
@@ -40,8 +42,10 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
     supported.
 
     The dead time of the carrier comparison (`mdl.pwm.t_d`, by default that of the
-    converter) is supported only if `dead_time` is True, and only with the
-    current-direction function `np.sign` of the converter.
+    converter) and the threshold voltage of the converter (`u_th`) are supported only
+    if `dead_time` is True, and only with the current-direction function `np.sign` of
+    the converter. The computational delay must be one sampling period (`delay=1`,
+    or `delay=2` with `single_update`).
 
     """
     if not isinstance(mdl.mechanics, MechanicalSystem) or mdl.mechanics.B_L != 0:
@@ -56,13 +60,19 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
         raise NotImplementedError("Sensor models not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
         raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
-    if mdl.pwm.t_d != 0:
+    if mdl.pwm.t_d != 0 or mdl.converter.u_th != 0:
         if not dead_time:
-            raise NotImplementedError("Converter dead time not supported")
+            raise NotImplementedError(
+                "Converter dead time and threshold voltage not supported"
+            )
         if mdl.converter.sign is not np.sign:
-            raise NotImplementedError("Only the dead time with sign=np.sign supported")
-    if len(mdl.delay.data) != 1:
-        raise NotImplementedError("Only the computational delay of one sample")
+            raise NotImplementedError(
+                "Only the dead time and the threshold voltage with sign=np.sign "
+                "supported"
+            )
+        if mdl.pwm.t_d < 0 or mdl.converter.u_th < 0:
+            raise NotImplementedError("Only t_d >= 0 and u_th >= 0 supported")
+    _check_delay(mdl)
     _check_initial_drive_states(mdl)
 
 
@@ -134,7 +144,7 @@ def _check_supported_speed_control(
         raise NotImplementedError("Speed-control mode with SpeedController required")
     if type(ctrl).modulate is not VectorControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl.pwm, ctrl.k_comp, d_err=dead_time)
+    _check_supported_pwm(ctrl, d_err=dead_time)
 
 
 def speed_ctrl_values(
@@ -179,6 +189,8 @@ def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         variables += [("converter.t_d", t_d)]
+    if mdl.converter.u_th > 0:
+        variables += [("converter.u_th", mdl.converter.u_th)]
     if dc_bus is not None:
         variables += [("dc_bus.C_dc", dc_bus.C_dc)]
         variables += [("dc_bus.u_dc0", float(dc_bus.state.u_dc.real))]
@@ -187,6 +199,44 @@ def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
         variables += [("dc_bus.u_g", dc_bus.u_g), ("dc_bus.w_g", dc_bus.w_g)]
     return variables
 
+
+# Space for the voltmeters of the converter voltages between the converter and the
+# machine (horizontal shift of the machine and the components after it)
+MEAS_DX = 60
+
+
+def _add_phase_lines(sch: _Schematic, x_c: int) -> None:
+    """
+    Add the phase lines from the converter (its AC terminals at the absolute `x_c`)
+    to the machine (added at the current `sch.dx`), with the voltmeters of the
+    line-to-line converter voltages u_ab and u_bc, measured for the control system
+    (used while the gates are blocked). The lines a and c are spread around the line
+    b so that the voltmeters fit between them, as the PCC voltmeters of the grid
+    converters.
+    """
+    dx = sch.dx
+    x_m = MACH[0] - 30  # The terminals of the machine (shifted by sch.dx)
+    y_c = CONV[1]
+    x_1, x_v, x_2 = x_c + 15 - dx, x_c + 45 - dx, x_m - 15  # Shifted by sch.dx
+    sch.component("Voltmeter", "u_cab", (x_v, y_c - 20), direction="up", show=False)
+    sch.component("Voltmeter", "u_cbc", (x_v, y_c + 20), direction="up", show=False)
+    meters = [[("u_cab", 1)], [("u_cab", 2), ("u_cbc", 1)], [("u_cbc", 2)]]
+    for k in range(3):
+        y_t, y = y_c - 10 + 10 * k, y_c - 40 + 40 * k  # The terminals and the line
+        out = [] if k == 1 else [(x_1, y_t), (x_1, y)]
+        back = [] if k == 1 else [(x_2, y), (x_2, y_t)]
+        dsts = [(m, []) for m in meters[k]]
+        sch.bus(
+            ("Converter", k + 1),
+            "Wire",
+            [(out + [(x_v, y)], dsts), ([], [(("Machine", k + 1), back)])],
+        )
+
+
+# Probes of the line-to-line converter voltages (the input u_c_line)
+CONVERTER_VOLTAGES = _probe("u_cab", ["Measured voltage"]) + _probe(
+    "u_cbc", ["Measured voltage"]
+)
 
 MACHINE_FRAME = "      Frame         [-25, -25; 25, 35]\n"
 MACHINE_TERMINALS = [

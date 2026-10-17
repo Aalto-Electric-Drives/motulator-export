@@ -38,10 +38,10 @@
 
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 14, 6};
-static const int FEEDTHROUGH[] = {1, 1, 1};
+static const int INPUT_WIDTHS[] = {14, 6};
+static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {3, 2, 4, 1};
-#define NUM_INPUTS 3
+#define NUM_INPUTS 2
 #define NUM_OUTPUTS 4
 #define NUM_PARAMS 1
 
@@ -101,32 +101,15 @@ static void mdlStart(SimStruct *S)
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 3; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(1, k) = 0.0;
-        }
-        for (int k = 0; k < 4; k++) {
-            OutputSignal(2, k) = 0.0;
-        }
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(3, k) = 0.0;
-        }
-        return;
-    }
-
     double fbk_u[FBK_WIDTH];
     for (int k = 0; k < FBK_WIDTH; k++) {
-        fbk_u[k] = InputSignal(1, k);
+        fbk_u[k] = InputSignal(0, k);
     }
     GFMFeedbacks fbk;
     gfm_feedbacks_unpack(fbk_u, &fbk);
     double ref_u[REF_WIDTH];
     for (int k = 0; k < REF_WIDTH; k++) {
-        ref_u[k] = InputSignal(2, k);
+        ref_u[k] = InputSignal(1, k);
     }
     GFMReferences ref;
     gfm_references_unpack(ref_u, &ref);

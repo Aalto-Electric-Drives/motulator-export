@@ -47,3 +47,17 @@ def arr(values: Any) -> Any:
 def d(x: float) -> ctypes.c_double:
     """Double for ctypes."""
     return ctypes.c_double(x)
+
+
+def control_step(ctrl: Any, meas: Any, enabled: bool) -> tuple[Any, Any]:
+    """
+    One step of the control loop of motulator (`ControlSystem.run_control_loop`)
+    with the gate enable `enabled`, for open-loop sequences of measurements. With
+    blocked gates, the measurements include the converter voltage `meas.u_c_ab`.
+    Returns the feedback signals and the references.
+    """
+    ctrl.enabled = enabled
+    fbk = ctrl.get_feedback(meas)
+    ref = ctrl.compute_output(fbk) if enabled else ctrl.compute_standby_output(fbk)
+    ctrl.update(ref, fbk)
+    return fbk, ref

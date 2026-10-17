@@ -40,14 +40,11 @@ static PowerReferenceLimiter self;
 static double T_s; /* Sampling period */
 static int limit; /* Limiter used (i_d_max given) */
 
-/* Initial state, restored while the block is disabled */
-static PowerReferenceLimiter self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 2, 2};
-static const int FEEDTHROUGH[] = {1, 1, 0, 0};
+static const int INPUT_WIDTHS[] = {1, 2, 2};
+static const int FEEDTHROUGH[] = {1, 0, 0};
 static const int OUTPUT_WIDTHS[] = {1};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 4
 
@@ -120,22 +117,12 @@ static void mdlStart(SimStruct *S)
         power_reference_limiter_init(&self, P(0, 0), P(1, 0), P(2, 0));
     }
     T_s = P(3, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
-    double p_g_ref = InputSignal(1, 0);
+    double p_g_ref = InputSignal(0, 0);
     if (limit) {
         p_g_ref = power_reference_limiter_compute_output(&self, p_g_ref);
     }
@@ -146,15 +133,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     if (limit) {
-        power_reference_limiter_update(&self, T_s, complex_from(InputSignal(2, 0), InputSignal(2, 1)),
-                                       complex_from(InputSignal(3, 0), InputSignal(3, 1)), 0.0);
+        power_reference_limiter_update(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)),
+                                       complex_from(InputSignal(2, 0), InputSignal(2, 1)), 0.0);
     }
 }
 

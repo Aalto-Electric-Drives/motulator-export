@@ -35,7 +35,9 @@ from motulator_export.plecs._control import (
     checks,
     complex_in,
     complex_out,
+    compute_standby_output,
     control_block,
+    converter_voltage_input,
     current_limiter,
     get_measurement,
     grid_converter_control_system,
@@ -88,6 +90,7 @@ GFL_INPUTS = [
     Port("i_c_abc", 3),
     Port("u_g_line", 2),
     Port("u_dc", 1),
+    Port("u_c_line", 2),
 ]
 GFL_OUTPUTS = {
     "Power (p_g_ref, p_g, q_g_ref, q_g)": ["p_g_ref", "p_g", "q_g_ref", "q_g"],
@@ -106,6 +109,7 @@ GFM_INPUTS = [
     Port("v_c_ref", 1),
     Port("i_c_abc", 3),
     Port("u_dc", 1),
+    Port("u_c_line", 2),
 ]
 GFM_OUTPUTS = {
     "Power (p_g_ref, p_g, q_g)": ["p_g_ref", "p_g", "q_g"],
@@ -147,16 +151,16 @@ def _pll() -> CBlock:
     start = checks(params, params) + "pll_init(&self, P(0, 0), P(1, 0), P(2, 0));\n"
     start += "T_s = P(3, 0);\n"
     output = (
-        GFL_SIGNALS.read(1, "meas")
+        GFL_SIGNALS.read(0, "meas")
         + "pll_compute_output(&self, meas.i_c_ab, meas.u_g_ab, &out);\n"
         "/* Voltage for the control laws (GridConverterControlSystem.get_feedback) */\n"
-        f"out.u_c = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        f"out.u_c = cexp(-I * out.theta_c) * {complex_in(1)};\n"
         + GFL_SIGNALS.write(0, "fbk", "out")
     )
     fbk = GFL_SIGNALS.width("fbk")
     return CBlock(
         "PLL",
-        [Port(ENABLE, 1), GFL_SIGNALS.port("meas"), Port("u_c_ab", 2)],
+        [GFL_SIGNALS.port("meas"), Port("u_c_ab", 2)],
         [Port("out", fbk)],
         GFL_SIGNALS.class_code(
             "PLL",
@@ -164,7 +168,6 @@ def _pll() -> CBlock:
             output,
             "pll_update(&self, T_s, &out);\n",
             SAMPLING + "static GFLFeedbacks out;\n",
-            (fbk,),
         ),
         params,
         GFL_SIGNALS.sfunction("pll"),
@@ -203,7 +206,6 @@ def _gfl_current_reference() -> CBlock:
             "i_c = gfl_current_reference(p_g_ref, q_g_ref, u_g);\n",
             outputs={"i_c": COMPLEX},
             checks=required("T_s"),
-            disabled=None,
         ),
     )
 
@@ -233,7 +235,6 @@ def _gfl_power_reference() -> CBlock:
             inputs={"i_lim": COMPLEX},
             outputs={"i_c": COMPLEX},
             checks=required("T_s"),
-            disabled=None,
         ),
     )
 
@@ -269,13 +270,13 @@ def _gfl_current_controller() -> CBlock:
         "T_s = P(3, 0);\n"
     )
     output = (
-        GFL_SIGNALS.read(2, "fbk", declare=False) + "double complex u_c_ref =\n"
-        f"    complex_pi_compute_output(&self, {complex_in(1)}, fbk.i_c, fbk.u_g);\n"
+        GFL_SIGNALS.read(1, "fbk", declare=False) + "double complex u_c_ref =\n"
+        f"    complex_pi_compute_output(&self, {complex_in(0)}, fbk.i_c, fbk.u_g);\n"
         + complex_out(0, "u_c_ref")
     )
     return CBlock(
         "CurrentController",
-        [Port(ENABLE, 1), Port("i_c_ref", 2), GFL_SIGNALS.port("fbk")],
+        [Port("i_c_ref", 2), GFL_SIGNALS.port("fbk")],
         [Port("u_c", 2)],
         GFL_SIGNALS.class_code(
             "ComplexPIController",
@@ -283,7 +284,6 @@ def _gfl_current_controller() -> CBlock:
             output,
             "complex_pi_update(&self, T_s, fbk.u_c, fbk.w_c);\n",
             SAMPLING + "static GFLFeedbacks fbk;\n",
-            (2,),
         ),
         params,
         GFL_SIGNALS.sfunction("current_controller"),
@@ -339,6 +339,12 @@ def _gfl_current_vector_controller() -> Subsystem:
             _gfl_current_reference(),
             current_limiter(sig),
             _gfl_power_reference(),
+            # Standby: the current controller tracks the measured current
+            compute_standby_output(
+                sig,
+                [Port("p_g", 1), Port("q_g", 1), Port("i_c", 2)],
+                ["0.0", "0.0", "creal(fbk.i_c)", "cimag(fbk.i_c)"],
+            ),
             _gfl_current_controller(),
             Mux(
                 "Mux ref",
@@ -346,11 +352,11 @@ def _gfl_current_vector_controller() -> Subsystem:
             ),
         ],
         [
-            (ENABLE, "PLL:enable"),
-            (ENABLE, "CurrentController:enable"),
+            (ENABLE, "compute_standby_output:enable"),
             ("meas", "PLL:meas"),
             ("u_c_ab", "PLL:u_c_ab"),
             ("PLL:out", "fbk.u_g:u"),
+            ("PLL:out", "compute_standby_output:fbk"),
             ("PLL:out", "CurrentController:fbk"),
             ("PLL:out", "fbk"),
             ("p_g_ref", "compute_output:p_g_ref"),
@@ -359,10 +365,13 @@ def _gfl_current_vector_controller() -> Subsystem:
             ("fbk.u_g:y", "power_reference:u_g"),
             ("compute_output:i_c", "CurrentLimiter:i"),
             ("CurrentLimiter:i_lim", "power_reference:i_lim"),
-            ("power_reference:i_c", "CurrentController:i_c_ref"),
-            ("power_reference:i_c", "Mux ref:i_c"),
-            ("power_reference:p_g", "Mux ref:p_g"),
-            ("power_reference:q_g", "Mux ref:q_g"),
+            ("power_reference:p_g", "compute_standby_output:p_g_in"),
+            ("power_reference:q_g", "compute_standby_output:q_g_in"),
+            ("power_reference:i_c", "compute_standby_output:i_c_in"),
+            ("compute_standby_output:i_c", "CurrentController:i_c_ref"),
+            ("compute_standby_output:i_c", "Mux ref:i_c"),
+            ("compute_standby_output:p_g", "Mux ref:p_g"),
+            ("compute_standby_output:q_g", "Mux ref:q_g"),
             ("CurrentController:u_c", "Mux ref:u_c"),
             ("Mux ref:y", "ref"),
         ],
@@ -373,6 +382,7 @@ def _gfl_current_vector_controller() -> Subsystem:
             ["compute_output"],
             ["CurrentLimiter"],
             ["power_reference"],
+            ["compute_standby_output"],
             ["CurrentController"],
             ["Mux ref"],
             ["ref", "fbk"],
@@ -385,7 +395,8 @@ def _gfl_current_vector_controller() -> Subsystem:
             "meas": "PLL:meas",
             "CurrentLimiter:i": "compute_output:i_c",
             "power_reference:i_lim": "CurrentLimiter:i_lim",
-            "CurrentController:i_c_ref": "power_reference:i_c",
+            "compute_standby_output:i_c_in": "power_reference:i_c",
+            "CurrentController:i_c_ref": "compute_standby_output:i_c",
             "Mux ref:u_c": "CurrentController:u_c",
             "ref": "Mux ref:y",
             "fbk": "PLL:out",
@@ -425,9 +436,11 @@ def gfl_control_system() -> Subsystem:
             ("i_c_ab", "abc2complex(i_c_abc)"),
             ("u_g_ab", "line2complex(u_g_line)"),
             ("u_dc", "fmax(InputSignal(2, 0), U_DC_MIN)"),
+            ("u_c_ab", "line2complex(u_c_line)"),
         ],
         abc_input("i_c_abc", 0) + "/* Line-to-line PCC voltages u_ab and u_bc */\n"
-        "double u_g_line[2] = {InputSignal(1, 0), InputSignal(1, 1)};\n",
+        "double u_g_line[2] = {InputSignal(1, 0), InputSignal(1, 1)};\n"
+        + converter_voltage_input(3),
     )
     signals = monitor(GFL_SIGNALS, GFL_OUTPUTS, GFL_MONITORED, [])
     return grid_converter_control_system(
@@ -485,21 +498,16 @@ def _observer() -> CBlock:
         "T_s = P(4, 0);\n"
     )
     output = (
-        GFM_SIGNALS.read(1, "meas")
-        + f"gfm_observer_compute_output(&self, {complex_in(3)}, meas.i_c_ab, &out);\n"
+        GFM_SIGNALS.read(0, "meas")
+        + f"gfm_observer_compute_output(&self, {complex_in(2)}, meas.i_c_ab, &out);\n"
         "/* Voltage for the control laws (GridConverterControlSystem.get_feedback) */\n"
-        f"out.u_c = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        f"out.u_c = cexp(-I * out.theta_c) * {complex_in(1)};\n"
         + GFM_SIGNALS.write(0, "fbk", "out")
     )
     fbk = GFM_SIGNALS.width("fbk")
     return CBlock(
         "Observer",
-        [
-            Port(ENABLE, 1),
-            GFM_SIGNALS.port("meas"),
-            Port("u_c_ab", 2),
-            Port("u_c_zoh_ab", 2),
-        ],
+        [GFM_SIGNALS.port("meas"), Port("u_c_ab", 2), Port("u_c_zoh_ab", 2)],
         [Port("out", fbk)],
         GFM_SIGNALS.class_code(
             "GFMObserver",
@@ -507,7 +515,6 @@ def _observer() -> CBlock:
             output,
             "gfm_observer_update(&self, T_s, &out);\n",
             SAMPLING + "static GFMFeedbacks out;\n",
-            (fbk,),
         ),
         params,
         GFM_SIGNALS.sfunction("observer"),
@@ -570,7 +577,7 @@ def _power_reference_limiter() -> CBlock:
         "T_s = P(3, 0);\n"
     )
     output = (
-        "double p_g_ref = InputSignal(1, 0);\n"
+        "double p_g_ref = InputSignal(0, 0);\n"
         "if (limit) {\n"
         "    p_g_ref = power_reference_limiter_compute_output(&self, p_g_ref);\n"
         "}\n"
@@ -578,13 +585,13 @@ def _power_reference_limiter() -> CBlock:
     )
     update = (
         "if (limit) {\n"
-        f"    power_reference_limiter_update(&self, T_s, {complex_in(2)},\n"
-        f"                                   {complex_in(3)}, 0.0);\n"
+        f"    power_reference_limiter_update(&self, T_s, {complex_in(1)},\n"
+        f"                                   {complex_in(2)}, 0.0);\n"
         "}\n"
     )
     return CBlock(
         "PowerReferenceLimiter",
-        [Port(ENABLE, 1), Port("p_g_ref", 1), Port("u_c", 2), Port("i_c", 2)],
+        [Port("p_g_ref", 1), Port("u_c", 2), Port("i_c", 2)],
         [Port("p_g_ref_lim", 1)],
         GFM_SIGNALS.class_code(
             "PowerReferenceLimiter",
@@ -595,7 +602,7 @@ def _power_reference_limiter() -> CBlock:
         ),
         params,
         GFM_SIGNALS.sfunction("power_reference_limiter"),
-        feedthrough=[1, 1, 0, 0],
+        feedthrough=[1, 0, 0],
         mask=mask,
         mcode=MCode(
             start="% No limiter without i_d_max (the state is then not used)\n"
@@ -636,7 +643,7 @@ def _gfm_current_reference() -> CBlock:
         "compute_output",
         [Port("p_g_ref", 1), Port("v_c_ref", 1), GFM_SIGNALS.port("fbk")],
         [Port("p_g", 1), Port("v_c", 1), Port("i_c", 2)],
-        GFM_SIGNALS.class_code("GFMController", start, output, disabled=None),
+        GFM_SIGNALS.class_code("GFMController", start, output),
         params,
         GFM_SIGNALS.sfunction("current_reference"),
         sample_time=None,
@@ -649,7 +656,6 @@ def _gfm_current_reference() -> CBlock:
             inputs={"fbk": GFM_SIGNALS.vector("fbk")},
             outputs={"i_c": COMPLEX},
             checks=required(*params),
-            disabled=None,
         ),
     )
 
@@ -669,7 +675,7 @@ def _gfm_voltage_reference() -> CBlock:
         "voltage_reference",
         [Port("i_c", 2), GFM_SIGNALS.port("fbk")],
         [Port("u_c", 2)],
-        GFM_SIGNALS.class_code("GFMController", start, output, disabled=None),
+        GFM_SIGNALS.class_code("GFMController", start, output),
         params,
         GFM_SIGNALS.sfunction("voltage_reference"),
         sample_time=None,
@@ -678,7 +684,6 @@ def _gfm_voltage_reference() -> CBlock:
             inputs={"i_c": COMPLEX, "fbk": GFM_SIGNALS.vector("fbk")},
             outputs={"u_c": COMPLEX},
             checks=required(*params),
-            disabled=None,
         ),
     )
 
@@ -753,6 +758,13 @@ def _gfm_controller() -> Subsystem:
             _power_reference_limiter(),
             _gfm_current_reference(),
             current_limiter(sig),
+            # Standby: the voltage reference equals the estimated quasi-static
+            # converter voltage (the voltage reference of the measured current)
+            compute_standby_output(
+                sig,
+                [Port("p_g", 1), Port("v_c", 1), Port("i_c", 2)],
+                ["fbk.p_g", "cabs(fbk.v_c)", "creal(fbk.i_c)", "cimag(fbk.i_c)"],
+            ),
             _gfm_voltage_reference(),
             Mux(
                 "Mux ref",
@@ -761,13 +773,13 @@ def _gfm_controller() -> Subsystem:
             Tag("Goto u_c", "u_c", 2, goto=True),
         ],
         [
-            (ENABLE, "Observer:enable"),
-            (ENABLE, "PowerReferenceLimiter:enable"),
+            (ENABLE, "compute_standby_output:enable"),
             ("meas", "Observer:meas"),
             ("u_c_ab", "Observer:u_c_ab"),
             ("u_c_zoh_ab", "Observer:u_c_zoh_ab"),
             ("Observer:out", "fbk.i_c:u"),
             ("Observer:out", "compute_output:fbk"),
+            ("Observer:out", "compute_standby_output:fbk"),
             ("Observer:out", "voltage_reference:fbk"),
             ("Observer:out", "fbk"),
             ("fbk.i_c:y", "Goto i_c"),
@@ -777,10 +789,13 @@ def _gfm_controller() -> Subsystem:
             ("PowerReferenceLimiter:p_g_ref_lim", "compute_output:p_g_ref"),
             ("v_c_ref", "compute_output:v_c_ref"),
             ("compute_output:i_c", "CurrentLimiter:i"),
-            ("CurrentLimiter:i_lim", "voltage_reference:i_c"),
-            ("CurrentLimiter:i_lim", "Mux ref:i_c"),
-            ("compute_output:p_g", "Mux ref:p_g"),
-            ("compute_output:v_c", "Mux ref:v_c"),
+            ("compute_output:p_g", "compute_standby_output:p_g_in"),
+            ("compute_output:v_c", "compute_standby_output:v_c_in"),
+            ("CurrentLimiter:i_lim", "compute_standby_output:i_c_in"),
+            ("compute_standby_output:i_c", "voltage_reference:i_c"),
+            ("compute_standby_output:i_c", "Mux ref:i_c"),
+            ("compute_standby_output:p_g", "Mux ref:p_g"),
+            ("compute_standby_output:v_c", "Mux ref:v_c"),
             ("voltage_reference:u_c", "Mux ref:u_c"),
             ("voltage_reference:u_c", "Goto u_c"),
             ("Mux ref:y", "ref"),
@@ -792,6 +807,7 @@ def _gfm_controller() -> Subsystem:
             ["PowerReferenceLimiter", "fbk.i_c"],
             ["compute_output", "Goto i_c"],
             ["CurrentLimiter"],
+            ["compute_standby_output"],
             ["voltage_reference"],
             ["Mux ref", "Goto u_c"],
             ["ref", "fbk"],
@@ -807,12 +823,16 @@ def _gfm_controller() -> Subsystem:
             "fbk.i_c:u": "Observer:out+1",
             "Goto i_c": "fbk.i_c:y",
             "CurrentLimiter:i": "compute_output:i_c",
-            "voltage_reference:i_c": "CurrentLimiter:i_lim",
+            "compute_standby_output:i_c_in": "CurrentLimiter:i_lim",
+            "voltage_reference:i_c": "compute_standby_output:i_c",
             "Mux ref:u_c": "voltage_reference:u_c",
+            "Goto u_c": "fbk-1",
             "ref": "Mux ref:y",
             "fbk": "Observer:out",
         },
         lanes={
+            "compute_standby_output:p_g_in": "over:CurrentLimiter:1",
+            "compute_standby_output:v_c_in": "over:CurrentLimiter:0",
             "Mux ref:p_g": "above:1",
             "Mux ref:v_c": "above:0",
             "Mux ref:i_c": "over:voltage_reference:0",
@@ -844,8 +864,9 @@ def gfm_control_system() -> Subsystem:
         [
             ("i_c_ab", "abc2complex(i_c_abc)"),
             ("u_dc", "fmax(InputSignal(1, 0), U_DC_MIN)"),
+            ("u_c_ab", "line2complex(u_c_line)"),
         ],
-        abc_input("i_c_abc", 0),
+        abc_input("i_c_abc", 0) + converter_voltage_input(2),
     )
     signals = monitor(GFM_SIGNALS, GFM_OUTPUTS, GFM_MONITORED, [])
     return grid_converter_control_system(

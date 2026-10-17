@@ -101,15 +101,19 @@ typedef struct {
 typedef struct {
     double complex i_c_ab; /* Converter current in stationary coordinates */
     double u_dc;
+    double complex u_c_ab; /* Converter voltage, used only with blocked gates */
 } IMVHzMeasurements;
 
-/* V/Hz control system (VHzControlSystem) */
+/* V/Hz control system (VHzControlSystem). While the gates are blocked, the feedback
+ * voltage is the measured converter voltage, and the controller computes its
+ * standby output. */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     IMVHzController vhz_ctrl;
     RateLimiter rate_limiter; /* Of the speed reference (mechanical rad/s^2) */
     /* Workspace variables passed from the output to the update function */
+    double complex i_c_ab_ff; /* Current of the feedforward compensation */
     IMObserverOutputs fbk;
     IMVHzReferences ref;
 } IMVHzControlSystem;
@@ -119,9 +123,10 @@ static IMVHzControllerCfg im_vhz_controller_cfg(double psi_s_nom, double i_s_max
 static void im_vhz_control_system_init(IMVHzControlSystem *self,
                                        InductionMachineInvGammaPars par,
                                        const IMVHzControllerCfg *cfg, double slew_rate);
+/* Output of the control loop, with the gate enable at the sampling instant */
 static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
                                                  const IMVHzMeasurements *meas,
-                                                 double w_M_ref);
+                                                 double w_M_ref, int enabled);
 static void im_vhz_control_system_update(IMVHzControlSystem *self);
 /* Change the stator and rotor resistances of the machine model while the control
  * system runs, as changing par.R_s and par.R_R of the controller in motulator */
@@ -133,7 +138,8 @@ static void im_vhz_control_system_set_resistances(IMVHzControlSystem *self, doub
  * signals are those of current-vector control (FBK of im_current_vector.h). */
 #define VHZ_MEAS_i_c_ab 0
 #define VHZ_MEAS_u_dc 2
-#define VHZ_MEAS_WIDTH 3
+#define VHZ_MEAS_u_c_ab 3
+#define VHZ_MEAS_WIDTH 5
 
 #define VHZ_REF_psi_s 0
 #define VHZ_REF_tau_M 1

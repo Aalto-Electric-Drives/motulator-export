@@ -19,9 +19,10 @@ Currently supported:
   mode, with the active power reference given as a step and a constant converter
   voltage reference
 - Converter: carrier comparison (`pwm=True`) with the Symmetrical PWM block and the
-  ideal two-level converter of PLECS, a stiff DC bus (`VoltageSourceConverter`
-  without a DC-bus model), and the computational delay of one sampling period as a
-  PLECS Delay block
+  IGBT converter of PLECS with ideal IGBTs and diodes, a stiff DC bus
+  (`VoltageSourceConverter` without a DC-bus model), and the computational delay of
+  one sampling period as a PLECS Delay block
+- Gate blocking (`set_enable`), as in `motulator_export.plecs.sm`
 - AC filter: LCL filter (`LCLFilter`) without resistances and grid impedance, or L
   filter (`LFilter`) with its series resistance and the grid inductance
 - Grid: balanced three-phase voltage source (`ThreePhaseSource`) with constant
@@ -55,6 +56,7 @@ from motulator_export.plecs._common import (
     CONV,
     DC_DX,
     ENABLE,
+    GATE_DX,
     ControlBlock,
     StepSignal,
     _add_control_system,
@@ -63,14 +65,16 @@ from motulator_export.plecs._common import (
     _add_dc_bus,
     _add_delay,
     _add_pwm,
+    _check_delay,
     _check_initial_states,
     _check_supported_pwm,
     _write_model,
+    gate_enable,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._grid_control import GFL_BLOCK, GFM_BLOCK, init_script
 from motulator_export.plecs._rpc import simulate_plecs
-from motulator_export.plecs._schematic import Tap, _probe, _Schematic, _scope
+from motulator_export.plecs._schematic import Tap, Terminal, _probe, _Schematic, _scope
 
 
 # %%
@@ -96,10 +100,11 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
         raise NotImplementedError("Phase shift and negative sequence not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
         raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
-    if mdl.pwm.t_d != 0:
-        raise NotImplementedError("Converter dead time not supported")
-    if len(mdl.delay.data) != 1:
-        raise NotImplementedError("Only the computational delay of one sample")
+    if mdl.pwm.t_d != 0 or mdl.converter.u_th != 0:
+        raise NotImplementedError(
+            "Converter dead time and threshold voltage not supported"
+        )
+    _check_delay(mdl)
     # The capacitor voltage of the LCL filter is exported, the other states start
     # from their initial values
     states = [("ac_source.state.exp_j_theta_g", src.state.exp_j_theta_g, 1 + 0j)]
@@ -116,7 +121,7 @@ def _check_supported(
 ) -> None:
     """Raise an error if the grid converter system is not supported."""
     _check_supported_plant(mdl)
-    _check_supported_pwm(ctrl.pwm, ctrl.k_comp)
+    _check_supported_pwm(ctrl)
     f = mdl.ac_filter
     inner = ctrl.inner_ctrl
     if not isinstance(
@@ -172,7 +177,7 @@ def export_values(ctrl: GridConverterControlSystem) -> dict[str, Any]:
         cfg = inner.cfg
         names = ["i_max", "L", "alpha_c", "alpha_i", "u_nom", "w_nom", "alpha_pll"]
         values = {n: getattr(cfg, n) for n in [*names, "T_s"]}
-        return values | pwm_values(ctrl.pwm, cfg.T_s)
+        return values | pwm_values(ctrl.pwm)
     gfm = cast(ObserverBasedGridFormingController, inner)
     obs = gfm.observer  # The configuration is stored only as the resulting gains
     u_nom, w_nom, i_max = obs.state.u_g.real, obs.w_g, gfm.current_limiter.i_max
@@ -194,7 +199,7 @@ def export_values(ctrl: GridConverterControlSystem) -> dict[str, Any]:
         # Not used without the power limitation, the default of the configuration
         "alpha_l": 2 * pi * 50 if lim is None else lim.alpha_l,
     }
-    return values | pwm_values(ctrl.pwm, gfm.T_s)
+    return values | pwm_values(ctrl.pwm)
 
 
 def _observer_bandwidth(gfm: ObserverBasedGridFormingController, u_nom: float) -> float:
@@ -230,19 +235,44 @@ def _abc_probe(comp: str, signal: str) -> str:
     return "".join(_probe(f"{comp}{ph}", [signal]) for ph in "abc")
 
 
+# Voltmeters of the converter voltages between the ammeters and the filter, and the
+# space for them (horizontal shift of the filter and the grid)
+X_V, MEAS_DX = 730, 40
+
+
 def _grid_source(k: int) -> dict[str, str]:
     """Grid voltage e_g*cos(w_g*t - k*2*pi/3) of the phase k, exp_j_theta_g(0) = 1."""
     return {"V": "ac_source.e_g", "w": "ac_source.w_g", "phi": f"pi/2 - {k}*2*pi/3"}
 
 
-def _add_converter_current_meters(sch: _Schematic, y_ph: list[int]) -> None:
-    """Add the ammeters of the converter currents (measured for the control system)."""
+def _add_converter_meters(sch: _Schematic, y_ph: list[int]) -> None:
+    """
+    Add the ammeters of the converter currents and the voltmeters of the line-to-line
+    converter voltages u_ab and u_bc (measured for the control system, the voltages
+    used while the gates are blocked), with the voltmeters between the phase lines
+    `y_ph`, and shift the components after them by `MEAS_DX`.
+    """
     for k, ph in enumerate("abc"):
         sch.component(
             "Ammeter", f"i_c{ph}", (690, y_ph[k]), direction="left", show=False
         )
         jog = [] if k == 1 else [(660, CONV[1] - 10 + 10 * k), (660, y_ph[k])]
         sch.wire(("Converter", k + 1), (f"i_c{ph}", 1), jog)
+    sch.component("Voltmeter", "u_cab", (X_V, y_ph[0] + 20), direction="up", show=False)
+    sch.component("Voltmeter", "u_cbc", (X_V, y_ph[1] + 20), direction="up", show=False)
+    sch.dx += MEAS_DX
+
+
+def _wire_converter_meters(sch: _Schematic, k: int, dst: Terminal) -> None:
+    """
+    Wire the ammeter of the phase k to the first element `dst` of the filter (added
+    after `_add_converter_meters`), with the voltmeters of the converter voltages
+    branching from the line.
+    """
+    meters = [[("u_cab", 1)], [("u_cab", 2), ("u_cbc", 1)], [("u_cbc", 2)]][k]
+    y = 60 + 40 * k  # The phase line
+    taps: list[Tap] = [([(X_V - MEAS_DX, y)], [(m, []) for m in meters])]
+    sch.bus((f"i_c{'abc'[k]}", 2), "Wire", taps + [([], [(dst, [])])])
 
 
 def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
@@ -250,7 +280,7 @@ def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
     y_ph = [60, 100, 140]  # Phase lines a, b, and c
     x_cap = [780, 810, 840]  # Filter capacitors
     x_v = 940  # Line-to-line voltmeters between the phase lines
-    _add_converter_current_meters(sch, y_ph)
+    _add_converter_meters(sch, y_ph)
     for k, ph in enumerate("abc"):
         y = y_ph[k]
         # Converter-side inductor, capacitor, and grid-side inductor
@@ -264,7 +294,7 @@ def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
             label="north",
             show=k == 0,
         )
-        sch.wire((f"i_c{ph}", 2), (f"L_fc{ph}", 1))
+        _wire_converter_meters(sch, k, (f"L_fc{ph}", 1))
         capacitor = {"C": "ac_filter.C_f", "v_init": f"ac_filter.u_f0_abc({k + 1})"}
         sch.component(
             "Capacitor",
@@ -316,7 +346,7 @@ def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
 def _add_l_filter_and_grid(sch: _Schematic) -> None:
     """Add the L filter with its resistance, the grid inductance, and the grid."""
     y_ph = [60, 100, 140]  # Phase lines a, b, and c
-    _add_converter_current_meters(sch, y_ph)
+    _add_converter_meters(sch, y_ph)
     for k, ph in enumerate("abc"):
         elements = [
             ("Inductor", "L_f", {"i_init": "0", "L": "ac_filter.L_f"}),
@@ -335,7 +365,10 @@ def _add_l_filter_and_grid(sch: _Schematic) -> None:
                 label="north",
                 show=k == 0,
             )
-            sch.wire((prev, 2), (f"{name}{ph}", 1))
+            if n == 0:
+                _wire_converter_meters(sch, k, (f"{name}{ph}", 1))
+            else:
+                sch.wire((prev, 2), (f"{name}{ph}", 1))
             prev = f"{name}{ph}"
     # Star point of the grid (not grounded, the circuit is floating as in motulator)
     taps: list[Tap] = [([(930, y_ph[0]), (930, y_ph[1])], [(("e_gb", 2), [])])]
@@ -398,7 +431,6 @@ def write_model(
     q_g_ref: StepSignal | None = None,
     v_c_ref: float | None = None,
     outputs: bool = False,
-    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write a PLECS model of the grid converter system.
@@ -411,7 +443,8 @@ def write_model(
     mdl : GridConverterSystem
         Continuous-time system model.
     ctrl : GridConverterControlSystem
-        Discrete-time control system.
+        Discrete-time control system. Its gate enable (`set_enable`) is the input
+        `enable` of the control system, see `sm.write_model`.
     t_stop : float
         Simulation stop time (s).
     p_g_ref : StepSignal
@@ -423,9 +456,6 @@ def write_model(
     outputs : bool, optional
         Add the output ports "mdl" and "ctrl" for `simulate`, defaults to
         False.
-    enable : StepSignal | float, optional
-        Input `enable` of the control system, defaults to 1 (enabled), see
-        `sm.write_model`.
 
     Returns
     -------
@@ -442,7 +472,7 @@ def write_model(
     T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     lcl = isinstance(mdl.ac_filter, LCLFilter)
     sch = _Schematic()
-    sources: list[tuple[str, StepSignal | float | str]] = [(ENABLE, enable)]
+    sources: list[tuple[str, StepSignal | float | str]] = [(ENABLE, gate_enable(ctrl))]
     sources += [("p_g_ref", p_g_ref)]
     if block is GFL_BLOCK:
         if q_g_ref is None:
@@ -458,11 +488,13 @@ def write_model(
         voltages += _probe("u_gbc", ["Measured voltage"])
         sources += [("u_g_line", voltages)]
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
+    voltages = _probe("u_cab", ["Measured voltage"])
+    sources += [("u_c_line", voltages + _probe("u_cbc", ["Measured voltage"]))]
     _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
-    _add_pwm(sch, T_s)
-    sch.dx = DC_DX  # Space for the DC bus
-    _add_converter(sch)
+    _add_pwm(sch, T_s, mdl.single_update)
+    sch.dx = DC_DX + GATE_DX  # Space for the gate enable and the DC bus
+    _add_converter(sch, T_s)
     _add_dc_bus(sch, None)
     if lcl:
         _add_lcl_filter_and_grid(sch)

@@ -30,8 +30,8 @@ import motulator.grid.model as grid_model
 import numpy as np
 import pytest
 from motulator.common.control._base import ControlSystem, TimeSeries
-from motulator.common.utils import complex2abc, dead_time_error
-from motulator.common.utils._utils import wrap
+from motulator.common.utils import complex2abc
+from motulator.common.utils._utils import get_value, wrap
 from motulator.drive import model, utils
 from motulator.drive.control._base import (
     Measurements,
@@ -110,9 +110,18 @@ def start(dll: ctypes.CDLL, params: list[Any]) -> str | None:
     numel = (ctypes.c_int * len(arrays))(*[a.size for a in arrays])
     # The mock refers to the values of the parameters, so they are kept, as Simulink
     # keeps the parameters
-    values = PARAM_VALUES[id(dll)] = arr(np.concatenate(arrays))
+    values = PARAM_VALUES[id(dll)] = arr(np.concatenate([np.zeros(0), *arrays]))
     err = dll.sfun_start(len(arrays), numel, values)
     return None if err is None else err.decode()
+
+
+def restarter(dll: ctypes.CDLL, params: list[Any]) -> Callable[[], None]:
+    """Function restarting the S-function with the parameters."""
+
+    def restart() -> None:
+        assert start(dll, params) is None
+
+    return restart
 
 
 class SFunctionControlSystem(ControlSystem):
@@ -141,6 +150,9 @@ class SFunctionControlSystem(ControlSystem):
         raise NotImplementedError
 
     def compute_output(self, fbk: Any) -> Any:
+        raise NotImplementedError
+
+    def compute_standby_output(self, fbk: Any) -> Any:
         raise NotImplementedError
 
     def run_control_loop(self, mdl: Any) -> tuple[float, Sequence[float]]:
@@ -194,49 +206,43 @@ def compare(
     return sl.recorded
 
 
-def check_enable(dll: Any, block: Block, inputs: list[float]) -> None:
+def check_dc_bus_limit(
+    dll: Any, block: Block, inputs: list[float], restart: Callable[[], None]
+) -> None:
     """
-    Check the input `enable` and the lower limit of the measured DC-bus voltage.
+    Check the lower limit of the measured DC-bus voltage.
 
-    The started S-function is run with the given constant inputs (without `enable`).
-    Disabling should give zero voltage and reset the state to its initial value. The
-    outputs should stay finite without the DC-bus voltage, e.g., if the control system
-    is enabled before the DC bus is charged, the measured voltage being limited to
-    U_DC_MIN = 1 V.
+    The S-function, started by `restart`, is run with the given constant inputs
+    (without `enable`, which is 1). The outputs should stay finite without the DC-bus
+    voltage, e.g., if the gates are enabled before the DC bus is charged, the
+    measured voltage being limited to U_DC_MIN = 1 V.
 
     """
     y = (ctypes.c_double * (3 + len(block.signals)))()
+    k_u_dc = sum(block.input_widths[1 : block.inputs.index("u_dc")])
 
-    def run(enable: float, n: int, u_dc: float | None = None) -> np.ndarray:
+    def run(u_dc: float) -> np.ndarray:
+        restart()
         u = list(inputs)
-        if u_dc is not None:
-            u[sum(block.input_widths[1 : block.inputs.index("u_dc")])] = u_dc
-        out = np.zeros((n, len(y)))
-        for k in range(n):
-            dll.sfun_step(arr([enable, *u]), y)
+        u[k_u_dc] = u_dc
+        out = np.zeros((2000, len(y)))
+        for k in range(len(out)):
+            dll.sfun_step(arr([1.0, *u]), y)
             out[k] = y
         return out
 
-    def disable() -> None:
-        out = run(0.0, 2)
-        assert np.all(out[:, :3] == 0.5)
-        assert np.all(out[:, 3:] == 0)
-
-    disable()
-    first = run(1.0, 400)
-    assert np.all(np.isfinite(first))
-    assert np.any(first[-1, 3:] != 0)
-    disable()
-    assert np.array_equal(run(1.0, 400), first)
-    disable()
-    limited = run(1.0, 2000, 1.0)
+    limited = run(1.0)
     assert np.all(np.isfinite(limited))
     for u_dc in (0.0, -5.0):
-        disable()
-        assert np.array_equal(run(1.0, 2000, u_dc), limited)
+        assert np.array_equal(run(u_dc), limited)
 
 
-# %%
+def blocked_drive(t: float) -> bool:
+    """Gate enable of the drives with the gates blocked at the start and during the
+    operation."""
+    return 0.01 <= t < 0.15 or t >= 0.17
+
+
 # Systems of the tests: the builders of the system model and the control system of
 # motulator, the compared signals, and the inputs of the control-system blocks
 Build = Callable[[], tuple[Any, Any]]
@@ -253,8 +259,13 @@ def smooth_sign(x: np.ndarray) -> np.ndarray:
     return np.tanh(x / 0.2)
 
 
-def sm_system(sensorless: bool, t_d: float) -> tuple[Build, Signals]:
-    """Synchronous machine drive with flux-vector control."""
+def sm_system(
+    sensorless: bool, t_d: float, blocked: bool = False
+) -> tuple[Build, Signals]:
+    """
+    Synchronous machine drive with flux-vector control, optionally with the gates
+    blocked at the start and during the operation (`blocked`).
+    """
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
         par = model.SynchronousMachinePars(**SM_PAR)
@@ -268,7 +279,7 @@ def sm_system(sensorless: bool, t_d: float) -> tuple[Build, Signals]:
         pwm = sm_control.PWM()
         if t_d > 0:
             pwm = sm_control.PWM(
-                d_err=lambda i, d: dead_time_error(i, d, t_d, cfg.T_s, smooth_sign)
+                d_err=sm_control.InverterNonlinearity(t_d, sign=smooth_sign)
             )
         ctrl = VectorControlSystem(
             sm_control.FluxVectorController(par, cfg),
@@ -276,6 +287,8 @@ def sm_system(sensorless: bool, t_d: float) -> tuple[Build, Signals]:
             pwm,
         )
         ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
+        if blocked:
+            ctrl.set_enable(blocked_drive)
         return mdl, ctrl
 
     signals = {
@@ -287,30 +300,41 @@ def sm_system(sensorless: bool, t_d: float) -> tuple[Build, Signals]:
     return build, signals
 
 
-def im_system(sensorless: bool, t_d: float, i_0: float) -> tuple[Build, Signals]:
-    """Induction machine drive with current-vector control."""
+def im_system(
+    sensorless: bool,
+    t_d: float,
+    i_0: float,
+    u_th: float = 0.0,
+    single_update: bool = False,
+    blocked: bool = False,
+) -> tuple[Build, Signals]:
+    """Induction machine drive with current-vector control, see `sm_system`."""
     par = model.InductionMachineInvGammaPars(**IM_PAR)
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
         mdl = model.Drive(
             model.InductionMachine(par),
             model.MechanicalSystem(J=0.015),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+            model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
+            delay=2 if single_update else 1,  # One sampling period
+            single_update=single_update,
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 14.6)
         cfg = im_control.CurrentVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless
         )
         sign = np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
-        d_err = (
-            None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s, sign)
-        )
+        d_err = None
+        if t_d > 0 or u_th > 0:
+            d_err = im_control.InverterNonlinearity(t_d, u_th, sign)
         ctrl = VectorControlSystem(
             im_control.CurrentVectorController(par, cfg),
             im_control.SpeedController(**IM_SPEED),
-            im_control.PWM(d_err=d_err),
+            im_control.PWM(d_err=d_err, single_update=single_update),
         )
         ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
+        if blocked:
+            ctrl.set_enable(blocked_drive)
         return mdl, ctrl
 
     signals = {
@@ -327,8 +351,13 @@ IM_BASE = utils.BaseValues.from_nominal(IM_NOM, n_p=2)
 OPEN_LOOP_PAR = {"n_p": 2, "R_s": 0, "R_R": 0, "L_sgm": 0, "L_M": inf}
 
 
-def vhz_system(open_loop: bool, t_d: float, d_min: float) -> tuple[Build, Signals]:
-    """Induction machine drive with observer-based or open-loop V/Hz control."""
+def vhz_system(
+    open_loop: bool, t_d: float, d_min: float, blocked: bool = False
+) -> tuple[Build, Signals]:
+    """
+    Induction machine drive with observer-based or open-loop V/Hz control, see
+    `sm_system`.
+    """
 
     def build() -> tuple[model.Drive, VHzControlSystem]:
         mdl = model.Drive(
@@ -347,11 +376,9 @@ def vhz_system(open_loop: bool, t_d: float, d_min: float) -> tuple[Build, Signal
             cfg = im_control.ObserverBasedVHzControllerCfg(
                 psi_s_nom=IM_BASE.psi, i_s_max=1.5 * IM_BASE.i
             )
-        d_err = (
-            None
-            if t_d == 0
-            else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s, smooth_sign)
-        )
+        d_err = None
+        if t_d > 0:
+            d_err = im_control.InverterNonlinearity(t_d, sign=smooth_sign)
         pwm = im_control.PWM(overmodulation="MME", d_err=d_err, d_min=d_min)
         ctrl = VHzControlSystem(
             im_control.ObserverBasedVHzController(par, cfg),
@@ -359,6 +386,8 @@ def vhz_system(open_loop: bool, t_d: float, d_min: float) -> tuple[Build, Signal
             pwm=pwm,
         )
         ctrl.set_speed_ref(lambda t: (t > 0.1) * 0.8 * IM_BASE.w_M)
+        if blocked:
+            ctrl.set_enable(lambda t: 0.01 <= t < 0.7 or t >= 0.72)
         return mdl, ctrl
 
     signals = {
@@ -375,8 +404,8 @@ NOM = grid_utils.NominalValues(U=400, I=18, f=50, P=12.5e3)
 BASE = grid_utils.BaseValues.from_nominal(NOM)
 
 
-def gfl_system() -> tuple[Build, Signals]:
-    """Grid converter system with grid-following control."""
+def gfl_system(blocked: bool = False) -> tuple[Build, Signals]:
+    """Grid converter system with grid-following control, see `sm_system`."""
 
     def build() -> tuple[Any, grid_control.GridConverterControlSystem]:
         ac_filter = grid_model.LCLFilter(
@@ -395,6 +424,8 @@ def gfl_system() -> tuple[Build, Signals]:
         )
         ctrl.set_power_ref(lambda t: (t > 0.02) * 5e3)
         ctrl.set_reactive_power_ref(lambda t: (t > 0.04) * 4e3)
+        if blocked:
+            ctrl.set_enable(lambda t: 0.005 <= t < 0.03 or t >= 0.035)
         return mdl, ctrl
 
     signals = {
@@ -406,8 +437,8 @@ def gfl_system() -> tuple[Build, Signals]:
     return build, signals
 
 
-def gfm_system(power_limitation: bool) -> tuple[Build, Signals]:
-    """Grid converter system with grid-forming control."""
+def gfm_system(power_limitation: bool, blocked: bool = False) -> tuple[Build, Signals]:
+    """Grid converter system with grid-forming control, see `sm_system`."""
 
     def build() -> tuple[Any, grid_control.GridConverterControlSystem]:
         ac_filter = grid_model.LFilter(
@@ -432,6 +463,8 @@ def gfm_system(power_limitation: bool) -> tuple[Build, Signals]:
         )
         ctrl.set_power_ref(lambda t: (t > 0.05) * NOM.P - (t > 0.15) * 2 * NOM.P)
         ctrl.set_ac_voltage_ref(BASE.u)
+        if blocked:
+            ctrl.set_enable(lambda t: 0.01 <= t < 0.1 or t >= 0.11)
         return mdl, ctrl
 
     signals = {
@@ -454,7 +487,11 @@ def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem
             mech = mdl.mechanics
             i_s_abc = mdl.machine.meas_currents()
             u_dc = mdl.converter.meas_dc_voltage()
-            u = [1.0, cast(Any, ctrl.ext_ref.w_M)(t), *i_s_abc, u_dc]
+            # The gate enable, and the converter voltage, used with blocked gates
+            enabled = float(bool(get_value(ctrl._enable, t)))
+            u_c_line = mdl.converter.meas_voltages()
+            w_M_ref = cast(Any, ctrl.ext_ref.w_M)(t)
+            u = [enabled, w_M_ref, *i_s_abc, u_dc, *u_c_line]
             if "theta_M" in block.inputs:
                 u.append(wrap(mech.meas_position()))
             elif "w_M" in block.inputs:
@@ -465,7 +502,9 @@ def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem
             T_s = cast(Any, ctrl.vhz_ctrl).cfg.T_s
         else:
             T_s = cast(Any, ctrl.vector_ctrl).cfg.T_s
-        return SFunctionControlSystem(dll, block, T_s, inputs)
+        sl = SFunctionControlSystem(dll, block, T_s, inputs)
+        sl.set_enable(ctrl._enable)  # For blocking the gates of the system model
+        return sl
 
     return sfun
 
@@ -481,24 +520,32 @@ def grid_sfun(
         def inputs(mdl: grid_model.GridConverterSystem, t: float) -> list[float]:
             i_c_abc = mdl.ac_filter.meas_currents()
             u_dc = mdl.converter.meas_dc_voltage()
+            # The gate enable, and the converter voltage, used with blocked gates
+            enabled = float(bool(get_value(ctrl._enable, t)))
+            u_c_line = mdl.converter.meas_voltages()
             if "q_g_ref" in block.inputs:
                 u_g_line = mdl.ac_filter.meas_pcc_voltages()
-                return [1.0, ext_ref.p_g(t), ext_ref.q_g(t), *i_c_abc, *u_g_line, u_dc]
-            return [1.0, ext_ref.p_g(t), ext_ref.v_c, *i_c_abc, u_dc]
+                refs = [ext_ref.p_g(t), ext_ref.q_g(t)]
+                return [enabled, *refs, *i_c_abc, *u_g_line, u_dc, *u_c_line]
+            refs = [ext_ref.p_g(t), ext_ref.v_c]
+            return [enabled, *refs, *i_c_abc, u_dc, *u_c_line]
 
         T_s = grid.export_values(ctrl)["T_s"]
-        return SFunctionControlSystem(dll, block, T_s, inputs)
+        sl = SFunctionControlSystem(dll, block, T_s, inputs)
+        sl.set_enable(ctrl._enable)  # For blocking the gates of the system model
+        return sl
 
     return sfun
 
 
-# Constant inputs of `check_enable` (without enable)
-SM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.3]
-IM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0]
-VHZ_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0]
+# Constant inputs of `check_dc_bus_limit` (without enable), with zero converter
+# voltages
+SM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0, 0.0, 0.3]
+IM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0, 0.0, 0.0]
+VHZ_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0, 0.0]
 # Line-to-line PCC voltages u_ab and u_bc of the voltage vector BASE.u
-GFL_INPUTS = [5e3, 1e3, 3.0, -1.0, -2.0, 1.5 * BASE.u, 0.0, 650.0]
-GFM_INPUTS = [5e3, BASE.u, 3.0, -1.0, -2.0, 650.0]
+GFL_INPUTS = [5e3, 1e3, 3.0, -1.0, -2.0, 1.5 * BASE.u, 0.0, 650.0, 0.0, 0.0]
+GFM_INPUTS = [5e3, BASE.u, 3.0, -1.0, -2.0, 650.0, 0.0, 0.0]
 
 
 # %%
@@ -510,7 +557,8 @@ def test_parameter_errors(fvc: ctypes.CDLL) -> None:
     values |= SM_PAR | {"i_s_max": 6.5, "T_s": 125e-6}
     values |= {"speed_J": 0.015, "speed_alpha_s": 25.0, "k_o": [1.0, 2.0, 3.0]}
     assert start(fvc, sfunction_params(block, values)) == "pwm_t_d must be a scalar."
-    values |= {"pwm_t_d": 0.0, "pwm_i_0": 0.0, "pwm_feedforward": 1, "pwm_d_min": 0.0}
+    values |= {"pwm_t_d": 0.0, "pwm_u_th": 0.0, "pwm_i_0": 0.0, "pwm_feedforward": 1}
+    values |= {"pwm_d_min": 0.0, "pwm_single_update": 0}
     assert start(fvc, sfunction_params(block, values)) == "k_o must be [] or [k0 k1]."
     values["k_o"] = None
     assert start(fvc, sfunction_params(block, values)) is None
@@ -519,85 +567,140 @@ def test_parameter_errors(fvc: ctypes.CDLL) -> None:
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d"),
-    [(True, 0.0), (False, 0.0), (True, 2e-6)],
-    ids=["sensorless", "sensored", "dead_time"],
+    ("sensorless", "t_d", "blocked"),
+    [
+        (True, 0.0, False),
+        (False, 0.0, False),
+        (True, 2e-6, False),
+        (True, 0.0, True),
+        (False, 0.0, True),
+    ],
+    ids=["sensorless", "sensored", "dead_time", "blocked", "sensored_blocked"],
 )
-def test_flux_vector_control(fvc: ctypes.CDLL, sensorless: bool, t_d: float) -> None:
+def test_flux_vector_control(
+    fvc: ctypes.CDLL, sensorless: bool, t_d: float, blocked: bool
+) -> None:
     """The S-function of flux-vector control should agree with motulator, also with
     the dead time and its compensation (with the smooth current-direction function),
-    and the input `enable` should reset it."""
-    build, signals = sm_system(sensorless, t_d)
+    and with the gates blocked (`blocked`)."""
+    build, signals = sm_system(sensorless, t_d, blocked)
     values, _ = sm.export_values(build()[1], SM_SPEED)
-    assert start(fvc, sfunction_params(monolithic.FVC, values)) is None
+    params = sfunction_params(monolithic.FVC, values)
+    assert start(fvc, params) is None
     compare(build, model.Simulation, drive_sfun(fvc, monolithic.FVC), signals, 0.3)
-    check_enable(fvc, monolithic.FVC, SM_INPUTS)
+    check_dc_bus_limit(fvc, monolithic.FVC, SM_INPUTS, restarter(fvc, params))
     fvc.sfun_terminate()
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0"),
-    [(True, 0.0, 0.0), (False, 0.0, 0.0), (True, 2e-6, 0.0), (True, 2e-6, 0.5)],
-    ids=["sensorless", "sensored", "dead_time", "dead_time_tanh"],
+    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked"),
+    [
+        (True, 0.0, 0.0, 0.0, False, False),
+        (False, 0.0, 0.0, 0.0, False, False),
+        (True, 2e-6, 0.0, 0.0, False, False),
+        (True, 2e-6, 0.5, 0.0, False, False),
+        (True, 2e-6, 0.5, 1.0, True, False),
+        (True, 0.0, 0.5, 1.0, False, True),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time",
+        "dead_time_tanh",
+        "u_th_single",
+        "u_th_blocked",
+    ],
 )
 def test_current_vector_control(
-    cvc: ctypes.CDLL, sensorless: bool, t_d: float, i_0: float
+    cvc: ctypes.CDLL,
+    sensorless: bool,
+    t_d: float,
+    i_0: float,
+    u_th: float,
+    single_update: bool,
+    blocked: bool,
 ) -> None:
     """The S-function of current-vector control should agree with motulator, also
-    with the dead time of the converter and its compensation, with the
-    current-direction function np.sign or tanh(i/i_0)."""
-    build, signals = im_system(sensorless, t_d, i_0)
+    with the dead time and the threshold voltage of the converter and their
+    compensation, with the current-direction function np.sign or tanh(i/i_0), with
+    single update, and with the gates blocked."""
+    args = (sensorless, t_d, i_0, u_th, single_update, blocked)
+    build, signals = im_system(*args)
     values = im.export_values(build()[1], IM_SPEED)
-    assert start(cvc, sfunction_params(monolithic.CVC, values)) is None
+    params = sfunction_params(monolithic.CVC, values)
+    assert start(cvc, params) is None
     compare(build, model.Simulation, drive_sfun(cvc, monolithic.CVC), signals, 0.3)
-    check_enable(cvc, monolithic.CVC, IM_INPUTS)
+    check_dc_bus_limit(cvc, monolithic.CVC, IM_INPUTS, restarter(cvc, params))
     cvc.sfun_terminate()
 
 
-# Cases of V/Hz control: open loop, the dead time, and the minimum duty ratio
+# Cases of V/Hz control: open loop, the dead time, the minimum duty ratio, and the
+# gates blocked
 VHZ_CASES = [
-    (False, 0.0, 0.0),
-    (True, 0.0, 0.0),
-    (False, 2e-6, 0.0),
-    (True, 2e-6, 0.04),
+    (False, 0.0, 0.0, False),
+    (True, 0.0, 0.0, False),
+    (False, 2e-6, 0.0, False),
+    (True, 2e-6, 0.04, False),
+    (False, 0.0, 0.0, True),
 ]
-VHZ_IDS = ["ovhz", "open_loop", "ovhz_dead_time", "open_loop_dead_time_min_pulse"]
+VHZ_IDS = [
+    "ovhz",
+    "open_loop",
+    "ovhz_dead_time",
+    "open_loop_dead_time_min_pulse",
+    "ovhz_blocked",
+]
 
 
-@pytest.mark.parametrize(("open_loop", "t_d", "d_min"), VHZ_CASES, ids=VHZ_IDS)
+@pytest.mark.parametrize(
+    ("open_loop", "t_d", "d_min", "blocked"), VHZ_CASES, ids=VHZ_IDS
+)
 def test_vhz_control(
-    vhz: ctypes.CDLL, open_loop: bool, t_d: float, d_min: float
+    vhz: ctypes.CDLL, open_loop: bool, t_d: float, d_min: float, blocked: bool
 ) -> None:
     """The S-function of observer-based or open-loop V/Hz control should agree with
-    motulator, also with the dead-time compensation and the minimum pulses."""
-    build, signals = vhz_system(open_loop, t_d, d_min)
+    motulator, also with the dead-time compensation, the minimum pulses, and the
+    gates blocked."""
+    build, signals = vhz_system(open_loop, t_d, d_min, blocked)
     values = im.export_vhz_values(build()[1])
-    assert start(vhz, sfunction_params(monolithic.VHZ, values)) is None
+    params = sfunction_params(monolithic.VHZ, values)
+    assert start(vhz, params) is None
     compare(build, model.Simulation, drive_sfun(vhz, monolithic.VHZ), signals, 1.0)
-    check_enable(vhz, monolithic.VHZ, VHZ_INPUTS)
+    check_dc_bus_limit(vhz, monolithic.VHZ, VHZ_INPUTS, restarter(vhz, params))
     vhz.sfun_terminate()
 
 
-def test_grid_following_control(gfl: ctypes.CDLL) -> None:
-    """The S-function of grid-following control should agree with motulator."""
-    build, signals = gfl_system()
+@pytest.mark.parametrize("blocked", [False, True], ids=["enabled", "blocked"])
+def test_grid_following_control(gfl: ctypes.CDLL, blocked: bool) -> None:
+    """The S-function of grid-following control should agree with motulator, also
+    with the gates blocked."""
+    build, signals = gfl_system(blocked)
     values = grid.export_values(build()[1])
-    assert start(gfl, sfunction_params(monolithic.GFL, values)) is None
+    params = sfunction_params(monolithic.GFL, values)
+    assert start(gfl, params) is None
     sfun = grid_sfun(gfl, monolithic.GFL)
     compare(build, grid_model.Simulation, sfun, signals, 0.06)
-    check_enable(gfl, monolithic.GFL, GFL_INPUTS)
+    check_dc_bus_limit(gfl, monolithic.GFL, GFL_INPUTS, restarter(gfl, params))
     gfl.sfun_terminate()
 
 
-@pytest.mark.parametrize("power_limitation", [False, True])
-def test_grid_forming_control(gfm: ctypes.CDLL, power_limitation: bool) -> None:
-    """The S-function of grid-forming control should agree with motulator."""
-    build, signals = gfm_system(power_limitation)
+@pytest.mark.parametrize(
+    ("power_limitation", "blocked"),
+    [(False, False), (True, False), (True, True)],
+    ids=["no_limitation", "power_limitation", "power_limitation_blocked"],
+)
+def test_grid_forming_control(
+    gfm: ctypes.CDLL, power_limitation: bool, blocked: bool
+) -> None:
+    """The S-function of grid-forming control should agree with motulator, also
+    with the gates blocked."""
+    build, signals = gfm_system(power_limitation, blocked)
     values = grid.export_values(build()[1])
-    assert start(gfm, sfunction_params(monolithic.GFM, values)) is None
+    params = sfunction_params(monolithic.GFM, values)
+    assert start(gfm, params) is None
     sfun = grid_sfun(gfm, monolithic.GFM)
     compare(build, grid_model.Simulation, sfun, signals, 0.25)
-    check_enable(gfm, monolithic.GFM, GFM_INPUTS)
+    check_dc_bus_limit(gfm, monolithic.GFM, GFM_INPUTS, restarter(gfm, params))
     gfm.sfun_terminate()
 
 
@@ -652,7 +755,7 @@ def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[fl
     for k in range(n):
         th = float(wrap(theta_M[k]))
         meas = Measurements(i_s_ab[k], 540.0, w_M[k], th)
-        u = [1.0, float(w_M_ref[k]), *complex2abc(i_s_ab[k]), 540.0, th]
+        u = [1.0, float(w_M_ref[k]), *complex2abc(i_s_ab[k]), 540.0, 0.0, 0.0, th]
         out.append((meas, u))
     return out
 

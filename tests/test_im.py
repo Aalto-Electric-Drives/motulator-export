@@ -3,8 +3,10 @@ Test the C port of induction machine current-vector control against motulator.
 
 The 2.2-kW induction machine drive (see im_2kw_cvc.py) is simulated in closed loop
 with the control system of motulator and with the C port (in the sensorless and
-sensored modes, and with the dead time of the converter and its compensation), and
-the controller signals are compared at the sampling instants.
+sensored modes, with the dead time and the threshold voltage of the converter and
+their compensation, also with single update, and with the gates blocked at the start
+and during the operation), and the controller signals are compared at the sampling
+instants.
 The closed-loop test is used, since replaying recorded measurements to a sensorless
 flux observer is an open loop, which amplifies rounding differences. PLECS is not
 needed.
@@ -26,7 +28,7 @@ import motulator.drive.control.im as control
 import numpy as np
 import pytest
 from motulator.common.control._base import ControlSystem, TimeSeries
-from motulator.common.utils import complex2abc, dead_time_error
+from motulator.common.utils import complex2abc
 from motulator.drive import model, utils
 
 from tests.c_port import arr, compile_library, d
@@ -52,13 +54,15 @@ void init(const double *p, const double *c, const double *s)
     cfg.T_s = c[10];
     PIController speed_ctrl = speed_controller(s[0], s[1], s[2], s[3]);
     im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);
-    pwm_set_dead_time(&ctrl.pwm, s[4], cfg.T_s, s[5], (int)s[6]);
+    pwm_set_nonlinearity(&ctrl.pwm, s[4], s[5], s[6], (int)s[7]);
+    pwm_set_single_update(&ctrl.pwm, (int)s[8]);
 }
 
-void step(const double *i_s_abc, double u_dc, double w_M, double w_M_ref, double *out)
+void step(const double *i_s_abc, double u_dc, double w_M, double w_M_ref,
+          double enabled, const double *u_c_ab, double *out)
 {
-    IMMeasurements meas = {abc2complex(i_s_abc), u_dc, w_M};
-    im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref);
+    IMMeasurements meas = {abc2complex(i_s_abc), u_dc, w_M, u_c_ab[0] + I * u_c_ab[1]};
+    im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref, (int)enabled);
     /* Current reference in estimated rotor flux coordinates, as in the
      * post-processed results of motulator */
     double complex i_s_ref = cexp(-I * carg(ctrl.fbk.psi_R)) * ctrl.ref.i_s;
@@ -82,6 +86,7 @@ PAR = control.InductionMachineInvGammaPars(
 )
 SPEED_CTRL = {"J": 0.015, "alpha_s": 2 * pi * 4}
 T_D = 2e-6  # Dead time (s)
+U_TH = 1.0  # Threshold voltage (V)
 I_0 = 0.5  # Current scale (A) of sign = tanh(i/i_0) in the dead-time compensation
 
 
@@ -91,32 +96,44 @@ def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 def build_system(
-    sensorless: bool, t_d: float = 0.0, i_0: float = 0.0
+    sensorless: bool,
+    t_d: float = 0.0,
+    u_th: float = 0.0,
+    i_0: float = 0.0,
+    single_update: bool = False,
+    blocked: bool = False,
 ) -> tuple[model.Drive, control.VectorControlSystem]:
     """
-    Build the drive system of the 2.2-kW example, optionally with the dead time.
+    Build the drive system of the 2.2-kW example, optionally with the dead time and
+    the threshold voltage, with single update, and with the gates blocked at the
+    start and during the operation (`blocked`).
 
-    The dead-time compensation uses `sign = tanh(i/i_0)`, or `np.sign` if `i_0` is
-    zero.
+    The compensation uses `sign = tanh(i/i_0)`, or `np.sign` if `i_0` is zero.
 
     """
     mdl = model.Drive(
         model.InductionMachine(PAR),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
+        delay=2 if single_update else 1,  # One sampling period
+        single_update=single_update,
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.3) * NOM.tau)
     cfg = control.CurrentVectorControllerCfg(
         psi_s_nom=BASE.psi, i_s_max=1.5 * BASE.i, J=0.015, sensorless=sensorless
     )
     sign = np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
-    d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, cfg.T_s, sign)
+    d_err = None
+    if t_d > 0 or u_th > 0:
+        d_err = control.InverterNonlinearity(t_d, u_th, sign)
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(PAR, cfg),
         control.SpeedController(**SPEED_CTRL),
-        control.PWM(d_err=d_err),
+        control.PWM(d_err=d_err, single_update=single_update),
     )
     ctrl.set_speed_ref(lambda t: (t > 0.1) * 0.5 * BASE.w_M)
+    if blocked:
+        ctrl.set_enable(lambda t: 0.02 <= t < 0.35 or t >= 0.38)
     return mdl, ctrl
 
 
@@ -128,10 +145,12 @@ class CControlSystem(control.VectorControlSystem):
         ctrl: control.VectorControlSystem,
         dll: ctypes.CDLL,
         t_d: float,
+        u_th: float,
         i_0: float,
     ) -> None:
         super().__init__(ctrl.vector_ctrl, ctrl.speed_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
+        self.set_enable(ctrl._enable)
         cfg = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg
         self.T_s = cfg.T_s
         self.dll = dll
@@ -141,16 +160,27 @@ class CControlSystem(control.VectorControlSystem):
         c += [cfg.w_s_nom, cfg.k_u, np.nan, cast(float, cfg.J), cfg.sensorless]
         c += [cfg.T_s]
         p = [PAR.n_p, PAR.R_s, PAR.R_R, PAR.L_sgm, PAR.L_M]
-        s = [*SPEED_CTRL.values(), np.nan, inf, t_d, i_0, ctrl.pwm.feedforward]
+        s = [*SPEED_CTRL.values(), np.nan, inf, t_d, u_th, i_0, ctrl.pwm.feedforward]
+        s += [ctrl.pwm.single_update]
         self.dll.init(arr(p), arr(c), arr(s))
         self.out = (ctypes.c_double * len(NAMES))()
 
     def run_control_loop(self, mdl: model.Drive) -> tuple[float, Sequence[float]]:
-        meas = self.get_measurement(mdl)
+        self.enabled = self.get_enable()
+        meas = self.get_measurement(mdl)  # The converter voltage with blocked gates
         w_M_ref = cast(Any, self.ext_ref.w_M)(self.t)
         i_abc = complex2abc(meas.i_c_ab)
         w_M = meas.w_M or 0.0  # Measured only in the sensored mode
-        self.dll.step(arr(i_abc), d(meas.u_dc), d(w_M), d(w_M_ref), self.out)
+        u_c = meas.u_c_ab or 0j
+        self.dll.step(
+            arr(i_abc),
+            d(meas.u_dc),
+            d(w_M),
+            d(w_M_ref),
+            d(self.enabled),
+            arr([u_c.real, u_c.imag]),
+            self.out,
+        )
         out = np.array(self.out)
         self.save(self.t, out=SimpleNamespace(**dict(zip(NAMES, out, strict=True))))
         self.t = (self.t + self.T_s) % 1e9
@@ -161,15 +191,41 @@ class CControlSystem(control.VectorControlSystem):
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0"),
-    [(True, 0.0, 0.0), (False, 0.0, 0.0), (True, T_D, 0.0), (True, T_D, I_0)],
-    ids=["sensorless", "sensored", "dead_time", "dead_time_tanh"],
+    ("sensorless", "t_d", "u_th", "i_0", "single_update", "blocked"),
+    [
+        (True, 0.0, 0.0, 0.0, False, False),
+        (False, 0.0, 0.0, 0.0, False, False),
+        (True, T_D, 0.0, 0.0, False, False),
+        (True, T_D, 0.0, I_0, False, False),
+        (True, T_D, U_TH, I_0, True, False),
+        (True, 0.0, 0.0, 0.0, False, True),
+        # Without the dead time: after the currents have decayed through the diodes,
+        # the first blanking intervals depend on the sign of a zero current in the
+        # converter model, i.e., on the rounding errors
+        (False, 0.0, U_TH, I_0, False, True),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time",
+        "dead_time_tanh",
+        "u_th_single",
+        "blocked",
+        "sensored_u_th_blocked",
+    ],
 )
 def test_control_system(
-    dll: ctypes.CDLL, sensorless: bool, t_d: float, i_0: float
+    dll: ctypes.CDLL,
+    sensorless: bool,
+    t_d: float,
+    u_th: float,
+    i_0: float,
+    single_update: bool,
+    blocked: bool,
 ) -> None:
     """Closed-loop simulation of the 2.2-kW drive with motulator and with the C port."""
-    mdl, ctrl = build_system(sensorless, t_d, i_0)
+    args = (sensorless, t_d, u_th, i_0, single_update, blocked)
+    mdl, ctrl = build_system(*args)
     res_py = model.Simulation(mdl, ctrl).simulate(t_stop=0.5)
     fbk, ref = res_py.ctrl.fbk, res_py.ctrl.ref
     py = np.column_stack(
@@ -184,8 +240,8 @@ def test_control_system(
             ref.i_s.imag,
         ]
     )
-    mdl, ctrl = build_system(sensorless, t_d, i_0)
-    res_c = model.Simulation(mdl, CControlSystem(ctrl, dll, t_d, i_0)).simulate(
+    mdl, ctrl = build_system(*args)
+    res_c = model.Simulation(mdl, CControlSystem(ctrl, dll, t_d, u_th, i_0)).simulate(
         t_stop=0.5
     )
     c = np.column_stack([getattr(res_c.ctrl.out, name) for name in NAMES])

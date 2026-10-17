@@ -17,7 +17,10 @@ from typing import Any
 
 import numpy as np
 from motulator.common.control._pwm import PWM
+from motulator.common.model._base import Model
 from motulator.common.model._converter import DCBus, DiodeBridgeDCBus
+from motulator.drive.control._base import DriveControlSystem
+from motulator.grid.control._base import GridConverterControlSystem
 
 from motulator_export.plecs._netlist import Subsystem
 from motulator_export.plecs._render import schematic
@@ -143,10 +146,12 @@ class ControlBlock:
     Control-system block: a masked subsystem containing the blocks of the classes of
     the control system (see `_control`).
 
-    The inputs are `enable` (see `block_enable_code`), the references, and the
-    measurements. The duty ratios of the C block "PWM/compute_output" are the only
-    output of the block. The monitored signals are the outputs of the C block
-    "Monitored signals", available as mask probes of the block.
+    The inputs are `enable`, the gate enable of motulator (see `ENABLE_DESCRIPTION`),
+    the references, and the measurements, including the line-to-line converter
+    voltages used while the gates are blocked. The duty ratios of the C block
+    "PWM/compute_output" are the only output of the block. The monitored signals are
+    the outputs of the C block "Monitored signals", available as mask probes of the
+    block.
 
     """
 
@@ -227,61 +232,11 @@ ENABLE = "enable"
 # C block of the monitored signals of a control system
 MONITOR = "Monitored signals"
 ENABLE_DESCRIPTION = (
-    " While the input enable is not positive, the duty ratios are 0.5 and the state "
-    "is reset to its initial value."
+    " The input enable is the gate enable (ControlSystem.set_enable): while it is "
+    "zero, the gates of the converter are blocked, and the control system computes "
+    "its standby output, the feedback voltage being the measured converter voltage "
+    "u_c_line, as in motulator."
 )
-
-
-def block_enable_code(
-    code: dict[str, str],
-    state: list[tuple[str, str]],
-    output_widths: list[int],
-    disabled: float = 0.0,
-) -> dict[str, str]:
-    """
-    Add the input `enable` (the first input) to the code sections of a C block.
-
-    While the input is not positive, the algorithm is not run: the outputs are
-    `disabled` (the duty ratios 0.5, i.e., zero voltage, and the monitored signals
-    zero), and the state variables `state` (type, name) are reset to their initial
-    values, so that the control system starts from its initial state when enabled,
-    e.g., after a fault. The initial values are copied at the end of the start
-    function, so the reset does not evaluate the parameters again.
-
-    """
-    disabled_if = "if (!(InputSignal(0, 0) > 0.0)) {\n"
-    outputs = "".join(
-        f"    for (int k = 0; k < {w}; k++) {{\n"
-        f"        OutputSignal({i}, k) = {disabled!r};\n"
-        "    }\n"
-        for i, w in enumerate(output_widths)
-    )
-    out = code | {
-        "OutputFcn": "/* Disabled: the algorithm is not run */\n"
-        + disabled_if
-        + outputs
-        + "    return;\n"
-        "}\n"
-        "\n" + code["OutputFcn"]
-    }
-    if state:
-        out["Declarations"] = (
-            code["Declarations"]
-            + "\n/* Initial state, restored while the block is disabled */\n"
-            + "".join(f"static {t} {n}_init;\n" for t, n in state)
-        )
-        out["StartFcn"] = (
-            code["StartFcn"] + "\n" + "".join(f"{n}_init = {n};\n" for _, n in state)
-        )
-        out["UpdateFcn"] = (
-            "/* Disabled: reset the state */\n"
-            + disabled_if
-            + "".join(f"    {n} = {n}_init;\n" for _, n in state)
-            + "    return;\n"
-            "}\n"
-            "\n" + code["UpdateFcn"]
-        )
-    return out
 
 
 def monitored_code(
@@ -348,27 +303,78 @@ def _jogs(
     return x
 
 
+# Tag of the gate enable (the input enable of the control system), and its distance
+# above the source
+TAG = {"Tag": ENABLE, "Visibility": "2"}  # Schematic
+Y_TAG = 15
+# Space for the gate enable between the PWM (or the blanking time) and the DC bus
+# (horizontal shift of the converter and the components after it)
+GATE_DX = 60
+
 # Converter: phases a, b, and c on the right, the gate input on the top, and the DC
 # terminals on the top and bottom
 CONVERTER_FRAME = "      Frame         [-25, -25; 25, 25]\n"
 
 
-def _check_supported_pwm(pwm: PWM, k_comp: float, d_err: bool = False) -> None:
+def _check_supported_pwm(
+    ctrl: DriveControlSystem | GridConverterControlSystem, d_err: bool = False
+) -> None:
     """
-    Raise an error if the PWM or the angle-advance factor `k_comp` of the voltage
-    reference (given by the controller) of the control system is not supported.
+    Raise an error if the PWM, the angle-advance factor `k_comp` of the voltage
+    reference (given by the controller), or the gate enable of the control system is
+    not supported (see `gate_enable`).
 
     The duty-ratio error model `d_err` is supported only if `d_err` is True.
 
     """
+    pwm = ctrl.pwm
     if not isinstance(pwm, PWM) or pwm.overmodulation not in ("MPE", "MME"):
         raise NotImplementedError("Only the MPE and MME overmodulation supported")
-    if k_comp != 1.5:
+    if ctrl.k_comp != 1.5:
         raise NotImplementedError("Only k_comp = 1.5 of the controller supported")
     if pwm.k_pred != 1.5:
         raise NotImplementedError("Only k_pred = 1.5 supported")
     if pwm.d_err is not None and not d_err:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
+    gate_enable(ctrl)  # Raises if not supported
+
+
+def gate_enable(
+    ctrl: DriveControlSystem | GridConverterControlSystem,
+) -> StepSignal | float:
+    """
+    Get the gate enable of the control system (`ControlSystem.set_enable` of
+    motulator), the input enable of the exported control system.
+
+    Only a constant gate enable (True or False, 1 or 0) or a `StepSignal` with the
+    levels 0 and 1 is supported. The control system evaluates the gate enable at its
+    sampling instants, as in motulator; `sampled_step` gives a step switching at the
+    same sampling instant as in motulator.
+
+    """
+    enable = ctrl._enable
+    if isinstance(enable, StepSignal):
+        levels = [enable.before, *np.atleast_1d(enable.after)]
+        if any(v not in (0, 1) for v in levels):
+            raise ValueError("The levels of the gate enable must be 0 or 1")
+        return enable
+    if isinstance(enable, (bool, np.bool_, int, float)) and enable in (0, 1):
+        return float(enable)
+    raise NotImplementedError(
+        "Only a constant gate enable (set_enable) or a StepSignal of 0 and 1 supported"
+    )
+
+
+def _check_delay(mdl: Model) -> None:
+    """
+    Raise an error if the computational delay is not one sampling period (one half
+    carrier period with double update, two with single update).
+    """
+    if len(mdl.delay.data) != (2 if mdl.single_update else 1):
+        raise NotImplementedError(
+            "Only the computational delay of one sampling period supported (delay=1, "
+            "or delay=2 with single_update)"
+        )
 
 
 def _check_initial_states(
@@ -394,19 +400,23 @@ def _check_initial_states(
             )
 
 
-def _add_pwm(sch: _Schematic, T_s: float | str) -> None:
+def _add_pwm(sch: _Schematic, T_s: float | str, single_update: bool = False) -> None:
     """
     Add the carrier comparison (PLECS Symmetrical PWM), fed by the delayed duty ratios.
 
-    The symmetrical triangular carrier with the period 2*T_s, starting from its
-    maximum, and the regular sampling at both the maximum and the minimum correspond
-    to CarrierComparison in motulator. The counter quantization of motulator is not
-    modeled. The output values -1 and 1 are the gate signals of the ideal converter.
+    The symmetrical triangular carrier with the period 2*T_s (T_s with
+    `single_update`), starting from its maximum, and the regular sampling at both the
+    maximum and the minimum correspond to CarrierComparison in motulator. With single
+    update, the delayed duty ratios change only at the maxima, so that sampling also
+    at the minima gives the single update. The counter quantization of motulator is
+    not modeled. The output values -1 and 1 are the gate signals of the ideal
+    converter.
 
     """
+    k = 1.0 if single_update else 0.5  # Carrier frequency times the sampling period
     params = {
         "sampling": "3",  # Regular (double update)
-        "fc": f"0.5/{T_s}" if isinstance(T_s, str) else _fmt(0.5 / T_s),
+        "fc": f"{k:g}/{T_s}" if isinstance(T_s, str) else _fmt(k / T_s),
         "carrier_phaseshift": "0",
         "carrier_limits": "[0 1]",
         "output_values": "[-1 1]",
@@ -458,28 +468,39 @@ def _add_blanking_time(sch: _Schematic) -> None:
     sch.signal(("PWM", 1), ("Blanking time", 2))
 
 
-def _add_converter(sch: _Schematic, t_d: float = 0.0) -> None:
+def _add_converter(
+    sch: _Schematic, T_s: float | str, t_d: float = 0.0, u_th: float = 0.0
+) -> None:
     """
-    Add the two-level converter (PLECS), fed by the gate signals.
+    Add the two-level converter (PLECS), fed by the gate signals, which are blocked
+    while the gate enable is zero.
 
-    Without the dead time `t_d`, the converter is ideal. With the dead time, the
-    converter is fed by the blanking time (`_add_blanking_time`, added before), and the
-    IGBT converter with ideal IGBTs and diodes is used, so that the current direction
-    determines the leg state during blanking, as in motulator with `sign=np.sign`.
+    The converter is the IGBT converter of PLECS with ideal IGBTs and diodes: the
+    upper IGBT is turned on with a positive, the lower one with a negative gate
+    signal, and both are off with a zero gate signal, when the current direction
+    determines the conducting diode, as in motulator with `sign=np.sign`. With the
+    dead time `t_d`, the converter is fed by the blanking time (`_add_blanking_time`,
+    added before). With the threshold voltage `u_th`, the IGBT converter with
+    parasitics is used, the forward voltages of the IGBTs and the diodes being
+    `converter.u_th` (without on-resistances). The gate signals are multiplied by the
+    gate enable, the input enable of the control system (from the tag of
+    `_add_control_system`) sampled at the sampling instants (`T_s`), as the control
+    system evaluates the gate enable in motulator (`ControlSystem.get_enable`), so
+    that the gates are blocked (all switches off) without the computational delay.
 
     """
-    if t_d > 0:
-        # The upper IGBT is turned on with a positive, the lower one with a negative
-        # gate signal, and both are off with a zero gate signal
-        src = "Components/Electrical/Converters/2-Level\\nIGBT\\nConv."
+    params: dict[str, str] = {}
+    if u_th > 0:
+        src = "Components/Electrical/Converters/Detailed\\n2-Level\\nIGBT\\nConv."
+        params = {"Vf_igbt": "converter.u_th", "Ron_igbt": "0"}
+        params |= {"Vf_d": "converter.u_th", "Ron_d": "0"}
     else:
-        # Ideal converter: the phase is connected to the positive DC terminal upon a
-        # positive gate signal and else to the negative terminal, as in motulator
-        src = "Components/Electrical/Converters/2-Level\\nConv."
+        src = "Components/Electrical/Converters/2-Level\\nIGBT\\nConv."
     sch.component(
         "Reference",
         "Converter",
         CONV,
+        params,
         # Mirrored so that the AC terminals are on the right, as in the machine
         direction="down",
         flipped=True,
@@ -497,11 +518,39 @@ def _add_converter(sch: _Schematic, t_d: float = 0.0) -> None:
             ]
         ),
     )
-    # The gate signals are routed above the DC bus, the riser staying next to the PWM
-    # (or the blanking time)
+    # The gate signals rise next to the PWM (or the blanking time) to the product
+    # with the sampled gate enable, from which they are routed above the DC bus. The
+    # gate enable comes from its tag above them. The coordinates are absolute (the
+    # components after the PWM are shifted by sch.dx).
     gate: Terminal = ("Blanking time", 1) if t_d > 0 else ("PWM", 1)
-    x = X_RISER + (BLANKING_DX if t_d > 0 else 0) - sch.dx
-    sch.signal(gate, ("Converter", 4), [(x, CS[1]), (x, 20), (CONV[0] + 15, 20)])
+    x_r = X_RISER + (BLANKING_DX if t_d > 0 else 0)  # The riser of the gate signals
+    y_p, y_e = 25, 25 - 4 * 5  # The product and the gate enable above it
+    dx = sch.dx
+    sch.component("From", "From enable", (x_r - 90 - dx, y_e), TAG, show=False)
+    ts = T_s if isinstance(T_s, str) else _fmt(T_s)
+    sch.component(
+        "ZeroOrderHold", "Sampled enable", (x_r - 30 - dx, y_e), {"Ts": ts}, show=False
+    )
+    sch.signal(("From enable", 1), ("Sampled enable", 1))
+    product = {"Inputs": "2"}
+    sch.component(
+        "Product",
+        "Gate enable",
+        (x_r + 45 - dx, y_p),
+        product,
+        direction="up",
+        show=False,
+    )
+    # The gate enable to the upper input, the gate signals to the lower one
+    x_e = x_r + 15
+    sch.signal(
+        ("Sampled enable", 2),
+        ("Gate enable", 2),
+        [(x_e - dx, y_e), (x_e - dx, y_p - 5)],
+    )
+    sch.signal(gate, ("Gate enable", 3), [(x_r - dx, CS[1]), (x_r - dx, y_p + 5)])
+    x_g = CONV[0] + 15  # The gate input of the converter (shifted by sch.dx)
+    sch.signal(("Gate enable", 1), ("Converter", 4), [(x_g, y_p)])
 
 
 def _add_dc_bus(sch: _Schematic, dc_bus: DCBus | None) -> None:
@@ -754,6 +803,12 @@ def _add_control_system(
         x = x_jog[k]
         points = [] if y_src[k] == y_in[k] else [(x, y_src[k]), (x, y_in[k])]
         sch.signal(out, (block.name, k + 1), points)
+        if name == ENABLE:
+            # The gate enable also to the converter (`_add_converter`), by a tag above
+            x_b, y_tag = x_jog[k] - 5, y_src[k] - Y_TAG
+            sch.component("Goto", "Goto enable", (x_b + 40, y_tag), TAG, show=False)
+            sch.trunk(out, "Signal", [(x_b, y_src[k])])
+            sch.signal(out, ("Goto enable", 1), [(x_b, y_tag)])
     header, trailer = _control_subsystem(block, values, init)
     sch.component(
         "Subsystem", block.name, CS, direction="up", extra=header, trailer=trailer

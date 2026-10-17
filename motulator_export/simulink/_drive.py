@@ -7,6 +7,7 @@ from typing import Any, cast
 import numpy as np
 from motulator.common.model._converter import VoltageSourceConverter
 from motulator.common.model._pwm import CarrierComparison
+from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.model import Drive
 
 from motulator_export.plecs._common import ControlBlock, StepSignal
@@ -15,6 +16,7 @@ from motulator_export.plecs._drive import MDL_OUTPUTS
 from motulator_export.simulink._common import (
     _m_source,
     _m_steps,
+    check_supported_model,
     scope_indices,
     simulate,
     write_script,
@@ -23,20 +25,27 @@ from motulator_export.simulink._mfunction import MFunction
 from motulator_export.simulink._sfunction import SFunction
 
 
-def check_supported_converter(mdl: Drive) -> None:
+def check_supported_converter(
+    mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem
+) -> None:
     """
     Raise an error if the converter or the DC bus is not supported.
 
-    Only the stiff DC bus (no DC-bus model) is supported. The dead time is not modeled
-    in the system model, but its compensation in the control system is supported.
+    Only the stiff DC bus (no DC-bus model) is supported. The dead time and the
+    threshold voltage are not modeled in the system model, but their compensation in
+    the control system is supported. The system model updates the duty ratios twice
+    per carrier period, and its gates are not blocked (see `check_supported_model`).
 
     """
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
     if mdl.dc_bus is not None:
         raise NotImplementedError("DC-bus model not supported, only a stiff DC bus")
-    if cast(CarrierComparison, mdl.pwm).t_d != 0:
-        raise NotImplementedError("Dead time not supported in the system model")
+    if cast(CarrierComparison, mdl.pwm).t_d != 0 or mdl.converter.u_th != 0:
+        raise NotImplementedError(
+            "Dead time and threshold voltage not supported in the system model"
+        )
+    check_supported_model(mdl, ctrl)
 
 
 def write_drive_model(
@@ -48,7 +57,6 @@ def write_drive_model(
     tau_L: StepSignal,
     t_stop: float,
     functions: Sequence[SFunction | MFunction] = (),
-    enable: StepSignal | float = 1.0,
     code: str = "c",
 ) -> Path:
     """
@@ -76,10 +84,6 @@ def write_drive_model(
     functions : Sequence[SFunction | MFunction], optional
         S-function of the machine ("gn"), whose parameters are passed to the
         builder, or its MATLAB function with `code` "matlab".
-    enable : StepSignal | float, optional
-        Input `enable` of the control system, defaults to 1 (enabled). While it is
-        not positive, the duty ratios are 0.5 and the state of the control system is
-        reset to its initial value.
     code : str, optional
         Code of the blocks of the control system: "c" (the C port in S-functions,
         the default) or "matlab" (the MATLAB port in MATLAB Function blocks).
@@ -103,7 +107,7 @@ def write_drive_model(
     fields: list[tuple[str, Any]] = [
         ("init_script", init_script),
         ("machine", machine),
-        ("enable", _m_source(enable)),
+        ("enable", _m_source(1.0)),  # The gates are not blocked
         ("w_M_ref", _m_steps(w_M_ref)),
         ("tau_L", _m_steps(tau_L)),
         ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),

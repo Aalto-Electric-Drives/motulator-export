@@ -6,8 +6,10 @@
  *                                           wrap, clip, sign
  *   motulator/common/control/_controllers.py PIController, ComplexPIController,
  *                                            RateLimiter
- *   motulator/common/control/_pwm.py         PWM (MPE and MME overmodulation)
- *   motulator/common/utils/_dead_time.py     dead_time_error (with numpy.sign or tanh)
+ *   motulator/common/control/_pwm.py         PWM (MPE and MME overmodulation),
+ *                                            InverterNonlinearity (with numpy.sign
+ *                                            or tanh)
+ *   motulator/common/utils/_dead_time.py     averaged_gate_signals
  *   motulator/grid/control/_common.py        CurrentLimiter, PowerReferenceLimiter
  *   motulator/drive/control/_common.py       SpeedController, SpeedObserver,
  *                                            hold_equivalent, matched_pole
@@ -162,59 +164,85 @@ static double rate_limiter_compute_output(const RateLimiter *self, double T_s,
                                           double u);
 static void rate_limiter_update(RateLimiter *self, double y);
 
-/* Duty-ratio error due to the dead time t_d (dead_time_error), T_s being the half
- * carrier period. The current direction is sign = tanh(i/i_0), or the signum
+/* Duty-ratio error due to the dead time t_d and the threshold voltage u_th of the
+ * power devices (InverterNonlinearity), u_dc being the DC-bus voltage and T_half the
+ * half carrier period. The current direction is sign = tanh(i/i_0), or the signum
  * function (numpy.sign) if i_0 = 0. */
-static void dead_time_error(const double i_abc[3], const double d_abc[3], double t_d,
-                            double T_s, double i_0, double d_err[3]);
+static void inverter_nonlinearity(double t_d, double u_th, double i_0,
+                                  const double i_abc[3], const double d_abc[3],
+                                  double u_dc, double T_half, double d_err[3]);
 
 /* Space-vector PWM with the minimum-phase-error (MPE) or minimum-magnitude-error
- * (MME) overmodulation (pwm_set_overmodulation, MPE by default). Optionally,
- * the duty-ratio error due to the dead time is modeled (pwm_set_dead_time), which
- * corresponds to d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign) in motulator
- * with sign = tanh(i/i_0), or numpy.sign if i_0 = 0. The angle of the voltage
+ * (MME) overmodulation (pwm_set_overmodulation, MPE by default). Optionally, the
+ * duty-ratio error due to the dead time and the threshold voltage is modeled
+ * (pwm_set_nonlinearity), which corresponds to d_err = InverterNonlinearity(t_d,
+ * u_th, sign) in motulator with sign = tanh(i/i_0), or numpy.sign if i_0 = 0. The
+ * duty ratios are updated twice per carrier period, or once (pwm_set_single_update),
+ * which sets the half carrier period of the error model. The angle of the voltage
  * reference is not advanced here: the control systems compensate for the delays. */
 typedef struct {
-    double k_pred;   /* Prediction factor of the currents for the compensation */
-    int mme;         /* MME overmodulation (else MPE) */
-    double t_d;      /* Dead time of the duty-ratio error model, 0 = no error model */
-    double T_s;      /* Sampling period of the duty-ratio error model */
-    double i_0;      /* Current scale of sign = tanh(i/i_0), 0 = signum function */
-    int feedforward; /* Compensate for the duty-ratio error */
-    double d_min;    /* Minimum duty ratio of a switching leg, 0 = no limit */
+    double k_pred;     /* Prediction factor of the currents for the compensation */
+    int mme;           /* MME overmodulation (else MPE) */
+    double t_d;        /* Dead time of the duty-ratio error model */
+    double u_th;       /* Threshold voltage of the duty-ratio error model */
+    double i_0;        /* Current scale of sign = tanh(i/i_0), 0 = signum function */
+    int feedforward;   /* Compensate for the duty-ratio error */
+    double d_min;      /* Minimum duty ratio of a switching leg, 0 = no limit */
+    int single_update; /* Duty ratios updated once per carrier period (else twice) */
     /* States */
     double d_abc[2][3]; /* Duty ratios of the previous and the ongoing periods */
+    double T_half;      /* Half carrier period of the previous period, assumed to
+                         * apply also to the ongoing one (infinite at first) */
+    double complex i_c_ab; /* Current of the feedforward compensation, see
+                            * pwm_feedforward_current */
 } PWM;
 
 static void pwm_init(PWM *self, double k_pred);
-static void pwm_set_dead_time(PWM *self, double t_d, double T_s, double i_0,
-                              int feedforward);
+/* Duty-ratio error model of the dead time t_d and the threshold voltage u_th (no
+ * error model if both are zero) and its compensation */
+static void pwm_set_nonlinearity(PWM *self, double t_d, double u_th, double i_0,
+                                 int feedforward);
 /* Overmodulation: MME if mme is nonzero, else MPE (overmodulation of PWM) */
 static void pwm_set_overmodulation(PWM *self, int mme);
 /* Minimum duty ratio d_min of a switching leg (d_min of PWM in motulator), see
  * pwm_limit_pulses */
 static void pwm_set_min_pulse(PWM *self, double d_min);
+/* Single update (single_update of PWM in motulator) if single_update is nonzero */
+static void pwm_set_single_update(PWM *self, int single_update);
 /* Limit the duty ratios of the switching legs to [d_min, 1 - d_min] (limit_pulses):
  * a duty ratio in (0, d_min) is replaced by 0 or d_min, and in (1 - d_min, 1) by
  * 1 - d_min or 1, whichever gives the realized duty ratio nearer to the reference
  * d_ref (the leg switches if equally near). The realized duty ratios are corrected
- * for the duty-ratio error at the currents i_abc, unless i_abc is NULL. */
+ * for the duty-ratio error at the currents i_abc, the DC-bus voltage u_dc, and the
+ * half carrier period T_half, unless i_abc is NULL. */
 static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_ref[3],
-                             const double *i_abc);
+                             const double *i_abc, double u_dc, double T_half);
 /* Realized voltage from the duty ratios and the measured DC-bus voltage, corrected
- * for the duty-ratio error using the measured current (get_realized_voltage): the
- * average of the previous and the ongoing sampling periods if average is nonzero,
- * else that of the ongoing sampling period */
+ * for the duty-ratio error using the measured current and the half carrier period
+ * of the previous period (get_realized_voltage): the average of the previous and the
+ * ongoing sampling periods if average is nonzero, else that of the ongoing sampling
+ * period */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
                                            double u_dc, int average);
 /* Duty ratios and the limited voltage reference; the measured current i_c_ab,
  * predicted by the angle k_pred*T_s*w, is used in the feedforward compensation of
- * the duty-ratio error */
+ * the duty-ratio error. With a discharged DC bus (u_dc <= 0), the duty ratios are
+ * 0.5. */
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
                                          double w, double complex i_c_ab,
                                          double d_abc[3]);
-/* Store the duty ratios of the next sampling period */
-static void pwm_update(PWM *self, const double d_abc[3]);
+/* Store the duty ratios of the next sampling period and the half carrier period of
+ * the sampling period T_s */
+static void pwm_update(PWM *self, double T_s, const double d_abc[3]);
+/* Measured current for the feedforward compensation of pwm_compute_output: i_c_ab,
+ * or while the gates are blocked (enabled is zero), the current of the latest
+ * sampling period with enabled gates, stored by pwm_store_current (in motulator,
+ * get_realized_voltage stores the current, and it is not called while the gates are
+ * blocked) */
+static double complex pwm_feedforward_current(const PWM *self, int enabled,
+                                              double complex i_c_ab);
+/* Store the current of the feedforward compensation (pwm_feedforward_current) */
+static void pwm_store_current(PWM *self, double complex i_c_ab);
 
 #endif

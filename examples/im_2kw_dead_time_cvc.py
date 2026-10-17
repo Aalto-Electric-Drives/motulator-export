@@ -6,17 +6,20 @@ This script builds a 2.2-kW induction machine (IM) drive with sensorless current
 vector control (CVC) at low speeds, corresponding to the example
 examples/drive/current_vector/plot_2kw_im_dead_time_cvc.py with the constant-
 parameter machine model and the signum function as the current-direction function.
-The dead time of the converter is modeled, and its effect is compensated for in the
-control system. The script exports the system to a PLECS model
-(im_2kw_dead_time_cvc.plecs), where the dead time is modeled with the Blanking Time
-block and the IGBT converter of PLECS, and, if PLECS Standalone is running with the
-RPC interface enabled, simulates both and compares the results.
+The dead time and the threshold voltage of the converter are modeled, and their
+effects are compensated for in the control system. The duty ratios are updated once
+per carrier period (single update), so the sampling period equals the carrier
+period. The script exports the system to a PLECS model (im_2kw_dead_time_cvc.plecs),
+where the dead time is modeled with the Blanking Time block and the threshold voltage
+with the forward voltages of the IGBT converter with parasitics of PLECS, and, if
+PLECS Standalone is running with the RPC interface enabled, simulates both and
+compares the results.
 
-With --tanh, the current direction in the dead-time compensation of the control
-system is the smooth function tanh(i/i_0) instead of the signum function, as on
-hardware, where the current ripple and the measurement noise near the zero
-crossings would make the signum function chatter (im_2kw_dead_time_cvc_tanh.plecs).
-The converter model still uses the signum function.
+With --tanh, the current direction in the compensation of the control system is the
+smooth function tanh(i/i_0) instead of the signum function, as on hardware, where the
+current ripple and the measurement noise near the zero crossings would make the
+signum function chatter (im_2kw_dead_time_cvc_tanh.plecs). The converter model still
+uses the signum function.
 
 Run from the repository root:
 
@@ -35,7 +38,7 @@ import matplotlib.pyplot as plt
 import motulator.drive.control.im as control
 import numpy as np
 from motulator.common.model import CarrierComparison, SolverCfg
-from motulator.common.utils import abc2complex, dead_time_error
+from motulator.common.utils import abc2complex
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal, sampled_step
@@ -50,8 +53,11 @@ W_M_REF = StepSignal(time=[0.2, 1.4], after=[0.05 * base.w_M, -0.05 * base.w_M])
 TAU_L = StepSignal(time=0.8, after=0.7 * nom.tau)
 SPEED_CTRL = {"J": 0.015, "alpha_s": 2 * pi * 4}  # Arguments of SpeedController
 T_D = 2e-6  # Dead time (s)
-T_S = 125e-6  # Sampling period (s), the default value in CurrentVectorControllerCfg
-I_0 = 0.1  # Current scale (A) of tanh(i/i_0), about half the peak-to-peak ripple
+U_TH = 1.0  # Threshold voltage (V)
+# Sampling period (s), the default value in CurrentVectorControllerCfg, equal to the
+# carrier period with single update
+T_S = 125e-6
+I_0 = 0.05  # Current scale (A) of tanh(i/i_0), about half the peak-to-peak ripple
 
 
 # %%
@@ -59,8 +65,8 @@ def build_system(tanh: bool = False) -> tuple[model.Drive, control.VectorControl
     """
     Build the drive system of the motulator example.
 
-    With `tanh`, the dead-time compensation uses the current-direction function
-    `tanh(i/I_0)` instead of `np.sign`.
+    With `tanh`, the compensation uses the current-direction function `tanh(i/I_0)`
+    instead of `np.sign`.
 
     """
     par = model.InductionMachineInvGammaPars(
@@ -69,8 +75,10 @@ def build_system(tanh: bool = False) -> tuple[model.Drive, control.VectorControl
     mdl = model.Drive(
         model.InductionMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=T_D),
+        model.VoltageSourceConverter(u_dc=540, t_d=T_D, u_th=U_TH),
         pwm=True,
+        delay=2,  # One sampling period, i.e., two half carrier periods
+        single_update=True,
     )
     # Fine quantization (not modeled in PLECS), the dead time as in the converter
     mdl.pwm = CarrierComparison(N=2**24, t_d=T_D)
@@ -80,10 +88,12 @@ def build_system(tanh: bool = False) -> tuple[model.Drive, control.VectorControl
     cfg = control.CurrentVectorControllerCfg(
         psi_s_nom=0.95 * base.psi, i_s_max=1.5 * base.i, sensorless=True, T_s=T_S
     )
-    # The duty-ratio error model of the system model, compensated for in the PWM,
-    # optionally with a smooth current-direction function
+    # The duty-ratio error model of the system model, compensated for in the PWM
+    # configured for single update, optionally with a smooth current-direction
+    # function
     sign = (lambda i: np.tanh(i / I_0)) if tanh else np.sign
-    pwm = control.PWM(d_err=lambda i, d: dead_time_error(i, d, T_D, T_S, sign))
+    d_err = control.InverterNonlinearity(T_D, U_TH, sign)
+    pwm = control.PWM(d_err=d_err, single_update=True)
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(est_par, cfg),
         control.SpeedController(**SPEED_CTRL),

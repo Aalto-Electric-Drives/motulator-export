@@ -41,10 +41,10 @@
 #define U_DC_MIN 1.0
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {3, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1};
-static const int OUTPUT_WIDTHS[] = {5};
-#define NUM_INPUTS 3
+static const int INPUT_WIDTHS[] = {3, 2, 1, 2};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int OUTPUT_WIDTHS[] = {7};
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 1
 
@@ -108,11 +108,15 @@ static void mdlOutputs(SimStruct *S, int_T tid)
         InputSignal(0, 2)};
     /* Line-to-line PCC voltages u_ab and u_bc */
     double u_g_line[2] = {InputSignal(1, 0), InputSignal(1, 1)};
+    /* Line-to-line converter voltages u_ab and u_bc, used while the gates are
+     * blocked */
+    double u_c_line[2] = {InputSignal(3, 0), InputSignal(3, 1)};
     GridMeasurements meas;
     /* Measurements, the DC-bus voltage limited to U_DC_MIN */
     meas.i_c_ab = abc2complex(i_c_abc);
     meas.u_g_ab = line2complex(u_g_line);
     meas.u_dc = fmax(InputSignal(2, 0), U_DC_MIN);
+    meas.u_c_ab = line2complex(u_c_line);
     double y[MEAS_WIDTH];
     grid_measurements_pack(&meas, y);
     for (int k = 0; k < MEAS_WIDTH; k++) {

@@ -7,17 +7,17 @@ persistent self
 if isempty(self)
     self = pwm_init(1.5); % k_pred
     self = pwm_set_overmodulation(self, p.mme);
-    self = pwm_set_dead_time(self, p.t_d, p.T_s, p.i_0, p.feedforward);
+    self = pwm_set_nonlinearity(self, p.t_d, p.u_th, p.i_0, p.feedforward);
     self = pwm_set_min_pulse(self, p.d_min);
-end
-% Disabled: the algorithm is not run
-if ~(enable > 0)
-    d_abc = 0.5*ones(3, 1);
-    return
+    self = pwm_set_single_update(self, p.single_update);
 end
 meas = measurements_unpack(meas_in);
 u_c_ref_ab = complex_in(u_c_ref_ab_in);
-[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, meas.u_dc, w, meas.i_c_ab);
+% Measured current for the compensation, while the gates are blocked that
+% of the latest sampling period with enabled gates
+i_c_ab_ff = pwm_feedforward_current(self, enable > 0, meas.i_c_ab);
+[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, meas.u_dc, w, i_c_ab_ff);
+self = pwm_store_current(self, i_c_ab_ff);
 end
 
 function s = measurements_unpack(u)
@@ -25,7 +25,8 @@ function s = measurements_unpack(u)
 s = struct( ...
     'i_c_ab', complex(u(1), u(2)), ...
     'u_dc', u(3), ...
-    'theta_M', u(4));
+    'theta_M', u(4), ...
+    'u_c_ab', complex(u(5), u(6)));
 end
 
 function u_ab = abc2complex(u)
@@ -48,14 +49,15 @@ function y = clip(value, min_value, max_value)
 y = max(min(value, max_value), min_value);
 end
 
-function d_err = dead_time_error(i_abc, d_abc, t_d, T_s, i_0)
-%DEAD_TIME_ERROR Duty-ratio error due to the dead time t_d (dead_time_error), T_s
-%   being the half carrier period. The current direction is sign = tanh(i/i_0), or
-%   the signum function (numpy.sign) if i_0 = 0.
+function d_err = inverter_nonlinearity(t_d, u_th, i_0, i_abc, d_abc, u_dc, T_half)
+%INVERTER_NONLINEARITY Duty-ratio error due to the dead time t_d and the threshold
+%   voltage u_th of the power devices (InverterNonlinearity), u_dc being the DC-bus
+%   voltage and T_half the half carrier period. The current direction is sign =
+%   tanh(i/i_0), or the signum function (numpy.sign) if i_0 = 0.
 d = d_abc(:);
 % Switching-cycle averaged on-times of the upper and lower switches
 % (averaged_gate_signals), the dead time affecting only the switching legs
-delta = (t_d/(2*T_s))*(d > 0 & d < 1);
+delta = (t_d/(2*T_half))*(d > 0 & d < 1);
 q_hi = max(d - delta, 0);
 q_lo = max(1 - d - delta, 0);
 b = 1 - q_hi - q_lo;
@@ -65,27 +67,35 @@ if i_0 > 0
 else
     s = sign(i_abc(:));
 end
-d_err = d - q_hi - 0.5*b.*(1 - s);
+d_err = d - q_hi - 0.5*b.*(1 - s) + s*u_th/u_dc;
 end
 
 function self = pwm_init(k_pred)
 %PWM_INIT Space-vector PWM (PWM), with the prediction factor k_pred of the currents
 %   for the compensation of the duty-ratio error.
 %   The overmodulation is MPE or MME (pwm_set_overmodulation, MPE by default).
-%   Optionally, the duty-ratio error due to the dead time is modeled
-%   (pwm_set_dead_time), which corresponds to d_err = dead_time_error(i_abc, d_abc,
-%   t_d, T_s, sign) in motulator with sign = tanh(i/i_0), or numpy.sign if i_0 = 0.
-%   The angle of the voltage reference is not advanced here: the control systems
-%   compensate for the delays. The state d_abc has the duty ratios of the previous
-%   and the ongoing periods as its rows.
-self = struct('k_pred', k_pred, 'mme', 0, 't_d', 0, 'T_s', 0, 'i_0', 0, ...
-    'feedforward', 1, 'd_min', 0, 'd_abc', zeros(2, 3));
+%   Optionally, the duty-ratio error due to the dead time and the threshold voltage
+%   is modeled (pwm_set_nonlinearity), which corresponds to d_err =
+%   InverterNonlinearity(t_d, u_th, sign) in motulator with sign = tanh(i/i_0), or
+%   numpy.sign if i_0 = 0. The duty ratios are updated twice per carrier period, or
+%   once (pwm_set_single_update), which sets the half carrier period of the error
+%   model. The angle of the voltage reference is not advanced here: the control
+%   systems compensate for the delays. The state d_abc has the duty ratios of the
+%   previous and the ongoing periods as its rows, T_half is the half carrier
+%   period of the previous period, assumed to apply also to the ongoing one (before
+%   the first duty ratios, the legs do not switch, and the infinite period gives no
+%   dead-time error), and i_c_ab is the current of the feedforward compensation
+%   (see pwm_feedforward_current).
+self = struct('k_pred', k_pred, 'mme', 0, 't_d', 0, 'u_th', 0, 'i_0', 0, ...
+    'feedforward', 1, 'd_min', 0, 'single_update', 0, 'd_abc', zeros(2, 3), ...
+    'T_half', Inf, 'i_c_ab', complex(0));
 end
 
-function self = pwm_set_dead_time(self, t_d, T_s, i_0, feedforward)
-%PWM_SET_DEAD_TIME Duty-ratio error model of the dead time t_d and its compensation.
+function self = pwm_set_nonlinearity(self, t_d, u_th, i_0, feedforward)
+%PWM_SET_NONLINEARITY Duty-ratio error model of the dead time t_d and the threshold
+%   voltage u_th (no error model if both are zero) and its compensation.
 self.t_d = t_d;
-self.T_s = T_s;
+self.u_th = u_th;
 self.i_0 = i_0;
 self.feedforward = feedforward;
 end
@@ -101,13 +111,33 @@ function self = pwm_set_min_pulse(self, d_min)
 self.d_min = d_min;
 end
 
-function d_abc = pwm_limit_pulses(self, d_abc, d_ref, i_abc, use_i)
+function self = pwm_set_single_update(self, single_update)
+%PWM_SET_SINGLE_UPDATE Single update (single_update of PWM) if single_update is
+%   nonzero.
+self.single_update = single_update;
+end
+
+function y = pwm_has_error_model(self)
+%PWM_HAS_ERROR_MODEL Error model of the PWM in use (d_err is not None).
+y = self.t_d > 0 || self.u_th > 0;
+end
+
+function T_half = pwm_half_period(self, T_s)
+%PWM_HALF_PERIOD Half carrier period (s) corresponding to the sampling period.
+if self.single_update
+    T_half = T_s/2;
+else
+    T_half = T_s;
+end
+end
+
+function d_abc = pwm_limit_pulses(self, d_abc, d_ref, i_abc, use_i, u_dc, T_half)
 %PWM_LIMIT_PULSES Limit the duty ratios of the switching legs to [d_min, 1 - d_min]
 %   (limit_pulses): a duty ratio in (0, d_min) is replaced by 0 or d_min, and in
 %   (1 - d_min, 1) by 1 - d_min or 1, whichever gives the realized duty ratio nearer
 %   to the reference d_ref (the leg switches if equally near). The realized duty
-%   ratios are corrected for the duty-ratio error at the currents i_abc if use_i is
-%   true.
+%   ratios are corrected for the duty-ratio error at the currents i_abc, the DC-bus
+%   voltage u_dc, and the half carrier period T_half if use_i is true.
 candidates = zeros(1, 2); % The leg switching, the leg clamped
 for k = 1:3
     if d_abc(k) > 0 && d_abc(k) < self.d_min
@@ -122,7 +152,8 @@ for k = 1:3
         d_abc(k) = candidates(j);
         realized = candidates(j);
         if use_i
-            d_err = dead_time_error(i_abc, d_abc, self.t_d, self.T_s, self.i_0);
+            d_err = inverter_nonlinearity(self.t_d, self.u_th, self.i_0, i_abc, ...
+                d_abc, u_dc, T_half);
             realized = realized - d_err(k);
         end
         errors(j) = abs(realized - d_ref(k));
@@ -153,22 +184,48 @@ end
 function [u_ab, d_abc] = pwm_compute_output(self, T_s, u_c_ref_ab, u_dc, w, i_c_ab)
 %PWM_COMPUTE_OUTPUT Duty ratios and the limited voltage reference.
 %   The measured current i_c_ab, predicted by the angle k_pred*T_s*w, is used in the
-%   feedforward compensation of the duty-ratio error.
+%   feedforward compensation of the duty-ratio error. With a discharged DC bus
+%   (u_dc <= 0), the duty ratios are 0.5.
+% A discharged DC bus, e.g., with blocked gates before the precharge
+if u_dc <= 0
+    d_abc = 0.5*ones(3, 1);
+    u_ab = complex(0);
+    return
+end
 % Duty ratios
 d_abc = pwm_duty_ratios(u_c_ref_ab, u_dc, self.mme);
 d_ref = d_abc;
 % Compensate for the duty-ratio error using the predicted currents
-compensate = self.t_d > 0 && self.feedforward;
+compensate = pwm_has_error_model(self) && self.feedforward;
+T_half = pwm_half_period(self, T_s);
 i_c_abc = zeros(3, 1);
 if compensate
     i_c_abc = complex2abc(exp(1i*self.k_pred*T_s*w)*i_c_ab);
-    d_err = dead_time_error(i_c_abc, d_abc, self.t_d, self.T_s, self.i_0);
+    d_err = inverter_nonlinearity(self.t_d, self.u_th, self.i_0, i_c_abc, d_abc, ...
+        u_dc, T_half);
     d_abc = clip(d_abc + d_err, 0, 1);
 end
 % Minimum pulses
 if self.d_min > 0
-    d_abc = pwm_limit_pulses(self, d_abc, d_ref, i_c_abc, compensate);
+    d_abc = pwm_limit_pulses(self, d_abc, d_ref, i_c_abc, compensate, u_dc, T_half);
 end
 % Limited voltage reference, including the compensation
 u_ab = abc2complex(d_abc)*u_dc;
+end
+
+function i_c_ab = pwm_feedforward_current(self, enabled, i_c_ab)
+%PWM_FEEDFORWARD_CURRENT Measured current for the feedforward compensation of
+%   pwm_compute_output: i_c_ab, or while the gates are blocked (enabled is false),
+%   the current of the latest sampling period with enabled gates, stored by
+%   pwm_store_current (in motulator, get_realized_voltage stores the current, and it
+%   is not called while the gates are blocked).
+if ~enabled
+    i_c_ab = self.i_c_ab;
+end
+end
+
+function self = pwm_store_current(self, i_c_ab)
+%PWM_STORE_CURRENT Store the current of the feedforward compensation
+%   (pwm_feedforward_current).
+self.i_c_ab = i_c_ab;
 end

@@ -24,6 +24,9 @@ function build_grid(s)
 %
 %   The system model is built from basic Simulink blocks: the carrier comparison,
 %   the ideal converter with a stiff DC bus, the AC filter, and the grid voltage.
+%   The ideal converter does not block its gates, so the input of the converter
+%   voltages u_ab and u_bc of the control system (used only while the gates are
+%   blocked) is zero.
 %   The root-level output ports 'mdl' and 'ctrl' give the converter currents
 %   [i_c_a i_c_b i_c_c] (and the grid currents [i_g_a i_g_b i_g_c] with the LCL
 %   filter) and the monitored signals of the control system.
@@ -67,7 +70,7 @@ for blk = {'Delay', 'PWM', 'Converter', 'AC filter'}
 end
 blocks.align(sys, 'Grid', 'Outport', 1, blocks.port_y(sys, 'AC filter', 'Inport', 2));
 
-% Input 'enable', the references, and the DC-bus voltage
+% Input 'enable', the references, the DC-bus voltage, and the converter voltages
 for k = 1:size(s.refs, 1)
     name = s.refs{k, 1};
     if strcmp(s.refs{k, 2}, 'step')
@@ -80,8 +83,11 @@ for k = 1:size(s.refs, 1)
     blocks.connect(sys, [name '/1'], sprintf('%s/%d', cs, k));
 end
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
-blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', n_in));
-blocks.connect(sys, 'u_dc/1', sprintf('%s/%d', cs, n_in));
+blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', n_in - 1));
+blocks.connect(sys, 'u_dc/1', sprintf('%s/%d', cs, n_in - 1));
+add([sys '/u_c_line'], 'built-in/Constant', [80 0 130 20], 'Value', '[0 0]');
+blocks.align(sys, 'u_c_line', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', n_in));
+blocks.connect(sys, 'u_c_line/1', sprintf('%s/%d', cs, n_in));
 
 % Converter (and grid) currents for the output port 'mdl'
 n_mdl = 1 + lcl;
