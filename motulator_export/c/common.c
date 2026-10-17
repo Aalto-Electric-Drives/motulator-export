@@ -373,7 +373,6 @@ static void pwm_init(PWM *self, double k_pred)
     /* Before the first duty ratios, the legs do not switch, and the infinite period
      * gives no dead-time error */
     self->T_half = INFINITY;
-    self->i_c_ab = 0.0;
 }
 
 static void pwm_set_nonlinearity(PWM *self, double t_d, double u_th, double i_0,
@@ -445,6 +444,10 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
                                            double u_dc, int average)
 {
+    /* A discharged DC bus, e.g., with blocked gates */
+    if (u_dc <= 0.0) {
+        return 0.0;
+    }
     double i_abc[3];
     complex2abc(i_c_ab, i_abc);
     int k0 = average ? 0 : 1;
@@ -540,15 +543,4 @@ static void pwm_update(PWM *self, double T_s, const double d_abc[3])
         self->d_abc[1][k] = d_abc[k];
     }
     self->T_half = pwm_half_period(self, T_s);
-}
-
-static double complex pwm_feedforward_current(const PWM *self, int enabled,
-                                              double complex i_c_ab)
-{
-    return enabled ? i_c_ab : self->i_c_ab;
-}
-
-static void pwm_store_current(PWM *self, double complex i_c_ab)
-{
-    self->i_c_ab = i_c_ab;
 }

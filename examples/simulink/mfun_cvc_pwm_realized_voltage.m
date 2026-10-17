@@ -90,14 +90,13 @@ function self = pwm_init(k_pred)
 %   once (pwm_set_single_update), which sets the half carrier period of the error
 %   model. The angle of the voltage reference is not advanced here: the control
 %   systems compensate for the delays. The state d_abc has the duty ratios of the
-%   previous and the ongoing periods as its rows, T_half is the half carrier
-%   period of the previous period, assumed to apply also to the ongoing one (before
+%   previous and the ongoing periods as its rows, and T_half is the half carrier
+%   period of the previous period, assumed to apply also to the ongoing one: before
 %   the first duty ratios, the legs do not switch, and the infinite period gives no
-%   dead-time error), and i_c_ab is the current of the feedforward compensation
-%   (see pwm_feedforward_current).
+%   dead-time error.
 self = struct('k_pred', k_pred, 'mme', 0, 't_d', 0, 'u_th', 0, 'i_0', 0, ...
     'feedforward', 1, 'd_min', 0, 'single_update', 0, 'd_abc', zeros(2, 3), ...
-    'T_half', Inf, 'i_c_ab', complex(0));
+    'T_half', Inf);
 end
 
 function self = pwm_set_nonlinearity(self, t_d, u_th, i_0, feedforward)
@@ -145,7 +144,13 @@ function u_ab = pwm_realized_voltage(self, i_c_ab, u_dc, average)
 %   voltage, corrected for the duty-ratio error using the measured current and the
 %   half carrier period of the previous period (get_realized_voltage): the average
 %   of the previous and the ongoing sampling periods if average is true, else that
-%   of the ongoing sampling period.
+%   of the ongoing sampling period. With a discharged DC bus (u_dc <= 0), the
+%   voltage is zero.
+% A discharged DC bus, e.g., with blocked gates
+if u_dc <= 0
+    u_ab = complex(0);
+    return
+end
 i_abc = complex2abc(i_c_ab);
 if average
     k0 = 1;

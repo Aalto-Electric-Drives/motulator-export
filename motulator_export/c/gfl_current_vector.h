@@ -107,7 +107,6 @@ typedef struct {
     PLL pll;
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
-    double complex i_c_ab_ff; /* Current of the feedforward compensation */
     GFLFeedbacks fbk;
     GFLReferences ref;
 } GFLControlSystem;

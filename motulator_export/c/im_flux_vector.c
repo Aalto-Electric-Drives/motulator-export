@@ -155,7 +155,6 @@ static void im_vhz_control_system_init(IMVHzControlSystem *self,
     self->k_comp = 1.5; /* k_comp of ObserverBasedVHzController */
     im_vhz_ctrl_init(&self->vhz_ctrl, par, cfg);
     rate_limiter_init(&self->rate_limiter, slew_rate);
-    self->i_c_ab_ff = 0.0;
 }
 
 static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
@@ -205,9 +204,8 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
      * k_comp*T_s*w_c */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
-    self->i_c_ab_ff = pwm_feedforward_current(&self->pwm, enabled, meas->i_c_ab);
     ref->u_c_ab = pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
-                                     self->i_c_ab_ff, ref->d_abc);
+                                     meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;
 }
 
@@ -216,7 +214,6 @@ static void im_vhz_control_system_update(IMVHzControlSystem *self)
     IMVHzController *ctrl = &self->vhz_ctrl;
     double T_s = self->ref.T_s;
     pwm_update(&self->pwm, T_s, self->ref.d_abc);
-    pwm_store_current(&self->pwm, self->i_c_ab_ff);
     rate_limiter_update(&self->rate_limiter, self->ref.w_M);
     ctrl->tau_M_lpf += T_s * ctrl->alpha_f * (self->fbk.tau_M - ctrl->tau_M_lpf);
     im_flux_observer_update(&ctrl->observer, T_s, &self->fbk);

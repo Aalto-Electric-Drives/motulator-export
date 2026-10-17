@@ -97,7 +97,6 @@ static void gfl_control_system_init(GFLControlSystem *self, const GFLControllerC
     pll_init(&self->pll, cfg->u_nom, cfg->w_nom, cfg->alpha_pll);
     pwm_init(&self->pwm, 1.5);
     self->k_comp = 1.5; /* k_comp of CurrentVectorController */
-    self->i_c_ab_ff = 0.0;
 }
 
 static void gfl_control_system_compute_output(GFLControlSystem *self,
@@ -144,9 +143,8 @@ static void gfl_control_system_compute_output(GFLControlSystem *self,
      * k_comp*T_s*w_c */
     double complex u_c_ab_ref = cexp(I * fbk->theta_c) * ref->u_c;
     u_c_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
-    self->i_c_ab_ff = pwm_feedforward_current(&self->pwm, enabled, meas->i_c_ab);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_c_ab_ref, fbk->u_dc,
-                                     fbk->w_c, self->i_c_ab_ff, ref->d_abc);
+                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
 }
 
 static void gfl_control_system_update(GFLControlSystem *self)
@@ -154,7 +152,6 @@ static void gfl_control_system_update(GFLControlSystem *self)
     const GFLFeedbacks *fbk = &self->fbk;
     double T_s = self->ref.T_s;
     pwm_update(&self->pwm, T_s, self->ref.d_abc);
-    pwm_store_current(&self->pwm, self->i_c_ab_ff);
     /* Current controller: the realized voltage in controller coordinates */
     complex_pi_update(&self->current_ctrl, T_s, fbk->u_c, fbk->w_c);
     pll_update(&self->pll, T_s, fbk);

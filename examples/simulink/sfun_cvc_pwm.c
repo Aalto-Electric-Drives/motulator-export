@@ -38,13 +38,12 @@
 
 static PWM self;
 static double T_s; /* Sampling period */
-static double complex i_c_ab_ff; /* Current of the compensation */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 6, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {6, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 8
 
@@ -144,27 +143,16 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     UNUSED_ARG(tid);
     double meas_u[MEAS_WIDTH];
     for (int k = 0; k < MEAS_WIDTH; k++) {
-        meas_u[k] = InputSignal(1, k);
+        meas_u[k] = InputSignal(0, k);
     }
     IMMeasurements meas;
     im_measurements_unpack(meas_u, &meas);
-    /* Measured current for the compensation, while the gates are blocked
-     * that of the latest sampling period with enabled gates */
-    i_c_ab_ff = pwm_feedforward_current(&self, InputSignal(0, 0) > 0.0,
-                                        meas.i_c_ab);
     double d_abc[3];
-    pwm_compute_output(&self, T_s, complex_from(InputSignal(2, 0), InputSignal(2, 1)), meas.u_dc,
-                       InputSignal(3, 0), i_c_ab_ff, d_abc);
+    pwm_compute_output(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)), meas.u_dc,
+                       InputSignal(2, 0), meas.i_c_ab, d_abc);
     for (int k = 0; k < 3; k++) {
         OutputSignal(0, k) = d_abc[k];
     }
-}
-
-#define MDL_UPDATE
-static void mdlUpdate(SimStruct *S, int_T tid)
-{
-    UNUSED_ARG(tid);
-    pwm_store_current(&self, i_c_ab_ff);
 }
 
 static void mdlTerminate(SimStruct *S)

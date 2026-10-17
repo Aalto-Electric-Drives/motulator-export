@@ -113,7 +113,6 @@ typedef struct {
     IMVHzController vhz_ctrl;
     RateLimiter rate_limiter; /* Of the speed reference (mechanical rad/s^2) */
     /* Workspace variables passed from the output to the update function */
-    double complex i_c_ab_ff; /* Current of the feedforward compensation */
     IMObserverOutputs fbk;
     IMVHzReferences ref;
 } IMVHzControlSystem;

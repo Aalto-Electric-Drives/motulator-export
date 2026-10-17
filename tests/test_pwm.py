@@ -177,15 +177,19 @@ def test_pwm(
 
 @pytest.mark.parametrize("u_dc", [0.0, -1.0], ids=["zero", "negative"])
 def test_pwm_discharged(dll: ctypes.CDLL, u_dc: float) -> None:
-    """With a discharged DC bus, the duty ratios are 0.5 and the limited voltage is
-    zero, as in motulator, also with the duty-ratio error model."""
+    """With a discharged DC bus, the duty ratios are 0.5 and the limited and the
+    realized voltages zero, as in motulator, also with the duty-ratio error model."""
     pwm = PWM(d_err=InverterNonlinearity(T_D, U_TH))
     dll.init(d(T_D), d(U_TH), d(0.0), d(1.0), d(0.0), d(0.0))
     out = (ctypes.c_double * 9)()
+    u_py = pwm.get_realized_voltage(5.0 + 0j, u_dc)
+    u_zoh_py = pwm.get_realized_voltage(5.0 + 0j, u_dc, average=False)
     d_py, u_lim_py = pwm.compute_output(T_S, 100.0 + 0j, u_dc, 2 * pi * 50)
     dll.step(d(T_S), arr([100.0, 0.0]), arr([5.0, 0.0]), d(u_dc), d(2 * pi * 50), out)
     assert d_py == [0.5, 0.5, 0.5]
-    assert list(out[4:9]) == [*d_py, u_lim_py.real, u_lim_py.imag]
+    py = [u_py.real, u_py.imag, u_zoh_py.real, u_zoh_py.imag, *d_py]
+    assert list(out) == [*py, u_lim_py.real, u_lim_py.imag]
+    assert np.all(np.array(out)[[0, 1, 2, 3, 7, 8]] == 0)
 
 
 def test_pwm_values() -> None:

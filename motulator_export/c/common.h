@@ -193,8 +193,6 @@ typedef struct {
     double d_abc[2][3]; /* Duty ratios of the previous and the ongoing periods */
     double T_half;      /* Half carrier period of the previous period, assumed to
                          * apply also to the ongoing one (infinite at first) */
-    double complex i_c_ab; /* Current of the feedforward compensation, see
-                            * pwm_feedforward_current */
 } PWM;
 
 static void pwm_init(PWM *self, double k_pred);
@@ -221,7 +219,7 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
  * for the duty-ratio error using the measured current and the half carrier period
  * of the previous period (get_realized_voltage): the average of the previous and the
  * ongoing sampling periods if average is nonzero, else that of the ongoing sampling
- * period */
+ * period. With a discharged DC bus (u_dc <= 0), the voltage is zero. */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
                                            double u_dc, int average);
 /* Duty ratios and the limited voltage reference; the measured current i_c_ab,
@@ -235,14 +233,5 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
 /* Store the duty ratios of the next sampling period and the half carrier period of
  * the sampling period T_s */
 static void pwm_update(PWM *self, double T_s, const double d_abc[3]);
-/* Measured current for the feedforward compensation of pwm_compute_output: i_c_ab,
- * or while the gates are blocked (enabled is zero), the current of the latest
- * sampling period with enabled gates, stored by pwm_store_current (in motulator,
- * get_realized_voltage stores the current, and it is not called while the gates are
- * blocked) */
-static double complex pwm_feedforward_current(const PWM *self, int enabled,
-                                              double complex i_c_ab);
-/* Store the current of the feedforward compensation (pwm_feedforward_current) */
-static void pwm_store_current(PWM *self, double complex i_c_ab);
 
 #endif

@@ -368,9 +368,7 @@ def pwm(sig: Signals) -> Subsystem:
         "pulses, and the single update. The blocks inside are its methods "
         "compute_output and get_realized_voltage. While the gates are blocked (the "
         "input enable is zero), the realized voltage is the measured converter "
-        "voltage meas.u_c_ab, as in DriveControlSystem.get_feedback, and the "
-        "compensation uses the current of the latest sampling period with enabled "
-        "gates.",
+        "voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.",
         [
             T_S,
             Param(
@@ -433,39 +431,22 @@ def pwm(sig: Signals) -> Subsystem:
     m_checks = required(*params)
     meas = sig.port("meas")
     output = (
-        sig.read(1, "meas")
-        + "/* Measured current for the compensation, while the gates are blocked\n"
-        " * that of the latest sampling period with enabled gates */\n"
-        "i_c_ab_ff = pwm_feedforward_current(&self, InputSignal(0, 0) > 0.0,\n"
-        "                                    meas.i_c_ab);\n"
-        "double d_abc[3];\n"
-        "pwm_compute_output(&self, T_s, " + complex_in(2) + ", meas.u_dc,\n"
-        "                   InputSignal(3, 0), i_c_ab_ff, d_abc);\n"
+        sig.read(0, "meas") + "double d_abc[3];\n"
+        "pwm_compute_output(&self, T_s, " + complex_in(1) + ", meas.u_dc,\n"
+        "                   InputSignal(2, 0), meas.i_c_ab, d_abc);\n"
         + _write(0, "3", "d_abc")
     )
     compute = CBlock(
         "compute_output",
-        [Port(ENABLE, 1), meas, Port("u_c_ref_ab", 2), Port("w", 1)],
+        [meas, Port("u_c_ref_ab", 2), Port("w", 1)],
         [Port("d_abc", 3)],
-        sig.class_code(
-            "PWM",
-            start,
-            output,
-            "pwm_store_current(&self, i_c_ab_ff);\n",
-            SAMPLING + "static double complex i_c_ab_ff; /* Current of the "
-            "compensation */\n",
-        ),
+        sig.class_code("PWM", start, output, "", SAMPLING),
         params,
         sig.sfunction("pwm"),
         mcode=MCode(
             start=m_start,
-            output="% Measured current for the compensation, while the gates are "
-            "blocked that\n"
-            "% of the latest sampling period with enabled gates\n"
-            "i_c_ab_ff = pwm_feedforward_current(self, enable > 0, meas.i_c_ab);\n"
-            "[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, meas.u_dc, w, "
-            "i_c_ab_ff);\n",
-            update="self = pwm_store_current(self, i_c_ab_ff);\n",
+            output="[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, "
+            "meas.u_dc, w, meas.i_c_ab);\n",
             inputs={"meas": sig.vector("meas"), "u_c_ref_ab": COMPLEX},
             checks=m_checks,
         ),
@@ -520,7 +501,6 @@ def pwm(sig: Signals) -> Subsystem:
         [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2), Port("d_abc", 3)],
         [compute, realized],
         [
-            (ENABLE, "compute_output:enable"),
             (ENABLE, "get_realized_voltage:enable"),
             ("meas", "compute_output:meas"),
             ("meas", "get_realized_voltage:meas"),

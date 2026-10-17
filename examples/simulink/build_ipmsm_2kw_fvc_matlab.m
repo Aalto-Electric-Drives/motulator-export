@@ -77,13 +77,12 @@ s.control.netlist.blocks = { ...
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'PWM/w', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
-    'PWM/u_c_ab', 'Outport', [845.0 55.0 875.0 69.0], {'Port', '1'}
-    'PWM/u_c_zoh_ab', 'Outport', [845.0 113.0 875.0 127.0], {'Port', '2'}
-    'PWM/d_abc', 'Outport', [845.0 153.0 875.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [355.0 100.0 495.0 220.0], {'mfun_fvc_pwm', 'p.T_s', [3.0]}
-    'PWM/get_realized_voltage', 'Subsystem', [645.0 40.0 785.0 130.0], {'ContentPreviewEnabled', 'off'}
-    'PWM/From compute_output.enable', 'From', [260.0 108.0 330.0 122.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'PWM/From get_realized_voltage.enable', 'From', [550.0 48.0 620.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
+    'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
+    'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_fvc_pwm', 'p.T_s', [3.0]}
+    'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
+    'PWM/From get_realized_voltage.enable', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/get_realized_voltage/enable', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'PWM/get_realized_voltage/meas', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
@@ -153,7 +152,6 @@ s.control.netlist.aligns = { ...
     'PWM', 'u_c_ab', 'Inport', 1.0, 'get_realized_voltage', 'Outport', 1.0, 0.0
     'PWM', 'd_abc', 'Inport', 1.0, 'compute_output', 'Outport', 1.0, 0.0
     'PWM', 'meas', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 2.0, 0.0
-    'PWM', 'From compute_output.enable', 'Outport', 1.0, 'compute_output', 'Inport', 1.0, 0.0
     'PWM', 'From get_realized_voltage.enable', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 1.0, 0.0
     'PWM', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
     'PWM/get_realized_voltage', 'u_c_ab', 'Inport', 1.0, 'mfun_fvc_pwm_realized_voltage', 'Outport', 1.0, 0.0
@@ -223,16 +221,15 @@ s.control.netlist.lines = { ...
     'SpeedController', 'Delay tau_M/1', 'mfun_fvc_speed_controller/3', []
     'SpeedController', 'w_M_ref/1', 'mfun_fvc_speed_controller/4', {'x', 205.0}
     'SpeedController', 'mfun_fvc_speed_controller/1', 'tau_M_ref/1', []
-    'PWM', 'From compute_output.enable/1', 'compute_output/1', []
     'PWM', 'From get_realized_voltage.enable/1', 'get_realized_voltage/1', []
-    'PWM', 'meas/1', 'compute_output/2', {'x', 230.0}
+    'PWM', 'meas/1', 'compute_output/1', {'x', 230.0}
     'PWM', 'meas/1', 'get_realized_voltage/2', []
-    'PWM', 'u_c_ref_ab/1', 'compute_output/3', {'x', 215.0}
-    'PWM', 'w/1', 'compute_output/4', {'x', 200.0}
+    'PWM', 'u_c_ref_ab/1', 'compute_output/2', {'x', 215.0}
+    'PWM', 'w/1', 'compute_output/3', {'x', 200.0}
     'PWM', 'compute_output/1', 'd_abc/1', []
-    'PWM', 'compute_output/1', 'get_realized_voltage/3', {'x', 520.0}
+    'PWM', 'compute_output/1', 'get_realized_voltage/3', {'x', 430.0}
     'PWM', 'get_realized_voltage/1', 'u_c_ab/1', []
-    'PWM', 'get_realized_voltage/2', 'u_c_zoh_ab/1', {'x', 810.0}
+    'PWM', 'get_realized_voltage/2', 'u_c_zoh_ab/1', {'x', 720.0}
     'PWM', 'enable/1', 'Goto enable/1', []
     'PWM/get_realized_voltage', 'enable/1', 'mfun_fvc_pwm_realized_voltage/1', []
     'PWM/get_realized_voltage', 'meas/1', 'mfun_fvc_pwm_realized_voltage/2', {'x', 190.0}
@@ -324,7 +321,7 @@ s.control.netlist.masks = { ...
     'port_label(''input'', 3, ''tau_M'');', ...
     'port_label(''input'', 4, ''w_M_ref'');', ...
     'port_label(''output'', 1, ''tau_M_ref'');'}, newline)
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback, and the compensation uses the current of the latest sampling period with enabled gates.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'

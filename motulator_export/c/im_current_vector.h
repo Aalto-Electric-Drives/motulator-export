@@ -142,7 +142,6 @@ typedef struct {
     PIController speed_ctrl;
     /* Workspace variables passed from the output to the update function */
     int enabled; /* Gate enable */
-    double complex i_c_ab_ff; /* Current of the feedforward compensation */
     IMObserverOutputs fbk;
     IMReferences ref;
 } IMVectorControlSystem;

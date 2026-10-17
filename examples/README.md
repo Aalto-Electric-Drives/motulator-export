@@ -46,7 +46,7 @@ The scripts close the model in PLECS before simulating it, since an open model i
 
 ## Agreement of the PLECS models with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.14.0 and PLECS 5.0 (2026-10-17).
+Maximum differences (PLECS − *motulator*) printed by the scripts, with *motulator* 0.14.1 and PLECS 5.0 (2026-10-17).
 *motulator* uses the tolerances of 1e-9 (1e-8 in `pmsyrm_6kw_gn_fvc.py`), and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 

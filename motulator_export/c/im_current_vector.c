@@ -323,7 +323,6 @@ static void im_vector_control_system_init(IMVectorControlSystem *self,
     self->speed_ctrl.u_i = 0.0;
     self->speed_ctrl.v = 0.0;
     self->enabled = 1;
-    self->i_c_ab_ff = 0.0;
 }
 
 static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
@@ -371,16 +370,14 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
      * k_comp*T_s*w_c */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
-    self->i_c_ab_ff = pwm_feedforward_current(&self->pwm, enabled, meas->i_c_ab);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
-                                     fbk->w_c, self->i_c_ab_ff, ref->d_abc);
+                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;
 }
 
 static void im_vector_control_system_update(IMVectorControlSystem *self)
 {
     pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
-    pwm_store_current(&self->pwm, self->i_c_ab_ff);
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
     if (self->enabled) {
         pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
