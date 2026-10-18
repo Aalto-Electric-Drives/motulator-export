@@ -1,73 +1,53 @@
 """
 Native simulation of synchronous machine drives with flux-vector control.
 
-The system is simulated by the library `c/native_sm.c`. Currently supported:
-
-- Synchronous machine (`SynchronousMachine`): `SynchronousMachinePars`, or
-  `SpatialSaturatedSynchronousMachinePars` with a GradNet current map with spatial
-  harmonics (`CurrentMapWithHarmonics`), without core losses
-- Mechanical system (`MechanicalSystem`) with a constant friction coefficient
-- Converter (`VoltageSourceConverter`) with a constant DC-bus voltage, the dead time,
-  and the threshold voltage (with `sign=np.sign`). The PWM model is `ZOH` (the
-  default) or `CarrierComparison` (`pwm=True`), with any computational delay and the
-  single or double update, starting from their initial states.
-- Flux-vector control (`FluxVectorController`) in `VectorControlSystem` with a speed
-  controller, with the features of the C port (see `motulator_export.plecs.sm`) and
-  the duty-ratio error model of the PWM (without the minimum pulses, if compensated)
-- Ideal sensors, the gates enabled
+The system is simulated by the library `c/native_sm.c`. Supported are the drive
+models of `motulator_export.native._drive` with a synchronous machine, and
+flux-vector control (`FluxVectorController`) in `VectorControlSystem` with a speed
+controller, with the features of the C port (see `motulator_export.plecs.sm`) and the
+duty-ratio error model of the PWM (without the minimum pulses, if compensated), the
+gates enabled.
 
 """
 
 from typing import Any, cast
 
-import motulator.drive.gradnet as gn
-import numpy as np
 from motulator.common.control._controllers import PIController
-from motulator.common.model._converter import VoltageSourceConverter
-from motulator.common.model._pwm import ZOH, CarrierComparison
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._sm_flux_vector import FluxVectorController
-from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
+from motulator.drive.model import Drive, SynchronousMachine
 from motulator.drive.utils._parameters import (
     SaturatedSynchronousMachinePars,
-    SpatialSaturatedSynchronousMachinePars,
     SynchronousMachinePars,
 )
 
 from motulator_export.native._build import Signatures
+from motulator_export.native._drive import (
+    DRIVE_API,
+    check_supported_drive,
+    set_drive,
+    set_mechanics_signals,
+)
 from motulator_export.native._system import (
-    GRADNET_API,
+    PWM_API,
     NativeSystem,
     c_double,
     c_int,
     c_void_p,
+    check_supported_control,
     value,
 )
-from motulator_export.plecs._common import _c_define, _check_supported_pwm, gate_enable
-from motulator_export.plecs._control import pwm_values
 from motulator_export.plecs.sm import _fit_speed_dependent_gain, export_gradnet
 
-DELAY_MAX_LENGTH = _c_define("sim.h", "DELAY_MAX_LENGTH")
-
-# Functions of the library setting the parameters
+# Functions of the library setting the parameters of the control system
 API: Signatures = {
-    "set_machine": (None, [c_void_p] + [c_double] * 5),
-    "machine_current_map": (c_void_p, [c_void_p]),
-    "set_machine_current_map": (None, [c_void_p, c_double, c_double, c_int]),
-    "set_mechanics": (None, [c_void_p, c_double, c_double]),
-    "load_torque": (c_void_p, [c_void_p]),
-    "set_converter": (None, [c_void_p, c_double, c_double]),
-    "set_modulator": (None, [c_void_p, c_int, c_double, c_double, c_int, c_int]),
     "set_control_machine": (None, [c_void_p] + [c_double] * 5),
     "control_flux_map": (c_void_p, [c_void_p]),
     "set_control_machine_flux_map": (None, [c_void_p, c_double, c_double]),
     "set_flux_vector_controller": (None, [c_void_p] + [c_double] * 13 + [c_int]),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
-    "set_pwm": (
-        None,
-        [c_void_p, c_int, c_double, c_double, c_double, c_int, c_double, c_int],
-    ),
     "speed_reference": (c_void_p, [c_void_p]),
+    **PWM_API,
 }
 
 
@@ -87,25 +67,9 @@ class SynchronousMachineDriveSystem(NativeSystem):
     def __init__(self, mdl: Any, ctrl: Any) -> None:
         self.check_supported(mdl, ctrl)
         mdl, ctrl = cast(Drive, mdl), cast(VectorControlSystem, ctrl)
-        super().__init__("sm", {**API, **GRADNET_API})
+        super().__init__("sm", {**DRIVE_API, **API})
         lib, h = self.lib, self.handle
-
-        # System model
-        par = mdl.machine.par
-        if isinstance(par, SpatialSaturatedSynchronousMachinePars):
-            g = export_gradnet(_current_map(par))
-            self.set_gradnet(lib.machine_current_map(h), g)
-            lib.set_machine_current_map(h, par.n_p, par.R_s, g["k"])
-        else:
-            par = cast(SynchronousMachinePars, par)
-            lib.set_machine(h, par.n_p, par.R_s, par.L_d, par.L_q, par.psi_f)
-        mechanics = cast(MechanicalSystem, mdl.mechanics)
-        lib.set_mechanics(h, mechanics.J, mechanics.B_L)
-        lib.set_converter(h, mdl.converter.u_dc, mdl.converter.u_th)
-        pwm = mdl.pwm
-        N = pwm.N if isinstance(pwm, CarrierComparison) else 0
-        delay = len(mdl.delay.data)
-        lib.set_modulator(h, N > 0, N, pwm.t_d, delay, mdl.single_update)
+        set_drive(self, mdl)
 
         # Control system
         fvc = cast(FluxVectorController, ctrl.vector_ctrl)
@@ -141,17 +105,7 @@ class SynchronousMachineDriveSystem(NativeSystem):
         lib.set_speed_controller(
             h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
         )
-        v = pwm_values(ctrl.pwm)
-        lib.set_pwm(
-            h,
-            v["pwm_overmodulation"] == "MME",
-            v["pwm_t_d"],
-            v["pwm_u_th"],
-            v["pwm_i_0"],
-            v["pwm_feedforward"],
-            v["pwm_d_min"],
-            v["pwm_single_update"],
-        )
+        self.set_pwm(ctrl.pwm)
 
     def set_signals(self, mdl: Any, ctrl: Any) -> None:
         """Set the speed reference and the load torque."""
@@ -159,7 +113,7 @@ class SynchronousMachineDriveSystem(NativeSystem):
         if ctrl.ext_ref.w_M is None:
             raise ValueError("Speed reference must be set")
         self.set_signal(self.lib.speed_reference(self.handle), ctrl.ext_ref.w_M)
-        self.set_signal(self.lib.load_torque(self.handle), mdl.mechanics.inp.tau_L)
+        set_mechanics_signals(self, mdl)
 
     @staticmethod
     def supports(mdl: Any, ctrl: Any) -> bool:
@@ -170,19 +124,9 @@ class SynchronousMachineDriveSystem(NativeSystem):
     def check_supported(mdl: Any, ctrl: Any) -> None:
         """Raise an error if the drive system is not supported."""
         _check_supported_control(ctrl)
-        _check_supported_machine(mdl)
-        _check_supported_converter(mdl)
-
-
-def _current_map(par: SpatialSaturatedSynchronousMachinePars) -> Any:
-    """GradNet current map of the machine model, checking its type."""
-    if type(par.magnetic_map_fcn) is not gn.CurrentMapWithHarmonics:
-        raise NotImplementedError(
-            "Only GradNet current maps with spatial harmonics "
-            "(CurrentMapWithHarmonics) supported in "
-            "SpatialSaturatedSynchronousMachinePars"
-        )
-    return par.magnetic_map_fcn
+        if type(mdl.machine) is not SynchronousMachine:
+            raise NotImplementedError("Only SynchronousMachine supported")
+        check_supported_drive(mdl)
 
 
 def _speed_gain(k: Any) -> list[float]:
@@ -210,64 +154,4 @@ def _check_supported_control(ctrl: Any) -> None:
         raise NotImplementedError("Machine model of the control system not supported")
     if not isinstance(ctrl.speed_ctrl, PIController):
         raise NotImplementedError("Speed-control mode with a speed controller required")
-    _check_supported_pwm(ctrl, d_err=True)
-    pwm = ctrl.pwm
-    pwm_values(pwm)  # Raises if the duty-ratio error model is not supported
-    if pwm.d_err is not None and pwm.feedforward and pwm.d_min > 0:
-        raise NotImplementedError(
-            "Minimum pulses (d_min) with the compensation of the duty-ratio error not "
-            "supported"
-        )
-    if gate_enable(ctrl) != 1:
-        raise NotImplementedError("Gate blocking (set_enable) not supported")
-
-
-def _check_supported_machine(mdl: Drive) -> None:
-    """Raise an error if the machine or the mechanics is not supported."""
-    machine = mdl.machine
-    if type(machine) is not SynchronousMachine:
-        raise NotImplementedError("Only SynchronousMachine supported")
-    par = machine.par
-    if isinstance(par, SpatialSaturatedSynchronousMachinePars):
-        export_gradnet(_current_map(par))  # Raises if not supported
-    elif not isinstance(par, SynchronousMachinePars):
-        raise NotImplementedError(
-            "Only SynchronousMachinePars and SpatialSaturatedSynchronousMachinePars "
-            "supported in the machine model"
-        )
-    if par.G_c != 0:
-        raise NotImplementedError("Core losses not supported")
-    if machine.i_s_sensor is not None:
-        raise NotImplementedError("Sensor models not supported")
-    mechanics = mdl.mechanics
-    if type(mechanics) is not MechanicalSystem or callable(mechanics.B_L):
-        raise NotImplementedError(
-            "Only MechanicalSystem with a constant friction coefficient supported"
-        )
-
-
-def _check_supported_converter(mdl: Drive) -> None:
-    """Raise an error if the converter, its PWM model, or the delay is not supported."""
-    converter, pwm = mdl.converter, mdl.pwm
-    if mdl.lc_filter is not None:
-        raise NotImplementedError("LC filter not supported")
-    if type(converter) is not VoltageSourceConverter or converter.sign is not np.sign:
-        raise NotImplementedError(
-            "Only VoltageSourceConverter with sign=np.sign supported"
-        )
-    if mdl.dc_bus is not None or converter.u_dc is None:
-        raise NotImplementedError("Only a constant DC-bus voltage supported")
-    if converter.u_dc_sensor is not None:
-        raise NotImplementedError("Sensor models not supported")
-    if type(pwm) not in (ZOH, CarrierComparison):
-        raise NotImplementedError(
-            "Only the PWM models ZOH and CarrierComparison supported"
-        )
-    delay = mdl.delay.data
-    if len(delay) > DELAY_MAX_LENGTH:
-        raise NotImplementedError(f"At most the delay {DELAY_MAX_LENGTH} supported")
-    initial = not np.any(delay)
-    if isinstance(pwm, CarrierComparison):
-        initial &= pwm._rising_edge and pwm._command is None
-    if not initial:
-        raise NotImplementedError("Only the initial state of the PWM model supported")
+    check_supported_control(ctrl, d_err=True)

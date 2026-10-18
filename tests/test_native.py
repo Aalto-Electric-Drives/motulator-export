@@ -1,11 +1,13 @@
 """
 Test the native simulation against the simulation of motulator.
 
-The drive systems are simulated in motulator and natively, and the results are
-compared. With the zero-order hold (ZOH), the native simulation takes the same steps
-as motulator, so the results agree to the rounding errors. With the carrier
-comparison, a change of the quantized duty ratios at the rounding error changes the
-switching instants, so a fine quantization is used.
+The drive systems and the grid converter systems are simulated in motulator and
+natively, and the results are compared. With the zero-order hold (ZOH), the native
+simulation takes the same steps as motulator, so the results agree to the rounding
+errors. With the carrier comparison, a change of the quantized duty ratios at the
+rounding error changes the switching instants, so a fine quantization is used. With
+the diode bridge, the clamping of the inductor current at zero makes the step sizes
+sensitive to the rounding errors, so the control signals are compared.
 
 Run from the repository root (requires gcc):
 
@@ -20,12 +22,24 @@ from typing import Any
 
 import motulator.drive.control.sm as control
 import motulator.drive.gradnet as gn
+import motulator.grid.control as grid_control
+import motulator.grid.model as grid_model
 import numpy as np
 import pytest
-from motulator.common.model import CarrierComparison, SolverCfg
+from motulator.common.model import CarrierComparison, DCBus, DiodeBridgeDCBus, SolverCfg
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal, native
+from tests.test_simulink import BASE as GRID_BASE
+from tests.test_simulink import NOM as GRID_NOM
+from tests.test_simulink import (
+    Build,
+    gfl_system,
+    gfm_system,
+    im_system,
+    sm_system,
+    vhz_system,
+)
 
 MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
 
@@ -110,7 +124,10 @@ def simulate(build: Any, t_stop: float, **kwargs: Any) -> tuple[Any, Any]:
 
 
 def max_errors(groups_py: dict[str, Any], groups_c: dict[str, Any]) -> dict[str, float]:
-    """Maximum errors of the signals relative to their maximum magnitudes."""
+    """
+    Maximum errors of the signals relative to their maximum magnitudes, at least 1
+    (e.g., the error signal of a locked PLL is at the level of the rounding errors).
+    """
     errors = {}
     for group, signals in groups_py.items():
         for name, values in vars(signals).items():
@@ -118,10 +135,15 @@ def max_errors(groups_py: dict[str, Any], groups_c: dict[str, Any]) -> dict[str,
                 # The current-direction vector is discontinuous at zero currents (it
                 # affects the voltage only with the dead time or threshold voltage)
                 continue
-            x_py = np.asarray(values, dtype=complex)
-            x_c = np.asarray(getattr(groups_c[group], name), dtype=complex)
+            x_py = np.asarray(values)
+            x_c = np.asarray(getattr(groups_c[group], name))
             assert x_c.shape == x_py.shape, f"{group}.{name}"
-            scale = max(np.max(np.abs(x_py), initial=0.0), 1e-9)
+            if x_py.dtype == object:  # None, e.g., the DC-bus voltage reference
+                assert all(v is None for v in [*x_py, *x_c]), f"{group}.{name}"
+                errors[f"{group}.{name}"] = 0.0
+                continue
+            x_py, x_c = x_py.astype(complex), x_c.astype(complex)
+            scale = max(np.max(np.abs(x_py), initial=0.0), 1.0)
             errors[f"{group}.{name}"] = np.max(np.abs(x_c - x_py), initial=0.0) / scale
     return errors
 
@@ -138,7 +160,8 @@ def check(res_py: Any, res_c: Any, rtol: float, same_steps: bool = True) -> None
     )
     if same_steps:
         assert np.max(np.abs(res_c.mdl.t - res_py.mdl.t)) < 1e-12
-        names = ["machine", "mechanics", "converter"]
+        # The time series of the subsystems (e.g., machine and converter)
+        names = [name for name in vars(res_py.mdl) if name != "t"]
         mdl_py = {name: getattr(res_py.mdl, name) for name in names}
         errors |= max_errors(mdl_py, {name: getattr(res_c.mdl, name) for name in names})
     worst = max(errors, key=lambda name: errors[name])
@@ -197,4 +220,217 @@ def test_interface() -> None:
         native.Simulation(mdl, ctrl, cfg=SolverCfg(method="DOP853"))
     ctrl.set_enable(False)
     with pytest.raises(NotImplementedError, match="Gate blocking"):
+        native.Simulation(mdl, ctrl)
+
+
+# %%
+# Induction machine drives, DC buses, and grid converter systems, mostly with the
+# systems of tests/test_simulink.py
+@pytest.mark.parametrize(
+    "build",
+    [
+        im_system(sensorless=True, t_d=0.0, i_0=0.0)[0],
+        im_system(sensorless=False, t_d=0.0, i_0=0.0)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True)[0],
+        vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0],
+        vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0],
+        vhz_system(open_loop=False, t_d=0.0, d_min=0.1)[0],
+    ],
+    ids=[
+        "cvc_sensorless",
+        "cvc_sensored",
+        "cvc_u_th_single",
+        "vhz",
+        "vhz_open_loop",
+        "vhz_d_min",
+    ],
+)
+def test_induction_machine(build: Build) -> None:
+    """Current-vector control and observer-based V/Hz control."""
+    check(*simulate(build, 0.3), rtol=1e-9)
+
+
+def test_quadratic_load() -> None:
+    """Friction coefficient as a function of the speed (a quadratic load torque)."""
+    build = vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0]
+
+    def build_quadratic() -> tuple[model.Drive, Any]:
+        mdl, ctrl = build()
+        mechanics = model.MechanicalSystem(J=0.015, B_L=lambda w_M: 1e-4 * abs(w_M))
+        return model.Drive(mdl.machine, mechanics, mdl.converter), ctrl
+
+    check(*simulate(build_quadratic, 0.3), rtol=1e-9)
+
+
+def with_dc_bus(build: Build, bridge: bool) -> Build:
+    """The drive of `build` fed by a DC-bus model (DCBus or DiodeBridgeDCBus)."""
+
+    def build_dc() -> tuple[model.Drive, Any]:
+        mdl, ctrl = build()
+        c = mdl.converter
+        converter = model.VoltageSourceConverter(t_d=c.t_d, u_th=c.u_th)
+        if bridge:
+            dc_bus = DiodeBridgeDCBus(
+                235e-6, 2e-3, U_g=400, f_g=50, converters=[converter]
+            )
+        else:
+            dc_bus = DCBus(C_dc=1e-3, u_dc=540, converters=[converter])
+        return model.Drive(mdl.machine, mdl.mechanics, converter, dc_bus=dc_bus), ctrl
+
+    return build_dc
+
+
+@pytest.mark.parametrize("bridge", [False, True], ids=["capacitor", "diode_bridge"])
+@pytest.mark.parametrize("machine", ["sm", "im"])
+def test_dc_bus(machine: str, bridge: bool) -> None:
+    """DC-bus models feeding the converter of the drive."""
+    if machine == "sm":
+        build = sm_system(sensorless=True, t_d=0.0)[0]
+    else:
+        build = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]
+    res_py, res_c = simulate(with_dc_bus(build, bridge), 0.3)
+    if bridge:
+        check(res_py, res_c, rtol=1e-5, same_steps=False)
+    else:
+        check(res_py, res_c, rtol=1e-9)
+
+
+def gfl_variant(lcl: bool, pwm: bool = False, dc_bus: bool = False) -> Build:
+    """
+    Grid-following control with the resistances and the grid impedance of the filter,
+    a voltage dip, a phase shift, and a negative-sequence component of the source, and
+    optionally the carrier comparison and a DC-bus model.
+    """
+    B = GRID_BASE
+
+    def build() -> tuple[grid_model.GridConverterSystem, Any]:
+        if lcl:
+            ac_filter: Any = grid_model.LCLFilter(
+                L_fc=0.073 * B.L,
+                L_fg=0.073 * B.L,
+                C_f=0.043 * B.C,
+                R_fc=0.01 * B.Z,
+                R_fg=0.01 * B.Z,
+                L_g=0.2 * B.L,
+                R_g=0.01 * B.Z,
+                u_f0_ab=B.u,
+            )
+        else:
+            ac_filter = grid_model.LFilter(
+                L_f=0.15 * B.L, R_f=0.02 * B.Z, L_g=0.1 * B.L, R_g=0.01 * B.Z
+            )
+        ac_source = grid_model.ThreePhaseSource(
+            w_g=B.w,
+            e_g=StepSignal(time=0.1, after=0.8 * B.u, before=B.u),
+            phi=0.1,
+            e_g_neg=0.05 * B.u,
+            phi_neg=0.3,
+        )
+        converter = grid_model.VoltageSourceConverter(u_dc=None if dc_bus else 650)
+        dc = DCBus(C_dc=1e-3, u_dc=650, converters=[converter]) if dc_bus else None
+        mdl = grid_model.GridConverterSystem(
+            converter, ac_filter, ac_source, dc_bus=dc, pwm=pwm
+        )
+        if pwm:
+            mdl.pwm = CarrierComparison(N=2**24)
+        cfg = grid_control.CurrentVectorControllerCfg(
+            i_max=1.5 * B.i, L=0.073 * B.L, T_s=100e-6
+        )
+        ctrl = grid_control.GridConverterControlSystem(
+            grid_control.CurrentVectorController(cfg)
+        )
+        ctrl.set_power_ref(StepSignal(time=0.02, after=5e3))
+        ctrl.set_reactive_power_ref(lambda t: (t > 0.04) * 4e3)
+        return mdl, ctrl
+
+    return build
+
+
+def gfm_variant() -> Build:
+    """Grid-forming control with an LCL filter and a step in the grid frequency."""
+    B = GRID_BASE
+
+    def build() -> tuple[grid_model.GridConverterSystem, Any]:
+        ac_filter = grid_model.LCLFilter(
+            L_fc=0.15 * B.L,
+            L_fg=0.1 * B.L,
+            C_f=0.043 * B.C,
+            R_fc=0.05 * B.Z,
+            L_g=0.5 * B.L,
+        )
+        ac_source = grid_model.ThreePhaseSource(
+            w_g=lambda t: B.w * (1 + 0.01 * (t > 0.1)), e_g=B.u
+        )
+        mdl = grid_model.GridConverterSystem(
+            grid_model.VoltageSourceConverter(u_dc=650), ac_filter, ac_source
+        )
+        cfg = grid_control.ObserverBasedGridFormingControllerCfg(
+            i_max=1.3 * B.i,
+            L=0.35 * B.L,
+            R=0.05 * B.Z,
+            R_a=0.2 * B.Z,
+            u_nom=B.u,
+            w_nom=B.w,
+        )
+        ctrl = grid_control.GridConverterControlSystem(
+            grid_control.ObserverBasedGridFormingController(cfg)
+        )
+        ctrl.set_power_ref(lambda t: (t > 0.05) * GRID_NOM.P)
+        ctrl.set_ac_voltage_ref(B.u)
+        return mdl, ctrl
+
+    return build
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        gfl_system()[0],
+        gfl_variant(lcl=False),
+        gfl_variant(lcl=True),
+        gfl_variant(lcl=True, dc_bus=True),
+        gfm_system(power_limitation=False)[0],
+        gfm_system(power_limitation=True)[0],
+        gfm_variant(),
+    ],
+    ids=[
+        "gfl",
+        "gfl_l_filter",
+        "gfl_lcl_filter",
+        "gfl_dc_bus",
+        "gfm",
+        "gfm_power_limitation",
+        "gfm_lcl_filter",
+    ],
+)
+def test_grid(build: Build) -> None:
+    """Grid-following and grid-forming control."""
+    check(*simulate(build, 0.2), rtol=1e-9)
+
+
+def test_grid_pwm() -> None:
+    """Grid-following control with the carrier comparison."""
+    res_py, res_c = simulate(gfl_variant(lcl=True, pwm=True), 0.2)
+    check(res_py, res_c, rtol=1e-6, same_steps=False)
+
+
+def test_unsupported() -> None:
+    """Unsupported systems raise errors."""
+    # Gate blocking
+    mdl, ctrl = gfl_system()[0]()
+    ctrl.set_enable(False)
+    with pytest.raises(NotImplementedError, match="Gate blocking"):
+        native.Simulation(mdl, ctrl)
+    # DC-bus voltage control
+    mdl, ctrl = gfl_system()[0]()
+    ctrl.dc_bus_voltage_ctrl = grid_control.DCBusVoltageController(
+        C_dc=1e-3, alpha_dc=2 * pi * 30
+    )
+    with pytest.raises(NotImplementedError, match="DC-bus voltage control"):
+        native.Simulation(mdl, ctrl)
+    # External DC current
+    mdl, ctrl = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0], False)()
+    cast_dc_bus: Any = mdl.dc_bus
+    cast_dc_bus.set_external_dc_current(1.0)
+    with pytest.raises(NotImplementedError, match="External DC current"):
         native.Simulation(mdl, ctrl)

@@ -130,7 +130,7 @@ utils.plot(res, base)
 
 The results are also stored in the time series of `mdl` and `ctrl`, as in *motulator*, and a subsequent call continues the simulation. The control system runs in C from its initial state. The library of the system type is compiled at the first use and cached in the temporary directory. The references and the load torque can be constants, functions of time (called from C), or `StepSignal` objects (evaluated in C, faster).
 
-The native simulation takes the same solver steps as *motulator*, so the results agree to the rounding errors: about 1e-12 relative to the signal magnitudes, also with the GradNet models, see `tests/test_native.py`. With the carrier comparison (`pwm=True`), a rounding error can change a quantized duty ratio and thereby a switching instant, after which the solutions differ more; with a fine quantization (`CarrierComparison(N=2**24)`), they agree to about 1e-6. The closed-loop simulations of *motulator* itself are equally sensitive to the rounding errors.
+The native simulation takes the same solver steps as *motulator*, so the results agree to the rounding errors: about 1e-12 relative to the signal magnitudes, also with the GradNet models, see `tests/test_native.py`. With the carrier comparison (`pwm=True`), a rounding error can change a quantized duty ratio and thereby a switching instant, after which the solutions differ more; with a fine quantization (`CarrierComparison(N=2**24)`), they agree to about 1e-7. Similarly, the diode bridge (`DiodeBridgeDCBus`) clamps its inductor current at zero, which makes the step sizes sensitive to the rounding errors (differences of about 1e-7 to 1e-5, depending on the system and the simulated time). The closed-loop simulations of *motulator* itself are equally sensitive to the rounding errors.
 
 Run times of `simulate` with *motulator* 0.15.0 (the wall time including the post-processing of the results, on one core of a laptop):
 
@@ -143,7 +143,7 @@ Run times of `simulate` with *motulator* 0.15.0 (the wall time including the pos
 
 In the first case, the native run itself takes 0.17 s, and the rest is the post-processing of the results in Python, as in *motulator*.
 
-Currently supported are synchronous machine drives with flux-vector control (see `motulator_export/native/sm.py` and the table of [supported systems](#supported-systems)); other systems raise `NotImplementedError`. The example `examples/pmsyrm_6kw_gn_fvc_native.py` simulates the GradNet example natively, and with `--compare` also in *motulator*.
+The native simulation supports the drives and the grid converter systems of the table of [supported systems](#supported-systems), except the gate blocking (see the modules of `motulator_export/native/`); other systems raise `NotImplementedError`. The example `examples/pmsyrm_6kw_gn_fvc_native.py` simulates the GradNet example natively, and with `--compare` also in *motulator*.
 
 ## Examples
 
@@ -160,23 +160,24 @@ The [examples](examples/) build the systems of the *motulator* examples, write t
 
 ## Supported systems
 
-| Feature                                                                                                 | PLECS |   Simulink   | Native |
-| ------------------------------------------------------------------------------------------------------- | :---: | :----------: | :----: |
-| Synchronous machine drives: flux-vector control (constant inductances or GradNet models), speed control |  yes  |     yes      |  yes   |
-| Induction machine drives: current-vector control (constant parameters), speed control                   |  yes  |     yes      |   no   |
-| Induction machine drives: observer-based V/Hz control, including open-loop V/Hz control (`L_M = inf`)   |  yes  |     yes      |   no   |
-| Grid-following control with an LCL filter (without resistances and grid impedance)                      |  yes  |     yes      |   no   |
-| Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |     yes      |   no   |
-| Stiff DC bus                                                                                            |  yes  |     yes      |  yes   |
-| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     |  yes  |      no      |   no   |
-| Dead time and threshold voltage of the converter in the system model (drives)                           |  yes  |      no      |  yes   |
-| Compensation of the dead time and the threshold voltage in the control system (drives)                  |  yes  |     yes      |  yes   |
-| Single update of the duty ratios in the system model (`single_update`)                                  |  yes  |      no      |  yes   |
-| Gate blocking (`set_enable`): the control system, and the system model                                  |  yes  | control only |   no   |
+| Feature                                                                                                 | PLECS  |   Simulink   | Native |
+| ------------------------------------------------------------------------------------------------------- | :----: | :----------: | :----: |
+| Synchronous machine drives: flux-vector control (constant inductances or GradNet models), speed control |  yes   |     yes      |  yes   |
+| Induction machine drives: current-vector control (constant parameters), speed control                   |  yes   |     yes      |  yes   |
+| Induction machine drives: observer-based V/Hz control, including open-loop V/Hz control (`L_M = inf`)   |  yes   |     yes      |  yes   |
+| Grid-following control (current-vector control with a PLL)                                              |  yes   |     yes      |  yes   |
+| Grid-forming control (disturbance observer)                                                             |  yes   |     yes      |  yes   |
+| Stiff DC bus                                                                                            |  yes   |     yes      |  yes   |
+| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     | drives |      no      |  yes   |
+| Dead time and threshold voltage of the converter in the system model                                    | drives |      no      |  yes   |
+| Compensation of the dead time and the threshold voltage in the control system (drives)                  |  yes   |     yes      |  yes   |
+| Single update of the duty ratios in the system model (`single_update`)                                  |  yes   |      no      |  yes   |
+| Gate blocking (`set_enable`): the control system, and the system model                                  |  yes   | control only |   no   |
 
-The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`) with the computational delay of one sampling period, and the grid is balanced with constant voltage and frequency. The native simulation also supports the zero-order hold (the default of *motulator*) and other computational delays; its machine model has constant inductances or a GradNet current map with spatial harmonics.
-Grid-following control is supported with the LCL filter and grid-forming control with the L filter.
-Other configurations raise `NotImplementedError` when the model is written.
+The drives can be sensorless or sensored.
+In the PLECS and Simulink models, the converter uses carrier comparison (`pwm=True`) with the computational delay of one sampling period, grid-following control is supported with an LCL filter without resistances and grid impedance and grid-forming control with an L filter and the grid inductance, and the grid is balanced with constant voltage and frequency.
+The native simulation is more general: it supports both filters with their resistances and the grid impedance with either control, the source with the magnitudes, the phase shifts, and the frequency as functions of time (e.g., voltage dips and negative-sequence components), the zero-order hold (the default of *motulator*), other computational delays, and the friction coefficient of the mechanics as a function of the speed; its synchronous machine model has constant inductances or a GradNet current map with spatial harmonics.
+Other configurations raise `NotImplementedError` when the model is written or the native simulation is created.
 
 ## Working with the models
 

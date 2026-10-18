@@ -7,13 +7,15 @@
  *   motulator/common/model/_base.py        Model.modulate, Delay
  *   motulator/common/model/_pwm.py         ZOH, CarrierComparison
  *   motulator/common/utils/_dead_time.py   averaged_gate_signals
- *   motulator/common/model/_converter.py   VoltageSourceConverter
+ *   motulator/common/model/_converter.py   VoltageSourceConverter, DCBus,
+ *                                          DiodeBridgeDCBus
  *   motulator_export/plecs/_common.py      StepSignal
  *   scipy/integrate/_ivp/rk.py             RK45 (used by solve_ivp in Simulation)
  *
  * A model (Model) consists of a voltage-source converter, its modulator (the
- * computational delay and the PWM model), and the continuous-time subsystems, whose
- * state derivatives are given by the function rhs. The control system
+ * computational delay and the PWM model), optionally a DC-bus model feeding the
+ * converter, and the continuous-time subsystems, whose state derivatives are given by
+ * the function rhs. The control system
  * (ControlSystem) is run at its sampling instants. The switching state of the
  * converter is held constant between the sampling and switching instants, and the
  * states are integrated over these intervals using the Dormand-Prince method of
@@ -21,7 +23,8 @@
  * having zero imaginary parts.
  *
  * Supported: a single model with a single control system, the gates enabled (no
- * gate blocking), and a constant DC-bus voltage.
+ * gate blocking), and a constant DC-bus voltage or a DC-bus model feeding only the
+ * converter, without an external DC current.
  */
 
 #ifndef MOTULATOR_SIM_H
@@ -160,8 +163,41 @@ typedef struct {
 static void converter_set_gate_signals(VoltageSourceConverter *self,
                                        const double q_abc[3], const double b_abc[3],
                                        double complex i_c_ab);
-/* Converter voltage (V) */
-static double complex converter_voltage(const VoltageSourceConverter *self);
+/* Converter voltage (V) with the DC-bus voltage u_dc */
+static double complex converter_voltage(const VoltageSourceConverter *self,
+                                        double u_dc);
+/* Internal DC current (A) with the converter current i_c_ab
+ * (VoltageSourceConverter.compute_internal_dc_current) */
+static double converter_dc_current(const VoltageSourceConverter *self,
+                                   double complex i_c_ab);
+
+/* DC bus ------------------------------------------------------------------- */
+
+#define DC_BUS_NONE 0         /* Constant DC-bus voltage of the converter */
+#define DC_BUS_CAPACITOR 1    /* DCBus */
+#define DC_BUS_DIODE_BRIDGE 2 /* DiodeBridgeDCBus */
+
+/* DC-bus model feeding the converter, without an external DC current. Its states
+ * (u_dc of DCBus, and u_dc, i_L, and exp_j_theta_g of DiodeBridgeDCBus) come first
+ * in the states of the model, as in motulator. */
+typedef struct {
+    int type;
+    double C_dc; /* DC-bus capacitance (F) */
+    double L_dc; /* DC-bus inductance (H) of the diode bridge */
+    double u_g;  /* Grid voltage (V), peak line-to-neutral, of the diode bridge */
+    double w_g;  /* Grid angular frequency (rad/s) of the diode bridge */
+} DCBus;
+
+/* Number of states, and their names separated by spaces */
+static int dc_bus_states(const DCBus *self);
+static const char *dc_bus_state_names(const DCBus *self);
+/* DC-bus voltage (V) from the states x of the model, or the constant DC-bus voltage
+ * u_dc of the converter without a DC-bus model */
+static double dc_bus_voltage(const DCBus *self, const double complex *x, double u_dc);
+/* State derivatives of the DC bus (DCBus.rhs or DiodeBridgeDCBus.rhs), the converter
+ * drawing the internal DC current i_dc_int */
+static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_int,
+                       double complex *dx);
 
 /* Logs --------------------------------------------------------------------- */
 
@@ -183,12 +219,16 @@ static void log_free(Log *self);
 typedef struct Model Model;
 
 /* Continuous-time system model. The concrete models embed this as their first member
- * and set the functions. */
+ * and set the functions. The states of the DC bus come first. */
 struct Model {
     int n;              /* Number of states */
     const char *states; /* Names of the states, separated by spaces */
     VoltageSourceConverter converter;
     Modulator modulator;
+    DCBus dc_bus;
+    /* Set the number and the names of the states from the configuration of the
+     * subsystems (e.g., after setting the DC-bus model) */
+    void (*init_states)(Model *self);
     /* State derivatives, with the switching state of the converter held constant */
     void (*rhs)(const Model *self, double t, const double complex *x,
                 double complex *dx);
@@ -199,16 +239,23 @@ struct Model {
     void (*set_states)(const Model *self, double complex *x);
 };
 
+/* DC-bus voltage (V) of the converter at the states x */
+static double model_dc_voltage(const Model *self, const double complex *x);
+/* Names of the states of the DC bus followed by `names`, written into `buffer` of
+ * the given size */
+static void model_state_names(const Model *self, const char *names, char *buffer,
+                              int size);
+
 typedef struct ControlSystem ControlSystem;
 
 /* Discrete-time control system. The concrete control systems embed this as their
  * first member and set the function run, which logs the signals of the step into
  * log: the controller time followed by the fields (see log_fields_width). */
 struct ControlSystem {
-    /* Control step at a sampling instant, with the model states x: gives the
+    /* Control step at the sampling instant t, with the model states x: gives the
      * sampling period T_s and the duty ratios, and returns the status */
-    int (*run)(ControlSystem *self, const Model *mdl, const double complex *x,
-               double *T_s, double d_abc[3]);
+    int (*run)(ControlSystem *self, const Model *mdl, double t,
+               const double complex *x, double *T_s, double d_abc[3]);
     const char *fields; /* Logged fields */
     Log log;
 };

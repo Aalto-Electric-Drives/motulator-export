@@ -3,10 +3,11 @@
  * translation unit of the shared library of motulator_export.native, with its API
  * for Python (ctypes).
  *
- * The system (System) consists of the simulation (sim.h), the drive model (drive.h),
- * and the control system: VectorControlSystem with FluxVectorController and a speed
- * controller (sm_flux_vector.h), with the speed reference. The API functions mirror
- * the constructors of motulator. The control system is constructed from its
+ * The system (System) consists of the simulation (sim.h), the drive model (drive.h)
+ * with a synchronous machine, and the control system: VectorControlSystem with
+ * FluxVectorController and a speed controller (sm_flux_vector.h), with the speed
+ * reference. The API functions mirror the constructors of motulator; those of the
+ * model are in sim.c and drive.c. The control system is constructed from its
  * parameters when the simulation starts (start), after which sim_run of sim.c runs
  * the simulation.
  */
@@ -18,6 +19,7 @@
 #include "sm_flux_vector.c"
 #include "sim.c"
 #include "drive.c"
+#include "native.c"
 
 /* Signals logged at each step (the signal groups of ControlSystem.save), see
  * log_fields_width */
@@ -35,24 +37,6 @@ typedef struct {
     double t; /* Controller time */
 } FluxVectorControlSystem;
 
-/* Limited voltage reference (V) in stationary coordinates, excluding the compensation
- * of the duty-ratio error (PWM.limited_voltage). With the compensation, the minimum
- * pulses are not supported. */
-static double complex limited_voltage(const VectorControlSystem *ctrl)
-{
-    const PWM *pwm = &ctrl->pwm;
-    double u_dc = ctrl->fbk.u_dc;
-    if (!(pwm_has_error_model(pwm) && pwm->feedforward) || u_dc <= 0.0) {
-        return ctrl->ref.u_c_ab;
-    }
-    /* Duty ratios of the voltage reference (vector_control_system_compute_output) */
-    double complex u_s_ab_ref = cexp(I * ctrl->fbk.theta_c) * ctrl->ref.u_s;
-    u_s_ab_ref *= cexp(I * ctrl->k_comp * ctrl->ref.T_s * ctrl->fbk.w_c);
-    double d_ref[3];
-    pwm_duty_ratios(u_s_ab_ref, u_dc, pwm->mme, d_ref);
-    return abc2complex(d_ref) * u_dc;
-}
-
 /* Save the signals of the step (FVC_FIELDS) */
 static int fvc_save(FluxVectorControlSystem *self)
 {
@@ -69,7 +53,10 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, ref->psi_s);
     log_put_complex(&p, 0.0); /* Current reference, not used */
     log_put_complex(&p, ref->u_s);
-    log_put_complex(&p, cexp(-I * fbk->theta_c) * limited_voltage(ctrl));
+    double complex u_s_lim =
+        native_limited_voltage(&ctrl->pwm, ref->u_c_ab, ref->u_s, fbk->theta_c,
+                               ctrl->k_comp, ref->T_s, fbk->w_c, fbk->u_dc);
+    log_put_complex(&p, cexp(-I * fbk->theta_c) * u_s_lim);
     log_put(&p, ref->w_M);
     for (int k = 0; k < 3; k++) {
         log_put(&p, ref->d_abc[k]);
@@ -98,16 +85,17 @@ static int fvc_save(FluxVectorControlSystem *self)
 
 /* Control step (ControlSystem.run_control_loop with the measurements of
  * VectorControlSystem.get_measurement) */
-static int fvc_run(ControlSystem *base, const Model *mdl, const double complex *x,
-                   double *T_s, double d_abc[3])
+static int fvc_run(ControlSystem *base, const Model *mdl, double t,
+                   const double complex *x, double *T_s, double d_abc[3])
 {
     FluxVectorControlSystem *self = (FluxVectorControlSystem *)base;
-    const SynchronousMachineDrive *drive = (const SynchronousMachineDrive *)mdl;
+    (void)t;
+    const Drive *drive = (const Drive *)mdl;
     VectorControlSystem *ctrl = &self->ctrl;
     Measurements meas;
-    meas.i_c_ab = sm_drive_meas_current(drive, x);
-    meas.u_dc = mdl->converter.u_dc;
-    meas.theta_M = sm_drive_meas_position(drive, x);
+    meas.i_c_ab = drive_meas_current(drive, x);
+    meas.u_dc = model_dc_voltage(mdl, x);
+    meas.theta_M = drive_meas_position(drive, x);
     meas.u_c_ab = 0.0;
     double w_M_ref = signal_value(&self->w_M_ref, self->t);
     if (!isfinite(w_M_ref)) {
@@ -131,7 +119,7 @@ static int fvc_run(ControlSystem *base, const Model *mdl, const double complex *
 
 typedef struct {
     Simulation sim; /* First member, see the API of sim.c */
-    SynchronousMachineDrive mdl;
+    Drive mdl;
     FluxVectorControlSystem ctrl;
     /* Parameters of the control system, from which it is constructed at the start */
     SynchronousMachinePars est_par;
@@ -148,7 +136,7 @@ System *system_new(void)
     if (self == NULL) {
         return NULL;
     }
-    sm_drive_init(&self->mdl);
+    drive_init(&self->mdl);
     modulator_init(&self->mdl.base.modulator, 0, 0.0, 0.0, 1, 0);
     self->sim.mdl = &self->mdl.base;
     self->sim.ctrl = &self->ctrl.base;
@@ -170,90 +158,12 @@ void system_free(System *self)
     }
 }
 
-/* GradNet from its parameters (export_gradnet of motulator_export.plecs.sm) */
-void gradnet_set(GradNet *net, int in_dim, int mu_dim, int embed_dim, const double *W,
-                 const double *b, const double *mu_log, const double *bias,
-                 int activation, double beta_log, int p, double in_base,
-                 double out_base)
-{
-    net->in_dim = in_dim;
-    net->mu_dim = mu_dim;
-    net->embed_dim = embed_dim;
-    for (int j = 0; j < embed_dim; j++) {
-        for (int k = 0; k < in_dim; k++) {
-            net->W[j][k] = W[in_dim * j + k];
-        }
-        net->b[j] = b[j];
-    }
-    for (int k = 0; k < in_dim; k++) {
-        net->mu_log[k] = (k < mu_dim) ? mu_log[k] : 0.0;
-        net->bias[k] = bias[k];
-    }
-    net->activation = (GradNetActivation)activation;
-    net->beta_log = beta_log;
-    net->p = p;
-    net->in_base = in_base;
-    net->out_base = out_base;
-}
 
-/* System model: SynchronousMachine with SynchronousMachinePars */
-void set_machine(System *self, double n_p, double R_s, double L_d, double L_q,
-                 double psi_f)
-{
-    SynchronousMachine *machine = &self->mdl.machine;
-    machine->n_p = n_p;
-    machine->R_s = R_s;
-    machine->harmonics = 0;
-    machine->L_d = L_d;
-    machine->L_q = L_q;
-    machine->psi_f = psi_f;
-}
 
-/* GradNet current map of the machine, set by gradnet_set */
-GradNet *machine_current_map(System *self)
-{
-    return &self->mdl.machine.current_map;
-}
 
-/* SynchronousMachine with SpatialSaturatedSynchronousMachinePars: the current map
- * with spatial harmonics of order k (CurrentMapWithHarmonics), set by
- * machine_current_map */
-void set_machine_current_map(System *self, double n_p, double R_s, int k)
-{
-    SynchronousMachine *machine = &self->mdl.machine;
-    machine->n_p = n_p;
-    machine->R_s = R_s;
-    machine->harmonics = 1;
-    machine->k = k;
-}
 
-/* MechanicalSystem with a constant friction coefficient */
-void set_mechanics(System *self, double J, double B_L)
-{
-    self->mdl.mechanics.J = J;
-    self->mdl.mechanics.B_L = B_L;
-}
 
-/* External load torque of the mechanics, set by signal_steps or signal_function */
-Signal *load_torque(System *self)
-{
-    return &self->mdl.mechanics.tau_L;
-}
 
-/* VoltageSourceConverter with a constant DC-bus voltage */
-void set_converter(System *self, double u_dc, double u_th)
-{
-    self->mdl.base.converter.u_dc = u_dc;
-    self->mdl.base.converter.u_th = u_th;
-}
-
-/* PWM model (CarrierComparison if carrier is nonzero, else ZOH) and the delay of the
- * model, see modulator_init */
-void set_modulator(System *self, int carrier, double N, double t_d, int delay,
-                   int single_update)
-{
-    modulator_init(&self->mdl.base.modulator, carrier, N, t_d, delay, single_update);
-}
 
 /* Machine model of the control system: SynchronousMachinePars */
 void set_control_machine(System *self, double n_p, double R_s, double L_d, double L_q,
@@ -307,17 +217,12 @@ void set_speed_controller(System *self, double k_p, double k_t, double alpha_i,
     pi_init(&self->speed_ctrl, k_p, k_t, alpha_i, u_max);
 }
 
-/* PWM of the control system: the overmodulation (MME if mme is nonzero, else MPE),
- * the duty-ratio error model InverterNonlinearity(t_d, u_th, sign) with sign =
- * tanh(i/i_0), or np.sign if i_0 = 0, with its feedforward compensation, the minimum
- * duty ratio, and the single update */
+/* PWM of the control system, see native_pwm_settings */
 void set_pwm(System *self, int mme, double t_d, double u_th, double i_0,
              int feedforward, double d_min, int single_update)
 {
-    pwm_set_overmodulation(&self->pwm, mme);
-    pwm_set_nonlinearity(&self->pwm, t_d, u_th, i_0, feedforward);
-    pwm_set_min_pulse(&self->pwm, d_min);
-    pwm_set_single_update(&self->pwm, single_update);
+    native_pwm_settings(&self->pwm, mme, t_d, u_th, i_0, feedforward, d_min,
+                        single_update);
 }
 
 /* Speed reference, set by signal_steps or signal_function */
@@ -335,12 +240,7 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
     FluxVectorControlSystem *ctrl = &self->ctrl;
     vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
                                self->speed_ctrl);
-    PWM *pwm = &ctrl->ctrl.pwm;
-    pwm_set_overmodulation(pwm, self->pwm.mme);
-    pwm_set_nonlinearity(pwm, self->pwm.t_d, self->pwm.u_th, self->pwm.i_0,
-                         self->pwm.feedforward);
-    pwm_set_min_pulse(pwm, self->pwm.d_min);
-    pwm_set_single_update(pwm, self->pwm.single_update);
+    native_pwm_copy_settings(&ctrl->ctrl.pwm, &self->pwm);
     ctrl->t = t_ctrl;
 
     double complex x[SIM_MAX_STATES];

@@ -13,10 +13,16 @@ from motulator.common.model._simulation import SimulationResults
 from tqdm import tqdm
 
 from motulator_export.native._system import ERRORS, NativeSystem
+from motulator_export.native.grid import GridConverterNativeSystem
+from motulator_export.native.im import InductionMachineDriveSystem
 from motulator_export.native.sm import SynchronousMachineDriveSystem
 
 # Supported systems, each with the class method `supports(mdl, ctrl)`
-SYSTEMS = [SynchronousMachineDriveSystem]
+SYSTEMS = [
+    SynchronousMachineDriveSystem,
+    InductionMachineDriveSystem,
+    GridConverterNativeSystem,
+]
 
 # Number of runs between the updates of the progress bar
 _CHUNKS = 100
@@ -73,7 +79,8 @@ class Simulation:
         system = next((s for s in SYSTEMS if s.supports(mdl, ctrl)), None)
         if system is None:
             raise NotImplementedError(
-                "Only synchronous machine drives with flux-vector control supported"
+                "Only machine drives (Drive) and grid converter systems "
+                "(GridConverterSystem) supported"
             )
         system.check_supported(mdl, ctrl)
         self._solver_cfg = _solver_cfg(self.cfg)
@@ -106,10 +113,11 @@ class Simulation:
         if N_eval < 0:
             raise ValueError("N_eval must be nonnegative")
         mdl, ctrl = self.mdl, self.ctrl
-        if self._system is None:
-            self._system = self._system_type(mdl, ctrl)
-            self._system.start(mdl, self._t_start, ctrl.t, self._solver_cfg)
         system = self._system
+        if system is None:
+            system = self._system_type(mdl, ctrl)
+            system.start(mdl, self._t_start, ctrl.t, self._solver_cfg)
+            self._system = system
         system.set_signals(mdl, ctrl)
 
         progress_bar = None
@@ -200,6 +208,8 @@ def _fields(fields: list[str], data: np.ndarray) -> list[tuple[str, str, Any]]:
         group, name = path.split(".")
         if kind == "c":  # Complex
             width, values = 2, data[:, col] + 1j * data[:, col + 1]
+        elif kind == "n":  # None, not logged
+            width, values = 0, [None] * len(data)
         elif kind == "b":  # Bool
             width, values = 1, data[:, col] != 0
         elif kind:  # Array, as rows

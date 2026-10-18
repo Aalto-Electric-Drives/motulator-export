@@ -3,6 +3,7 @@
  * ported from motulator. See sim.h.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "sim.h"
@@ -397,9 +398,89 @@ static void converter_set_gate_signals(VoltageSourceConverter *self,
     self->s_c_ab = abc2complex(s_abc);
 }
 
-static double complex converter_voltage(const VoltageSourceConverter *self)
+static double complex converter_voltage(const VoltageSourceConverter *self,
+                                        double u_dc)
 {
-    return self->q_c_ab * self->u_dc - self->u_th * self->s_c_ab;
+    return self->q_c_ab * u_dc - self->u_th * self->s_c_ab;
+}
+
+static double converter_dc_current(const VoltageSourceConverter *self,
+                                   double complex i_c_ab)
+{
+    return 1.5 * creal(self->q_c_ab * conj(i_c_ab));
+}
+
+/* DC bus ------------------------------------------------------------------- */
+
+static int dc_bus_states(const DCBus *self)
+{
+    switch (self->type) {
+    case DC_BUS_CAPACITOR:
+        return 1;
+    case DC_BUS_DIODE_BRIDGE:
+        return 3;
+    default:
+        return 0;
+    }
+}
+
+static const char *dc_bus_state_names(const DCBus *self)
+{
+    switch (self->type) {
+    case DC_BUS_CAPACITOR:
+        return "u_dc";
+    case DC_BUS_DIODE_BRIDGE:
+        return "u_dc i_L exp_j_theta_g";
+    default:
+        return "";
+    }
+}
+
+static double dc_bus_voltage(const DCBus *self, const double complex *x, double u_dc)
+{
+    return (self->type == DC_BUS_NONE) ? u_dc : creal(x[0]);
+}
+
+static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_int,
+                       double complex *dx)
+{
+    /* Net current fed to the capacitor (DCBus.compute_dc_current), without an
+     * external DC current */
+    double i_dc = 0.0 - i_dc_int;
+    if (self->type == DC_BUS_CAPACITOR) {
+        dx[0] = i_dc / self->C_dc;
+    } else if (self->type == DC_BUS_DIODE_BRIDGE) {
+        /* Output voltage of the diode bridge (DiodeBridgeDCBus.compute_voltages) */
+        double u_g_abc[3];
+        complex2abc(self->u_g * x[2], u_g_abc);
+        double u_max = fmax(fmax(u_g_abc[0], u_g_abc[1]), u_g_abc[2]);
+        double u_min = fmin(fmin(u_g_abc[0], u_g_abc[1]), u_g_abc[2]);
+        double u_di = u_max - u_min;
+        double i_L = creal(x[1]);
+        dx[0] = (i_L + i_dc) / self->C_dc;
+        double d_i_L = (u_di - creal(x[0])) / self->L_dc;
+        /* The inductor current cannot be negative due to the diode bridge */
+        if (i_L < 0.0 && d_i_L < 0.0) {
+            d_i_L = 0.0;
+        }
+        dx[1] = d_i_L;
+        dx[2] = I * self->w_g * x[2];
+    }
+}
+
+/* Model -------------------------------------------------------------------- */
+
+static double model_dc_voltage(const Model *self, const double complex *x)
+{
+    return dc_bus_voltage(&self->dc_bus, x, self->converter.u_dc);
+}
+
+static void model_state_names(const Model *self, const char *names, char *buffer,
+                              int size)
+{
+    const char *dc_bus = dc_bus_state_names(&self->dc_bus);
+    snprintf(buffer, (size_t)size, "%s%s%s", dc_bus, (*dc_bus != '\0') ? " " : "",
+             names);
 }
 
 /* Logs --------------------------------------------------------------------- */
@@ -434,8 +515,8 @@ static void log_free(Log *self)
 }
 
 /* Number of doubles in a row of the logged fields, given as space-separated names
- * with the suffixes ":c" (complex, two doubles), ":b" (bool, one double), or ":<n>"
- * (an array of n doubles), plus one for the time */
+ * with the suffixes ":c" (complex, two doubles), ":b" (bool, one double), ":n" (None,
+ * not logged), or ":<n>" (an array of n doubles), plus one for the time */
 static int log_fields_width(const char *fields)
 {
     int width = 1;
@@ -455,6 +536,8 @@ static int log_fields_width(const char *fields)
             p++;
             if (*p == 'c') {
                 n = 2;
+            } else if (*p == 'n') {
+                n = 0;
             } else if (*p >= '0' && *p <= '9') {
                 n = (int)strtol(p, NULL, 10);
             }
@@ -599,7 +682,7 @@ static int simulation_run(Simulation *self, double t_stop, int N_eval)
         if (due) {
             /* Control, computational delay, and PWM */
             double T_s, d_abc[3];
-            int status = self->ctrl->run(self->ctrl, mdl, self->x, &T_s, d_abc);
+            int status = self->ctrl->run(self->ctrl, mdl, t0, self->x, &T_s, d_abc);
             if (status != SIM_OK) {
                 return status;
             }
@@ -730,4 +813,34 @@ void signal_function(Signal *self, SignalFunction fcn)
 int signal_max_steps(void)
 {
     return SIGNAL_MAX_STEPS;
+}
+
+/* VoltageSourceConverter: the DC-bus voltage u_dc (constant, without a DC-bus model)
+ * and the threshold voltage u_th */
+void set_converter(Simulation *self, double u_dc, double u_th)
+{
+    self->mdl->converter.u_dc = u_dc;
+    self->mdl->converter.u_th = u_th;
+}
+
+/* PWM model (CarrierComparison if carrier is nonzero, else ZOH) and the delay of the
+ * model, see modulator_init */
+void set_modulator(Simulation *self, int carrier, double N, double t_d, int delay,
+                   int single_update)
+{
+    modulator_init(&self->mdl->modulator, carrier, N, t_d, delay, single_update);
+}
+
+/* DC-bus model (DC_BUS_NONE, DC_BUS_CAPACITOR, or DC_BUS_DIODE_BRIDGE) with its
+ * parameters (see DCBus), updating the states of the model */
+void set_dc_bus(Simulation *self, int type, double C_dc, double L_dc, double u_g,
+                double w_g)
+{
+    DCBus *dc_bus = &self->mdl->dc_bus;
+    dc_bus->type = type;
+    dc_bus->C_dc = C_dc;
+    dc_bus->L_dc = L_dc;
+    dc_bus->u_g = u_g;
+    dc_bus->w_g = w_g;
+    self->mdl->init_states(self->mdl);
 }

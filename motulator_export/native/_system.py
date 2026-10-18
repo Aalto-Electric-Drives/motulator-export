@@ -3,10 +3,11 @@ Systems in the native libraries.
 
 A native library (`c/native_<name>.c`) holds a system: a model and a control system
 with their simulation. The libraries share the API of `c/sim.c` (the simulation, its
-logs, and the signals) and provide `system_new`, `system_free`, and `start`, while
-their functions setting the parameters are specific to the system (e.g.,
-`c/native_sm.c`). `NativeSystem` wraps a system of a library, and its subclasses set
-the parameters from the motulator objects.
+logs, the signals, and the converter with its DC bus and modulator) and provide
+`system_new`, `system_free`, and `start`, while their other functions setting the
+parameters are specific to the model (e.g., `c/drive.c`) and the control system
+(e.g., `c/native_sm.c`). `NativeSystem` wraps a system of a library, and its
+subclasses set the parameters from the motulator objects.
 
 """
 
@@ -19,9 +20,21 @@ from typing import Any
 import numpy as np
 from motulator.common.model import SolverCfg
 from motulator.common.model._base import Model
+from motulator.common.model._converter import (
+    DCBus,
+    DiodeBridgeDCBus,
+    VoltageSourceConverter,
+)
+from motulator.common.model._pwm import ZOH, CarrierComparison
 
 from motulator_export.native._build import Signatures, declare, load_library
-from motulator_export.plecs._common import StepSignal
+from motulator_export.plecs._common import (
+    StepSignal,
+    _c_define,
+    _check_supported_pwm,
+    gate_enable,
+)
+from motulator_export.plecs._control import pwm_values
 
 c_double_p = ctypes.POINTER(ctypes.c_double)
 c_int = ctypes.c_int
@@ -45,6 +58,17 @@ API: Signatures = {
     "signal_steps": (None, [c_void_p, c_double, c_int, c_double_p, c_double_p]),
     "signal_function": (None, [c_void_p, SignalFunction]),
     "signal_max_steps": (c_int, []),
+    "set_converter": (None, [c_void_p, c_double, c_double]),
+    "set_modulator": (None, [c_void_p, c_int, c_double, c_double, c_int, c_int]),
+    "set_dc_bus": (None, [c_void_p, c_int] + [c_double] * 4),
+}
+
+# Function setting the PWM of the control system, in the libraries with a PWM
+PWM_API: Signatures = {
+    "set_pwm": (
+        None,
+        [c_void_p, c_int, c_double, c_double, c_double, c_int, c_double, c_int],
+    )
 }
 
 # Function setting a GradNet, in the libraries using them
@@ -55,6 +79,10 @@ GRADNET_API: Signatures = {
         + [c_double_p, c_int, c_double, c_int, c_double, c_double],
     )
 }
+
+DELAY_MAX_LENGTH = _c_define("sim.h", "DELAY_MAX_LENGTH")
+# Types of the DC-bus models (DC_BUS_* in sim.h)
+DC_BUS_TYPES = {DCBus: 1, DiodeBridgeDCBus: 2}
 
 # Status codes of the simulation (SIM_ERROR_* in sim.h)
 ERRORS = {
@@ -164,6 +192,40 @@ class NativeSystem:
             g["out_base"],
         )
 
+    def set_converter(self, mdl: Model) -> None:
+        """Set the converter, its DC bus, and its modulator from the model."""
+        lib, h, converter = self.lib, self.handle, mdl.converter
+        lib.set_converter(h, value(converter.u_dc), converter.u_th)
+        dc_bus = mdl.dc_bus
+        if dc_bus is not None:
+            bridge = dc_bus if isinstance(dc_bus, DiodeBridgeDCBus) else None
+            lib.set_dc_bus(
+                h,
+                DC_BUS_TYPES[type(dc_bus)],
+                dc_bus.C_dc,
+                nan if bridge is None else bridge.L_dc,
+                nan if bridge is None else bridge.u_g,
+                nan if bridge is None else bridge.w_g,
+            )
+        pwm = mdl.pwm
+        N = pwm.N if isinstance(pwm, CarrierComparison) else 0
+        delay = len(mdl.delay.data)
+        lib.set_modulator(h, N > 0, N, pwm.t_d, delay, mdl.single_update)
+
+    def set_pwm(self, pwm: Any) -> None:
+        """Set the PWM of the control system, in a library of `PWM_API`."""
+        v = pwm_values(pwm)
+        self.lib.set_pwm(
+            self.handle,
+            v["pwm_overmodulation"] == "MME",
+            v["pwm_t_d"],
+            v["pwm_u_th"],
+            v["pwm_i_0"],
+            v["pwm_feedforward"],
+            v["pwm_d_min"],
+            v["pwm_single_update"],
+        )
+
     def start(self, mdl: Model, t_start: float, t_ctrl: float, cfg: SolverCfg) -> None:
         """
         Start the simulation from the time and the states of the model, with the first
@@ -214,3 +276,61 @@ class NativeSystem:
         data = np.ctypeslib.as_array(self.lib.log_data(log), shape=(rows, width)).copy()
         self.lib.log_clear(log)
         return data
+
+
+def check_supported_converter(mdl: Model) -> None:
+    """
+    Raise an error if the converter, its DC bus, its PWM model, or the delay is not
+    supported.
+    """
+    converter, pwm, dc_bus = mdl.converter, mdl.pwm, mdl.dc_bus
+    if type(converter) is not VoltageSourceConverter or converter.sign is not np.sign:
+        raise NotImplementedError(
+            "Only VoltageSourceConverter with sign=np.sign supported"
+        )
+    if converter.u_dc_sensor is not None:
+        raise NotImplementedError("Sensor models not supported")
+    if dc_bus is None and converter.u_dc is None:
+        raise ValueError(
+            "The DC-bus voltage must be given, unless the converter is fed from a "
+            "DC-bus model"
+        )
+    if dc_bus is not None:
+        if type(dc_bus) not in DC_BUS_TYPES:
+            raise NotImplementedError("Only DCBus and DiodeBridgeDCBus supported")
+        if dc_bus.converters != [converter]:
+            raise NotImplementedError(
+                "DC bus shared with other converters not supported"
+            )
+        if dc_bus.inp.i_dc is not None:
+            raise NotImplementedError("External DC current not supported")
+    if type(pwm) not in (ZOH, CarrierComparison):
+        raise NotImplementedError(
+            "Only the PWM models ZOH and CarrierComparison supported"
+        )
+    delay = mdl.delay.data
+    if len(delay) > DELAY_MAX_LENGTH:
+        raise NotImplementedError(f"At most the delay {DELAY_MAX_LENGTH} supported")
+    initial = not np.any(delay)
+    if isinstance(pwm, CarrierComparison):
+        initial &= pwm._rising_edge and pwm._command is None
+    if not initial:
+        raise NotImplementedError("Only the initial state of the PWM model supported")
+
+
+def check_supported_control(ctrl: Any, d_err: bool) -> None:
+    """
+    Raise an error if the PWM of the control system is not supported (the duty-ratio
+    error model only if `d_err`, and then without the minimum pulses if compensated)
+    or the gates are blocked.
+    """
+    _check_supported_pwm(ctrl, d_err=d_err)
+    pwm = ctrl.pwm
+    pwm_values(pwm)  # Raises if the duty-ratio error model is not supported
+    if pwm.d_err is not None and pwm.feedforward and pwm.d_min > 0:
+        raise NotImplementedError(
+            "Minimum pulses (d_min) with the compensation of the duty-ratio error not "
+            "supported"
+        )
+    if gate_enable(ctrl) != 1:
+        raise NotImplementedError("Gate blocking (set_enable) not supported")

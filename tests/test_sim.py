@@ -33,7 +33,8 @@ static void vdp_rhs(const Model *self, double t, const double complex *x,
     (void)t;
     dx[0] = x[1];
     dx[1] = 5.0 * (1.0 - x[0] * x[0]) * x[1] - x[0];
-    dx[2] = (-1.0 + 10.0 * I) * x[2] + x[0] + converter_voltage(&self->converter);
+    dx[2] = (-1.0 + 10.0 * I) * x[2] + x[0] +
+            converter_voltage(&self->converter, self->converter.u_dc);
 }
 
 static double complex zero_current(const Model *self, const double complex *x)
@@ -55,10 +56,11 @@ typedef struct {
     double T_s;
 } Control;
 
-static int control_run(ControlSystem *base, const Model *mdl, const double complex *x,
-                       double *T_s, double d_abc[3])
+static int control_run(ControlSystem *base, const Model *mdl, double t,
+                       const double complex *x, double *T_s, double d_abc[3])
 {
     (void)mdl;
+    (void)t;
     (void)x;
     *T_s = ((Control *)base)->T_s;
     for (int k = 0; k < 3; k++) {
