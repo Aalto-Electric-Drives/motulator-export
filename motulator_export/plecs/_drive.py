@@ -15,7 +15,7 @@ from motulator.common.model._converter import (
 )
 from motulator.common.model._pwm import CarrierComparison
 from motulator.common.utils._utils import wrap
-from motulator.drive.control._base import VectorControlSystem
+from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._common import SpeedController
 from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
 
@@ -29,8 +29,9 @@ from motulator_export.plecs._common import (
     _check_delay,
     _check_initial_states,
     _check_supported_pwm,
+    reference,
 )
-from motulator_export.plecs._schematic import _probe, _Schematic, _scope
+from motulator_export.plecs._schematic import _fmt, _probe, _Schematic, _scope
 
 # Machine signals in the output port "mdl"
 MDL_OUTPUTS = ["i_a", "i_b", "i_c", "w_M", "theta_M", "tau_M"]
@@ -147,28 +148,51 @@ def _check_supported_speed_control(
     _check_supported_pwm(ctrl, d_err=dead_time)
 
 
-def speed_ctrl_values(
-    ctrl: VectorControlSystem, speed_ctrl_args: dict[str, float]
-) -> dict[str, Any]:
+def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     """
     Get the parameter values of the speed controller (the struct speed_ctrl of the
-    model initialization).
+    model initialization): the arguments of `SpeedController`, whose gains must be
+    those of the arguments (the exported controller computes its gains from them).
 
-    The speed controller stores only the resulting gains, so the arguments given to
-    `SpeedController` are needed. They are checked against the gains of `ctrl`.
+    The controller stores the integral action bandwidth as the ratio of its gains,
+    which may differ from the argument by a rounding error. The default (None, i.e.,
+    `alpha_s`) is exported as None if it gives the gains of the controller, so that
+    the exported controller computes the same gains as motulator.
 
     """
     speed_ctrl = cast(SpeedController, ctrl.speed_ctrl)
-    ref = SpeedController(**speed_ctrl_args)
-    for attr in ("k_p", "k_t", "alpha_i", "u_max"):
-        if getattr(ref, attr) != getattr(speed_ctrl, attr):
-            raise ValueError(f"speed_ctrl_args do not match the controller: {attr}")
+    J, alpha_s, u_max = speed_ctrl.J, speed_ctrl.alpha_s, speed_ctrl.u_max
+    gains = (speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i)
+    default = SpeedController(J, alpha_s, None, u_max)
+    alpha_i = None
+    if gains != (default.k_p, default.k_t, default.alpha_i):
+        alpha_i = speed_ctrl.alpha_i
+        given = SpeedController(J, alpha_s, alpha_i, u_max)
+        if not np.allclose((given.k_p, given.k_t, given.alpha_i), gains, rtol=1e-12):
+            raise NotImplementedError(
+                "The gains of the speed controller must be those of its arguments "
+                "(SpeedController), which the exported controller has"
+            )
     return {
-        "speed_J": speed_ctrl_args["J"],
-        "speed_alpha_s": speed_ctrl_args["alpha_s"],
-        "speed_alpha_i": speed_ctrl_args.get("alpha_i"),
-        "speed_tau_M_max": speed_ctrl_args.get("tau_M_max", float("inf")),
+        "speed_J": J,
+        "speed_alpha_s": alpha_s,
+        "speed_alpha_i": alpha_i,
+        "speed_tau_M_max": u_max,
     }
+
+
+def drive_references(
+    mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem, T_s: float
+) -> tuple[StepSignal | float, StepSignal | float]:
+    """
+    Speed reference and load torque of the drive, read from the control system
+    (`set_speed_ref`) and the mechanics (`set_external_load_torque`): constants or
+    `StepSignal` objects, the speed reference sampled to switch at the same sampling
+    instant as in motulator (the load torque acts in continuous time).
+    """
+    w_M_ref = reference(ctrl.ext_ref.w_M, "speed reference", T_s)
+    tau_L = reference(cast(MechanicalSystem, mdl.mechanics).inp.tau_L, "load torque")
+    return w_M_ref, tau_L
 
 
 def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
@@ -247,7 +271,7 @@ MACHINE_TERMINALS = [
 ]
 
 
-def _add_mechanics(sch: _Schematic, tau_L: StepSignal, inertia: bool) -> None:
+def _add_mechanics(sch: _Schematic, tau_L: StepSignal | float, inertia: bool) -> None:
     """Add the load torque (and the inertia, if not included in the machine)."""
     x_f, y_f = MACH[0] + 30, MACH[1] + 30  # Flange of the machine
     y_load = y_f + 90 if inertia else y_f + 50
@@ -267,9 +291,13 @@ def _add_mechanics(sch: _Schematic, tau_L: StepSignal, inertia: bool) -> None:
         sch.connect(("Inertia", 2), ("Load", 3), "Rotational")
     else:
         sch.connect(("Machine", 4), ("Load", 3), "Rotational")
-    # Several steps are summed by a Gain block in front of the load
-    x_step = x_f - 70 if np.isscalar(tau_L.time) else x_f - 120
-    load_torque = _add_step(sch, "tau_L", tau_L, (x_step, y_load))
+    if isinstance(tau_L, StepSignal):
+        # Several steps are summed by a Gain block in front of the load
+        x_step = x_f - 70 if np.isscalar(tau_L.time) else x_f - 120
+        load_torque = _add_step(sch, "tau_L", tau_L, (x_step, y_load))
+    else:
+        sch.component("Constant", "tau_L", (x_f - 70, y_load), {"Value": _fmt(tau_L)})
+        load_torque = ("tau_L", 1)
     sch.component(
         "ControlledTorque",
         "Load",

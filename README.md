@@ -29,7 +29,7 @@ The same C code also runs natively: `native.Simulation` simulates a *motulator* 
 
 ## Requirements
 
-- Python 3.12 or later. The package installs *motulator* 0.15.1 or a later 0.15 release.
+- Python 3.12 or later. The package installs *motulator* 0.15.2 or a later 0.15 release.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
 - **Native simulation**: a C compiler that supports `complex.h`, by default gcc (or the compiler given by the environment variable `CC`, e.g., clang).
 - **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks (`code="matlab"`) need no C compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
@@ -74,25 +74,23 @@ mdl = model.Drive(
     model.VoltageSourceConverter(u_dc=540),
     pwm=True,
 )
-speed_ctrl_args = {"J": 0.015, "alpha_s": 25.0}  # Arguments of SpeedController
 ctrl = control.VectorControlSystem(
     control.FluxVectorController(par, control.FluxVectorControllerCfg(i_s_max=6.5)),
-    control.SpeedController(**speed_ctrl_args),
+    control.SpeedController(J=0.015, alpha_s=25.0),
 )
 
-# References and the load torque as step signals, and the stop time (s)
-w_M_ref = StepSignal(time=0.1, after=50.0)  # Speed reference (mechanical rad/s)
-tau_L = StepSignal(time=0.7, after=10.0)  # Load torque (Nm)
-plecs.sm.write_model("ipmsm.plecs", mdl, ctrl, w_M_ref, tau_L, 1.2, speed_ctrl_args)
-simulink.sm.write_model("ipmsm.slx", mdl, ctrl, w_M_ref, tau_L, 1.2, speed_ctrl_args)
+# The speed reference and the load torque as step signals (or constants), as in
+# motulator, and the stop time (s)
+ctrl.set_speed_ref(StepSignal(time=0.1, after=50.0))  # Mechanical rad/s
+mdl.mechanics.set_external_load_torque(StepSignal(time=0.7, after=10.0))  # Nm
+plecs.write_model("ipmsm.plecs", mdl, ctrl, t_stop=1.2)
+simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2)
 ```
 
 This writes the PLECS model `ipmsm.plecs` and, for Simulink, the scripts `build_ipmsm.m` and `init_ipmsm.m` with the C sources of the S-functions (`sfun_*.c`) in the same folder.
-With `simulink.sm.write_model(..., code="matlab")`, the Simulink model has MATLAB Function blocks instead: their functions (`mfun_*.m`) are written in the folder, and the build script copies them into the model.
-The speed controller of *motulator* stores only its gains, so its arguments are given (`speed_ctrl_args`).
-V/Hz control (`control.VHzControlSystem`, see `examples/im_2kw_vhz.py`) has no speed controller: `plecs.im.write_model("im_vhz.plecs", mdl, ctrl, w_M_ref, tau_L, 1.6)`.
-
-The modules `sm` (synchronous machine drives), `im` (induction machine drives), and `grid` (grid converter systems) are the same in `plecs` and `simulink`.
+With `simulink.write_model(..., code="matlab")`, the Simulink model has MATLAB Function blocks instead: their functions (`mfun_*.m`) are written in the folder, and the build script copies them into the model.
+`write_model` recognizes the system: a drive with a synchronous or an induction machine (with a speed controller, or V/Hz control, see `examples/im_2kw_vhz.py`), or a grid converter system, whose references are the active power reference (`set_power_ref`) and the reactive power reference (`set_reactive_power_ref`) or the AC voltage reference (`set_ac_voltage_ref`).
+The references, the load torque, and the gate enable (`set_enable`) are read from the control system and the system model: constants or `StepSignal` objects, which the models have as Constant and Step blocks (a function of time cannot be exported). The references of the control system switch at the same sampling instants as in *motulator*, although the sampling times of *motulator* accumulate rounding errors.
 A system that is not supported raises `NotImplementedError`, and an invalid argument `ValueError`, before any file is written.
 
 The models start from the state of the system model. A drive can start at a given speed (e.g., `mdl.mechanics.state.w_M = 50.0`), but the other states (e.g., the flux linkages of the machine) are not exported, so write the models before simulating the system in *motulator*.
@@ -106,15 +104,11 @@ import numpy as np
 
 t_eval = np.linspace(0, 1.2, 1201)
 # PLECS: the model needs the output ports (outputs=True), and PLECS the RPC interface
-path = plecs.sm.write_model(
-    "ipmsm_out.plecs", mdl, ctrl, w_M_ref, tau_L, 1.2, speed_ctrl_args, outputs=True
-)
-mdl_signals, ctrl_signals = plecs.sm.simulate(path, t_eval)
+path = plecs.write_model("ipmsm_out.plecs", mdl, ctrl, t_stop=1.2, outputs=True)
+mdl_signals, ctrl_signals = plecs.simulate(path, t_eval, mdl, ctrl)
 # Simulink: builds the model with the MATLAB Engine API and simulates it
-mdl_signals, ctrl_signals = simulink.sm.simulate("ipmsm.slx", t_eval)
+mdl_signals, ctrl_signals = simulink.simulate("ipmsm.slx", t_eval, mdl, ctrl)
 ```
-
-The controller of *motulator* evaluates the references at its sampling instants, whose times accumulate rounding errors, so a step at a sampling instant may switch at a different sample than in the tools. For an exact comparison, `sampled_step(sig, T_s)` gives the step that switches at the same sample as in *motulator*, as the example scripts use.
 
 ## Native simulation
 

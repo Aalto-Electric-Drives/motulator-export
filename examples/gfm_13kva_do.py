@@ -26,8 +26,7 @@ from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import control, model, utils
 
-from motulator_export import StepSignal, sampled_step
-from motulator_export.plecs import grid
+from motulator_export import StepSignal, plecs
 
 T_STOP = 1.4
 nom = utils.NominalValues(U=400, I=18, f=50, P=12.5e3)
@@ -66,32 +65,20 @@ def build_system() -> tuple[
 # %%
 if __name__ == "__main__":
     mdl, ctrl = build_system()
-    T_s = cast(control.ObserverBasedGridFormingController, ctrl.inner_ctrl).T_s
-    p_g_ref = sampled_step(P_G_REF, T_s)
-    path = grid.write_model(
-        Path(__file__).with_name("gfm_13kva_do.plecs"),
-        mdl,
-        ctrl,
-        T_STOP,
-        p_g_ref=p_g_ref,
-        v_c_ref=V_C_REF,
+    ctrl.set_ac_voltage_ref(V_C_REF)
+    ctrl.set_power_ref(P_G_REF)
+    path = plecs.write_model(
+        Path(__file__).with_name("gfm_13kva_do.plecs"), mdl, ctrl, T_STOP
     )
     print(f"Wrote {path}")
     # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = grid.write_model(
-        path.with_stem(path.stem + "_tmp"),
-        mdl,
-        ctrl,
-        T_STOP,
-        p_g_ref=p_g_ref,
-        v_c_ref=V_C_REF,
-        outputs=True,
+    tmp = plecs.write_model(
+        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
     )
     atexit.register(tmp.unlink, missing_ok=True)
 
     # Simulate in motulator with tight tolerances
-    ctrl.set_ac_voltage_ref(V_C_REF)
-    ctrl.set_power_ref(P_G_REF)
+    T_s = cast(control.ObserverBasedGridFormingController, ctrl.inner_ctrl).T_s
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     res = sim.simulate(t_stop=T_STOP)
     in_mdl = res.mdl.t <= T_STOP
@@ -103,7 +90,7 @@ if __name__ == "__main__":
     t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
     t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
     try:
-        plecs_mdl, plecs_ctrl = grid.simulate(tmp, t_eval, mdl, ctrl)
+        plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t_eval, mdl, ctrl)
     except ConnectionRefusedError:
         print("PLECS RPC interface not available, skipping the comparison.")
         sys.exit()

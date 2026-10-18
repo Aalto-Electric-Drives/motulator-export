@@ -20,7 +20,9 @@ from motulator.common.control._pwm import PWM
 from motulator.common.model._base import Model
 from motulator.common.model._converter import DCBus, DiodeBridgeDCBus
 from motulator.drive.control._base import DriveControlSystem
+from motulator.drive.model import Drive, InductionMachine, SynchronousMachine
 from motulator.grid.control._base import GridConverterControlSystem
+from motulator.grid.model import GridConverterSystem
 
 from motulator_export.plecs._netlist import Subsystem
 from motulator_export.plecs._render import schematic
@@ -94,6 +96,8 @@ class StepSignal:
         times, afters = np.atleast_1d(self.time), np.atleast_1d(self.after)
         if times.ndim != 1 or times.size == 0 or times.shape != afters.shape:
             raise ValueError("time and after must have the same number of steps")
+        if not np.all(np.isfinite([*times, self.before, *afters])):
+            raise ValueError("The step times and the levels must be finite")
         if not np.all(np.isfinite(times)) or np.any(np.diff(times) < 0):
             raise ValueError("The step times must be finite and increasing")
 
@@ -120,6 +124,8 @@ def sampled_step(sig: StepSignal, T_s: float) -> StepSignal:
         raise ValueError("The sampling period T_s must be positive and finite")
     times = []
     for time in np.atleast_1d(sig.time):
+        if not (np.isfinite(time) and time < 1e9):
+            raise ValueError("The step times must be finite and below 1e9 s")
         t, k = 0.0, 0
         while not t > time:
             t = (t + T_s) % 1e9  # As in ControlSystem.update of motulator
@@ -127,6 +133,55 @@ def sampled_step(sig: StepSignal, T_s: float) -> StepSignal:
         times.append((k - 0.5) * T_s)
     time = times[0] if np.isscalar(sig.time) else times
     return StepSignal(time=time, after=sig.after, before=sig.before)
+
+
+def reference(x: Any, name: str, T_s: float | None = None) -> StepSignal | float:
+    """
+    Reference signal (or load torque) of the exported model, read from the motulator
+    object: a constant or a `StepSignal`, which the model has as a Constant or a Step
+    block. A reference of the control system, which evaluates it at its sampling
+    instants, is sampled (`sampled_step`) to switch at the same sampling instant as
+    in motulator if the sampling period `T_s` is given.
+    """
+    if x is None:
+        raise ValueError(f"The {name} must be set")
+    if isinstance(x, StepSignal):
+        return sampled_step(x, T_s) if T_s is not None else x
+    if isinstance(x, (int, float, np.integer, np.floating)):
+        if not np.isfinite(x):
+            raise ValueError(f"The {name} must be finite")
+        return float(x)
+    raise NotImplementedError(
+        f"Only a constant {name} or a StepSignal supported (the model has a Constant "
+        "or a Step block)"
+    )
+
+
+def system_type(mdl: Any, ctrl: Any) -> str:
+    """
+    Type of the system: "sm" (a drive with a synchronous machine), "im" (a drive
+    with an induction machine), or "grid" (a grid converter system), with the control
+    system of its kind.
+    """
+    if isinstance(mdl, GridConverterSystem):
+        if not isinstance(ctrl, GridConverterControlSystem):
+            raise NotImplementedError(
+                "Only GridConverterControlSystem supported for a grid converter system"
+            )
+        return "grid"
+    if isinstance(mdl, Drive):
+        if not isinstance(ctrl, DriveControlSystem):
+            raise NotImplementedError(
+                "Only VectorControlSystem and VHzControlSystem supported for a drive"
+            )
+        if isinstance(mdl.machine, SynchronousMachine):
+            return "sm"
+        if isinstance(mdl.machine, InductionMachine):
+            return "im"
+    raise NotImplementedError(
+        "Only machine drives (Drive) with a synchronous or an induction machine and "
+        "grid converter systems (GridConverterSystem) supported"
+    )
 
 
 @dataclass
@@ -188,7 +243,7 @@ C_U_DC_MIN = (
     "#define U_DC_MIN 1.0\n"
 )
 
-# C-Script declarations for reading a GradNet from the parameters (sm.py only)
+# C-Script declarations for reading a GradNet from the parameters (_sm.py only)
 C_GRADNET_PARAMS = (
     "/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n"
     " * in the arrays of the C port (in the start function only, returns on error) */\n"
@@ -340,7 +395,7 @@ def _check_supported_pwm(
 
 
 def gate_enable(
-    ctrl: DriveControlSystem | GridConverterControlSystem,
+    ctrl: DriveControlSystem | GridConverterControlSystem, T_s: float | None = None
 ) -> StepSignal | float:
     """
     Get the gate enable of the control system (`ControlSystem.set_enable` of
@@ -348,8 +403,8 @@ def gate_enable(
 
     Only a constant gate enable (True or False, 1 or 0) or a `StepSignal` with the
     levels 0 and 1 is supported. The control system evaluates the gate enable at its
-    sampling instants, as in motulator; `sampled_step` gives a step switching at the
-    same sampling instant as in motulator.
+    sampling instants, so a step is sampled (`sampled_step`) to switch at the same
+    sampling instant as in motulator, if the sampling period `T_s` is given.
 
     """
     enable = ctrl._enable
@@ -357,7 +412,7 @@ def gate_enable(
         levels = [enable.before, *np.atleast_1d(enable.after)]
         if any(v not in (0, 1) for v in levels):
             raise ValueError("The levels of the gate enable must be 0 or 1")
-        return enable
+        return sampled_step(enable, T_s) if T_s is not None else enable
     if isinstance(enable, (bool, np.bool_, int, float)) and enable in (0, 1):
         return float(enable)
     raise NotImplementedError(

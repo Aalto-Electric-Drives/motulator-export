@@ -5,11 +5,11 @@ The control system runs the same C code as in the PLECS model: each class of *mo
 Alternatively (`code="matlab"` of `write_model`), the blocks of the classes are MATLAB Function blocks running the MATLAB port of the same code (`../matlab`), in the same hierarchy and with the same masks; these models need no C compiler, since Simulink compiles the MATLAB Function blocks itself, and they carry the code of their blocks in the model.
 The system model is built from basic Simulink blocks, so no toolboxes are needed.
 
-| Module | System                                                                                                                                                    | Example                                                                                                                                              |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm`   | Synchronous machine drive (`SynchronousMachinePars`, or a GradNet current map with spatial harmonics), flux-vector control (also with a GradNet flux map) | [ipmsm_2kw_fvc_simulink.py](../../examples/ipmsm_2kw_fvc_simulink.py), [pmsyrm_6kw_gn_fvc_simulink.py](../../examples/pmsyrm_6kw_gn_fvc_simulink.py) |
-| `im`   | Induction machine drive (constant parameters), current-vector control or observer-based V/Hz control (also open-loop V/Hz control)                        | [im_2kw_cvc_simulink.py](../../examples/im_2kw_cvc_simulink.py), [im_2kw_vhz_simulink.py](../../examples/im_2kw_vhz_simulink.py)                     |
-| `grid` | Grid converter system (LCL filter or L filter and grid inductance), grid-following or grid-forming control                                                | [gfl_10kva_lcl_simulink.py](../../examples/gfl_10kva_lcl_simulink.py), [gfm_13kva_do_simulink.py](../../examples/gfm_13kva_do_simulink.py)           |
+| System                                                                                                                                                    | Example                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Synchronous machine drive (`SynchronousMachinePars`, or a GradNet current map with spatial harmonics), flux-vector control (also with a GradNet flux map) | [ipmsm_2kw_fvc_simulink.py](../../examples/ipmsm_2kw_fvc_simulink.py), [pmsyrm_6kw_gn_fvc_simulink.py](../../examples/pmsyrm_6kw_gn_fvc_simulink.py) |
+| Induction machine drive (constant parameters), current-vector control or observer-based V/Hz control (also open-loop V/Hz control)                        | [im_2kw_cvc_simulink.py](../../examples/im_2kw_cvc_simulink.py), [im_2kw_vhz_simulink.py](../../examples/im_2kw_vhz_simulink.py)                     |
+| Grid converter system (LCL filter or L filter and grid inductance), grid-following or grid-forming control                                                | [gfl_10kva_lcl_simulink.py](../../examples/gfl_10kva_lcl_simulink.py), [gfm_13kva_do_simulink.py](../../examples/gfm_13kva_do_simulink.py)           |
 
 ## Usage
 
@@ -33,20 +33,21 @@ python examples/ipmsm_2kw_fvc_simulink.py --matlab
 
 This writes `build_ipmsm_2kw_fvc_matlab.m` and `init_ipmsm_2kw_fvc_matlab.m` and the MATLAB functions of the blocks (`mfun_fvc_*.m`), and the build script saves `ipmsm_2kw_fvc_matlab.slx`, whose blocks contain the code of the functions, so the model does not need the files.
 The models of the synchronous machine drives (with either code) also need the function `sm_reference_luts.m`, written next to the model, which the mask initialization of the `ReferenceGenerator` calls to compute the lookup tables of the loci.
-In your own scripts, pass `code="matlab"` to `write_model` (e.g., `simulink.sm.write_model("ipmsm.slx", ..., code="matlab")`); `simulate` is the same.
+In your own scripts, pass `code="matlab"` to `write_model` (e.g., `simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop, code="matlab")`); `simulate` is the same.
 
 ## Files
 
-| File                                     | Contents                                                                                                                                                                                         |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `_sfunction.py`                          | Generator of the S-functions from the code sections of a C-Script block                                                                                                                          |
-| `_mfunction.py`                          | Generator of the MATLAB functions of the MATLAB Function blocks from the MATLAB code of a block (`MCode`) and the MATLAB port, and of the masks collecting their parameters                      |
-| `_render.py`                             | Control systems: the S-functions (or the MATLAB functions) of the blocks and the netlist rows (blocks, alignments, lines, and masks) for `blocks.add_netlist`                                    |
-| `_common.py`                             | Writer of the build and initialization scripts (the struct `s` of the control system and the signals) and the simulation via the MATLAB Engine API                                               |
-| `_drive.py`, `sm.py`, `im.py`, `grid.py` | Writers of the drives and the grid converter systems: `write_model` writes the S-functions (or the MATLAB functions) and the scripts; `simulate` builds and runs the model                       |
-| `build_drive.m`                          | Builder of the drive models: the layout of the system and the machine subsystems                                                                                                                 |
-| `build_grid.m`                           | Builder of the grid converter models: the layout of the system, the AC filter, and the grid                                                                                                      |
-| `+blocks/`                               | MATLAB package of the common parts: the model settings, the compilation, the control-system subsystem, the MATLAB Function blocks, the PWM, the converter, the mechanics, and the layout helpers |
+| File                                        | Contents                                                                                                                                                                                         |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `_sfunction.py`                             | Generator of the S-functions from the code sections of a C-Script block                                                                                                                          |
+| `_mfunction.py`                             | Generator of the MATLAB functions of the MATLAB Function blocks from the MATLAB code of a block (`MCode`) and the MATLAB port, and of the masks collecting their parameters                      |
+| `_render.py`                                | Control systems: the S-functions (or the MATLAB functions) of the blocks and the netlist rows (blocks, alignments, lines, and masks) for `blocks.add_netlist`                                    |
+| `_common.py`                                | Writer of the build and initialization scripts (the struct `s` of the control system and the signals) and the simulation via the MATLAB Engine API                                               |
+| `_export.py`                                | `write_model` and `simulate` of the package for all the system types, dispatching to the writers below                                                                                           |
+| `_drive.py`, `_sm.py`, `_im.py`, `_grid.py` | Writers of the drives and the grid converter systems: `write_model` writes the S-functions (or the MATLAB functions) and the scripts; `simulate` builds and runs the model                       |
+| `build_drive.m`                             | Builder of the drive models: the layout of the system and the machine subsystems                                                                                                                 |
+| `build_grid.m`                              | Builder of the grid converter models: the layout of the system, the AC filter, and the grid                                                                                                      |
+| `+blocks/`                                  | MATLAB package of the common parts: the model settings, the compilation, the control-system subsystem, the MATLAB Function blocks, the PWM, the converter, the mechanics, and the layout helpers |
 
 ## S-function
 

@@ -30,8 +30,7 @@ import numpy as np
 from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.drive import model, utils
 
-from motulator_export import StepSignal, sampled_step
-from motulator_export.plecs import sm
+from motulator_export import StepSignal, plecs
 
 MODEL_DIR = Path(__file__).parent / "trained_models"
 nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)
@@ -40,7 +39,6 @@ base = utils.BaseValues.from_nominal(nom, n_p=2)
 T_STOP = 1.75
 W_M_REF = StepSignal(time=0.25, after=2 * base.w_M)  # Speed reference (rad/s)
 TAU_L = StepSignal(time=1.25, after=0.5 * base.tau)  # Load torque (Nm)
-SPEED_CTRL = {"J": 0.05, "alpha_s": 2 * pi * 4}  # Arguments of SpeedController
 
 
 # %%
@@ -69,7 +67,7 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     )
     ctrl = control.VectorControlSystem(
         control.FluxVectorController(est_par, cfg),
-        control.SpeedController(**SPEED_CTRL),
+        control.SpeedController(J=0.05, alpha_s=2 * pi * 4),
     )
     return mdl, ctrl
 
@@ -77,45 +75,30 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
 # %%
 if __name__ == "__main__":
     mdl, ctrl = build_system()
-    # Speed reference switching at the same sample as in motulator
-    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
-    w_M_ref = sampled_step(W_M_REF, T_s)
-    path = sm.write_model(
-        Path(__file__).with_name("pmsyrm_6kw_gn_fvc.plecs"),
-        mdl,
-        ctrl,
-        w_M_ref,
-        TAU_L,
-        T_STOP,
-        SPEED_CTRL,
+    ctrl.set_speed_ref(W_M_REF)
+    mdl.mechanics.set_external_load_torque(TAU_L)
+    path = plecs.write_model(
+        Path(__file__).with_name("pmsyrm_6kw_gn_fvc.plecs"), mdl, ctrl, T_STOP
     )
     print(f"Wrote {path}")
     # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = sm.write_model(
-        path.with_stem(path.stem + "_tmp"),
-        mdl,
-        ctrl,
-        w_M_ref,
-        TAU_L,
-        T_STOP,
-        SPEED_CTRL,
-        outputs=True,
+    tmp = plecs.write_model(
+        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
     )
     atexit.register(tmp.unlink, missing_ok=True)
 
     # Simulate in PLECS first (fast), at a uniform grid
+    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
     t_grid = np.arange(0, T_STOP, T_s / 4)
     start = time.time()
     try:
-        plecs_mdl, _ = sm.simulate(tmp, t_grid)
+        plecs_mdl, _ = plecs.simulate(tmp, t_grid, mdl, ctrl)
     except ConnectionRefusedError:
         print("PLECS RPC interface not available, skipping the comparison.")
         sys.exit()
     print(f"PLECS: {time.time() - start:.1f} s")
 
     # Simulate in motulator
-    ctrl.set_speed_ref(W_M_REF)
-    mdl.mechanics.set_external_load_torque(TAU_L)
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     start = time.time()
     res = sim.simulate(t_stop=T_STOP)
@@ -125,7 +108,7 @@ if __name__ == "__main__":
     # sampling period, drop the extra samples)
     keep = res.mdl.t <= T_STOP
     t, idx = np.unique(res.mdl.t[keep], return_index=True)
-    plecs_mdl, plecs_ctrl = sm.simulate(tmp, t)
+    plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t, mdl, ctrl)
     i_s_abc = np.array([plecs_mdl[k] for k in ("i_a", "i_b", "i_c")])
     i_s_ab = (2 / 3) * (i_s_abc[0] - 0.5 * (i_s_abc[1] + i_s_abc[2])) + 1j * (
         i_s_abc[1] - i_s_abc[2]

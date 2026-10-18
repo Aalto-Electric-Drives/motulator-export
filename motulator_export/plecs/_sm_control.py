@@ -761,7 +761,7 @@ def init_script(
     """
     Model initialization: the variables of the system model, and the structs of the
     control system (par, cfg, speed_ctrl, and pwm) from the parameter values of the
-    control system (`sm.export_values`).
+    control system (`_sm.export_values`).
     """
     flux_map = values["psi_s_dq_fcn"]
     machine = ["n_p", "R_s"] + (["L_d", "L_q", "psi_f"] if flux_map is None else [])

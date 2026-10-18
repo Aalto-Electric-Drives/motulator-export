@@ -15,7 +15,6 @@ from motulator_export.plecs._control import VALUES
 from motulator_export.plecs._drive import MDL_OUTPUTS
 from motulator_export.simulink._common import (
     _m_source,
-    _m_steps,
     check_supported_model,
     scope_indices,
     simulate,
@@ -53,8 +52,8 @@ def write_drive_model(
     block: ControlBlock,
     init_script: str,
     machine: str,
-    w_M_ref: StepSignal,
-    tau_L: StepSignal,
+    w_M_ref: StepSignal | float,
+    tau_L: StepSignal | float,
     t_stop: float,
     functions: Sequence[SFunction | MFunction] = (),
     code: str = "c",
@@ -75,9 +74,9 @@ def write_drive_model(
     machine : str
         "sm" (synchronous machine), "gn" (synchronous machine with a GradNet current
         map, see `gradnet_machine_sfunction`), or "im" (induction machine).
-    w_M_ref : StepSignal
+    w_M_ref : StepSignal | float
         Speed reference (mechanical rad/s).
-    tau_L : StepSignal
+    tau_L : StepSignal | float
         External load torque (Nm).
     t_stop : float
         Simulation stop time (s).
@@ -108,8 +107,8 @@ def write_drive_model(
         ("init_script", init_script),
         ("machine", machine),
         ("enable", _m_source(1.0)),  # The gates are not blocked
-        ("w_M_ref", _m_steps(w_M_ref)),
-        ("tau_L", _m_steps(tau_L)),
+        ("w_M_ref", _m_source(w_M_ref)),
+        ("tau_L", _m_source(tau_L)),
         ("scope", scope_indices(scope, MDL_OUTPUTS, signals)),
     ]
     if functions and isinstance(functions[0], SFunction):

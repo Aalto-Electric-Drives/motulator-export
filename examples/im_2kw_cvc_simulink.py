@@ -24,26 +24,22 @@ from typing import cast
 
 import motulator.drive.control.im as control
 import numpy as np
-from im_2kw_cvc import SPEED_CTRL, T_STOP, TAU_L, W_M_REF, build_system
+from im_2kw_cvc import T_STOP, TAU_L, W_M_REF, build_system
 from motulator.common.model import SolverCfg
 from motulator.drive import model
 
-from motulator_export import sampled_step
-from motulator_export.simulink import im
+from motulator_export import simulink
 
 # %%
 if __name__ == "__main__":
     mdl, ctrl = build_system()
-    # Speed reference switching at the same sample as in motulator
-    T_s = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg.T_s
-    w_M_ref = sampled_step(W_M_REF, T_s)
+    ctrl.set_speed_ref(W_M_REF)
+    mdl.mechanics.set_external_load_torque(TAU_L)
     code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
     name = "im_2kw_cvc_matlab" if code == "matlab" else "im_2kw_cvc"
     path = Path(__file__).parent / "simulink" / f"{name}.slx"
     path.parent.mkdir(exist_ok=True)
-    script = im.write_model(
-        path, mdl, ctrl, w_M_ref, TAU_L, T_STOP, SPEED_CTRL, code=code
-    )
+    script = simulink.write_model(path, mdl, ctrl, T_STOP, code=code)
     print(f"Wrote {script}")
     try:
         import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]
@@ -52,8 +48,7 @@ if __name__ == "__main__":
         sys.exit()
 
     # Simulate in motulator with tight tolerances
-    ctrl.set_speed_ref(W_M_REF)
-    mdl.mechanics.set_external_load_torque(TAU_L)
+    T_s = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg.T_s
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     res = sim.simulate(t_stop=T_STOP)
     in_mdl = res.mdl.t <= T_STOP
@@ -64,7 +59,7 @@ if __name__ == "__main__":
     t_mdl = res.mdl.t[in_mdl]
     t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
     t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
-    sl_mdl, sl_ctrl = im.simulate(path, t_eval)
+    sl_mdl, sl_ctrl = simulink.simulate(path, t_eval, mdl, ctrl)
 
     # Compare the machine signals at the motulator solver steps
     k_mdl = np.searchsorted(sl_mdl["t"], t_mdl)

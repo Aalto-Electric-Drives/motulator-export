@@ -3,7 +3,7 @@ Export motulator grid converter systems to PLECS.
 
 This module converts a grid converter system with grid-following current-vector
 control or disturbance-observer-based grid-forming control into a PLECS Standalone
-model, in the same way as `motulator_export.plecs.sm` does for drive systems. In
+model, in the same way as `motulator_export.plecs._sm` does for drive systems. In
 the control system, each class of motulator is a block with a mask of its arguments
 (see `_grid_control`), with the C port in `c/gfl_current_vector.c` or
 `c/gfm_observer.c`. The parameters are defined in the initialization commands of
@@ -14,15 +14,15 @@ of PLECS blocks.
 Currently supported:
 
 - Grid-following control (`CurrentVectorController`) in the power-control mode, with
-  the active and reactive power references given as steps
+  the active and reactive power references (constants or step signals)
 - Grid-forming control (`ObserverBasedGridFormingController`) in the power-control
-  mode, with the active power reference given as a step and a constant converter
-  voltage reference
+  mode, with the active power reference and the converter voltage reference
+  (constants or step signals)
 - Converter: carrier comparison (`pwm=True`) with the Symmetrical PWM block and the
   IGBT converter of PLECS with ideal IGBTs and diodes, a stiff DC bus
   (`VoltageSourceConverter` without a DC-bus model), and the computational delay of
   one sampling period as a PLECS Delay block
-- Gate blocking (`set_enable`), as in `motulator_export.plecs.sm`
+- Gate blocking (`set_enable`), as in `motulator_export.plecs._sm`
 - AC filter: LCL filter (`LCLFilter`) without resistances and grid impedance, or L
   filter (`LFilter`) with its series resistance and the grid inductance
 - Grid: balanced three-phase voltage source (`ThreePhaseSource`) with constant
@@ -67,6 +67,7 @@ from motulator_export.plecs._common import (
     _check_supported_pwm,
     _write_model,
     gate_enable,
+    reference,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._grid_control import GFL_BLOCK, GFM_BLOCK, init_script
@@ -157,6 +158,23 @@ def _plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
             ("ac_filter.L_g", f.L_g),
         ]
     return variables + [("ac_source.e_g", src.e_g), ("ac_source.w_g", src.w_g)]
+
+
+def grid_references(
+    ctrl: GridConverterControlSystem, gfl: bool, T_s: float
+) -> list[tuple[str, StepSignal | float]]:
+    """
+    References of the grid converter control system, read from it: the active power
+    reference and the reactive power reference (grid-following control, `gfl`) or
+    the AC voltage reference (grid-forming control), constants or `StepSignal`
+    objects sampled to switch at the same sampling instant as in motulator.
+    """
+    ext_ref = ctrl.ext_ref
+    refs = [("p_g_ref", reference(ext_ref.p_g, "active power reference", T_s))]
+    if gfl:
+        q_g_ref = reference(ext_ref.q_g, "reactive power reference", T_s)
+        return [*refs, ("q_g_ref", q_g_ref)]
+    return [*refs, ("v_c_ref", reference(ext_ref.v_c, "AC voltage reference", T_s))]
 
 
 def control_block(ctrl: GridConverterControlSystem) -> ControlBlock:
@@ -382,40 +400,14 @@ def write_model(
     mdl: GridConverterSystem,
     ctrl: GridConverterControlSystem,
     t_stop: float,
-    p_g_ref: StepSignal,
-    q_g_ref: StepSignal | None = None,
-    v_c_ref: float | None = None,
     outputs: bool = False,
 ) -> Path:
     """
-    Write a PLECS model of the grid converter system.
+    Write a PLECS model of the grid converter system, see `plecs.write_model`.
 
-    Parameters
-    ----------
-    path : str | Path
-        Path of the model file (.plecs). The C sources are expected in the `c`
-        directory of the package, referred to by a path relative to the model file.
-    mdl : GridConverterSystem
-        Continuous-time system model.
-    ctrl : GridConverterControlSystem
-        Discrete-time control system. Its gate enable (`set_enable`) is the input
-        `enable` of the control system, see `sm.write_model`.
-    t_stop : float
-        Simulation stop time (s).
-    p_g_ref : StepSignal
-        Active power reference (W).
-    q_g_ref : StepSignal, optional
-        Reactive power reference (VAr), needed in grid-following control.
-    v_c_ref : float, optional
-        Converter voltage magnitude reference (V), needed in grid-forming control.
-    outputs : bool, optional
-        Add the output ports "mdl" and "ctrl" for `simulate`, defaults to
-        False.
-
-    Returns
-    -------
-    Path
-        Path of the written model file.
+    The references are the active power reference (`set_power_ref`) and, in
+    grid-following control, the reactive power reference (`set_reactive_power_ref`)
+    or, in grid-forming control, the AC voltage reference (`set_ac_voltage_ref`).
 
     """
     path = Path(path)
@@ -427,16 +419,10 @@ def write_model(
     T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     lcl = isinstance(mdl.ac_filter, LCLFilter)
     sch = _Schematic()
-    sources: list[tuple[str, StepSignal | float | str]] = [(ENABLE, gate_enable(ctrl))]
-    sources += [("p_g_ref", p_g_ref)]
-    if block is GFL_BLOCK:
-        if q_g_ref is None:
-            raise ValueError("q_g_ref is needed in grid-following control")
-        sources += [("q_g_ref", q_g_ref)]
-    else:
-        if v_c_ref is None:
-            raise ValueError("v_c_ref is needed in grid-forming control")
-        sources += [("v_c_ref", v_c_ref)]
+    sources: list[tuple[str, StepSignal | float | str]] = [
+        (ENABLE, gate_enable(ctrl, values["T_s"]))
+    ]
+    sources += list(grid_references(ctrl, block is GFL_BLOCK, values["T_s"]))
     sources += [("i_c_abc", _abc_probe("i_c", "Measured current"))]
     if block is GFL_BLOCK:
         voltages = _probe("u_gab", ["Measured voltage"])
@@ -466,7 +452,7 @@ def simulate(
     mdl: GridConverterSystem,
     ctrl: GridConverterControlSystem,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Simulate the PLECS model of a grid converter system, see `sm.simulate`."""
+    """Simulate the PLECS model of a grid converter system, see `plecs.simulate`."""
     return simulate_plecs(
         path,
         t_eval,

@@ -164,7 +164,7 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
 static void vector_control_system_update(VectorControlSystem *self);
 
 /* Signal vectors of the modular control system, in which each class is a block (see
- * motulator_export.plecs.sm): the measurements (meas), the feedback signals (fbk),
+ * motulator_export.plecs._sm): the measurements (meas), the feedback signals (fbk),
  * and the references of the flux-vector controller (ref) as arrays of doubles, a
  * complex field as its real and imaginary parts. The defines give the indices of
  * the fields. The fields u_dc and tau_L of ObserverOutputs, which the callers of

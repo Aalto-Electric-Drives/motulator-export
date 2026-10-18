@@ -30,13 +30,13 @@ from motulator.drive import model
 from motulator.grid import model as grid_model
 
 from motulator_export.plecs import (
+    _grid,
     _grid_control,
+    _im,
     _im_control,
     _im_vhz_control,
+    _sm,
     _sm_control,
-    grid,
-    im,
-    sm,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
 from motulator_export.plecs._control import VALUES
@@ -55,9 +55,7 @@ from tests.test_simulink import (
     GFL_INPUTS,
     GFM_INPUTS,
     IM_INPUTS,
-    IM_SPEED,
     SM_INPUTS,
-    SM_SPEED,
     VHZ_CASES,
     VHZ_IDS,
     VHZ_INPUTS,
@@ -139,8 +137,8 @@ def grid_run(build: Any, signals: Any, block: ControlBlock, t_stop: float) -> Ru
 def case(name: str) -> Case:
     """Case of a test, see `Case`."""
     if name.startswith("fvc_gradnet"):
-        ctrl, speed = gradnet_control_system()
-        values, flux_map = sm.export_values(ctrl, speed)
+        ctrl = gradnet_control_system()
+        values, flux_map = _sm.export_values(ctrl)
 
         def gradnet_run(_: Netlist) -> list[list[float]]:
             return [u for _, u in gradnet_inputs(ctrl, 1600)]
@@ -154,7 +152,7 @@ def case(name: str) -> Case:
             "fvc_blocked": (True, 0.0, True),
         }[name]
         build, signals = sm_system(sensorless, t_d, blocked)
-        values, _ = sm.export_values(build()[1], SM_SPEED)
+        values, _ = _sm.export_values(build()[1])
         run = drive_run(build, signals, _sm_control.FVC_BLOCK, 0.3)
         return "fvc", values, None, run, SM_INPUTS
     if name.startswith("cvc"):
@@ -172,24 +170,24 @@ def case(name: str) -> Case:
             "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True),
         }[name]
         build, signals = im_system(*args)
-        values = im.export_values(build()[1], IM_SPEED)
+        values = _im.export_values(build()[1])
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
     if name.startswith("vhz"):
         vhz_args = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
         build, signals = vhz_system(*vhz_args)
-        values = im.export_vhz_values(build()[1])
+        values = _im.export_vhz_values(build()[1])
         run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0)
         return "vhz", values, None, run, VHZ_INPUTS
     if name.startswith("gfl"):
         build, signals = gfl_system(name == "gfl_blocked")
-        values = grid.export_values(build()[1])
+        values = _grid.export_values(build()[1])
         run = grid_run(build, signals, _grid_control.GFL_BLOCK, 0.06)
         return "gfl", values, None, run, GFL_INPUTS
     build, signals = gfm_system(
         name.startswith("gfm_power_limitation"), name.endswith("blocked")
     )
-    values = grid.export_values(build()[1])
+    values = _grid.export_values(build()[1])
     run = grid_run(build, signals, _grid_control.GFM_BLOCK, 0.25)
     return "gfm", values, None, run, GFM_INPUTS
 
@@ -412,10 +410,10 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
     to RTOL with the GradNet flux map, whose MTPV locus differs by about 1e-11.
     """
     if gradnet:
-        ctrl, speed = gradnet_control_system()
+        ctrl = gradnet_control_system()
     else:
-        ctrl, speed = sm_system(True, 0.0)[0]()[1], SM_SPEED
-    values, flux_map = sm.export_values(ctrl, speed)
+        ctrl = sm_system(True, 0.0)[0]()[1]
+    values, flux_map = _sm.export_values(ctrl)
     rg = cast(Any, ctrl.vector_ctrl).reference_gen
     eng = harnesses.eng
     eng.addpath(str(reference_luts_mfunction().write(tmp_path).parent), nargout=0)

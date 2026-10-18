@@ -41,7 +41,7 @@ from motulator.drive.control._base import (
 )
 from motulator.grid import utils as grid_utils
 
-from motulator_export.plecs import grid, im, sm
+from motulator_export.plecs import _grid, _im, _sm
 from motulator_export.plecs._common import C_SOURCES, ControlBlock
 from motulator_export.simulink._sfunction import SFunction, gradnet_machine_sfunction
 from tests import monolithic
@@ -531,7 +531,7 @@ def grid_sfun(
             refs = [ext_ref.p_g(t), ext_ref.v_c]
             return [enabled, *refs, *i_c_abc, u_dc, *u_c_line]
 
-        T_s = grid.export_values(ctrl)["T_s"]
+        T_s = _grid.export_values(ctrl)["T_s"]
         sl = SFunctionControlSystem(dll, block, T_s, inputs)
         sl.set_enable(ctrl._enable)  # For blocking the gates of the system model
         return sl
@@ -585,7 +585,7 @@ def test_flux_vector_control(
     the dead time and its compensation (with the smooth current-direction function),
     and with the gates blocked (`blocked`)."""
     build, signals = sm_system(sensorless, t_d, blocked)
-    values, _ = sm.export_values(build()[1], SM_SPEED)
+    values, _ = _sm.export_values(build()[1])
     params = sfunction_params(monolithic.FVC, values)
     assert start(fvc, params) is None
     compare(build, model.Simulation, drive_sfun(fvc, monolithic.FVC), signals, 0.3)
@@ -627,7 +627,7 @@ def test_current_vector_control(
     single update, and with the gates blocked."""
     args = (sensorless, t_d, i_0, u_th, single_update, blocked)
     build, signals = im_system(*args)
-    values = im.export_values(build()[1], IM_SPEED)
+    values = _im.export_values(build()[1])
     params = sfunction_params(monolithic.CVC, values)
     assert start(cvc, params) is None
     compare(build, model.Simulation, drive_sfun(cvc, monolithic.CVC), signals, 0.3)
@@ -663,7 +663,7 @@ def test_vhz_control(
     motulator, also with the dead-time compensation, the minimum pulses, and the
     gates blocked."""
     build, signals = vhz_system(open_loop, t_d, d_min, blocked)
-    values = im.export_vhz_values(build()[1])
+    values = _im.export_vhz_values(build()[1])
     params = sfunction_params(monolithic.VHZ, values)
     assert start(vhz, params) is None
     compare(build, model.Simulation, drive_sfun(vhz, monolithic.VHZ), signals, 1.0)
@@ -676,7 +676,7 @@ def test_grid_following_control(gfl: ctypes.CDLL, blocked: bool) -> None:
     """The S-function of grid-following control should agree with motulator, also
     with the gates blocked."""
     build, signals = gfl_system(blocked)
-    values = grid.export_values(build()[1])
+    values = _grid.export_values(build()[1])
     params = sfunction_params(monolithic.GFL, values)
     assert start(gfl, params) is None
     sfun = grid_sfun(gfl, monolithic.GFL)
@@ -696,7 +696,7 @@ def test_grid_forming_control(
     """The S-function of grid-forming control should agree with motulator, also
     with the gates blocked."""
     build, signals = gfm_system(power_limitation, blocked)
-    values = grid.export_values(build()[1])
+    values = _grid.export_values(build()[1])
     params = sfunction_params(monolithic.GFM, values)
     assert start(gfm, params) is None
     sfun = grid_sfun(gfm, monolithic.GFM)
@@ -718,8 +718,8 @@ def gn_machine(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(gradnet_machine_sfunction(), path)
 
 
-def gradnet_control_system() -> tuple[VectorControlSystem, dict[str, float]]:
-    """Flux-vector control with a GradNet flux map and its speed controller."""
+def gradnet_control_system() -> VectorControlSystem:
+    """Flux-vector control with a GradNet flux map."""
     flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
     par = sm_control.SaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
@@ -727,11 +727,11 @@ def gradnet_control_system() -> tuple[VectorControlSystem, dict[str, float]]:
     cfg = sm_control.FluxVectorControllerCfg(
         i_s_max=17.6, alpha_i=0, alpha_o=2 * pi * 8, J=0.05, sensorless=False
     )
-    speed = {"J": 0.05, "alpha_s": 2 * pi * 4}
     ctrl = VectorControlSystem(
-        sm_control.FluxVectorController(par, cfg), sm_control.SpeedController(**speed)
+        sm_control.FluxVectorController(par, cfg),
+        sm_control.SpeedController(J=0.05, alpha_s=2 * pi * 4),
     )
-    return ctrl, speed
+    return ctrl
 
 
 def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[float]]]:
@@ -760,8 +760,8 @@ def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[fl
 
 def test_gradnet_flux_vector_control(fvc: ctypes.CDLL) -> None:
     """The S-function with a GradNet flux map should agree with motulator."""
-    ctrl, speed = gradnet_control_system()
-    values, g = sm.export_values(ctrl, speed)
+    ctrl = gradnet_control_system()
+    values, g = _sm.export_values(ctrl)
     assert start(fvc, sfunction_params(monolithic.FVC, values, g)) is None
     ctrl.set_speed_ref(lambda t_: 50.0 if t_ > 0.05 else 0.0)
     names = ["d_a", "d_b", "d_c", *monolithic.FVC.signals]
@@ -793,8 +793,8 @@ def test_gradnet_machine(gn_machine: ctypes.CDLL) -> None:
         n_p=2, R_s=0.63, magnetic_map_fcn=current_map
     )
     machine = model.SynchronousMachine(par)
-    g = sm.export_gradnet(current_map)
-    params = [2.0, 0.63, g["k"], *(g[f] for f in sm.GRADNET_FIELDS)]
+    g = _sm.export_gradnet(current_map)
+    params = [2.0, 0.63, g["k"], *(g[f] for f in _sm.GRADNET_FIELDS)]
     assert start(gn_machine, params) is None
     x = (ctypes.c_double * 2)()
     gn_machine.sfun_states(x, None)

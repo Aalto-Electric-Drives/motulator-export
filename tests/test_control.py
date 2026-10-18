@@ -32,13 +32,13 @@ from motulator.grid import model as grid_model
 from motulator.grid.control._gfm_observer import Observer
 
 from motulator_export.plecs import (
+    _grid,
     _grid_control,
+    _im,
     _im_control,
     _im_vhz_control,
+    _sm,
     _sm_control,
-    grid,
-    im,
-    sm,
 )
 from motulator_export.plecs._common import ControlBlock
 from motulator_export.plecs._control import VALUES
@@ -132,7 +132,7 @@ def init_script(key: str, values: dict[str, Any], flux_map: Any = None) -> str:
     if key == "fvc":
         variables = []
         if flux_map is not None:
-            variables = [(f"est_flux_map.{f}", flux_map[f]) for f in sm.GRADNET_FIELDS]
+            variables = [(f"est_flux_map.{f}", flux_map[f]) for f in _sm.GRADNET_FIELDS]
         return _sm_control.init_script(variables, values, "")
     if key == "cvc":
         return _im_control.init_script([], values, "")
@@ -199,7 +199,7 @@ def test_flux_vector_control(
     """Flux-vector control should agree with motulator, and exactly with the
     monolithic control system, also with the gates blocked."""
     build, signals = sm_system(sensorless, t_d, blocked)
-    values, _ = sm.export_values(build()[1], SM_SPEED)
+    values, _ = _sm.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, _sm_control.FVC_BLOCK)
@@ -212,8 +212,8 @@ def test_gradnet_flux_vector_control(compiled: Compiled) -> None:
     """Flux-vector control with a GradNet flux map should agree exactly with the
     monolithic control system (which is compared with motulator in
     `test_simulink`)."""
-    ctrl, speed = gradnet_control_system()
-    values, flux_map = sm.export_values(ctrl, speed)
+    ctrl = gradnet_control_system()
+    values, flux_map = _sm.export_values(ctrl)
 
     def run(net: Netlist) -> list[list[float]]:
         return [u for _, u in gradnet_inputs(ctrl, 1600)]
@@ -245,7 +245,7 @@ def test_current_vector_control(
     monolithic control system, also with the threshold voltage, single update, and
     the gates blocked."""
     build, signals = im_system(sensorless, t_d, i_0, u_th, single_update, blocked)
-    values = im.export_values(build()[1], IM_SPEED)
+    values = _im.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, _im_control.CVC_BLOCK)
@@ -263,7 +263,7 @@ def test_vhz_control(
     """Observer-based or open-loop V/Hz control should agree with motulator, and
     exactly with the monolithic control system."""
     build, signals = vhz_system(open_loop, t_d, d_min, blocked)
-    values = im.export_vhz_values(build()[1])
+    values = _im.export_vhz_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, _im_vhz_control.VHZ_BLOCK)
@@ -277,7 +277,7 @@ def test_grid_following_control(compiled: Compiled, blocked: bool) -> None:
     """Grid-following control should agree with motulator, and exactly with the
     monolithic control system, also with the gates blocked."""
     build, signals = gfl_system(blocked)
-    values = grid.export_values(build()[1])
+    values = _grid.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = grid_sfun(net, _grid_control.GFL_BLOCK)
@@ -297,7 +297,7 @@ def test_grid_forming_control(
     """Grid-forming control should agree with motulator, and exactly with the
     monolithic control system, also with the gates blocked."""
     build, signals = gfm_system(power_limitation, blocked)
-    values = grid.export_values(build()[1])
+    values = _grid.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = grid_sfun(net, _grid_control.GFM_BLOCK)
@@ -310,7 +310,7 @@ def test_parameter_errors(compiled: Compiled) -> None:
     """Missing or invalid parameters should be reported by the blocks."""
     net, _ = compiled("fvc")
     build, _ = sm_system(True, 0.0)
-    values, _ = sm.export_values(build()[1], SM_SPEED)
+    values, _ = _sm.export_values(build()[1])
     for name, value, message in [
         ("speed_J", None, "SpeedController: J must be a scalar."),
         ("pwm_d_min", None, "PWM/compute_output: d_min must be a scalar."),
@@ -333,7 +333,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     cfg = sm_control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=sensorless, J=J)
     fvc = sm_control.FluxVectorController(sm_par, cfg)
     ctrl = VectorControlSystem(fvc, sm_control.SpeedController(**SM_SPEED))
-    values, _ = sm.export_values(ctrl, SM_SPEED)
+    values, _ = _sm.export_values(ctrl)
     params = block_params(
         _sm_control.FVC_BLOCK.netlist(), init_script("fvc", values), VALUES
     )
@@ -354,7 +354,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     )
     cvc = im_control.CurrentVectorController(im_par, cfg)
     ctrl = VectorControlSystem(cvc, im_control.SpeedController(**IM_SPEED))
-    values = im.export_values(ctrl, IM_SPEED)
+    values = _im.export_values(ctrl)
     params = block_params(
         _im_control.CVC_BLOCK.netlist(), init_script("cvc", values), VALUES
     )
@@ -368,7 +368,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
 def test_init_script() -> None:
     """The model initialization should define the parameters as in motulator."""
     build, _ = gfm_system(True)
-    values = grid.export_values(build()[1])
+    values = _grid.export_values(build()[1])
     init = init_script("gfm", values)
     assert "cfg.R_a = " in init
     assert "cfg.i_d_max = " in init
@@ -402,7 +402,7 @@ def test_gfm_configuration(k_v: float | None) -> None:
     )
     grid_model.Simulation(mdl, ctrl, show_progress=False).simulate(t_stop=0.01)
     assert gfm.observer.state.u_g != BASE.u  # The initial estimate has changed
-    values = grid.export_values(ctrl)
+    values = _grid.export_values(ctrl)
     assert (values["u_nom"], values["alpha_o"], values["k_v"]) == (
         BASE.u,
         cfg.alpha_o,
