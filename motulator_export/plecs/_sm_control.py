@@ -33,7 +33,9 @@ from motulator_export.plecs._control import (
     checks,
     complex_in,
     complex_out,
+    compute_standby_output,
     control_block,
+    converter_voltage_input,
     get_measurement,
     init_header,
     mask_params,
@@ -80,6 +82,7 @@ CTRL_INPUTS = [
     Port("w_M_ref", 1),
     Port("i_s_abc", 3),
     Port("u_dc", 1),
+    Port("u_c_line", 2),
     Port("theta_M", 1),
 ]
 CTRL_OUTPUTS = {
@@ -233,8 +236,8 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(1, "meas") + f"double complex u_s_zoh_ab = {complex_in(3)};\n"
-        "double w_M = InputSignal(4, 0);\n"
+        SIGNALS.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
+        "double w_M = InputSignal(3, 0);\n"
         "if (h == 0.0) {\n"
         "    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,\n"
         "                                 0.0, &out);\n"
@@ -246,7 +249,7 @@ def _flux_observer() -> CBlock:
         "                                 h, &out);\n"
         "}\n"
         "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
-        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(2)};\n"
+        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(1)};\n"
         + SIGNALS.write(0, "fbk", "out")
     )
     mcode = MCode(
@@ -287,7 +290,6 @@ def _flux_observer() -> CBlock:
     return CBlock(
         "FluxObserver",
         [
-            Port(ENABLE, 1),
             SIGNALS.port("meas"),
             Port("u_s_ab", 2),
             Port("u_s_zoh_ab", 2),
@@ -300,7 +302,6 @@ def _flux_observer() -> CBlock:
             output,
             "flux_observer_update(&self, T_s, &out);\n",
             workspace=SAMPLING + "static double h;\nstatic ObserverOutputs out;\n",
-            outputs=(SIGNALS.width("fbk"),),
         ),
         params,
         SIGNALS.sfunction("flux_observer"),
@@ -387,12 +388,7 @@ def _speed_flux_observer() -> Subsystem:
     fbk = SIGNALS.width("fbk")
     return Subsystem(
         "SpeedFluxObserver",
-        [
-            Port(ENABLE, 1),
-            SIGNALS.port("meas"),
-            Port("u_s_ab", 2),
-            Port("u_s_zoh_ab", 2),
-        ],
+        [SIGNALS.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
         [Port("out", fbk)],
         [
             _flux_observer(),
@@ -401,8 +397,6 @@ def _speed_flux_observer() -> Subsystem:
             speed_observer(SIGNALS),
         ],
         [
-            (ENABLE, "FluxObserver:enable"),
-            (ENABLE, "SpeedObserver:enable"),
             ("meas", "FluxObserver:meas"),
             ("u_s_ab", "FluxObserver:u_s_ab"),
             ("u_s_zoh_ab", "FluxObserver:u_s_zoh_ab"),
@@ -414,7 +408,7 @@ def _speed_flux_observer() -> Subsystem:
             ("fbk.tau_M:y", "SpeedObserver:tau_M"),
         ],
         columns=[
-            [ENABLE, "meas", "u_s_ab", "u_s_zoh_ab"],
+            ["meas", "u_s_ab", "u_s_zoh_ab"],
             ["FluxObserver"],
             ["fbk.eps", "fbk.tau_M"],
             ["SpeedObserver"],
@@ -427,7 +421,6 @@ def _speed_flux_observer() -> Subsystem:
             "SpeedObserver:eps": "fbk.eps:y",
         },
         lanes={"FluxObserver:w_M": "below:0"},
-        tags=[ENABLE],
         mask=mask,
     )
 
@@ -519,7 +512,7 @@ def _reference_generator() -> CBlock:
         "ReferenceGenerator",
         [Port("tau_M_ref", 1), Port("u_dc", 1), Port("w_m", 1)],
         [Port("ref", 2)],
-        SIGNALS.class_code("ReferenceGenerator", start, output, disabled=None),
+        SIGNALS.class_code("ReferenceGenerator", start, output),
         params,
         SIGNALS.sfunction("reference_generator"),
         sample_time=None,
@@ -542,7 +535,6 @@ def _reference_generator() -> CBlock:
                     "luts must be a 16-by-6 matrix (sm_reference_luts.m).",
                 ),
             ),
-            disabled=None,
         ),
     )
 
@@ -580,13 +572,13 @@ def _flux_torque_controller() -> CBlock:
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
-        SIGNALS.read(2, "fbk", declare=False) + "double complex u_s_ref =\n"
-        "    flux_torque_ctrl_compute_output(&self, InputSignal(1, 0), "
-        "InputSignal(1, 1), &fbk);\n" + complex_out(0, "u_s_ref")
+        SIGNALS.read(1, "fbk", declare=False) + "double complex u_s_ref =\n"
+        "    flux_torque_ctrl_compute_output(&self, InputSignal(0, 0), "
+        "InputSignal(0, 1), &fbk);\n" + complex_out(0, "u_s_ref")
     )
     return CBlock(
         "FluxTorqueController",
-        [Port(ENABLE, 1), Port("ref", 2), SIGNALS.port("fbk")],
+        [Port("ref", 2), SIGNALS.port("fbk")],
         [Port("u_s", 2)],
         SIGNALS.class_code(
             "FluxTorqueController",
@@ -594,7 +586,6 @@ def _flux_torque_controller() -> CBlock:
             output,
             "flux_torque_ctrl_update(&self, T_s, &fbk);\n",
             workspace=SAMPLING + "static ObserverOutputs fbk;\n",
-            outputs=(2,),
         ),
         params,
         SIGNALS.sfunction("flux_torque_controller"),
@@ -665,24 +656,30 @@ def _flux_vector_controller() -> Subsystem:
             SIGNALS.selector("meas", "u_dc"),
             SIGNALS.selector("fbk", "w_m"),
             _reference_generator(),
+            # Standby: the flux and torque controller tracks the estimated flux and
+            # torque
+            compute_standby_output(
+                SIGNALS, [Port("ref", 2)], ["cabs(fbk.psi_s)", "fbk.tau_M"]
+            ),
             _flux_torque_controller(),
             Mux("Mux ref", [Port("ref", 2), Port("u_s", 2)]),
         ],
         [
-            (ENABLE, "SpeedFluxObserver:enable"),
-            (ENABLE, "FluxTorqueController:enable"),
+            (ENABLE, "compute_standby_output:enable"),
             ("meas", "SpeedFluxObserver:meas"),
             ("u_c_ab", "SpeedFluxObserver:u_s_ab"),
             ("u_c_zoh_ab", "SpeedFluxObserver:u_s_zoh_ab"),
             ("meas", "meas.u_dc:u"),
             ("SpeedFluxObserver:out", "fbk.w_m:u"),
+            ("SpeedFluxObserver:out", "compute_standby_output:fbk"),
             ("SpeedFluxObserver:out", "FluxTorqueController:fbk"),
             ("SpeedFluxObserver:out", "fbk"),
             ("tau_M_ref", "ReferenceGenerator:tau_M_ref"),
             ("meas.u_dc:y", "ReferenceGenerator:u_dc"),
             ("fbk.w_m:y", "ReferenceGenerator:w_m"),
-            ("ReferenceGenerator:ref", "FluxTorqueController:ref"),
-            ("ReferenceGenerator:ref", "Mux ref:ref"),
+            ("ReferenceGenerator:ref", "compute_standby_output:ref_in"),
+            ("compute_standby_output:ref", "FluxTorqueController:ref"),
+            ("compute_standby_output:ref", "Mux ref:ref"),
             ("FluxTorqueController:u_s", "Mux ref:u_s"),
             ("Mux ref:y", "ref"),
         ],
@@ -691,6 +688,7 @@ def _flux_vector_controller() -> Subsystem:
             ["SpeedFluxObserver"],
             ["meas.u_dc", "fbk.w_m"],
             ["ReferenceGenerator"],
+            ["compute_standby_output"],
             ["FluxTorqueController"],
             ["Mux ref"],
             ["ref", "fbk"],
@@ -701,7 +699,8 @@ def _flux_vector_controller() -> Subsystem:
             "fbk.w_m:y": "ReferenceGenerator:w_m+1",
             "SpeedFluxObserver:meas": "fbk.w_m:y+1",
             "meas": "SpeedFluxObserver:meas",
-            "FluxTorqueController:ref": "ReferenceGenerator:ref",
+            "compute_standby_output:ref_in": "ReferenceGenerator:ref",
+            "FluxTorqueController:ref": "compute_standby_output:ref",
             "Mux ref:u_s": "FluxTorqueController:u_s",
             "ref": "Mux ref:y",
             "fbk": "SpeedFluxObserver:out",
@@ -714,7 +713,7 @@ def _flux_vector_controller() -> Subsystem:
 
 # %%
 MONITORED = {
-    "w_M_ref": "InputSignal(3, 0)",
+    "w_M_ref": "InputSignal(2, 0)",
     "w_M": "fbk.w_M",
     "tau_M_ref": "ref.tau_M",
     "tau_M": "fbk.tau_M",
@@ -734,9 +733,10 @@ def control_system() -> Subsystem:
         [
             ("i_c_ab", "abc2complex(i_s_abc)"),
             ("u_dc", "fmax(InputSignal(1, 0), U_DC_MIN)"),
-            ("theta_M", "InputSignal(2, 0)"),
+            ("theta_M", "InputSignal(3, 0)"),
+            ("u_c_ab", "line2complex(u_c_line)"),
         ],
-        abc_input("i_s_abc", 0),
+        abc_input("i_s_abc", 0) + converter_voltage_input(2),
     )
     signals = monitor(SIGNALS, CTRL_OUTPUTS, MONITORED, [Port("w_M_ref", 1)])
     return vector_control_system(

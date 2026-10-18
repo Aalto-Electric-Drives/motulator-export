@@ -28,8 +28,8 @@ from motulator_export.plecs import _grid_control, grid
 from motulator_export.plecs._common import StepSignal
 from motulator_export.plecs._control import VALUES
 from motulator_export.simulink._common import (
-    _m_source,
     _m_steps,
+    check_supported_model,
     scope_indices,
     write_init,
     write_script,
@@ -58,7 +58,6 @@ def write_model(
     p_g_ref: StepSignal,
     q_g_ref: StepSignal | None = None,
     v_c_ref: float | None = None,
-    enable: StepSignal | float = 1.0,
     code: str = "c",
 ) -> Path:
     """
@@ -77,7 +76,8 @@ def write_model(
     mdl : GridConverterSystem
         Continuous-time system model.
     ctrl : GridConverterControlSystem
-        Discrete-time control system.
+        Discrete-time control system, without the gate blocking, see
+        `sm.write_model`.
     t_stop : float
         Simulation stop time (s).
     p_g_ref : StepSignal
@@ -86,9 +86,6 @@ def write_model(
         Reactive power reference (VAr), needed in grid-following control.
     v_c_ref : float, optional
         Converter voltage magnitude reference (V), needed in grid-forming control.
-    enable : StepSignal | float, optional
-        Input `enable` of the control system, defaults to 1 (enabled), see
-        `sm.write_model`.
     code : str, optional
         Code of the blocks of the control system, "c" (the default) or "matlab",
         see `sm.write_model`.
@@ -101,6 +98,7 @@ def write_model(
     """
     path = Path(path)
     grid._check_supported(mdl, ctrl)
+    check_supported_model(mdl, ctrl)
     block, values = grid.control_block(ctrl), grid.export_values(ctrl)
     # The references are checked before anything is written
     if block is grid.GFL_BLOCK and q_g_ref is None:
@@ -115,11 +113,7 @@ def write_model(
         ),
     )
     refs: list[list[Any]] = [
-        [
-            "enable",
-            "step" if isinstance(enable, StepSignal) else "constant",
-            _m_source(enable),
-        ],
+        ["enable", "constant", 1.0],  # The gates are not blocked
         ["p_g_ref", "step", _m_steps(p_g_ref)],
     ]
     if block is grid.GFL_BLOCK:

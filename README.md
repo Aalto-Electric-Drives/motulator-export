@@ -25,7 +25,7 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 
 ## Requirements
 
-- Python 3.12 or later. The package installs *motulator* 0.12.0 or a later 0.12 release.
+- Python 3.12 or later. The package installs *motulator* 0.14.1 or a later 0.14 release. The GradNet models need PyTorch, an optional dependency of *motulator*: install the package with `pip install -e .[gradnet]` (or `pip install -e .[dev]`).
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
 - **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks (`code="matlab"`) need no C compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 
@@ -115,30 +115,32 @@ The controller of *motulator* evaluates the references at its sampling instants,
 
 The [examples](examples/) build the systems of the *motulator* examples, write the models, and, if the tool is available, simulate them both in the tool and in *motulator* and print the maximum differences.
 
-| System                                                                                        | PLECS                                        | Simulink                        |
-| --------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------- |
-| 2.2-kW IPMSM, sensorless flux-vector control                                                  | `ipmsm_2kw_fvc.py` (`--diode`: diode bridge) | `ipmsm_2kw_fvc_simulink.py`     |
-| 5.6-kW PM-SyRM, GradNet models from FEM data, flux-vector control                             | `pmsyrm_6kw_gn_fvc.py`                       | `pmsyrm_6kw_gn_fvc_simulink.py` |
-| 2.2-kW induction machine, sensorless current-vector control                                   | `im_2kw_cvc.py`                              | `im_2kw_cvc_simulink.py`        |
-| 2.2-kW induction machine, observer-based V/Hz control (`--open-loop`: open-loop V/Hz control) | `im_2kw_vhz.py`                              | `im_2kw_vhz_simulink.py`        |
-| 10-kVA grid converter, LCL filter, grid-following control                                     | `gfl_10kva_lcl.py`                           | `gfl_10kva_lcl_simulink.py`     |
-| 12.5-kVA grid converter, weak grid, grid-forming control                                      | `gfm_13kva_do.py`                            | `gfm_13kva_do_simulink.py`      |
+| System                                                                                        | PLECS                                                                    | Simulink                        |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| 2.2-kW IPMSM, sensorless flux-vector control                                                  | `ipmsm_2kw_fvc.py` (`--diode`: diode bridge; `--blocked`: gates blocked) | `ipmsm_2kw_fvc_simulink.py`     |
+| 5.6-kW PM-SyRM, GradNet models from FEM data, flux-vector control                             | `pmsyrm_6kw_gn_fvc.py`                                                   | `pmsyrm_6kw_gn_fvc_simulink.py` |
+| 2.2-kW induction machine, sensorless current-vector control                                   | `im_2kw_cvc.py`                                                          | `im_2kw_cvc_simulink.py`        |
+| 2.2-kW induction machine, observer-based V/Hz control (`--open-loop`: open-loop V/Hz control) | `im_2kw_vhz.py`                                                          | `im_2kw_vhz_simulink.py`        |
+| 10-kVA grid converter, LCL filter, grid-following control                                     | `gfl_10kva_lcl.py`                                                       | `gfl_10kva_lcl_simulink.py`     |
+| 12.5-kVA grid converter, weak grid, grid-forming control                                      | `gfm_13kva_do.py`                                                        | `gfm_13kva_do_simulink.py`      |
 
 ## Supported systems
 
-| Feature                                                                                                 | PLECS | Simulink |
-| ------------------------------------------------------------------------------------------------------- | :---: | :------: |
-| Synchronous machine drives: flux-vector control (constant inductances or GradNet models), speed control |  yes  |   yes    |
-| Induction machine drives: current-vector control (constant parameters), speed control                   |  yes  |   yes    |
-| Induction machine drives: observer-based V/Hz control, including open-loop V/Hz control (`L_M = inf`)   |  yes  |   yes    |
-| Grid-following control with an LCL filter (without resistances and grid impedance)                      |  yes  |   yes    |
-| Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |   yes    |
-| Stiff DC bus                                                                                            |  yes  |   yes    |
-| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     |  yes  |    no    |
-| Dead time of the converter in the system model (drives)                                                 |  yes  |    no    |
-| Dead-time compensation in the control system (drives)                                                   |  yes  |   yes    |
+| Feature                                                                                                 | PLECS |   Simulink   |
+| ------------------------------------------------------------------------------------------------------- | :---: | :----------: |
+| Synchronous machine drives: flux-vector control (constant inductances or GradNet models), speed control |  yes  |     yes      |
+| Induction machine drives: current-vector control (constant parameters), speed control                   |  yes  |     yes      |
+| Induction machine drives: observer-based V/Hz control, including open-loop V/Hz control (`L_M = inf`)   |  yes  |     yes      |
+| Grid-following control with an LCL filter (without resistances and grid impedance)                      |  yes  |     yes      |
+| Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |     yes      |
+| Stiff DC bus                                                                                            |  yes  |     yes      |
+| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     |  yes  |      no      |
+| Dead time and threshold voltage of the converter in the system model (drives)                           |  yes  |      no      |
+| Compensation of the dead time and the threshold voltage in the control system (drives)                  |  yes  |     yes      |
+| Single update of the duty ratios in the system model (`single_update`)                                  |  yes  |      no      |
+| Gate blocking (`set_enable`): the control system, and the system model                                  |  yes  | control only |
 
-The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`), and the grid is balanced with constant voltage and frequency.
+The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`) with the computational delay of one sampling period, and the grid is balanced with constant voltage and frequency.
 Grid-following control is supported with the LCL filter and grid-forming control with the L filter.
 Other configurations raise `NotImplementedError` when the model is written.
 
@@ -146,7 +148,7 @@ Other configurations raise `NotImplementedError` when the model is written.
 
 - **Parameters** are defined in the initialization commands of the PLECS model (Simulation > Simulation Parameters > Initialization) and in the script `init_<model>.m` of the Simulink model: the system model (e.g., `machine`, `mechanics`, and `converter`) and the structs of the control system (e.g., `par`, `cfg`, `speed_ctrl`, and `pwm`). An empty parameter (`[]`) corresponds to `None` in *motulator*, i.e., the default.
 - **Control system**: the subsystem named after the control method (e.g., `Flux-vector control`) contains the blocks of the classes. Their masks show the arguments of the classes; the top-level blocks refer to the structs of the model initialization, and the blocks inside them get their parameters from the masks of their parents, whose initialization resolves the defaults as *motulator* does. Derived quantities, such as the gains and the lookup tables, are computed by the code of the blocks at the start of the simulation (in Simulink, the lookup tables of the control loci of synchronous machines by the function `sm_reference_luts.m` next to the model, in the mask initialization). The monitored signals are the mask probes of the subsystem (PLECS) and its output `signals` (Simulink).
-- **Input `enable`**: the first input of the control system is 1 by default (or a step signal, `enable` of `write_model`). While it is not positive, the duty ratios are 0.5 (zero voltage), the monitored signals are zero, and the states of the blocks are reset to their initial values, so that the control system starts from its initial state when enabled, e.g., after a fault. The measured DC-bus voltage is limited to at least 1 V.
+- **Input `enable`**: the first input of the control system is the gate enable of *motulator* (`ctrl.set_enable`, a constant or a `StepSignal` of 0 and 1, by default 1). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*: its observers track the system using the measured converter voltages (the input `u_c_line`, the line-to-line voltages u_ab and u_bc), its controller tracks the measured operating point, from which the control continues when the gates are released, and the speed controller is not updated. In PLECS, the gates of the IGBT converter are blocked (all switches off, the diodes conducting according to the currents). The Simulink system model does not block the gates (the input is 1 and `u_c_line` zero), but the control system supports it, e.g., on the hardware. The measured DC-bus voltage is limited to at least 1 V.
 - **C sources**: the PLECS models and the S-functions refer to the C files of the package by a path relative to the model file, so write the model again if you move it relative to the package. The Simulink models with MATLAB Function blocks contain their code.
 - **S-functions**: a compiled S-function stays loaded in MATLAB after its model is closed, so run `clear mex` before rebuilding a model that was open (on Windows, the compiled file cannot be overwritten while it is loaded).
 

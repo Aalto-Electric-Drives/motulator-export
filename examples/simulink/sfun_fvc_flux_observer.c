@@ -80,14 +80,11 @@ static double T_s; /* Sampling period */
 static double h;
 static ObserverOutputs out;
 
-/* Initial state, restored while the block is disabled */
-static FluxObserver self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 4, 2, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {6, 2, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {22};
-#define NUM_INPUTS 5
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 21
 
@@ -188,29 +185,19 @@ static void mdlStart(SimStruct *S)
     flux_observer_init(&self, par, P(0, 0), k_o);
     T_s = P(4, 0);
     h = P(3, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 22; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        return;
-    }
-
     double meas_u[MEAS_WIDTH];
     for (int k = 0; k < MEAS_WIDTH; k++) {
-        meas_u[k] = InputSignal(1, k);
+        meas_u[k] = InputSignal(0, k);
     }
     Measurements meas;
     measurements_unpack(meas_u, &meas);
-    double complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));
-    double w_M = InputSignal(4, 0);
+    double complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));
+    double w_M = InputSignal(3, 0);
     if (h == 0.0) {
         flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,
                                      0.0, &out);
@@ -222,7 +209,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
                                      h, &out);
     }
     /* Voltage for the control laws (DriveControlSystem.get_feedback) */
-    out.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
+    out.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));
     double y[FBK_WIDTH];
     observer_outputs_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {
@@ -234,12 +221,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     flux_observer_update(&self, T_s, &out);
 }
 

@@ -4,7 +4,7 @@ function tau_M_ref = mfun_cvc_speed_controller(enable, w_M, tau_M, w_M_ref, p)
 %   motulator. The parameters are the fields of the struct p (from the mask, [] as NaN).
 %   The state is in persistent variables. The inputs without direct feedthrough come
 %   through unit delays, so the update of the state with them is done at the next call.
-persistent self self_init pending enable_prev
+persistent self pending
 if isempty(self)
     % No torque limit without tau_M_max
     tau_M_max = p.tau_M_max;
@@ -12,27 +12,18 @@ if isempty(self)
         tau_M_max = Inf;
     end
     self = speed_controller(p.J, p.alpha_s, p.alpha_i, tau_M_max);
-    self_init = self;
     pending = false;
-    enable_prev = 0;
 end
 % Update of the previous sampling period with its inputs (the inputs
-% tau_M through unit delays)
+% enable, tau_M through unit delays)
 if pending
-    if enable_prev > 0
-        % The limited torque reference ref.tau_M (anti-windup)
+    % The limited torque reference ref.tau_M (anti-windup), not updated while
+    % the gates are blocked
+    if enable > 0
         self = pi_update(self, p.T_s, tau_M);
-    else
-        self = self_init;
     end
 end
 pending = true;
-enable_prev = enable;
-% Disabled: the algorithm is not run
-if ~(enable > 0)
-    tau_M_ref = 0;
-    return
-end
 % Torque reference
 [self, tau_M_ref] = pi_compute_output(self, w_M_ref, w_M, 0);
 end

@@ -61,7 +61,7 @@ from tests.test_simulink import (
     VHZ_CASES,
     VHZ_IDS,
     VHZ_INPUTS,
-    check_enable,
+    check_dc_bus_limit,
     compare,
     compile_sfunction,
     drive_sfun,
@@ -146,16 +146,17 @@ def check(
     key: str,
     values: dict[str, Any],
     run: Callable[[Netlist], list[list[float]]],
-    enable_inputs: list[float] | None,
+    dc_bus_inputs: list[float] | None,
     flux_map: Any = None,
 ) -> None:
     """
     Start the control system with the parameters of its masks, and run it by `run`
     (e.g., in a closed-loop simulation compared with motulator), which returns the
     inputs at each step. The monolithic control system should give the same outputs
-    exactly with the same inputs, from the initial state. Finally, check the input
-    `enable` with the constant inputs `enable_inputs`. The parameters are the same
-    with the scoping of the masks in PLECS and in Simulink.
+    exactly with the same inputs, from the initial state. Finally, check the lower
+    limit of the measured DC-bus voltage with the constant inputs `dc_bus_inputs`.
+    The parameters are the same with the scoping of the masks in PLECS and in
+    Simulink.
     """
     net, ref = compiled(key)
     block, mono = SYSTEMS[key]
@@ -176,22 +177,28 @@ def check(
         net.sfun_step(arr(u), y1)
         ref.sfun_step(arr(u), y2)
         assert list(y1) == list(y2)
-    if enable_inputs is not None:
-        check_enable(net, block, enable_inputs)
+    if dc_bus_inputs is not None:
+
+        def restart_net() -> None:
+            assert net.start(params, start) is None
+
+        check_dc_bus_limit(net, block, dc_bus_inputs, restart_net)
     net.sfun_terminate()
     ref.sfun_terminate()
 
 
 # %%
 @pytest.mark.parametrize(
-    ("sensorless", "t_d"),
-    [(True, 0.0), (False, 0.0), (True, 2e-6)],
-    ids=["sensorless", "sensored", "dead_time"],
+    ("sensorless", "t_d", "blocked"),
+    [(True, 0.0, False), (False, 0.0, False), (True, 2e-6, False), (True, 0.0, True)],
+    ids=["sensorless", "sensored", "dead_time", "blocked"],
 )
-def test_flux_vector_control(compiled: Compiled, sensorless: bool, t_d: float) -> None:
+def test_flux_vector_control(
+    compiled: Compiled, sensorless: bool, t_d: float, blocked: bool
+) -> None:
     """Flux-vector control should agree with motulator, and exactly with the
-    monolithic control system, also when disabled and enabled."""
-    build, signals = sm_system(sensorless, t_d)
+    monolithic control system, also with the gates blocked."""
+    build, signals = sm_system(sensorless, t_d, blocked)
     values, _ = sm.export_values(build()[1], SM_SPEED)
 
     def run(net: Netlist) -> list[list[float]]:
@@ -215,16 +222,29 @@ def test_gradnet_flux_vector_control(compiled: Compiled) -> None:
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0"),
-    [(True, 0.0, 0.0), (False, 0.0, 0.0), (True, 2e-6, 0.5)],
-    ids=["sensorless", "sensored", "dead_time_tanh"],
+    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked"),
+    [
+        (True, 0.0, 0.0, 0.0, False, False),
+        (False, 0.0, 0.0, 0.0, False, False),
+        (True, 2e-6, 0.5, 0.0, False, False),
+        (True, 2e-6, 0.5, 1.0, True, False),
+        (True, 0.0, 0.5, 1.0, False, True),
+    ],
+    ids=["sensorless", "sensored", "dead_time_tanh", "u_th_single", "u_th_blocked"],
 )
 def test_current_vector_control(
-    compiled: Compiled, sensorless: bool, t_d: float, i_0: float
+    compiled: Compiled,
+    sensorless: bool,
+    t_d: float,
+    i_0: float,
+    u_th: float,
+    single_update: bool,
+    blocked: bool,
 ) -> None:
     """Current-vector control should agree with motulator, and exactly with the
-    monolithic control system."""
-    build, signals = im_system(sensorless, t_d, i_0)
+    monolithic control system, also with the threshold voltage, single update, and
+    the gates blocked."""
+    build, signals = im_system(sensorless, t_d, i_0, u_th, single_update, blocked)
     values = im.export_values(build()[1], IM_SPEED)
 
     def run(net: Netlist) -> list[list[float]]:
@@ -234,13 +254,15 @@ def test_current_vector_control(
     check(compiled, "cvc", values, run, IM_INPUTS)
 
 
-@pytest.mark.parametrize(("open_loop", "t_d", "d_min"), VHZ_CASES, ids=VHZ_IDS)
+@pytest.mark.parametrize(
+    ("open_loop", "t_d", "d_min", "blocked"), VHZ_CASES, ids=VHZ_IDS
+)
 def test_vhz_control(
-    compiled: Compiled, open_loop: bool, t_d: float, d_min: float
+    compiled: Compiled, open_loop: bool, t_d: float, d_min: float, blocked: bool
 ) -> None:
     """Observer-based or open-loop V/Hz control should agree with motulator, and
     exactly with the monolithic control system."""
-    build, signals = vhz_system(open_loop, t_d, d_min)
+    build, signals = vhz_system(open_loop, t_d, d_min, blocked)
     values = im.export_vhz_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
@@ -250,10 +272,11 @@ def test_vhz_control(
     check(compiled, "vhz", values, run, VHZ_INPUTS)
 
 
-def test_grid_following_control(compiled: Compiled) -> None:
+@pytest.mark.parametrize("blocked", [False, True], ids=["enabled", "blocked"])
+def test_grid_following_control(compiled: Compiled, blocked: bool) -> None:
     """Grid-following control should agree with motulator, and exactly with the
-    monolithic control system."""
-    build, signals = gfl_system()
+    monolithic control system, also with the gates blocked."""
+    build, signals = gfl_system(blocked)
     values = grid.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
@@ -263,11 +286,17 @@ def test_grid_following_control(compiled: Compiled) -> None:
     check(compiled, "gfl", values, run, GFL_INPUTS)
 
 
-@pytest.mark.parametrize("power_limitation", [False, True])
-def test_grid_forming_control(compiled: Compiled, power_limitation: bool) -> None:
+@pytest.mark.parametrize(
+    ("power_limitation", "blocked"),
+    [(False, False), (True, False), (True, True)],
+    ids=["no_limitation", "power_limitation", "power_limitation_blocked"],
+)
+def test_grid_forming_control(
+    compiled: Compiled, power_limitation: bool, blocked: bool
+) -> None:
     """Grid-forming control should agree with motulator, and exactly with the
-    monolithic control system."""
-    build, signals = gfm_system(power_limitation)
+    monolithic control system, also with the gates blocked."""
+    build, signals = gfm_system(power_limitation, blocked)
     values = grid.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:

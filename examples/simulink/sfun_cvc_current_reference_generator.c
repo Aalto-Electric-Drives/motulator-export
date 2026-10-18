@@ -39,14 +39,11 @@
 static IMCurrentReferenceGenerator self;
 static double T_s; /* Sampling period */
 
-/* Initial state, restored while the block is disabled */
-static IMCurrentReferenceGenerator self_init;
-
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 2, 1, 2};
-static const int FEEDTHROUGH[] = {1, 1, 0, 0, 1};
+static const int INPUT_WIDTHS[] = {1, 2, 1, 2};
+static const int FEEDTHROUGH[] = {1, 0, 0, 1};
 static const int OUTPUT_WIDTHS[] = {1, 2};
-#define NUM_INPUTS 5
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 2
 #define NUM_PARAMS 11
 
@@ -147,28 +144,15 @@ static void mdlStart(SimStruct *S)
     im_reference_gen_init(&self, par, P(0, 0), P(1, 0),
                           P(2, 0), P(3, 0), PARAM(4));
     T_s = P(5, 0);
-
-    self_init = self;
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 1; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(1, k) = 0.0;
-        }
-        return;
-    }
-
-    double complex psi_R = complex_from(InputSignal(4, 0), InputSignal(4, 1));
+    double complex psi_R = complex_from(InputSignal(3, 0), InputSignal(3, 1));
     double tau_M_ref;
     double complex i_s_ref;
-    im_reference_gen_compute_output(&self, InputSignal(1, 0), cabs(psi_R),
+    im_reference_gen_compute_output(&self, InputSignal(0, 0), cabs(psi_R),
                                     &i_s_ref, &tau_M_ref);
     /* Transform the reference to the same coordinates as the feedback */
     i_s_ref = cexp(I * carg(psi_R)) * i_s_ref;
@@ -181,15 +165,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: reset the state */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        self = self_init;
-        return;
-    }
-
     /* Field weakening based on the unlimited voltage reference */
-    im_reference_gen_update(&self, T_s, complex_from(InputSignal(2, 0), InputSignal(2, 1)),
-                            InputSignal(3, 0));
+    im_reference_gen_update(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)),
+                            InputSignal(2, 0));
 }
 
 static void mdlTerminate(SimStruct *S)

@@ -4,12 +4,12 @@ Test the control systems with MATLAB Function blocks in Simulink.
 The blocks of the control systems run the MATLAB port of motulator in MATLAB Function
 blocks (`code` "matlab" of the Simulink export). Each control system is built alone
 in a Simulink model (`build_harness.m`) and run with the inputs of the closed-loop
-simulations of `test_control.py`, followed by a sequence with the input `enable`
-toggled and the DC-bus voltage zero (as in `test_simulink.check_enable`). The
-outputs, i.e., the duty ratios and the monitored signals, should agree with those of
-the S-functions of the blocks (`tests/netlist.py`), which agree with motulator, to
-the rounding errors (amplified by the replay in the vector control of the drives,
-see `test_matlab_function`).
+simulations of `test_control.py` (also with the gates blocked), and with a sequence
+of constant inputs with the gates blocked and enabled and the DC-bus voltage zero (as
+in `test_simulink.check_dc_bus_limit`). The outputs, i.e., the duty ratios and the
+monitored signals, should agree with those of the S-functions of the blocks
+(`tests/netlist.py`), which agree with motulator, to the rounding errors (amplified
+by the replay in the vector control of the drives, see `test_matlab_function`).
 
 Needs MATLAB with the MATLAB Engine API for Python (skipped otherwise) and gcc. Run
 from the repository root:
@@ -147,37 +147,48 @@ def case(name: str) -> Case:
 
         return "fvc", values, flux_map, gradnet_run, SM_INPUTS
     if name.startswith("fvc"):
-        sensorless, t_d = {
-            "fvc_sensorless": (True, 0.0),
-            "fvc_sensored": (False, 0.0),
-            "fvc_dead_time": (True, 2e-6),
+        sensorless, t_d, blocked = {
+            "fvc_sensorless": (True, 0.0, False),
+            "fvc_sensored": (False, 0.0, False),
+            "fvc_dead_time": (True, 2e-6, False),
+            "fvc_blocked": (True, 0.0, True),
         }[name]
-        build, signals = sm_system(sensorless, t_d)
+        build, signals = sm_system(sensorless, t_d, blocked)
         values, _ = sm.export_values(build()[1], SM_SPEED)
         run = drive_run(build, signals, _sm_control.FVC_BLOCK, 0.3)
         return "fvc", values, None, run, SM_INPUTS
     if name.startswith("cvc"):
-        sensorless, t_d, i_0 = {
-            "cvc_sensorless": (True, 0.0, 0.0),
-            "cvc_sensored": (False, 0.0, 0.0),
-            "cvc_dead_time_tanh": (True, 2e-6, 0.5),
+        # With the dead time, the duty-ratio error of a clamped leg (d = 1) differs
+        # from its limit as d approaches 1 by t_d/(4*T_half)*(1 + s), and similarly at
+        # d = 0. With the threshold voltage pulling the compensated duty ratio inside
+        # the limits, the outputs then depend on the rounding of the clamping in the
+        # overmodulation, unless the current direction s is exactly +-1, as np.sign
+        # gives (i_0 = 0)
+        args = {
+            "cvc_sensorless": (True, 0.0, 0.0, 0.0, False, False),
+            "cvc_sensored": (False, 0.0, 0.0, 0.0, False, False),
+            "cvc_dead_time_tanh": (True, 2e-6, 0.5, 0.0, False, False),
+            "cvc_u_th_single": (True, 2e-6, 0.0, 1.0, True, False),
+            "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True),
         }[name]
-        build, signals = im_system(sensorless, t_d, i_0)
+        build, signals = im_system(*args)
         values = im.export_values(build()[1], IM_SPEED)
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
     if name.startswith("vhz"):
-        open_loop, t_d, d_min = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
-        build, signals = vhz_system(open_loop, t_d, d_min)
+        vhz_args = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
+        build, signals = vhz_system(*vhz_args)
         values = im.export_vhz_values(build()[1])
         run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0)
         return "vhz", values, None, run, VHZ_INPUTS
-    if name == "gfl":
-        build, signals = gfl_system()
+    if name.startswith("gfl"):
+        build, signals = gfl_system(name == "gfl_blocked")
         values = grid.export_values(build()[1])
         run = grid_run(build, signals, _grid_control.GFL_BLOCK, 0.06)
         return "gfl", values, None, run, GFL_INPUTS
-    build, signals = gfm_system(name == "gfm_power_limitation")
+    build, signals = gfm_system(
+        name.startswith("gfm_power_limitation"), name.endswith("blocked")
+    )
     values = grid.export_values(build()[1])
     run = grid_run(build, signals, _grid_control.GFM_BLOCK, 0.25)
     return "gfm", values, None, run, GFM_INPUTS
@@ -187,21 +198,26 @@ CASES = [
     "fvc_sensorless",
     "fvc_sensored",
     "fvc_dead_time",
+    "fvc_blocked",
     "fvc_gradnet",
     "cvc_sensorless",
     "cvc_sensored",
     "cvc_dead_time_tanh",
+    "cvc_u_th_single",
+    "cvc_u_th_blocked",
     *(f"vhz_{v}" for v in VHZ_IDS),
     "gfl",
+    "gfl_blocked",
     "gfm",
     "gfm_power_limitation",
+    "gfm_power_limitation_blocked",
 ]
 
 
-def enable_sequence(block: ControlBlock, inputs: list[float]) -> list[list[float]]:
+def constant_sequence(block: ControlBlock, inputs: list[float]) -> list[list[float]]:
     """
-    Inputs disabling and enabling the control system with the constant inputs, also
-    with the DC-bus voltage zero (as in `test_simulink.check_enable`).
+    The constant inputs with the gates blocked and enabled, also with the DC-bus
+    voltage zero (as in `test_simulink.check_dc_bus_limit`).
     """
     k_dc = sum(block.input_widths[1 : block.inputs.index("u_dc")])
     out: list[list[float]] = []
@@ -341,13 +357,13 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     to them, so the differences grow exponentially. The outputs are therefore
     compared within their sensitivity, which the S-functions with the inputs
     perturbed at the level of the rounding errors (relative 1e-14) show: from the
-    start of the closed loop and of the sequence with `enable` (which resets the
-    state), the outputs are compared until the sensitivity of any of them reaches
-    1e-6 relative to its magnitude, after which the replay is meaningless (an output
-    that does not respond to the perturbation, e.g., the torque reference at its
-    limit, does not show that the states still agree). The tolerance is RTOL plus
-    100 times the sensitivity (the rounding errors of the MATLAB code grow as the
-    perturbation does).
+    start of the closed loop and of the sequence of constant inputs (each simulated
+    from the initial state), the outputs are compared until the sensitivity of any
+    of them reaches 1e-6 relative to its magnitude, after which the replay is
+    meaningless (an output that does not respond to the perturbation, e.g., the
+    torque reference at its limit, does not show that the states still agree). The
+    tolerance is RTOL plus 100 times the sensitivity (the rounding errors of the
+    MATLAB code grow as the perturbation does).
     """
     key, values, flux_map, run, constant = case(name)
     net, _ = compiled(key)
@@ -356,37 +372,35 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     params = block_params(net.top, init, VALUES)
     assert net.start(params, start) is None
     closed_loop = run(net)
-    inputs = np.array(closed_loop + enable_sequence(block, constant))
     n_out = 3 + len(block.signals)
-    expected = replay(net, params, inputs, n_out)
-    signs = np.random.default_rng(0).choice([-1.0, 1.0], inputs.shape)
-    perturbed = replay(net, params, inputs * (1 + 1e-14 * signs), n_out)
+    rng = np.random.default_rng(0)
+    counts = []
+    for inputs in (np.array(closed_loop), np.array(constant_sequence(block, constant))):
+        expected = replay(net, params, inputs, n_out)
+        signs = rng.choice([-1.0, 1.0], inputs.shape)
+        perturbed = replay(net, params, inputs * (1 + 1e-14 * signs), n_out)
+        actual = harnesses.simulate(key, init, inputs, values["T_s"])
+        assert actual.shape == expected.shape
+        scale = np.maximum(np.max(np.abs(expected), axis=0), 1.0)
+        sensitivity = np.abs(perturbed - expected)
+        conditioned = np.all(sensitivity <= 1e-6 * scale, axis=1)
+        compared = np.cumprod(conditioned).astype(bool)
+        sensitivity = np.maximum.accumulate(sensitivity, axis=0)
+        err = np.where(compared[:, None], np.abs(actual - expected), 0.0)
+        tol = RTOL * scale + 100 * sensitivity
+        print(f"  steps compared: {np.sum(compared)} of {len(inputs)}")
+        for j, signal in enumerate(["d_a", "d_b", "d_c", *block.signals]):
+            ratio = np.max(err[:, j] / tol[:, j])
+            print(
+                f"  {signal}: max error {np.max(err[:, j]):.3g} (scale "
+                f"{scale[j]:.3g}), max error/tolerance {ratio:.2g}"
+            )
+        assert np.all(err <= tol)
+        counts.append(np.sum(compared))
     net.sfun_terminate()
-    actual = harnesses.simulate(key, init, inputs, values["T_s"])
-    assert actual.shape == expected.shape
-    scale = np.maximum(np.max(np.abs(expected), axis=0), 1.0)
-    sensitivity = np.abs(perturbed - expected)
-    n_loop = len(closed_loop)
-    compared = np.zeros(len(inputs), dtype=bool)
-    for a, b in [(0, n_loop), (n_loop, len(inputs))]:
-        conditioned = np.all(sensitivity[a:b] <= 1e-6 * scale, axis=1)
-        compared[a:b] = np.cumprod(conditioned).astype(bool)
-        sensitivity[a:b] = np.maximum.accumulate(sensitivity[a:b], axis=0)
-    err = np.where(compared[:, None], np.abs(actual - expected), 0.0)
-    tol = RTOL * scale + 100 * sensitivity
-    print(
-        f"  steps compared: {np.sum(compared[:n_loop])} of {n_loop} and "
-        f"{np.sum(compared[n_loop:])} of {len(inputs) - n_loop}"
-    )
-    for j, signal in enumerate(["d_a", "d_b", "d_c", *block.signals]):
-        print(
-            f"  {signal}: max error {np.max(err[:, j]):.3g} (scale {scale[j]:.3g}), "
-            f"max error/tolerance {np.max(err[:, j] / tol[:, j]):.2g}"
-        )
-    # The sequence with enable, at least (sensorless current-vector control is
+    # The sequence of constant inputs, at least (sensorless current-vector control is
     # sensitive already at the start of the closed loop, with zero flux)
-    assert np.sum(compared[n_loop:]) >= 100
-    assert np.all(err <= tol)
+    assert counts[1] >= 100
 
 
 @pytest.mark.parametrize("gradnet", [False, True], ids=["constant", "gradnet"])

@@ -144,8 +144,8 @@ void init(const double *c, const double *s)
 void step(const double *i_s_abc, double u_dc, double w_M_ref, double theta_M,
           double *out)
 {
-    Measurements meas = {abc2complex(i_s_abc), u_dc, theta_M};
-    vector_control_system_compute_output(&ctrl, &meas, w_M_ref);
+    Measurements meas = {abc2complex(i_s_abc), u_dc, theta_M, 0.0};
+    vector_control_system_compute_output(&ctrl, &meas, w_M_ref, 1);
     out[0] = ctrl.ref.d_abc[0];
     out[1] = ctrl.ref.d_abc[1];
     out[2] = ctrl.ref.d_abc[2];

@@ -65,7 +65,7 @@ BLOCK = sm.FVC_BLOCK
 def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
     sm._check_supported(mdl, ctrl)  # The PLECS export supports a superset
-    check_supported_converter(mdl)
+    check_supported_converter(mdl, ctrl)
 
 
 def write_model(
@@ -76,7 +76,6 @@ def write_model(
     tau_L: StepSignal,
     t_stop: float,
     speed_ctrl_args: dict[str, float],
-    enable: StepSignal | float = 1.0,
     code: str = "c",
 ) -> Path:
     """
@@ -96,7 +95,9 @@ def write_model(
     mdl : Drive
         Continuous-time system model.
     ctrl : VectorControlSystem
-        Discrete-time control system.
+        Discrete-time control system. The control system supports the gate blocking
+        (`set_enable`) by its input `enable`, but the system model does not, so the
+        gates must not be blocked (the input is 1).
     w_M_ref : StepSignal
         Speed reference (mechanical rad/s).
     tau_L : StepSignal
@@ -105,10 +106,6 @@ def write_model(
         Simulation stop time (s).
     speed_ctrl_args : dict[str, float]
         Arguments of `SpeedController` used in `ctrl`.
-    enable : StepSignal | float, optional
-        Input `enable` of the control system, defaults to 1 (enabled). While it is
-        not positive, the duty ratios are 0.5 and the state of the control system is
-        reset to its initial value.
     code : str, optional
         Code of the blocks of the control system: "c" (the C port in S-functions,
         the default) or "matlab" (the MATLAB port in MATLAB Function blocks).
@@ -141,7 +138,7 @@ def write_model(
         path, lambda comment: _sm_control.init_script(variables, values, comment)
     )
     return write_drive_model(
-        path, BLOCK, script, machine, w_M_ref, tau_L, t_stop, functions, enable, code
+        path, BLOCK, script, machine, w_M_ref, tau_L, t_stop, functions, code
     )
 
 

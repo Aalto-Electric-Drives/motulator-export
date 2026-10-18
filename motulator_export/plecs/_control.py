@@ -26,11 +26,10 @@ classes of the control methods are in `_sm_control`, `_im_control`, and
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
-from motulator.common.control._pwm import PWM
-from motulator.common.utils import dead_time_error
+from motulator.common.control._pwm import PWM, InverterNonlinearity
 
 from motulator_export.plecs._common import (
     C_DIR,
@@ -45,7 +44,6 @@ from motulator_export.plecs._common import (
     MaskParam,
     _c_define,
     _fmt_mask,
-    block_enable_code,
     monitored_code,
 )
 from motulator_export.plecs._netlist import (
@@ -249,31 +247,19 @@ class Signals:
         return HEADER + includes + "\n" + C_PARAMS + gradnet + "\n" + workspace
 
     def class_code(
-        self,
-        cls: str,
-        start: str,
-        output: str,
-        update: str = "",
-        workspace: str = "",
-        outputs: tuple[int, ...] = (1,),
-        disabled: float | None = 0.0,
+        self, cls: str, start: str, output: str, update: str = "", workspace: str = ""
     ) -> dict[str, str]:
         """
         Code sections of the block of a class: its state `self` of the type `cls` is
         initialized by `start` from the parameters, which are read only there (the
-        parameters used later are copied to the `workspace` variables). The input
-        `enable` is added unless `disabled` is None.
+        parameters used later are copied to the `workspace` variables).
         """
-        code = {
+        return {
             "Declarations": self.declarations(f"static {cls} self;\n" + workspace),
             "StartFcn": start,
             "OutputFcn": output,
             "UpdateFcn": update,
         }
-        if disabled is None:
-            return code
-        state = [(cls, "self")] if update else []
-        return block_enable_code(code, state, list(outputs), disabled)
 
     def function_code(
         self, output: str, start: str = "", workspace: str = ""
@@ -296,9 +282,11 @@ def speed_controller(sig: Signals) -> CBlock:
     """Speed controller (SpeedController)."""
     mask = Mask(
         "SpeedController (motulator)",
-        "2DOF PI speed controller (SpeedController). The inputs are the speed "
-        "estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), and "
-        "the speed reference w_M_ref, and the output is the torque reference.",
+        "2DOF PI speed controller (SpeedController). The inputs are the gate enable, "
+        "the speed estimate fbk.w_M, the limited torque reference ref.tau_M "
+        "(anti-windup), and the speed reference w_M_ref, and the output is the "
+        "torque reference. While the gates are blocked, the controller is not "
+        "updated, as in VectorControlSystem.",
         [
             Param("J", "J: Total inertia (kgm²)", "speed_ctrl.J"),
             Param(
@@ -334,8 +322,11 @@ def speed_controller(sig: Signals) -> CBlock:
         "InputSignal(1, 0), 0.0);\n"
     )
     update = (
-        "/* The limited torque reference ref.tau_M (anti-windup) */\n"
-        "pi_update(&self, T_s, InputSignal(2, 0));\n"
+        "/* The limited torque reference ref.tau_M (anti-windup), not updated while\n"
+        " * the gates are blocked */\n"
+        "if (InputSignal(0, 0) > 0.0) {\n"
+        "    pi_update(&self, T_s, InputSignal(2, 0));\n"
+        "}\n"
     )
     mcode = MCode(
         start="% No torque limit without tau_M_max\n"
@@ -346,8 +337,12 @@ def speed_controller(sig: Signals) -> CBlock:
         "self = speed_controller(p.J, p.alpha_s, p.alpha_i, tau_M_max);\n",
         output="% Torque reference\n"
         "[self, tau_M_ref] = pi_compute_output(self, w_M_ref, w_M, 0);\n",
-        update="% The limited torque reference ref.tau_M (anti-windup)\n"
-        "self = pi_update(self, p.T_s, tau_M);\n",
+        update="% The limited torque reference ref.tau_M (anti-windup), not updated "
+        "while\n"
+        "% the gates are blocked\n"
+        "if enable > 0\n"
+        "    self = pi_update(self, p.T_s, tau_M);\n"
+        "end\n",
         checks=required("J", "alpha_s", "T_s"),
     )
     return CBlock(
@@ -357,7 +352,7 @@ def speed_controller(sig: Signals) -> CBlock:
         sig.class_code("PIController", start, output, update, SAMPLING),
         params,
         sig.sfunction("speed_controller"),
-        feedthrough=[1, 1, 0, 1],
+        feedthrough=[0, 1, 0, 1],
         mask=mask,
         mcode=mcode,
     )
@@ -369,20 +364,27 @@ def pwm(sig: Signals) -> Subsystem:
         "PWM (motulator)",
         "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-"
         "error (MME) overmodulation (PWM), with the duty-ratio error model d_err = "
-        "dead_time_error(i_abc, d_abc, t_d, T_s, sign) and its compensation, and the "
-        "minimum pulses. The blocks inside are "
-        "its methods compute_output and get_realized_voltage.",
+        "InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum "
+        "pulses, and the single update. The blocks inside are its methods "
+        "compute_output and get_realized_voltage. While the gates are blocked (the "
+        "input enable is zero), the realized voltage is the measured converter "
+        "voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.",
         [
             T_S,
             Param(
                 "t_d",
-                "t_d: Dead time (s) in d_err = dead_time_error(i_abc, d_abc, t_d, T_s),"
-                " 0 = None",
+                "t_d: Dead time (s) in d_err = InverterNonlinearity(t_d, u_th, sign)",
                 "pwm.t_d",
             ),
             Param(
+                "u_th",
+                "u_th: Threshold voltage (V) in InverterNonlinearity (d_err = None if "
+                "t_d = u_th = 0)",
+                "pwm.u_th",
+            ),
+            Param(
                 "i_0",
-                "i_0: Current scale (A) of sign = tanh(i/i_0) in dead_time_error, "
+                "i_0: Current scale (A) of sign = tanh(i/i_0) in InverterNonlinearity, "
                 "0 = np.sign",
                 "pwm.i_0",
             ),
@@ -397,6 +399,12 @@ def pwm(sig: Signals) -> Subsystem:
                 "pwm.d_min",
             ),
             Param(
+                "single_update",
+                "single_update: Duty ratios updated once (1) or twice (0) per carrier "
+                "period",
+                "pwm.single_update",
+            ),
+            Param(
                 "overmodulation",
                 "overmodulation: Overmodulation, 'MPE' or 'MME'",
                 "pwm.overmodulation",
@@ -407,31 +415,32 @@ def pwm(sig: Signals) -> Subsystem:
     params = mask_params(mask, {"overmodulation": ["mme"]})
     start = (
         checks(params, params) + "pwm_init(&self, 1.5); /* k_pred */\n"
-        "pwm_set_overmodulation(&self, (int)P(5, 0));\n"
-        "pwm_set_dead_time(&self, P(1, 0), P(0, 0), P(2, 0), (int)P(3, 0));\n"
-        "pwm_set_min_pulse(&self, P(4, 0));\n"
+        "pwm_set_overmodulation(&self, (int)P(7, 0));\n"
+        "pwm_set_nonlinearity(&self, P(1, 0), P(2, 0), P(3, 0), (int)P(4, 0));\n"
+        "pwm_set_min_pulse(&self, P(5, 0));\n"
+        "pwm_set_single_update(&self, (int)P(6, 0));\n"
+        "T_s = P(0, 0);\n"
     )
     m_start = (
         "self = pwm_init(1.5); % k_pred\n"
         "self = pwm_set_overmodulation(self, p.mme);\n"
-        "self = pwm_set_dead_time(self, p.t_d, p.T_s, p.i_0, p.feedforward);\n"
+        "self = pwm_set_nonlinearity(self, p.t_d, p.u_th, p.i_0, p.feedforward);\n"
         "self = pwm_set_min_pulse(self, p.d_min);\n"
+        "self = pwm_set_single_update(self, p.single_update);\n"
     )
     m_checks = required(*params)
     meas = sig.port("meas")
     output = (
-        sig.read(1, "meas") + "double d_abc[3];\n"
-        "pwm_compute_output(&self, T_s, " + complex_in(2) + ", meas.u_dc,\n"
-        "                   InputSignal(3, 0), meas.i_c_ab, d_abc);\n"
+        sig.read(0, "meas") + "double d_abc[3];\n"
+        "pwm_compute_output(&self, T_s, " + complex_in(1) + ", meas.u_dc,\n"
+        "                   InputSignal(2, 0), meas.i_c_ab, d_abc);\n"
         + _write(0, "3", "d_abc")
     )
     compute = CBlock(
         "compute_output",
-        [Port(ENABLE, 1), meas, Port("u_c_ref_ab", 2), Port("w", 1)],
+        [meas, Port("u_c_ref_ab", 2), Port("w", 1)],
         [Port("d_abc", 3)],
-        sig.class_code(
-            "PWM", start + "T_s = P(0, 0);\n", output, "", SAMPLING, (3,), 0.5
-        ),
+        sig.class_code("PWM", start, output, "", SAMPLING),
         params,
         sig.sfunction("pwm"),
         mcode=MCode(
@@ -440,42 +449,47 @@ def pwm(sig: Signals) -> Subsystem:
             "meas.u_dc, w, meas.i_c_ab);\n",
             inputs={"meas": sig.vector("meas"), "u_c_ref_ab": COMPLEX},
             checks=m_checks,
-            disabled=0.5,
         ),
     )
     output = (
         sig.read(1, "meas")
-        + "/* Average of the previous and the ongoing periods, and of the\n"
-        " * ongoing period */\n"
-        "double complex u_c_ab =\n"
-        "    pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n"
-        "double complex u_c_zoh_ab =\n"
-        "    pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n"
-        + complex_out(0, "u_c_ab")
-        + complex_out(1, "u_c_zoh_ab")
+        + "/* Average of the previous and the ongoing periods, and of the ongoing\n"
+        " * period, or while the gates are blocked, the measured voltage */\n"
+        "double complex u_c_ab = meas.u_c_ab;\n"
+        "double complex u_c_zoh_ab = meas.u_c_ab;\n"
+        "if (InputSignal(0, 0) > 0.0) {\n"
+        "    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n"
+        "    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n"
+        "}\n" + complex_out(0, "u_c_ab") + complex_out(1, "u_c_zoh_ab")
     )
     update = (
         "/* The duty ratios of the next period */\n"
         + _read(2, "3", "d_abc")
-        + "pwm_update(&self, d_abc);\n"
+        + "pwm_update(&self, T_s, d_abc);\n"
     )
     realized = CBlock(
         "get_realized_voltage",
         [Port(ENABLE, 1), meas, Port("d_abc", 3)],
         [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2)],
-        sig.class_code("PWM", start, output, update, outputs=(2, 2)),
+        sig.class_code("PWM", start, output, update, SAMPLING),
         params,
         sig.sfunction("pwm_realized_voltage"),
         feedthrough=[1, 1, 0],
         mcode=MCode(
             start=m_start,
             output="% Average of the previous and the ongoing periods, and of the "
-            "ongoing period\n"
-            "u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);\n"
-            "u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, "
-            "false);\n",
+            "ongoing\n"
+            "% period, or while the gates are blocked, the measured voltage\n"
+            "if enable > 0\n"
+            "    u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);\n"
+            "    u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, "
+            "false);\n"
+            "else\n"
+            "    u_c_ab = meas.u_c_ab;\n"
+            "    u_c_zoh_ab = meas.u_c_ab;\n"
+            "end\n",
             update="% The duty ratios of the next period\n"
-            "self = pwm_update(self, d_abc);\n",
+            "self = pwm_update(self, p.T_s, d_abc);\n",
             inputs={"meas": sig.vector("meas")},
             outputs={"u_c_ab": COMPLEX, "u_c_zoh_ab": COMPLEX},
             checks=m_checks,
@@ -487,7 +501,6 @@ def pwm(sig: Signals) -> Subsystem:
         [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2), Port("d_abc", 3)],
         [compute, realized],
         [
-            (ENABLE, "compute_output:enable"),
             (ENABLE, "get_realized_voltage:enable"),
             ("meas", "compute_output:meas"),
             ("meas", "get_realized_voltage:meas"),
@@ -536,20 +549,19 @@ def speed_observer(sig: Signals) -> CBlock:
     )
     return CBlock(
         "SpeedObserver",
-        [Port(ENABLE, 1), Port("eps", 1), Port("tau_M", 1)],
+        [Port("eps", 1), Port("tau_M", 1)],
         [Port("w_M", 1), Port("tau_L", 1)],
         sig.class_code(
             "SpeedObserver",
             start,
             "OutputSignal(0, 0) = self.w_M;\nOutputSignal(1, 0) = self.tau_L;\n",
-            "speed_observer_update(&self, T_s, InputSignal(1, 0), "
-            "InputSignal(2, 0));\n",
+            "speed_observer_update(&self, T_s, InputSignal(0, 0), "
+            "InputSignal(1, 0));\n",
             SAMPLING,
-            outputs=(1, 1),
         ),
         params,
         sig.sfunction("speed_observer"),
-        feedthrough=[1, 0, 0],
+        feedthrough=[0, 0],
         mask=mask,
         mcode=MCode(
             start="% The mechanical system model is not used without J\n"
@@ -562,6 +574,74 @@ def speed_observer(sig: Signals) -> CBlock:
             update="self = speed_observer_update(self, p.T_s, eps, tau_M);\n",
             checks=required("k_w", "k_tau", "T_s"),
         ),
+    )
+
+
+def compute_standby_output(
+    sig: Signals, ports: list[Port], standby: list[str]
+) -> CBlock:
+    """
+    References of compute_output of a controller, or while the gates are blocked (the
+    input enable is zero), those of its compute_standby_output.
+
+    The references `ports` of compute_output (e.g., the flux and torque references of
+    the reference generator), the inputs named with the suffix "_in", are passed
+    through to the outputs, or replaced by the C expressions `standby` (an element
+    of the outputs each) of the feedback signals fbk (e.g., the estimated flux and
+    torque), which the controller then tracks.
+
+    """
+    if len(standby) != sum(p.width for p in ports):
+        raise ValueError("The standby references must match the widths of the ports")
+    inputs = [Port(ENABLE, 1), *(Port(f"{p.name}_in", p.width) for p in ports)]
+    inputs.append(sig.port("fbk"))
+    passed, replaced, m_passed, m_replaced = "", "", "", ""
+    values = iter(standby)
+    for k, p in enumerate(ports):
+        exprs = [next(values) for _ in range(p.width)]
+        passed += "".join(
+            f"    OutputSignal({k}, {j}) = InputSignal({k + 1}, {j});\n"
+            for j in range(p.width)
+        )
+        replaced += "".join(
+            f"    OutputSignal({k}, {j}) = {e};\n" for j, e in enumerate(exprs)
+        )
+        m_passed += f"    {p.name} = {p.name}_in;\n"
+        m_exprs = "; ".join(c_to_matlab(e, inputs) for e in exprs)
+        m_replaced += f"    {p.name} = " + (
+            f"[{m_exprs}];\n" if p.width > 1 else f"{m_exprs};\n"
+        )
+    comment = (
+        "References of compute_output, or while the gates are blocked, of\n"
+        "compute_standby_output"
+    )
+    output = (
+        sig.read(len(ports) + 1, "fbk")
+        + "/* "
+        + comment.replace("\n", "\n * ")
+        + " */\n"
+        "if (InputSignal(0, 0) > 0.0) {\n" + passed + "} else {\n" + replaced + "}\n"
+    )
+    mcode = MCode(
+        output="% "
+        + comment.replace("\n", "\n% ")
+        + "\n"
+        + "if enable > 0\n"
+        + m_passed
+        + "else\n"
+        + m_replaced
+        + "end\n",
+        inputs={"fbk": sig.vector("fbk")},
+    )
+    return CBlock(
+        "compute_standby_output",
+        inputs,
+        [Port(p.name, p.width) for p in ports],
+        sig.function_code(output),
+        [],
+        sig.sfunction("standby_output"),
+        sample_time=None,
+        mcode=mcode,
     )
 
 
@@ -592,7 +672,6 @@ def current_limiter(sig: Signals) -> CBlock:
             inputs={"i": COMPLEX},
             outputs={"i_lim": COMPLEX},
             checks=required("i_max"),
-            disabled=None,
         ),
     )
 
@@ -611,12 +690,12 @@ def rate_limiter(sig: Signals) -> CBlock:
         checks(params, params) + "rate_limiter_init(&self, P(0, 0));\nT_s = P(1, 0);\n"
     )
     output = (
-        "y = rate_limiter_compute_output(&self, T_s, InputSignal(1, 0));\n"
+        "y = rate_limiter_compute_output(&self, T_s, InputSignal(0, 0));\n"
         "OutputSignal(0, 0) = y;\n"
     )
     return CBlock(
         "RateLimiter",
-        [Port(ENABLE, 1), Port("u", 1)],
+        [Port("u", 1)],
         [Port("y", 1)],
         sig.class_code(
             "RateLimiter",
@@ -637,79 +716,75 @@ def rate_limiter(sig: Signals) -> CBlock:
     )
 
 
-def pwm_values(pwm: PWM, T_s: float) -> dict[str, Any]:
+def pwm_values(pwm: PWM) -> dict[str, Any]:
     """
     Get the parameter values of the PWM (the struct pwm of the model
     initialization).
 
-    Only the duty-ratio error model `d_err = dead_time_error(i_abc, d_abc, t_d, T_s,
-    sign)` with the sampling period `T_s` of the control system and `sign = np.sign`
-    (the default) or `sign = lambda i: np.tanh(i/i_0)` is supported. Since `d_err`
-    is a function, the dead time `t_d` and the current scale `i_0` are identified
-    from its values at the duty ratios of 0.5, where `d_err = t_d/(2*T_s)*sign(i)`,
-    and the function is checked at test points, also near zero current. The minimum
-    duty ratio `d_min` of a switching leg is a parameter of the PWM.
+    Only the duty-ratio error model `d_err = InverterNonlinearity(t_d, u_th, sign)`
+    with `sign = np.sign` (the default) or `sign = lambda i: np.tanh(i/i_0)` is
+    supported. Since `sign` is a function, the current scale `i_0` is identified (see
+    `_sign_scale`). The minimum duty ratio `d_min` of a switching leg and the single
+    update are parameters of the PWM.
 
     """
-    d_min = float(pwm.d_min)
-    if pwm.d_err is None:
-        return {
-            "pwm_t_d": 0.0,
-            "pwm_i_0": 0.0,
-            "pwm_feedforward": int(pwm.feedforward),
-            "pwm_d_min": d_min,
-            "pwm_overmodulation": pwm.overmodulation,
-        }
+    t_d = u_th = i_0 = 0.0
     d_err = pwm.d_err
-    d_half = np.full(3, 0.5)
-
-    def sign(i: float) -> float:
-        """Current direction scaled by the error at the duty ratios of 0.5."""
-        return float(d_err(np.array([i, -i, 0.0]), d_half)[0])
-
-    # The sign function saturates far from zero current
-    t_d = float(f"{2 * T_s * sign(1e6):.12g}")  # Remove the rounding errors
-    i_0 = 0.0
-    if t_d > 0 and sign(1e-300) < 0.5 * t_d / (2 * T_s):
-        # Smooth sign function: bisect the current at which it reaches tanh(1)
-        lo, hi = 0.0, 1e6
-        target = np.tanh(1) * t_d / (2 * T_s)
-        for _ in range(200):
-            mid = 0.5 * (lo + hi)
-            lo, hi = (mid, hi) if sign(mid) < target else (lo, mid)
-        i_0 = float(f"{0.5 * (lo + hi):.12g}")
-    rng = np.random.default_rng(0)
-    i_test = rng.uniform(-10, 10, (40, 3))
-    i_test[:, 0] = 0  # The signum function is zero at zero current
-    # Currents near zero, where the sign functions differ
-    i_near = np.array([1e-9, 1e-6, 1e-3, 1e-2, 0.1, 0.3, 1.0])
-    if i_0 > 0:
-        i_near = np.concatenate((i_near, i_0 * np.array([0.1, 0.5, 1.0, 2.0, 5.0])))
-    for k, i in enumerate(i_near):
-        i_test[5 + 2 * k, 1:] = [i, -i]
-        i_test[6 + 2 * k, 1:] = [-i, 0.5 * i]
-    d_test = rng.uniform(0, 1, (40, 3))
-    d_test[:5] = [[0, 1, 0.5], [1e-3, 1 - 1e-3, 0.5], [0, 0, 1], [1, 1, 0], [0.5] * 3]
-    d_test[5:30, 1:] = 0.5  # Duty ratios at which the error is not suppressed
-    for i_abc, d_abc in zip(i_test, d_test, strict=True):
-        if t_d <= 0 or not np.allclose(
-            d_err(i_abc, d_abc),
-            dead_time_error(i_abc, d_abc, t_d, T_s, _tanh_sign(i_0)),
-            rtol=0,
-            atol=1e-12,
-        ):
+    if d_err is not None:
+        if type(d_err) is not InverterNonlinearity:
             raise NotImplementedError(
-                "Only d_err = dead_time_error(i_abc, d_abc, t_d, T_s, sign) with "
-                "sign=np.sign or sign=lambda i: np.tanh(i/i_0) and the sampling "
-                "period T_s of the control system supported"
+                "Only the duty-ratio error model d_err = InverterNonlinearity(t_d, "
+                "u_th, sign) supported"
             )
+        model = cast(InverterNonlinearity, d_err)
+        t_d, u_th = float(model.t_d), float(model.u_th)
+        if t_d < 0 or u_th < 0:
+            raise NotImplementedError("Only t_d >= 0 and u_th >= 0 supported")
+        i_0 = _sign_scale(model.sign)
     return {
         "pwm_t_d": t_d,
+        "pwm_u_th": u_th,
         "pwm_i_0": i_0,
         "pwm_feedforward": int(pwm.feedforward),
-        "pwm_d_min": d_min,
+        "pwm_d_min": float(pwm.d_min),
+        "pwm_single_update": int(pwm.single_update),
         "pwm_overmodulation": pwm.overmodulation,
     }
+
+
+def _sign_scale(sign: Callable[[np.ndarray], np.ndarray]) -> float:
+    """
+    Current scale `i_0` of the current-direction function `sign = tanh(i/i_0)`, or 0
+    for the signum function.
+
+    The scale is the current at which the function reaches tanh(1), found by
+    bisection, and the function is checked at test points, also near zero current.
+
+    """
+
+    def value(i: float) -> float:
+        return float(np.asarray(sign(np.array([i, -i, 0.0])))[0])
+
+    i_0 = 0.0
+    if value(1e-300) < 0.5:
+        # Smooth sign function: bisect the current at which it reaches tanh(1)
+        lo, hi = 0.0, 1e6
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            lo, hi = (mid, hi) if value(mid) < np.tanh(1) else (lo, mid)
+        i_0 = float(f"{0.5 * (lo + hi):.12g}")  # Remove the rounding errors
+    rng = np.random.default_rng(0)
+    i_test = [rng.uniform(-10, 10, 20), [0.0, 1e-300, 1e-9, 1e-6, 1e-3, 1e-2, 0.1]]
+    i_test += [[0.3, 1.0, 1e3, 1e6], i_0 * np.array([0.1, 0.5, 1.0, 2.0, 5.0])]
+    i_abc = np.concatenate(i_test)
+    i_abc = np.concatenate((i_abc, -i_abc)).reshape(-1, 3)
+    for i in i_abc:
+        if not np.allclose(sign(i), _tanh_sign(i_0)(i), rtol=0, atol=1e-12):
+            raise NotImplementedError(
+                "Only sign=np.sign or sign=lambda i: np.tanh(i/i_0) supported in "
+                "InverterNonlinearity"
+            )
+    return i_0
 
 
 def _tanh_sign(i_0: float) -> Callable[[np.ndarray], np.ndarray]:
@@ -736,7 +811,6 @@ def get_measurement(
         output="% Measurements, the DC-bus voltage limited to U_DC_MIN = 1 V\n"
         f"meas = struct( ...\n    {m_fields});\n",
         outputs={"meas": sig.vector("meas")},
-        disabled=None,
     )
     return CBlock(
         "get_measurement",
@@ -754,6 +828,15 @@ def abc_input(name: str, port: int) -> str:
     return (
         f"double {name}[3] = {{InputSignal({port}, 0), InputSignal({port}, 1),\n"
         f"    InputSignal({port}, 2)}};\n"
+    )
+
+
+def converter_voltage_input(port: int) -> str:
+    """C code reading the measured line-to-line converter voltages u_ab and u_bc."""
+    return (
+        "/* Line-to-line converter voltages u_ab and u_bc, used while the gates are\n"
+        " * blocked */\n"
+        f"double u_c_line[2] = {{InputSignal({port}, 0), InputSignal({port}, 1)}};\n"
     )
 
 
@@ -785,7 +868,6 @@ def modulate(sig: Signals, u: str) -> CBlock:
         inputs={"fbk": sig.vector("fbk"), u: COMPLEX},
         outputs={"u_c_ref_ab": COMPLEX},
         checks=required("T_s"),
-        disabled=None,
     )
     return CBlock(
         "modulate",
@@ -810,11 +892,11 @@ def monitor(
     feedback signals fbk, the references ref, and the other `inputs`.
     """
     code = sig.function_code(
-        sig.read(1, "fbk")
-        + sig.read(2, "ref")
+        sig.read(0, "fbk")
+        + sig.read(1, "ref")
         + monitored_code(outputs, monitored, prelude=prelude, first=0)
     )
-    ports = [Port(ENABLE, 1), sig.port("fbk"), sig.port("ref"), *inputs]
+    ports = [sig.port("fbk"), sig.port("ref"), *inputs]
     m_output = "% Monitored signals\n" + c_to_matlab(prelude, ports)
     for name, signals in outputs.items():
         values = [c_to_matlab(monitored[n], ports) for n in signals]
@@ -829,7 +911,7 @@ def monitor(
         MONITOR,
         ports,
         [Port(name, len(signals)) for name, signals in outputs.items()],
-        block_enable_code(code, [], [len(v) for v in outputs.values()], 0.0),
+        code,
         ["T_s"],
         sig.sfunction("monitored_signals"),
         mcode=mcode,
@@ -889,7 +971,6 @@ def vector_control_system(
             (ENABLE, "SpeedController:enable"),
             (ENABLE, "PWM:enable"),
             (ENABLE, f"{vc}:enable"),
-            (ENABLE, f"{MONITOR}:enable"),
             ("w_M_ref", "SpeedController:w_M_ref"),
             ("w_M_ref", f"{MONITOR}:w_M_ref"),
             *meas,
@@ -987,7 +1068,6 @@ def grid_converter_control_system(
         [
             (ENABLE, "PWM:enable"),
             (ENABLE, f"{ic}:enable"),
-            (ENABLE, f"{MONITOR}:enable"),
             *((r, f"{ic}:{r}") for r in refs),
             *((p.name, f"get_measurement:{p.name}") for p in measurement.inputs),
             ("get_measurement:meas", "PWM:meas"),
@@ -1078,10 +1158,8 @@ def vhz_control_system(
             signals,
         ],
         [
-            (ENABLE, "RateLimiter:enable"),
             (ENABLE, "PWM:enable"),
             (ENABLE, f"{vc}:enable"),
-            (ENABLE, f"{MONITOR}:enable"),
             ("w_M_ref", "RateLimiter:u"),
             ("RateLimiter:y", f"{vc}:w_M"),
             ("RateLimiter:y", "Goto w_M"),
@@ -1194,13 +1272,22 @@ def speed_ctrl_init(values: dict[str, Any]) -> str:
 def pwm_init(values: dict[str, Any]) -> str:
     """The struct pwm of the model initialization."""
     return (
-        "% PWM: the duty-ratio error model d_err = dead_time_error(i_abc, d_abc,\n"
-        "% t_d, cfg.T_s, sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0), its\n"
-        "% compensation, the minimum duty ratio of a switching leg, and the\n"
-        "% overmodulation ('MPE' or 'MME')\n"
+        "% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n"
+        "% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n"
+        "% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n"
+        "% leg, the single update (1) or the double update (0) of the duty ratios,\n"
+        "% and the overmodulation ('MPE' or 'MME')\n"
         + "".join(
             assign(f"pwm.{n}", values[f"pwm_{n}"])
-            for n in ("t_d", "i_0", "feedforward", "d_min", "overmodulation")
+            for n in (
+                "t_d",
+                "u_th",
+                "i_0",
+                "feedforward",
+                "d_min",
+                "single_update",
+                "overmodulation",
+            )
         )
     )
 

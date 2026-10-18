@@ -159,7 +159,7 @@ static void im_vhz_control_system_init(IMVHzControlSystem *self,
 
 static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
                                                  const IMVHzMeasurements *meas,
-                                                 double w_M_ref)
+                                                 double w_M_ref, int enabled)
 {
     IMVHzController *ctrl = &self->vhz_ctrl;
     IMObserverOutputs *fbk = &self->fbk;
@@ -168,25 +168,35 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
 
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. */
-    double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+     * averaged over the previous and ongoing periods. With blocked gates, both are
+     * the measured voltage. */
+    double complex u_c_ab_zoh = meas->u_c_ab;
+    double complex u_c_ab = meas->u_c_ab;
+    if (enabled) {
+        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
 
     /* Rate-limited speed reference (RateLimiter), stored in the update function */
     w_M_ref = rate_limiter_compute_output(&self->rate_limiter, T_s, w_M_ref);
 
     /* The rotor speed of the observer is the speed reference */
-    im_flux_observer_compute_output(&ctrl->observer, u_c_ab, meas->i_c_ab, w_M_ref, 0.0,
-                                    ctrl->h, fbk);
-    u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    im_flux_observer_compute_output(&ctrl->observer, u_c_ab_zoh, meas->i_c_ab, w_M_ref,
+                                    0.0, ctrl->h, fbk);
     fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* References */
+    /* References, or with blocked gates, the standby references: the flux and
+     * torque controller tracks the estimated flux and torque */
     ref->T_s = T_s;
-    im_reference_gen_flux_and_torque(&ctrl->reference_gen, ctrl->tau_M_lpf, fbk->w_s,
-                                     cabs(fbk->psi_R), fbk->u_dc, &ref->psi_s,
-                                     &ref->tau_M);
+    if (enabled) {
+        im_reference_gen_flux_and_torque(&ctrl->reference_gen, ctrl->tau_M_lpf,
+                                         fbk->w_s, cabs(fbk->psi_R), fbk->u_dc,
+                                         &ref->psi_s, &ref->tau_M);
+    } else {
+        ref->tau_M = fbk->tau_M;
+        ref->psi_s = cabs(fbk->psi_s);
+    }
     ref->u_s = im_flux_torque_ctrl_compute_output(&ctrl->flux_torque_ctrl, ref->psi_s,
                                                   ref->tau_M, fbk);
 
@@ -203,7 +213,7 @@ static void im_vhz_control_system_update(IMVHzControlSystem *self)
 {
     IMVHzController *ctrl = &self->vhz_ctrl;
     double T_s = self->ref.T_s;
-    pwm_update(&self->pwm, self->ref.d_abc);
+    pwm_update(&self->pwm, T_s, self->ref.d_abc);
     rate_limiter_update(&self->rate_limiter, self->ref.w_M);
     ctrl->tau_M_lpf += T_s * ctrl->alpha_f * (self->fbk.tau_M - ctrl->tau_M_lpf);
     im_flux_observer_update(&ctrl->observer, T_s, &self->fbk);
@@ -229,6 +239,8 @@ static void im_vhz_measurements_pack(const IMVHzMeasurements *meas,
     y[VHZ_MEAS_i_c_ab] = creal(meas->i_c_ab);
     y[VHZ_MEAS_i_c_ab + 1] = cimag(meas->i_c_ab);
     y[VHZ_MEAS_u_dc] = meas->u_dc;
+    y[VHZ_MEAS_u_c_ab] = creal(meas->u_c_ab);
+    y[VHZ_MEAS_u_c_ab + 1] = cimag(meas->u_c_ab);
 }
 
 static void im_vhz_measurements_unpack(const double u[VHZ_MEAS_WIDTH],
@@ -236,6 +248,7 @@ static void im_vhz_measurements_unpack(const double u[VHZ_MEAS_WIDTH],
 {
     meas->i_c_ab = complex_from(u[VHZ_MEAS_i_c_ab], u[VHZ_MEAS_i_c_ab + 1]);
     meas->u_dc = u[VHZ_MEAS_u_dc];
+    meas->u_c_ab = complex_from(u[VHZ_MEAS_u_c_ab], u[VHZ_MEAS_u_c_ab + 1]);
 }
 
 static void im_vhz_references_unpack(const double u[VHZ_REF_WIDTH],

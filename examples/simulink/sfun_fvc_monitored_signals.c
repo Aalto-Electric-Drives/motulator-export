@@ -77,10 +77,10 @@
 
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 22, 4, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {22, 4, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {2, 2, 2, 3};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 4
 #define NUM_PARAMS 1
 
@@ -140,37 +140,20 @@ static void mdlStart(SimStruct *S)
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Disabled: the algorithm is not run */
-    if (!(InputSignal(0, 0) > 0.0)) {
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(0, k) = 0.0;
-        }
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(1, k) = 0.0;
-        }
-        for (int k = 0; k < 2; k++) {
-            OutputSignal(2, k) = 0.0;
-        }
-        for (int k = 0; k < 3; k++) {
-            OutputSignal(3, k) = 0.0;
-        }
-        return;
-    }
-
     double fbk_u[FBK_WIDTH];
     for (int k = 0; k < FBK_WIDTH; k++) {
-        fbk_u[k] = InputSignal(1, k);
+        fbk_u[k] = InputSignal(0, k);
     }
     ObserverOutputs fbk;
     observer_outputs_unpack(fbk_u, &fbk);
     double ref_u[REF_WIDTH];
     for (int k = 0; k < REF_WIDTH; k++) {
-        ref_u[k] = InputSignal(2, k);
+        ref_u[k] = InputSignal(1, k);
     }
     References ref;
     references_unpack(ref_u, &ref);
     /* Monitored signals */
-    OutputSignal(0, 0) = InputSignal(3, 0);
+    OutputSignal(0, 0) = InputSignal(2, 0);
     OutputSignal(0, 1) = fbk.w_M;
     OutputSignal(1, 0) = ref.tau_M;
     OutputSignal(1, 1) = fbk.tau_M;

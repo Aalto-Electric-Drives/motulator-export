@@ -21,17 +21,24 @@ Currently supported:
   injected with controlled current and torque sources)
 - Mechanical system (`MechanicalSystem` without friction), with PLECS blocks
 - Converter: carrier comparison (`pwm=True` in `Drive`) with the Symmetrical PWM
-  block and the ideal two-level converter of PLECS. The DC bus is stiff
+  block and the IGBT converter of PLECS with ideal IGBTs and diodes. The DC bus is stiff
   (`VoltageSourceConverter` without a DC-bus model), capacitive (`DCBus`), or fed by
   a diode bridge with a DC-bus inductor and capacitor (`DiodeBridgeDCBus`). The
   DC-bus model feeds only the converter of the drive, without an external DC
   current, and the capacitor voltage starts from the state of the model. The
-  computational delay of one sampling period is a PLECS Delay block. The dead time
-  (`t_d` with `sign=np.sign`) is modeled as in `motulator_export.plecs.im`.
+  computational delay of one sampling period is a PLECS Delay block. The duty
+  ratios are updated twice per carrier period, or once (`single_update=True` with
+  `delay=2`). The dead time and the threshold voltage (`t_d` and `u_th` with
+  `sign=np.sign`) are modeled as in `motulator_export.plecs.im`.
 - Flux-vector control (`FluxVectorController`) in the sensorless or sensored mode,
   with `SynchronousMachinePars` or `SaturatedSynchronousMachinePars` (GradNet flux
   map), and a speed controller (`SpeedController`) in `VectorControlSystem`, with
-  the dead-time compensation in the PWM as in `motulator_export.plecs.im`
+  the compensation of the dead time and the threshold voltage in the PWM as in
+  `motulator_export.plecs.im`
+- Gate blocking (`set_enable`): the input `enable` of the control system, which
+  then runs in standby, and the gates of the IGBT converter blocked (not with the
+  GradNet machine model, whose controlled current sources would toggle the diodes
+  of a blocked leg)
 
 The PLECS model can be simulated from Python via the XML-RPC interface of PLECS
 Standalone (enable it in Preferences > General > RPC interface).
@@ -62,8 +69,10 @@ from motulator_export.plecs._common import (
     C_DIR,
     C_GRADNET_PARAMS,
     C_PARAMS,
+    CONV,
     DC_DX,
     ENABLE,
+    GATE_DX,
     GRADNET_FIELDS,
     GRADNET_MAX_EMBED_DIM,
     GRADNET_MAX_IN_DIM,
@@ -77,15 +86,19 @@ from motulator_export.plecs._common import (
     _add_delay,
     _add_pwm,
     _write_model,
+    gate_enable,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._drive import (
+    CONVERTER_VOLTAGES,
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
     MDL_OUTPUTS,
+    MEAS_DX,
     _add_drive_outputs,
     _add_mechanics,
+    _add_phase_lines,
     _check_supported_plant,
     _check_supported_speed_control,
     mechanics_and_converter_variables,
@@ -184,6 +197,13 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
         )
     if isinstance(par, SpatialSaturatedSynchronousMachinePars):
         export_gradnet(par.magnetic_map_fcn)  # Raises if not supported
+        # The controlled current sources of the machine model would toggle the
+        # diodes of a blocked leg at the zero crossings of its current
+        if gate_enable(ctrl) != 1:
+            raise NotImplementedError(
+                "Gate blocking (set_enable) not supported with the GradNet machine "
+                "model"
+            )
     if par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
     _check_supported_plant(mdl, dead_time=True)
@@ -260,7 +280,7 @@ def export_values(
         "sensorless": int(cfg.sensorless),
         "T_s": cfg.T_s,
         **speed_ctrl_values(ctrl, speed_ctrl_args),
-        **pwm_values(ctrl.pwm, cfg.T_s),
+        **pwm_values(ctrl.pwm),
     }
     return values, flux_map
 
@@ -369,7 +389,7 @@ PMSM_ICON = (
 def _add_pmsm(sch: _Schematic) -> None:
     """Add the PLECS permanent-magnet synchronous machine (including the inertia)."""
     machine = {
-        "configuration": "1",
+        "configuration": "2",
         "R": "machine.R_s",
         "L": "[machine.L_d machine.L_q]",
         "phi": "machine.psi_f",
@@ -508,7 +528,6 @@ def write_model(
     t_stop: float,
     speed_ctrl_args: dict[str, float],
     outputs: bool = False,
-    enable: StepSignal | float = 1.0,
 ) -> Path:
     """
     Write a PLECS model of the drive system.
@@ -521,7 +540,10 @@ def write_model(
     mdl : Drive
         Continuous-time system model.
     ctrl : VectorControlSystem
-        Discrete-time control system.
+        Discrete-time control system. Its gate enable (`set_enable`), a constant or
+        a `StepSignal`, is the input `enable` of the control system: while it is
+        zero, the gates of the converter are blocked, and the control system computes
+        its standby output, as in motulator.
     w_M_ref : StepSignal
         Speed reference (mechanical rad/s).
     tau_L : StepSignal
@@ -533,10 +555,6 @@ def write_model(
         "alpha_s": 25}``.
     outputs : bool, optional
         Add the output ports "mdl" and "ctrl" for `simulate`, defaults to False.
-    enable : StepSignal | float, optional
-        Input `enable` of the control system, defaults to 1 (enabled). While it is
-        not positive, the duty ratios are 0.5 and the state of the control system is
-        reset to its initial value.
 
     Returns
     -------
@@ -555,15 +573,16 @@ def write_model(
     sch = _Schematic()
     gradnet_plant = _has_gradnet_plant(mdl)
     sources: list[tuple[str, StepSignal | float | str]] = [
-        (ENABLE, enable),
+        (ENABLE, gate_enable(ctrl)),
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
+        ("u_c_line", CONVERTER_VOLTAGES),
         ("theta_M", _probe("Machine", MACHINE_PROBES[2:3])),
     ]
     _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
-    _add_pwm(sch, T_s)
+    _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         _add_blanking_time(sch)
@@ -571,15 +590,16 @@ def write_model(
     # the DC bus
     sch.dx = 320 if isinstance(mdl.dc_bus, DiodeBridgeDCBus) else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
-    sch.dx += DC_DX
-    _add_converter(sch, t_d)
+    sch.dx += DC_DX + GATE_DX
+    _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
+    x_c = CONV[0] + 30 + sch.dx  # The AC terminals of the converter
+    sch.dx += MEAS_DX
     if gradnet_plant:
         _add_gradnet_machine(sch)
     else:
         _add_pmsm(sch)
-    for k in range(3):
-        sch.wire(("Converter", k + 1), ("Machine", k + 1))
+    _add_phase_lines(sch, x_c)
     _add_mechanics(sch, tau_L, inertia=gradnet_plant)
     _add_drive_outputs(sch, block, outputs)
     size = (880 + sch.dx, 520)

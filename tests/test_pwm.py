@@ -1,11 +1,12 @@
 """
-Test the C port of the PWM with the dead-time error model against motulator.
+Test the C port of the PWM with the duty-ratio error model against motulator.
 
-The PWM of motulator with `d_err = dead_time_error(...)` and the C port are fed with
-the same sequence of voltage references and measured currents, and the duty ratios
-and the realized voltages are compared, with the current-direction functions
-`np.sign` and `tanh(i/i_0)`. The identification of the dead time and the current
-scale from `d_err` in the writers is also tested.
+The PWM of motulator with `d_err = InverterNonlinearity(...)` and the C port are fed
+with the same sequence of voltage references and measured currents, and the duty
+ratios and the realized voltages are compared, with the dead time and the threshold
+voltage, the current-direction functions `np.sign` and `tanh(i/i_0)`, and the double
+and single update. The identification of the current scale from `d_err` in the
+writers is also tested.
 
 Run from the repository root (requires gcc):
 
@@ -15,13 +16,12 @@ Run from the repository root (requires gcc):
 
 # %%
 import ctypes
-from math import pi
+from math import inf, pi
 from typing import Callable
 
 import numpy as np
 import pytest
-from motulator.common.control import PWM
-from motulator.common.utils import dead_time_error
+from motulator.common.control import PWM, InverterNonlinearity
 
 from motulator_export.plecs._control import pwm_values
 from tests.c_port import arr, compile_library, d
@@ -31,17 +31,19 @@ CAPI = r"""
 
 static PWM pwm;
 
-void init(double t_d, double T_s, double i_0, double feedforward, double d_min)
+void init(double t_d, double u_th, double i_0, double feedforward, double d_min,
+          double single_update)
 {
     pwm_init(&pwm, 1.5);
-    pwm_set_dead_time(&pwm, t_d, T_s, i_0, (int)feedforward);
+    pwm_set_nonlinearity(&pwm, t_d, u_th, i_0, (int)feedforward);
     pwm_set_min_pulse(&pwm, d_min);
+    pwm_set_single_update(&pwm, (int)single_update);
 }
 
-void error(const double *i_abc, const double *d_abc, double t_d, double T_s,
-           double i_0, double *out)
+void error(const double *i_abc, const double *d_abc, double t_d, double u_th,
+           double i_0, double u_dc, double T_half, double *out)
 {
-    dead_time_error(i_abc, d_abc, t_d, T_s, i_0, out);
+    inverter_nonlinearity(t_d, u_th, i_0, i_abc, d_abc, u_dc, T_half, out);
 }
 
 void step(double T_s, const double *u_ref, const double *i, double u_dc, double w,
@@ -51,17 +53,18 @@ void step(double T_s, const double *u_ref, const double *i, double u_dc, double 
     double complex u = pwm_realized_voltage(&pwm, i_c_ab, u_dc, 1);
     double complex u_zoh = pwm_realized_voltage(&pwm, i_c_ab, u_dc, 0);
     double d_abc[3];
-    pwm_compute_output(&pwm, T_s, u_ref[0] + I * u_ref[1], u_dc, w, i_c_ab, d_abc);
-    pwm_update(&pwm, d_abc);
-    double o[7] = {creal(u),  cimag(u),  creal(u_zoh), cimag(u_zoh),
-                   d_abc[0], d_abc[1], d_abc[2]};
-    for (int k = 0; k < 7; k++) {
+    double complex u_lim =
+        pwm_compute_output(&pwm, T_s, u_ref[0] + I * u_ref[1], u_dc, w, i_c_ab, d_abc);
+    pwm_update(&pwm, T_s, d_abc);
+    double o[9] = {creal(u),  cimag(u),  creal(u_zoh), cimag(u_zoh), d_abc[0],
+                   d_abc[1], d_abc[2], creal(u_lim),  cimag(u_lim)};
+    for (int k = 0; k < 9; k++) {
         out[k] = o[k];
     }
 }
 """
 
-T_S, T_D, U_DC, I_0 = 125e-6, 2e-6, 540.0, 0.5
+T_S, T_D, U_TH, U_DC, I_0 = 125e-6, 2e-6, 1.0, 540.0, 0.5
 D_MIN = 0.04  # Minimum duty ratio of a switching leg
 
 
@@ -76,45 +79,76 @@ def dll(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 @pytest.mark.parametrize("i_0", [0.0, I_0], ids=["sign", "tanh"])
-def test_dead_time_error(dll: ctypes.CDLL, i_0: float) -> None:
-    """The duty-ratio error equals that of motulator, also near the limits and near
-    zero current."""
+@pytest.mark.parametrize(
+    ("t_d", "u_th"), [(T_D, 0.0), (0.0, U_TH), (T_D, U_TH)], ids=["t_d", "u_th", "both"]
+)
+@pytest.mark.parametrize("T_half", [T_S, T_S / 2, inf], ids=["T_s", "T_s/2", "inf"])
+def test_inverter_nonlinearity(
+    dll: ctypes.CDLL, i_0: float, t_d: float, u_th: float, T_half: float
+) -> None:
+    """The duty-ratio error equals that of motulator, also near the limits, near zero
+    current, and with the infinite half carrier period before the first duty
+    ratios."""
     rng = np.random.default_rng(1)
     d_limits = [[0, 1, 0.5], [1e-3, 1 - 1e-3, 0.01], [0.5, 0.5, 0.5]]
     d_test = np.vstack((d_limits, rng.uniform(0, 1, (50, 3))))
     i_near = [[1, -1, 0], [-2, 2, 0], [0.01, -0.2, 0.6]]
     i_test = np.vstack((i_near, rng.uniform(-5, 5, (50, 3))))
+    u_dc_test = U_DC * rng.uniform(0.5, 1.5, len(i_test))
+    d_err = InverterNonlinearity(t_d, u_th, tanh_sign(i_0))
     out = (ctypes.c_double * 3)()
-    for i_abc, d_abc in zip(i_test, d_test, strict=True):
-        dll.error(arr(i_abc), arr(d_abc), d(T_D), d(T_S), d(i_0), out)
+    for i_abc, d_abc, u_dc in zip(i_test, d_test, u_dc_test, strict=True):
+        dll.error(
+            arr(i_abc), arr(d_abc), d(t_d), d(u_th), d(i_0), d(u_dc), d(T_half), out
+        )
         assert np.array(out) == pytest.approx(
-            dead_time_error(i_abc, d_abc, T_D, T_S, tanh_sign(i_0)), abs=1e-15
+            d_err(i_abc, d_abc, u_dc, T_half), abs=1e-15
         )
 
 
 @pytest.mark.parametrize(
-    ("t_d", "i_0", "d_min"),
+    ("t_d", "u_th", "i_0", "d_min"),
     [
-        (0.0, 0.0, 0.0),
-        (T_D, 0.0, 0.0),
-        (T_D, I_0, 0.0),
-        (0.0, 0.0, D_MIN),
-        (T_D, I_0, D_MIN),
+        (0.0, 0.0, 0.0, 0.0),
+        (T_D, 0.0, 0.0, 0.0),
+        (T_D, 0.0, I_0, 0.0),
+        (0.0, U_TH, 0.0, 0.0),
+        (T_D, U_TH, I_0, 0.0),
+        (0.0, 0.0, 0.0, D_MIN),
+        (T_D, U_TH, I_0, D_MIN),
     ],
-    ids=["no_d_err", "d_err", "d_err_tanh", "min_pulse", "d_err_tanh_min_pulse"],
+    ids=[
+        "no_d_err",
+        "d_err",
+        "d_err_tanh",
+        "u_th",
+        "d_err_u_th_tanh",
+        "min_pulse",
+        "d_err_u_th_tanh_min_pulse",
+    ],
 )
 @pytest.mark.parametrize("feedforward", [True, False], ids=["ff", "no_ff"])
+@pytest.mark.parametrize("single_update", [False, True], ids=["double", "single"])
 def test_pwm(
-    dll: ctypes.CDLL, t_d: float, i_0: float, d_min: float, feedforward: bool
+    dll: ctypes.CDLL,
+    t_d: float,
+    u_th: float,
+    i_0: float,
+    d_min: float,
+    feedforward: bool,
+    single_update: bool,
 ) -> None:
     """The duty ratios and the realized voltages (the average of two sampling periods
     and that of the ongoing period) equal those of motulator, also in overmodulation,
     where the error depends on the duty ratios, and with a varying DC-bus voltage."""
-    sign = tanh_sign(i_0)
-    d_err = None if t_d == 0 else lambda i, d: dead_time_error(i, d, t_d, T_S, sign)
-    pwm = PWM(d_err=d_err, feedforward=feedforward, d_min=d_min)
-    dll.init(d(t_d), d(T_S), d(i_0), d(feedforward), d(d_min))
-    out = (ctypes.c_double * 7)()
+    d_err = None
+    if t_d > 0 or u_th > 0:
+        d_err = InverterNonlinearity(t_d, u_th, tanh_sign(i_0))
+    pwm = PWM(
+        d_err=d_err, feedforward=feedforward, d_min=d_min, single_update=single_update
+    )
+    dll.init(d(t_d), d(u_th), d(i_0), d(feedforward), d(d_min), d(single_update))
+    out = (ctypes.c_double * 9)()
     rng = np.random.default_rng(2)
     for k in range(200):
         # Rotating voltage reference, reaching the overmodulation range
@@ -125,7 +159,8 @@ def test_pwm(
         u_dc = U_DC * (1 + 0.05 * np.sin(2 * pi * 300 * k * T_S))
         u_py = pwm.get_realized_voltage(i_c_ab, u_dc)
         u_zoh_py = pwm.get_realized_voltage(i_c_ab, u_dc, average=False)
-        d_py = pwm(T_S, u_ref, u_dc, w)
+        d_py, u_lim_py = pwm.compute_output(T_S, u_ref, u_dc, w)
+        pwm.update(T_S, d_py)
         dll.step(
             d(T_S),
             arr([u_ref.real, u_ref.imag]),
@@ -136,38 +171,65 @@ def test_pwm(
         )
         assert out[0] + 1j * out[1] == pytest.approx(u_py, abs=1e-9)
         assert out[2] + 1j * out[3] == pytest.approx(u_zoh_py, abs=1e-9)
-        assert np.array(out[4:]) == pytest.approx(d_py, abs=1e-12)
+        assert np.array(out[4:7]) == pytest.approx(d_py, abs=1e-12)
+        assert out[7] + 1j * out[8] == pytest.approx(u_lim_py, abs=1e-9)
+
+
+@pytest.mark.parametrize("u_dc", [0.0, -1.0], ids=["zero", "negative"])
+def test_pwm_discharged(dll: ctypes.CDLL, u_dc: float) -> None:
+    """With a discharged DC bus, the duty ratios are 0.5 and the limited and the
+    realized voltages zero, as in motulator, also with the duty-ratio error model."""
+    pwm = PWM(d_err=InverterNonlinearity(T_D, U_TH))
+    dll.init(d(T_D), d(U_TH), d(0.0), d(1.0), d(0.0), d(0.0))
+    out = (ctypes.c_double * 9)()
+    u_py = pwm.get_realized_voltage(5.0 + 0j, u_dc)
+    u_zoh_py = pwm.get_realized_voltage(5.0 + 0j, u_dc, average=False)
+    d_py, u_lim_py = pwm.compute_output(T_S, 100.0 + 0j, u_dc, 2 * pi * 50)
+    dll.step(d(T_S), arr([100.0, 0.0]), arr([5.0, 0.0]), d(u_dc), d(2 * pi * 50), out)
+    assert d_py == [0.5, 0.5, 0.5]
+    py = [u_py.real, u_py.imag, u_zoh_py.real, u_zoh_py.imag, *d_py]
+    assert list(out) == [*py, u_lim_py.real, u_lim_py.imag]
+    assert np.all(np.array(out)[[0, 1, 2, 3, 7, 8]] == 0)
 
 
 def test_pwm_values() -> None:
-    """The dead time and the current scale of tanh are identified from d_err, and
-    other functions are rejected, also if they differ from np.sign only near zero
-    current."""
-    pwm = PWM(d_err=lambda i, d: dead_time_error(i, d, T_D, T_S), feedforward=False)
-    assert pwm_values(pwm, T_S) == {
+    """The dead time and the threshold voltage are read from InverterNonlinearity
+    and the current scale of tanh is identified from its current-direction function,
+    and other functions are rejected, also if they differ from np.sign only near
+    zero current."""
+    pwm = PWM(d_err=InverterNonlinearity(T_D), feedforward=False)
+    assert pwm_values(pwm) == {
         "pwm_t_d": T_D,
+        "pwm_u_th": 0.0,
         "pwm_i_0": 0.0,
         "pwm_feedforward": 0,
         "pwm_d_min": 0.0,
+        "pwm_single_update": 0,
         "pwm_overmodulation": "MPE",
     }
-    assert pwm_values(PWM(), T_S) == {
+    assert pwm_values(PWM()) == {
         "pwm_t_d": 0.0,
+        "pwm_u_th": 0.0,
         "pwm_i_0": 0.0,
         "pwm_feedforward": 1,
         "pwm_d_min": 0.0,
+        "pwm_single_update": 0,
         "pwm_overmodulation": "MPE",
     }
     for i_0 in [1e-6, 0.01, I_0, 20.0]:
-        sign = tanh_sign(i_0)
-        pwm = PWM(d_err=lambda i, d, sign=sign: dead_time_error(i, d, T_D, T_S, sign))
-        assert pwm_values(pwm, T_S) == {
+        pwm = PWM(d_err=InverterNonlinearity(T_D, U_TH, tanh_sign(i_0)))
+        assert pwm_values(pwm) == {
             "pwm_t_d": T_D,
+            "pwm_u_th": U_TH,
             "pwm_i_0": i_0,
             "pwm_feedforward": 1,
             "pwm_d_min": 0.0,
+            "pwm_single_update": 0,
             "pwm_overmodulation": "MPE",
         }
+    pwm = PWM(d_err=InverterNonlinearity(0.0, U_TH, _signum))
+    assert pwm_values(pwm)["pwm_u_th"] == U_TH
+    assert pwm_values(pwm)["pwm_i_0"] == 0.0
     others: list[Callable[[np.ndarray], np.ndarray]] = [
         lambda x: 2 / pi * np.arctan(x / 0.1),
         lambda x: 2 / pi * np.arctan(x / 1e-4),  # Close to np.sign beyond 0.1 A
@@ -175,12 +237,42 @@ def test_pwm_values() -> None:
         lambda x: np.tanh(x / 0.01) ** 3,
     ]
     for sign in others:
-        pwm = PWM(d_err=lambda i, d, sign=sign: dead_time_error(i, d, T_D, T_S, sign))
-        with pytest.raises(NotImplementedError):
-            pwm_values(pwm, T_S)
+        with pytest.raises(NotImplementedError, match="sign=np.sign"):
+            pwm_values(PWM(d_err=InverterNonlinearity(T_D, sign=sign)))
 
 
-def test_pwm_values_min_pulse() -> None:
-    """The minimum duty ratio is a parameter of the PWM."""
-    pwm = PWM(d_min=D_MIN)
-    assert pwm_values(pwm, T_S)["pwm_d_min"] == D_MIN
+def _signum(i: np.ndarray) -> np.ndarray:
+    """Signum function, other than np.sign itself."""
+    return np.sign(i)
+
+
+class _Nonlinearity(InverterNonlinearity):
+    """Error model with an additional error."""
+
+    def __call__(
+        self, i_abc: np.ndarray, d_abc: np.ndarray, u_dc: float, T_half: float
+    ) -> np.ndarray:
+        return super().__call__(i_abc, d_abc, u_dc, T_half) + 1e-3
+
+
+@pytest.mark.parametrize(
+    "d_err",
+    [
+        InverterNonlinearity(T_D).__call__,  # A function, not InverterNonlinearity
+        _Nonlinearity(T_D),
+        InverterNonlinearity(-T_D),
+        InverterNonlinearity(T_D, -U_TH),
+    ],
+    ids=["function", "subclass", "negative_t_d", "negative_u_th"],
+)
+def test_pwm_values_unsupported(d_err: Callable) -> None:
+    """Only InverterNonlinearity with nonnegative parameters is supported."""
+    with pytest.raises(NotImplementedError):
+        pwm_values(PWM(d_err=d_err))
+
+
+def test_pwm_values_min_pulse_single_update() -> None:
+    """The minimum duty ratio and the single update are parameters of the PWM."""
+    values = pwm_values(PWM(d_min=D_MIN, single_update=True))
+    assert values["pwm_d_min"] == D_MIN
+    assert values["pwm_single_update"] == 1

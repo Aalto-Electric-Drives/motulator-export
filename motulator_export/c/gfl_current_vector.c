@@ -101,26 +101,38 @@ static void gfl_control_system_init(GFLControlSystem *self, const GFLControllerC
 
 static void gfl_control_system_compute_output(GFLControlSystem *self,
                                               const GridMeasurements *meas,
-                                              double p_g_ref, double q_g_ref)
+                                              double p_g_ref, double q_g_ref,
+                                              int enabled)
 {
     GFLFeedbacks *fbk = &self->fbk;
     GFLReferences *ref = &self->ref;
 
     /* Feedback signals from the PLL, which does not use the converter voltage. The
-     * control laws use the voltage averaged over the previous and ongoing periods. */
+     * control laws use the voltage averaged over the previous and ongoing periods,
+     * or with blocked gates, the measured voltage. */
     pll_compute_output(&self->pll, meas->i_c_ab, meas->u_g_ab, fbk);
-    double complex u_c_ab =
-        pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    double complex u_c_ab = meas->u_c_ab;
+    if (enabled) {
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
     fbk->u_c = cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* Current reference, limited to i_max (CurrentLimiter) */
     ref->T_s = self->cfg.T_s;
-    ref->i_c = current_limiter(self->cfg.i_max,
-                               gfl_current_reference(p_g_ref, q_g_ref, fbk->u_g));
-    /* Power references corresponding to the limited current, which are also used
-     * for the anti-windup of the DC-bus voltage controller */
-    gfl_power_references(ref->i_c, fbk->u_g, &ref->p_g, &ref->q_g);
+    if (enabled) {
+        /* Current reference, limited to i_max (CurrentLimiter) */
+        ref->i_c = current_limiter(self->cfg.i_max,
+                                   gfl_current_reference(p_g_ref, q_g_ref, fbk->u_g));
+        /* Power references corresponding to the limited current, which are also
+         * used for the anti-windup of the DC-bus voltage controller */
+        gfl_power_references(ref->i_c, fbk->u_g, &ref->p_g, &ref->q_g);
+    } else {
+        /* Standby output: the current controller tracks the measured current and
+         * voltage */
+        ref->i_c = fbk->i_c;
+        ref->p_g = 0.0;
+        ref->q_g = 0.0;
+    }
 
     /* Voltage reference from the current controller, with the PCC voltage as the
      * feedforward */
@@ -139,7 +151,7 @@ static void gfl_control_system_update(GFLControlSystem *self)
 {
     const GFLFeedbacks *fbk = &self->fbk;
     double T_s = self->ref.T_s;
-    pwm_update(&self->pwm, self->ref.d_abc);
+    pwm_update(&self->pwm, T_s, self->ref.d_abc);
     /* Current controller: the realized voltage in controller coordinates */
     complex_pi_update(&self->current_ctrl, T_s, fbk->u_c, fbk->w_c);
     pll_update(&self->pll, T_s, fbk);
@@ -159,6 +171,7 @@ static void grid_measurements_pack(const GridMeasurements *meas, double y[MEAS_W
     SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
     SET_COMPLEX(y, MEAS_u_g_ab, meas->u_g_ab);
     y[MEAS_u_dc] = meas->u_dc;
+    SET_COMPLEX(y, MEAS_u_c_ab, meas->u_c_ab);
 }
 
 static void grid_measurements_unpack(const double u[MEAS_WIDTH],
@@ -167,6 +180,7 @@ static void grid_measurements_unpack(const double u[MEAS_WIDTH],
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_g_ab = COMPLEX_AT(u, MEAS_u_g_ab);
     meas->u_dc = u[MEAS_u_dc];
+    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void gfl_feedbacks_pack(const GFLFeedbacks *fbk, double y[FBK_WIDTH])
