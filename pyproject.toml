@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "motulator-export"
 version = "0.6.0"
 dependencies = [
-    "motulator>=0.15.0,<0.16",
+    "motulator>=0.15.1,<0.16",
     "numpy",
 ]
 requires-python = ">=3.12"

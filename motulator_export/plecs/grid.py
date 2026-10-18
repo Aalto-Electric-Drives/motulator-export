@@ -30,8 +30,6 @@ Currently supported:
 
 """
 
-import cmath
-from math import pi
 from pathlib import Path
 from typing import Any, cast
 
@@ -44,7 +42,6 @@ from motulator.grid.control import (
     GridConverterControlSystem,
     ObserverBasedGridFormingController,
 )
-from motulator.grid.control._gfm_observer import Observer
 from motulator.grid.model import (
     GridConverterSystem,
     LCLFilter,
@@ -178,54 +175,10 @@ def export_values(ctrl: GridConverterControlSystem) -> dict[str, Any]:
         names = ["i_max", "L", "alpha_c", "alpha_i", "u_nom", "w_nom", "alpha_pll"]
         values = {n: getattr(cfg, n) for n in [*names, "T_s"]}
         return values | pwm_values(ctrl.pwm)
-    gfm = cast(ObserverBasedGridFormingController, inner)
-    obs = gfm.observer  # The configuration is stored only as the resulting gains
-    u_nom, w_nom, i_max = obs.state.u_g.real, obs.w_g, gfm.current_limiter.i_max
-    alpha_o = _observer_bandwidth(gfm, u_nom)
-    lim = gfm.power_limiter
-    # R_a and k_v are resolved in ObserverBasedGridFormingController.__init__
-    values = {
-        "i_max": i_max,
-        "L": obs.L,
-        "R": obs.R,
-        "R_a": None if gfm.R_a == 0.25 * u_nom / i_max else gfm.R_a,
-        "k_v": None if gfm.k_v == alpha_o / w_nom else gfm.k_v,
-        "alpha_o": alpha_o,
-        "alpha_c": gfm.k_c / obs.L,
-        "u_nom": u_nom,
-        "w_nom": w_nom,
-        "T_s": gfm.T_s,
-        "i_d_max": None if lim is None else lim.i_d_max,
-        # Not used without the power limitation, the default of the configuration
-        "alpha_l": 2 * pi * 50 if lim is None else lim.alpha_l,
-    }
+    cfg = cast(ObserverBasedGridFormingController, inner).cfg
+    names = ["i_max", "L", "R", "R_a", "k_v", "alpha_o", "alpha_c", "u_nom", "w_nom"]
+    values = {n: getattr(cfg, n) for n in [*names, "T_s", "i_d_max", "alpha_l"]}
     return values | pwm_values(ctrl.pwm)
-
-
-def _observer_bandwidth(gfm: ObserverBasedGridFormingController, u_nom: float) -> float:
-    """
-    Observer bandwidth `alpha_o` of the DO-GFM, which motulator stores only as the
-    observer gain `k_o = (1 - exp(-alpha_o*T_s))/gamma_g`.
-
-    The bandwidth is identified from the gain with a relative error of about 1e-13.
-    Since several neighboring values give the same gain, the value giving the same
-    gain exactly is chosen in the order: a multiple of 2*pi (e.g., the default
-    2*pi*50), the value with the fewest significant digits, and the nearest value,
-    preferring a value that gives the default `k_v = alpha_o/w_nom` if `k_v` equals it.
-
-    """
-    obs, T_s = gfm.observer, gfm.T_s
-
-    def same_gain(alpha: float) -> bool:
-        return Observer(u_nom, obs.w_g, obs.L, alpha, T_s, obs.R).k_o == obs.k_o
-
-    alpha_o = (-cmath.log(1 - obs.k_o * obs.gamma_g) / T_s).real
-    candidates = [2 * pi * round(alpha_o / (2 * pi), 6)]
-    candidates += [float(f"{alpha_o:.{n}g}") for n in range(1, 17)]
-    steps = np.array(sorted(range(-1000, 1001), key=abs))
-    candidates += [float(a) for a in alpha_o + np.spacing(alpha_o) * steps]
-    default_k_v = [a for a in candidates if a / obs.w_g == gfm.k_v]
-    return next((a for a in default_k_v + candidates if same_gain(a)), alpha_o)
 
 
 # %%
