@@ -2,11 +2,11 @@
  * Gradient networks (GradNets) for magnetics modeling, ported from motulator.
  *
  * Python counterpart:
- *   motulator/drive/gradnet/_gn.py  GradNet, FluxMap, CurrentMap,
- *                                   CurrentMapWithHarmonics
+ *   motulator/drive/gradnet/_maps.py  GradNetFunction, FluxMap, CurrentMap,
+ *                                     CurrentMapWithHarmonics
  *
  * Only the inference is ported (the networks are trained in motulator). The
- * computations use double precision, while PyTorch uses single precision.
+ * computations use double precision, as in motulator.
  */
 
 #ifndef MOTULATOR_GRADNET_H

@@ -41,10 +41,11 @@ net = struct('in_dim', in_dim, 'mu_dim', mu_dim, 'embed_dim', size(W, 1), ...
 end
 
 function [z, jac] = gradnet_forward(net, x, want_jac)
-%GRADNET_FORWARD GradNet.forward for a per-unit input x (a column vector).
-%   If want_jac is true, the Jacobian matrix (GradNet.jacobian) is computed too. The
-%   Jacobians of both activations are of the form c*(diag(d) - u*u^T), so the
-%   Jacobian of the network is diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u.
+%GRADNET_FORWARD Output of the network for a per-unit input x (a column vector),
+%   as GradNetFunction.__call__. If want_jac is true, the Jacobian matrix is
+%   computed too. The Jacobians of both activations are of the form
+%   c*(diag(d) - u*u^T), so the Jacobian of the network is
+%   diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u.
 W = net.W;
 beta = net.beta;
 % Module: W^T act(W x + b)

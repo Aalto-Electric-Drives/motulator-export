@@ -408,8 +408,8 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
     """
     The lookup tables of sm_reference_luts.m (called by the mask initialization of
     the ReferenceGenerator in Simulink) should be those of the reference generator
-    of motulator at their sample points, within the single precision of the GradNet
-    flux map of motulator.
+    of motulator at their sample points, to 1e-12 relative to their magnitudes, and
+    to RTOL with the GradNet flux map, whose MTPV locus differs by about 1e-11.
     """
     if gradnet:
         ctrl, speed = gradnet_control_system()
@@ -430,4 +430,4 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
         x, y = luts[:, 2 * i], luts[:, 2 * i + 1]
         err = np.max(np.abs(f(x) - y)) / np.max(np.abs(y))
         print(f"  {name}: max relative error {err:.3g}")
-        assert err < (1e-5 if gradnet else 1e-12)
+        assert err < (RTOL if gradnet else 1e-12)

@@ -26,6 +26,6 @@ Development uses a virtual environment in `.venv` (pyright is configured to use 
 ## Conventions
 
 - Follow the conventions of *motulator*: peak-valued complex space vectors, SI units, NumPy-style docstrings, and line length 88.
-- The package requires one minor release of *motulator* (e.g., `motulator>=0.14.1,<0.15` in `pyproject.toml`), since a new release may change its API; an update to a new release raises both bounds (and the version in the requirements of `README.md`).
+- The package requires one minor release of *motulator* (e.g., `motulator>=0.15.0,<0.16` in `pyproject.toml`), since a new release may change its API; an update to a new release raises both bounds (and the version in the requirements of `README.md`).
 - PLECS: the schematic coordinates are chosen so that wires do not cross and the labels are below the blocks (in the control systems, by the layout hints of the netlists). Only the signals fed back to the control system are measured with meters; the other signals use PLECS probes.
 - Simulink: the blocks are aligned with the ports they connect to (`blocks.align`), so that the lines are straight, and the feedback lines are drawn through given corners (`blocks.route`).

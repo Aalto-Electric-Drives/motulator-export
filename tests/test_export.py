@@ -14,6 +14,7 @@ from math import inf, pi
 from pathlib import Path
 from typing import Any
 
+import motulator.drive.gradnet as gn
 import motulator.grid.model as grid_model
 import numpy as np
 import pytest
@@ -493,11 +494,7 @@ def test_unsupported_single_update_grid(tmp_path: Path) -> None:
 def test_unsupported_gate_blocking_gradnet(tmp_path: Path) -> None:
     """The gate blocking is not supported with the GradNet machine model, whose
     controlled current sources would toggle the diodes of a blocked leg in PLECS."""
-    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
-
-    current_map = gn.CurrentMapWithHarmonics(
-        gn.load_gradnet(CURRENT_MAP, activation=gn.Softmax)
-    )
+    current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(CURRENT_MAP))
     par = model.SpatialSaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, magnetic_map_fcn=current_map
     )

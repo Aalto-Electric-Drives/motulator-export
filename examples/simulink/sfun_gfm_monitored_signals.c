@@ -114,16 +114,18 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     GFMReferences ref;
     gfm_references_unpack(ref_u, &ref);
     /* Monitored signals */
+    /* The currents and the angle in the coordinates of v_c */
+    double complex rot = cexp(-I * carg(fbk.v_c));
     OutputSignal(0, 0) = ref.p_g;
     OutputSignal(0, 1) = fbk.p_g;
     OutputSignal(0, 2) = fbk.q_g;
     OutputSignal(1, 0) = ref.v_c;
     OutputSignal(1, 1) = cabs(fbk.v_c);
-    OutputSignal(2, 0) = creal(ref.i_c);
-    OutputSignal(2, 1) = creal(fbk.i_c);
-    OutputSignal(2, 2) = cimag(ref.i_c);
-    OutputSignal(2, 3) = cimag(fbk.i_c);
-    OutputSignal(3, 0) = fbk.theta_c;
+    OutputSignal(2, 0) = creal(rot * ref.i_c);
+    OutputSignal(2, 1) = creal(rot * fbk.i_c);
+    OutputSignal(2, 2) = cimag(rot * ref.i_c);
+    OutputSignal(2, 3) = cimag(rot * fbk.i_c);
+    OutputSignal(3, 0) = wrap(fbk.theta_c + carg(fbk.v_c));
 }
 
 static void mdlTerminate(SimStruct *S)

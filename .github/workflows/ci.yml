@@ -38,10 +38,9 @@ jobs:
       uses: actions/setup-python@v7
       with:
         python-version: '3.12'
-    - name: Install PyTorch (CPU) and motulator-export
+    - name: Install motulator-export
       run: |
         python -m pip install --upgrade pip setuptools
-        pip install --index-url https://download.pytorch.org/whl/cpu torch
         pip install -e .[dev]
     - name: Install the main branch of motulator (weekly run)
       if: github.event_name == 'schedule'

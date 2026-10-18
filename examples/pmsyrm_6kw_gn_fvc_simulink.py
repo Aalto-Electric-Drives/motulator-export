@@ -55,7 +55,7 @@ if __name__ == "__main__":
     # Simulate in motulator
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-8, atol=1e-8))
+    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     start = time.time()
     res = sim.simulate(t_stop=T_STOP)
     print(f"motulator: {time.time() - start:.1f} s")

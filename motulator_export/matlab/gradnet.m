@@ -3,11 +3,11 @@
 % by motulator_export.simulink.
 %
 % Python counterpart:
-%   motulator/drive/gradnet/_gn.py  GradNet, FluxMap, CurrentMap,
-%                                   CurrentMapWithHarmonics
+%   motulator/drive/gradnet/_maps.py  GradNetFunction, FluxMap, CurrentMap,
+%                                     CurrentMapWithHarmonics
 %
 % Only the inference is ported (the networks are trained in motulator). The
-% computations use double precision, while PyTorch uses single precision. A GradNet
+% computations use double precision, as in motulator. A GradNet
 % has a single module, and the input dimension is 2 for the flux and current maps
 % and 4 for the current map with spatial harmonics. The linear term is applied to
 % the first mu_dim inputs. The activation is 1 (PNormGradient) or 2 (Softmax). The
@@ -34,10 +34,11 @@ net = gradnet(2, 0, zeros(1, 2), 0, zeros(2, 1), zeros(2, 1), 2, 0, 1, 1, 1);
 end
 
 function [z, jac] = gradnet_forward(net, x, want_jac)
-%GRADNET_FORWARD GradNet.forward for a per-unit input x (a column vector).
-%   If want_jac is true, the Jacobian matrix (GradNet.jacobian) is computed too. The
-%   Jacobians of both activations are of the form c*(diag(d) - u*u^T), so the
-%   Jacobian of the network is diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u.
+%GRADNET_FORWARD Output of the network for a per-unit input x (a column vector),
+%   as GradNetFunction.__call__. If want_jac is true, the Jacobian matrix is
+%   computed too. The Jacobians of both activations are of the form
+%   c*(diag(d) - u*u^T), so the Jacobian of the network is
+%   diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u.
 W = net.W;
 beta = net.beta;
 % Module: W^T act(W x + b)

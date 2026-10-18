@@ -3109,7 +3109,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nGFMFeedbacks fbk;\ngfm_feedbacks_unpack(fbk_u, &fbk);\ndouble ref_u[REF_WIDTH];\nfor (int k = 0; k < REF_WIDTH; k++) {\n    ref_u[k] = InputSignal(1, k);\n}\nGFMReferences ref;\ngfm_references_unpack(ref_u, &ref);\n/* Monitored signals */\nOutputSignal(0, 0) = ref.p_g;\nOutputSignal(0, 1) = fbk.p_g;\nOutputSignal(0, 2) = fbk.q_g;\nOutputSignal(1, 0) = ref.v_c;\nOutputSignal(1, 1) = cabs(fbk.v_c);\nOutputSignal(2, 0) = creal(ref.i_c);\nOutputSignal(2, 1) = creal(fbk.i_c);\nOutputSignal(2, 2) = cimag(ref.i_c);\nOutputSignal(2, 3) = cimag(fbk.i_c);\nOutputSignal(3, 0) = fbk.theta_c;\n"
+        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nGFMFeedbacks fbk;\ngfm_feedbacks_unpack(fbk_u, &fbk);\ndouble ref_u[REF_WIDTH];\nfor (int k = 0; k < REF_WIDTH; k++) {\n    ref_u[k] = InputSignal(1, k);\n}\nGFMReferences ref;\ngfm_references_unpack(ref_u, &ref);\n/* Monitored signals */\n/* The currents and the angle in the coordinates of v_c */\ndouble complex rot = cexp(-I * carg(fbk.v_c));\nOutputSignal(0, 0) = ref.p_g;\nOutputSignal(0, 1) = fbk.p_g;\nOutputSignal(0, 2) = fbk.q_g;\nOutputSignal(1, 0) = ref.v_c;\nOutputSignal(1, 1) = cabs(fbk.v_c);\nOutputSignal(2, 0) = creal(rot * ref.i_c);\nOutputSignal(2, 1) = creal(rot * fbk.i_c);\nOutputSignal(2, 2) = cimag(rot * ref.i_c);\nOutputSignal(2, 3) = cimag(rot * fbk.i_c);\nOutputSignal(3, 0) = wrap(fbk.theta_c + carg(fbk.v_c));\n"
         Show          off
       }
       Parameter {

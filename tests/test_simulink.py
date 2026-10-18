@@ -25,6 +25,7 @@ from typing import Any, cast
 
 import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
+import motulator.drive.gradnet as gn
 import motulator.grid.control as grid_control
 import motulator.grid.model as grid_model
 import numpy as np
@@ -706,9 +707,9 @@ def test_grid_forming_control(
 
 # %%
 MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
-FLUX_MAP = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.pth"
-CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.pth"
-RTOL = 1e-4  # motulator evaluates the GradNets in single precision
+FLUX_MAP = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
+CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.npz"
+RTOL = 1e-9  # Rounding errors
 
 
 @pytest.fixture(scope="module")
@@ -719,9 +720,7 @@ def gn_machine(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 def gradnet_control_system() -> tuple[VectorControlSystem, dict[str, float]]:
     """Flux-vector control with a GradNet flux map and its speed controller."""
-    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
-
-    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP, activation=gn.PNormGradient))
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
     par = sm_control.SaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
     )
@@ -740,9 +739,8 @@ def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[fl
     Measurements of the control system with a GradNet flux map, and the inputs of
     the S-function: an accelerating rotor, and a current vector in rotor coordinates.
     Later, the flux decreases until the torque-production factor c_tau of the
-    flux-torque controller approaches zero, where the differences of the
-    single-precision GradNet of motulator are amplified and the flux reduction
-    (c_tau < 0) may start at a different sample.
+    flux-torque controller approaches zero, where the rounding errors are amplified
+    and the flux reduction (c_tau < 0) may start at a different sample.
     """
     T_s = cast(Any, ctrl.vector_ctrl).cfg.T_s
     t = np.arange(n) * T_s
@@ -790,11 +788,7 @@ def test_gradnet_flux_vector_control(fvc: ctypes.CDLL) -> None:
 
 def test_gradnet_machine(gn_machine: ctypes.CDLL) -> None:
     """The S-function of the GradNet machine should agree with motulator."""
-    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
-
-    current_map = gn.CurrentMapWithHarmonics(
-        gn.load_gradnet(CURRENT_MAP, activation=gn.Softmax)
-    )
+    current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(CURRENT_MAP))
     par = model.SpatialSaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, magnetic_map_fcn=current_map
     )
