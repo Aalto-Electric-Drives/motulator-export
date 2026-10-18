@@ -408,6 +408,26 @@ def test_grid(build: Build) -> None:
     check(*simulate(build, 0.2), rtol=1e-9)
 
 
+def test_grid_after_simulation() -> None:
+    """
+    The control system runs in C from its initial state, also if it has been
+    simulated in motulator, and its parameters are read from its configuration
+    (not from the state of the observer of grid-forming control).
+    """
+
+    def build() -> tuple[grid_model.GridConverterSystem, Any]:
+        mdl, ctrl = gfm_system(power_limitation=False)[0]()
+        ctrl.set_power_ref(0.5 * GRID_NOM.P)  # Constant, independent of ctrl.t
+        return mdl, ctrl
+
+    mdl, ctrl = build()
+    model.Simulation(mdl, ctrl, show_progress=False).simulate(0.02)
+    res_c = native.Simulation(build()[0], ctrl, show_progress=False).simulate(0.1)
+    res_ref = native.Simulation(*build(), show_progress=False).simulate(0.1)
+    n = len(res_ref.ctrl.t)
+    assert np.array_equal(res_c.ctrl.ref.d_abc[-n:], res_ref.ctrl.ref.d_abc)
+
+
 def test_grid_pwm() -> None:
     """Grid-following control with the carrier comparison."""
     res_py, res_c = simulate(gfl_variant(lcl=True, pwm=True), 0.2)

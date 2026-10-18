@@ -13,9 +13,9 @@ Supported:
   drives (see `motulator_export.native._drive`)
 - Grid-following current-vector control (`CurrentVectorController`) or
   disturbance-observer-based grid-forming control
-  (`ObserverBasedGridFormingController`, from the initial state of its observer) in
-  `GridConverterControlSystem` in the power-control mode, with the features of the C
-  port (see `motulator_export.plecs.grid`), the gates enabled
+  (`ObserverBasedGridFormingController`) in `GridConverterControlSystem` in the
+  power-control mode, with the features of the C port (see
+  `motulator_export.plecs.grid`), the gates enabled
 - Ideal sensors
 
 """
@@ -173,13 +173,6 @@ class GridConverterNativeSystem(NativeSystem):
             )
         if ctrl.dc_bus_voltage_ctrl is not None:
             raise NotImplementedError("DC-bus voltage control not supported")
-        if isinstance(inner, ObserverBasedGridFormingController):
-            # The parameters are read from the initial state of the observer
-            obs = inner.observer.state
-            if obs.theta_c != 0 or obs.i_c != 0 or obs.u_g.imag != 0:
-                raise NotImplementedError(
-                    "Only the initial state of the observer supported"
-                )
         check_supported_control(ctrl, d_err=False)
         f = mdl.ac_filter
         if type(f) not in (LFilter, LCLFilter):
