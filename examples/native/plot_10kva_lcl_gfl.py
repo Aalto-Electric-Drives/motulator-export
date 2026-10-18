@@ -4,7 +4,8 @@
 
 This example simulates grid-following (GFL) current-vector control of a 10-kVA grid
 converter, connected to the grid through an LCL filter, natively. The system is that
-of the *motulator* example :doc:`motulator:grid_examples/grid_following/plot_10kva_lcl_gfl`.
+of the *motulator* example
+:doc:`motulator:grid_examples/grid_following/plot_10kva_lcl_gfl`.
 
 """
 

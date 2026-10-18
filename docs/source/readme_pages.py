@@ -21,7 +21,11 @@ PAGES: dict[str, tuple[str | None, str, list[str] | None]] = {
     "export": (
         "PLECS and Simulink export",
         "README.md",
-        ["Exporting your own system", "Simulating from Python", "Working with the models"],
+        [
+            "Exporting your own system",
+            "Simulating from Python",
+            "Working with the models",
+        ],
     ),
     "native": (None, "README.md", ["Native simulation"]),
     "supported": (None, "README.md", ["Supported systems"]),
@@ -92,4 +96,6 @@ def write_pages() -> None:
     """Write the pages generated from the README files."""
     OUT.mkdir(exist_ok=True)
     for name, (title, source, sections) in PAGES.items():
-        (OUT / f"{name}.md").write_text(_page(title, source, sections), encoding="utf-8")
+        (OUT / f"{name}.md").write_text(
+            _page(title, source, sections), encoding="utf-8"
+        )

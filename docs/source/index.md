@@ -5,13 +5,17 @@ This package exports drive systems and grid converter systems built in [*motulat
 The native simulation (`native.Simulation`) has the interface and the results of the simulation of *motulator*, but it is 30 to 40 times faster, which is useful, e.g., for parameter sweeps. See the [examples](examples/index.rst).
 
 ```{image} ../../examples/pmsyrm_6kw_gn_fvc.png
-:alt: PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control
-:class: only-light
+---
+alt: PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control
+class: only-light
+---
 ```
 
 ```{image} ../../examples/pmsyrm_6kw_gn_fvc_black.png
-:alt: PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control
-:class: only-dark
+---
+alt: PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control
+class: only-dark
+---
 ```
 
 *PLECS model of a 5.6-kW PM-SyRM drive: the flux-vector control subsystem, the computational delay, the PWM, the converter, the machine with a GradNet model, the mechanics, and the scope.*
