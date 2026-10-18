@@ -63,12 +63,13 @@ void step(const double *i_s_abc, double u_dc, double w_M, double w_M_ref,
 {
     IMMeasurements meas = {abc2complex(i_s_abc), u_dc, w_M, u_c_ab[0] + I * u_c_ab[1]};
     im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref, (int)enabled);
-    /* Current reference in estimated rotor flux coordinates, as in the
-     * post-processed results of motulator */
+    /* Current reference in estimated rotor flux coordinates and the angle of these
+     * coordinates, as in the post-processed results of motulator */
     double complex i_s_ref = cexp(-I * carg(ctrl.fbk.psi_R)) * ctrl.ref.i_s;
+    double theta_c = wrap(ctrl.fbk.theta_c + carg(ctrl.fbk.psi_R));
     double o[10] = {ctrl.ref.d_abc[0], ctrl.ref.d_abc[1], ctrl.ref.d_abc[2],
                     ctrl.fbk.w_M,      ctrl.fbk.tau_M,    ctrl.ref.tau_M,
-                    cabs(ctrl.fbk.psi_R), ctrl.fbk.theta_c, creal(i_s_ref),
+                    cabs(ctrl.fbk.psi_R), theta_c,        creal(i_s_ref),
                     cimag(i_s_ref)};
     for (int k = 0; k < 10; k++) {
         out[k] = o[k];

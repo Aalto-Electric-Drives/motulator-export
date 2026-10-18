@@ -27,10 +27,9 @@ Their gate enable (`ControlSystem.set_enable` of *motulator*) selects the standb
 The tests in `tests/` compile the C sources with gcc and compare the results with *motulator* step by step, without PLECS.
 They run in GitHub Actions on every push and weekly against the main branch of *motulator*, to detect changes in *motulator* that must be mirrored here.
 
-## Numerical precision of GradNets
+## GradNets
 
-*motulator* evaluates the GradNets in single precision (PyTorch), while the C port uses double precision.
-The incremental inductances are computed from the analytic Jacobian of the flux map in both, so the differences remain at the level of the single-precision rounding errors (below 1e-5), and the tests compare the C port with *motulator* using the relative tolerance of 1e-4.
+Both *motulator* and the C port evaluate the GradNets in double precision, and the incremental inductances are computed from the analytic Jacobian of the flux map in both, so the tests compare the C port with *motulator* using the relative tolerance of 1e-9.
 The sizes of the networks are limited by `GRADNET_MAX_IN_DIM` and `GRADNET_MAX_EMBED_DIM` in `gradnet.h`, which are checked both when a model is written and at the start of the simulation.
 
 ## Portability

@@ -5,10 +5,16 @@ function [power_signals, voltage_signals, current_signals, angle_signals] = mfun
 fbk = gfm_feedbacks_unpack(fbk_in);
 ref = gfm_references_unpack(ref_in);
 % Monitored signals
+% The currents and the angle in the coordinates of v_c
+rot = exp(-1i*angle(fbk.v_c));
 power_signals = [ref.p_g; fbk.p_g; fbk.q_g];
 voltage_signals = [ref.v_c; abs(fbk.v_c)];
-current_signals = [real(ref.i_c); real(fbk.i_c); imag(ref.i_c); imag(fbk.i_c)];
-angle_signals = [fbk.theta_c];
+current_signals = [ ...
+    real(rot * ref.i_c);
+    real(rot * fbk.i_c);
+    imag(rot * ref.i_c);
+    imag(rot * fbk.i_c)];
+angle_signals = [wrap(fbk.theta_c + angle(fbk.v_c))];
 end
 
 function s = gfm_feedbacks_unpack(u)
@@ -32,4 +38,13 @@ s = struct( ...
     'v_c', u(2), ...
     'i_c', complex(u(3), u(4)), ...
     'u_c', complex(u(5), u(6)));
+end
+
+function theta = wrap(theta)
+%WRAP Limit the angle into the range [-pi, pi), as numpy.mod does.
+x = rem(theta + pi, 2*pi);
+if x < 0
+    x = x + 2*pi;
+end
+theta = x - pi;
 end

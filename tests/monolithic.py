@@ -556,18 +556,23 @@ def _gfm_code() -> dict[str, str]:
         "q_g": "ctrl.fbk.q_g",
         "v_c_ref": "ctrl.ref.v_c",
         "v_c": "cabs(ctrl.fbk.v_c)",
-        "i_c_d_ref": "creal(ctrl.ref.i_c)",
-        "i_c_d": "creal(ctrl.fbk.i_c)",
-        "i_c_q_ref": "cimag(ctrl.ref.i_c)",
-        "i_c_q": "cimag(ctrl.fbk.i_c)",
-        "theta_c": "ctrl.fbk.theta_c",
+        "i_c_d_ref": "creal(rot * ctrl.ref.i_c)",
+        "i_c_d": "creal(rot * ctrl.fbk.i_c)",
+        "i_c_q_ref": "cimag(rot * ctrl.ref.i_c)",
+        "i_c_q": "cimag(rot * ctrl.fbk.i_c)",
+        "theta_c": "wrap(ctrl.fbk.theta_c + carg(ctrl.fbk.v_c))",
     }
     code = {
         "Declarations": _declarations(
             ["common.c", "gfm_observer.c"], "GFMControlSystem"
         ),
         "StartFcn": start,
-        "OutputFcn": output + monitored_code(_grid_control.GFM_OUTPUTS, monitored),
+        "OutputFcn": output
+        + monitored_code(
+            _grid_control.GFM_OUTPUTS,
+            monitored,
+            prelude="double complex rot = cexp(-I * carg(ctrl.fbk.v_c));\n",
+        ),
         "UpdateFcn": "gfm_control_system_update(&ctrl);\n",
     }
     return code

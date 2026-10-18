@@ -5,9 +5,9 @@
 
 #include "gradnet.h"
 
-/* GradNet.forward for a per-unit input x. If jac is not NULL, the Jacobian matrix
- * (GradNet.jacobian) is computed too. The Jacobians of both activations are of the
- * form c*(diag(d) - u*u^T), so the Jacobian of the network is
+/* Output of the network for a per-unit input x (GradNetFunction.__call__). If jac is
+ * not NULL, the Jacobian matrix is computed too. The Jacobians of both activations
+ * are of the form c*(diag(d) - u*u^T), so the Jacobian of the network is
  * diag(mu) + c*(W^T diag(d) W - v*v^T) with v = W^T u. */
 static void gradnet_forward(const GradNet *net, const double *x, double *z,
                             double jac[][GRADNET_MAX_IN_DIM])

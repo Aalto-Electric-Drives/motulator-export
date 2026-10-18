@@ -49,6 +49,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+import motulator.drive.gradnet as gn
 import numpy as np
 from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
@@ -139,44 +140,32 @@ def export_gradnet(net_map: Any) -> dict[str, Any]:
     (`GRADNET_MAX_IN_DIM` and `GRADNET_MAX_EMBED_DIM` in `c/gradnet.h`).
 
     """
-    import motulator.drive.gradnet as gn  # noqa: PLC0415 (loads PyTorch)
-
-    model = net_map.model
-    if model.num_modules != 1 or model.in_dim not in (2, 4):
+    fcn = net_map.fcn  # The network as a numpy function (GradNetFunction)
+    num_modules, embed_dim, in_dim = fcn.W.shape
+    if num_modules != 1 or in_dim not in (2, 4):
         raise NotImplementedError("Only single-module GradNets with 2D or 4D inputs")
-    block = model.blocks[0]
-    embed_dim = len(block.b)
-    if model.in_dim > GRADNET_MAX_IN_DIM or embed_dim > GRADNET_MAX_EMBED_DIM:
+    if in_dim > GRADNET_MAX_IN_DIM or embed_dim > GRADNET_MAX_EMBED_DIM:
         raise NotImplementedError(
             f"GradNet too large for the C port: embed_dim={embed_dim} (at most "
-            f"{GRADNET_MAX_EMBED_DIM}), in_dim={model.in_dim} (at most "
+            f"{GRADNET_MAX_EMBED_DIM}), in_dim={in_dim} (at most "
             f"{GRADNET_MAX_IN_DIM})"
         )
-    act = block.act
-    if isinstance(act, gn.PNormGradient):
-        activation, p = 1, act.q + 1
-    elif isinstance(act, gn.Softmax):
-        activation, p = 2, 0
-    else:
-        raise NotImplementedError(f"Activation not supported: {type(act).__name__}")
-
-    def arr(t: Any) -> np.ndarray:
-        return t.detach().cpu().numpy().astype(float)
-
-    harmonics = isinstance(net_map, gn.CurrentMapWithHarmonics)
+    activations = {"PNormGradient": 1, "Softmax": 2}  # GradNetActivation in C
+    if fcn.activation not in activations:
+        raise NotImplementedError(f"Activation not supported: {fcn.activation}")
     return {
-        "in_dim": model.in_dim,
-        "mu_dim": model.in_dim - model.non_mu_dim,
-        "k": net_map.k if harmonics else 0,
-        "W": arr(block.W),  # (embed_dim, in_dim)
-        "b": arr(block.b),
-        "mu_log": arr(model.mu_log),
-        "bias": arr(model.bias),
-        "activation": activation,
-        "beta_log": float(act.beta_log.item()),
-        "p": p,
-        "in_base": float(net_map.psi_base if harmonics else net_map.in_base),
-        "out_base": float(net_map.i_base if harmonics else net_map.out_base),
+        "in_dim": in_dim,
+        "mu_dim": fcn.mu_log.size,
+        "k": net_map.k if isinstance(net_map, gn.CurrentMapWithHarmonics) else 0,
+        "W": fcn.W[0],  # (embed_dim, in_dim)
+        "b": fcn.b[0],
+        "mu_log": fcn.mu_log,
+        "bias": fcn.bias,
+        "activation": activations[fcn.activation],
+        "beta_log": float(fcn.beta_log[0]),
+        "p": fcn.p,
+        "in_base": float(net_map.in_base),
+        "out_base": float(net_map.out_base),
     }
 
 

@@ -5,10 +5,10 @@ This test uses the control system of the example
 examples/drive/gradnet/plot_6kw_pmsyrm_gn_fvc_fem_harm.py: sensored flux-vector
 control, where the estimated machine model is a GradNet flux map trained on FEM data.
 
-The C port evaluates the GradNets in double precision, while motulator (PyTorch) uses
-single precision. Hence, the results are compared with the relative tolerance `RTOL`.
+Both the C port and motulator evaluate the GradNets in double precision, so the
+results agree to the rounding errors, within the relative tolerance `RTOL`.
 
-Run from the repository root (requires gcc and PyTorch):
+Run from the repository root (requires gcc):
 
     pytest tests/test_sm_gradnet.py
 
@@ -186,14 +186,14 @@ def set_net(dll: ctypes.CDLL, g: dict[str, Any]) -> None:
 # Machine model and control system of the example
 nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)
 base = utils.BaseValues.from_nominal(nom, n_p=2)
-FLUX_MAP = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.pth"
-RTOL = 1e-4  # Single-precision rounding errors of motulator are below 1e-5
-CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.pth"
+FLUX_MAP = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
+RTOL = 1e-9  # Rounding errors, e.g., of the root finding of the loci
+CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.npz"
 
 
 def setup(dll: ctypes.CDLL) -> Any:
     """Load the flux map in motulator and in the C port."""
-    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP, activation=gn.PNormGradient))
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
     est_par = control.SaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
     )
@@ -299,9 +299,7 @@ def test_control_system(dll: ctypes.CDLL) -> None:
 
 def test_plant(dll: ctypes.CDLL) -> None:
     """Machine model with the GradNet current map with spatial harmonics."""
-    current_map = gn.CurrentMapWithHarmonics(
-        gn.load_gradnet(CURRENT_MAP, activation=gn.Softmax)
-    )
+    current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(CURRENT_MAP))
     par = mdl_model.SpatialSaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, magnetic_map_fcn=current_map
     )

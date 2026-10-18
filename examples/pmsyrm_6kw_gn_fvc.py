@@ -46,10 +46,8 @@ SPEED_CTRL = {"J": 0.05, "alpha_s": 2 * pi * 4}  # Arguments of SpeedController
 # %%
 def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     """Build the drive system of the motulator example."""
-    path = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.pth"
-    magnetic_map = gn.CurrentMapWithHarmonics(
-        gn.load_gradnet(path, activation=gn.Softmax)
-    )
+    path = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.npz"
+    magnetic_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(path))
     par = model.SpatialSaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, magnetic_map_fcn=magnetic_map
     )
@@ -61,8 +59,8 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     )
     mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
 
-    path = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.pth"
-    est_flux_map = gn.FluxMap(gn.load_gradnet(path, activation=gn.PNormGradient))
+    path = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
+    est_flux_map = gn.FluxMap(gn.load_gradnet(path))
     est_par = control.SaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, psi_s_dq_fcn=est_flux_map
     )
@@ -118,7 +116,7 @@ if __name__ == "__main__":
     # Simulate in motulator
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-8, atol=1e-8))
+    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     start = time.time()
     res = sim.simulate(t_stop=T_STOP)
     print(f"motulator: {time.time() - start:.1f} s")

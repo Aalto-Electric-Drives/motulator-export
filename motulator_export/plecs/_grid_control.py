@@ -848,11 +848,11 @@ GFM_MONITORED = {
     "q_g": "fbk.q_g",
     "v_c_ref": "ref.v_c",
     "v_c": "cabs(fbk.v_c)",
-    "i_c_d_ref": "creal(ref.i_c)",
-    "i_c_d": "creal(fbk.i_c)",
-    "i_c_q_ref": "cimag(ref.i_c)",
-    "i_c_q": "cimag(fbk.i_c)",
-    "theta_c": "fbk.theta_c",
+    "i_c_d_ref": "creal(rot * ref.i_c)",
+    "i_c_d": "creal(rot * fbk.i_c)",
+    "i_c_q_ref": "cimag(rot * ref.i_c)",
+    "i_c_q": "cimag(rot * fbk.i_c)",
+    "theta_c": "wrap(fbk.theta_c + carg(fbk.v_c))",
 }
 
 
@@ -868,7 +868,14 @@ def gfm_control_system() -> Subsystem:
         ],
         abc_input("i_c_abc", 0) + converter_voltage_input(2),
     )
-    signals = monitor(GFM_SIGNALS, GFM_OUTPUTS, GFM_MONITORED, [])
+    signals = monitor(
+        GFM_SIGNALS,
+        GFM_OUTPUTS,
+        GFM_MONITORED,
+        [],
+        "/* The currents and the angle in the coordinates of v_c */\n"
+        "double complex rot = cexp(-I * carg(fbk.v_c));\n",
+    )
     return grid_converter_control_system(
         GFM_SIGNALS, GFM_NAME, GFM_INPUTS, measurement, _gfm_controller(), signals
     )
