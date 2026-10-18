@@ -11,7 +11,7 @@ Plecs {
   AbsTol        "-1"
   InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\nconverter.t_d = 2e-06;\nconverter.u_th = 1;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Current-vector control (CurrentVectorControllerCfg)\ncfg.psi_s_nom = 0.987615948229323;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_c = 2*pi*200;\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.w_s_nom = 2*pi*50;\ncfg.k_u = 0.95;\ncfg.k_fw = [];\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 2*pi*4;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 2e-06;\npwm.u_th = 1;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 1;\npwm.overmodulation = 'MPE';\n"
   Schematic {
-    Location      [0, 0; 1140, 520]
+    Location      [0, 0; 1140, 570]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -256,7 +256,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1145, 375]
+        Location      [0, 0; 1155, 395]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -379,7 +379,7 @@ Plecs {
       Type          Output
       Name          "d_abc"
       Show          on
-      Position      [710, 245]
+      Position      [720, 255]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -398,7 +398,7 @@ Plecs {
       Type          CScript
       Name          "get_measurement"
       Show          on
-      Position      [240, 145]
+      Position      [240, 155]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -508,7 +508,7 @@ Plecs {
       Type          Goto
       Name          "Goto fbk"
       Show          off
-      Position      [875, 100]
+      Position      [885, 110]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -527,7 +527,7 @@ Plecs {
       Type          Goto
       Name          "Goto ref"
       Show          off
-      Position      [875, 215]
+      Position      [885, 235]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -584,7 +584,7 @@ Plecs {
       Type          From
       Name          "From fbk 2"
       Show          off
-      Position      [875, 255]
+      Position      [885, 275]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -603,7 +603,7 @@ Plecs {
       Type          From
       Name          "From ref 2"
       Show          off
-      Position      [875, 295]
+      Position      [885, 315]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -622,7 +622,7 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.w_M"
       Show          on
-      Position      [340, 55]
+      Position      [350, 55]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -641,7 +641,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.tau_M"
       Show          on
-      Position      [340, 95]
+      Position      [350, 105]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -660,7 +660,7 @@ Plecs {
       Type          Subsystem
       Name          "SpeedController"
       Show          on
-      Position      [535, 60]
+      Position      [545, 60]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -999,7 +999,7 @@ Plecs {
       Type          Subsystem
       Name          "PWM"
       Show          on
-      Position      [535, 225]
+      Position      [545, 235]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1244,7 +1244,7 @@ Plecs {
       Type          Output
       Name          "d_abc"
       Show          on
-      Position      [545, 120]
+      Position      [545, 130]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1561,7 +1561,7 @@ Plecs {
       SrcTerminal   4
       Points        [300, 100]
       Branch {
-        Points        [500, 100; 500, 120]
+        Points        [500, 100; 500, 130]
         DstComponent  "d_abc"
         DstTerminal   1
       }
@@ -1599,7 +1599,7 @@ Plecs {
       Type          Subsystem
       Name          "CurrentVectorController"
       Show          on
-      Position      [750, 145]
+      Position      [760, 155]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1917,7 +1917,7 @@ Plecs {
       Type          Input
       Name          "u_s_ab"
       Show          on
-      Position      [40, 65]
+      Position      [40, 75]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1936,7 +1936,7 @@ Plecs {
       Type          Input
       Name          "u_s_zoh_ab"
       Show          on
-      Position      [40, 105]
+      Position      [40, 115]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2649,7 +2649,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_s_ab"
       SrcTerminal   1
-      Points        [80, 65; 80, 55]
+      Points        [80, 75; 80, 55]
       DstComponent  "FluxObserver"
       DstTerminal   2
     }
@@ -2657,7 +2657,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_s_zoh_ab"
       SrcTerminal   1
-      Points        [90, 105; 90, 65]
+      Points        [90, 115; 90, 65]
       DstComponent  "FluxObserver"
       DstTerminal   3
     }
@@ -3774,7 +3774,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.u_s"
       Show          on
-      Position      [870, 180]
+      Position      [880, 190]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3793,7 +3793,7 @@ Plecs {
       Type          CScript
       Name          "modulate"
       Show          on
-      Position      [1055, 140]
+      Position      [1065, 150]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3903,7 +3903,7 @@ Plecs {
       Type          CScript
       Name          "Monitored signals"
       Show          on
-      Position      [1055, 265]
+      Position      [1065, 285]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -4013,7 +4013,7 @@ Plecs {
       Type          From
       Name          "From SpeedController.enable"
       Show          off
-      Position      [446, 45]
+      Position      [456, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4032,7 +4032,7 @@ Plecs {
       Type          From
       Name          "From PWM.enable"
       Show          off
-      Position      [446, 195]
+      Position      [456, 205]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4051,7 +4051,7 @@ Plecs {
       Type          From
       Name          "From CurrentVectorController.enable"
       Show          off
-      Position      [661, 105]
+      Position      [671, 115]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4070,7 +4070,7 @@ Plecs {
       Type          From
       Name          "From SpeedController.w_M_ref"
       Show          off
-      Position      [446, 75]
+      Position      [456, 75]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4089,7 +4089,7 @@ Plecs {
       Type          From
       Name          "From Monitored signals.w_M_ref"
       Show          off
-      Position      [966, 275]
+      Position      [976, 295]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4181,7 +4181,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [135, 135; 135, 130]
+      Points        [135, 135; 135, 140]
       DstComponent  "get_measurement"
       DstTerminal   1
     }
@@ -4189,7 +4189,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc"
       SrcTerminal   1
-      Points        [145, 175; 145, 140]
+      Points        [145, 175; 145, 150]
       DstComponent  "get_measurement"
       DstTerminal   2
     }
@@ -4197,7 +4197,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_line"
       SrcTerminal   1
-      Points        [155, 215; 155, 150]
+      Points        [155, 215; 155, 160]
       DstComponent  "get_measurement"
       DstTerminal   3
     }
@@ -4205,7 +4205,7 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M"
       SrcTerminal   1
-      Points        [165, 255; 165, 160]
+      Points        [165, 255; 165, 170]
       DstComponent  "get_measurement"
       DstTerminal   4
     }
@@ -4213,9 +4213,9 @@ Plecs {
       Type          Signal
       SrcComponent  "get_measurement"
       SrcTerminal   5
-      Points        [385, 145]
+      Points        [395, 155]
       Branch {
-        Points        [385, 215]
+        Points        [395, 225]
         DstComponent  "PWM"
         DstTerminal   2
       }
@@ -4235,6 +4235,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref"
       SrcTerminal   1
+      Points        [310, 95; 310, 105]
       DstComponent  "ref.tau_M"
       DstTerminal   1
     }
@@ -4249,7 +4250,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.tau_M"
       SrcTerminal   2
-      Points        [375, 95; 375, 65]
+      Points        [385, 105; 385, 65]
       DstComponent  "SpeedController"
       DstTerminal   3
     }
@@ -4257,7 +4258,7 @@ Plecs {
       Type          Signal
       SrcComponent  "SpeedController"
       SrcTerminal   5
-      Points        [620, 60; 620, 125]
+      Points        [630, 60; 630, 135]
       DstComponent  "CurrentVectorController"
       DstTerminal   2
     }
@@ -4265,7 +4266,7 @@ Plecs {
       Type          Signal
       SrcComponent  "PWM"
       SrcTerminal   5
-      Points        [600, 205; 600, 165]
+      Points        [610, 215; 610, 175]
       DstComponent  "CurrentVectorController"
       DstTerminal   4
     }
@@ -4273,7 +4274,7 @@ Plecs {
       Type          Signal
       SrcComponent  "PWM"
       SrcTerminal   6
-      Points        [610, 225; 610, 185]
+      Points        [620, 235; 620, 195]
       DstComponent  "CurrentVectorController"
       DstTerminal   5
     }
@@ -4288,9 +4289,9 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentVectorController"
       SrcTerminal   6
-      Points        [820, 135]
+      Points        [830, 145]
       Branch {
-        Points        [820, 100]
+        Points        [830, 110]
         DstComponent  "Goto fbk"
         DstTerminal   1
       }
@@ -4303,9 +4304,9 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentVectorController"
       SrcTerminal   7
-      Points        [830, 155; 830, 180]
+      Points        [840, 165; 840, 190]
       Branch {
-        Points        [830, 215]
+        Points        [840, 235]
         DstComponent  "Goto ref"
         DstTerminal   1
       }
@@ -4318,7 +4319,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.u_s"
       SrcTerminal   2
-      Points        [925, 180; 925, 145]
+      Points        [935, 190; 935, 155]
       DstComponent  "modulate"
       DstTerminal   2
     }
@@ -4326,7 +4327,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   3
-      Points        [1135, 135; 1135, 335; 395, 335; 395, 235]
+      Points        [1145, 145; 1145, 355; 405, 355; 405, 245]
       DstComponent  "PWM"
       DstTerminal   3
     }
@@ -4334,7 +4335,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   4
-      Points        [1125, 145; 1125, 325; 405, 325; 405, 255]
+      Points        [1135, 155; 1135, 345; 415, 345; 415, 265]
       DstComponent  "PWM"
       DstTerminal   4
     }
@@ -4349,7 +4350,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref 2"
       SrcTerminal   1
-      Points        [915, 295; 915, 265]
+      Points        [925, 315; 925, 285]
       DstComponent  "Monitored signals"
       DstTerminal   2
     }
@@ -4806,7 +4807,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed (ctrl)"
       Show          on
-      Position      [80, 270]
+      Position      [80, 320]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4820,7 +4821,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed"
       Show          on
-      Position      [80, 310]
+      Position      [80, 360]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4834,7 +4835,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque (ctrl)"
       Show          on
-      Position      [80, 350]
+      Position      [80, 400]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4848,7 +4849,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque"
       Show          on
-      Position      [80, 390]
+      Position      [80, 440]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4862,7 +4863,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Currents"
       Show          on
-      Position      [80, 430]
+      Position      [80, 480]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4876,7 +4877,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Flux (ctrl)"
       Show          on
-      Position      [80, 470]
+      Position      [80, 520]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4890,7 +4891,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux speed"
       Show          off
-      Position      [180, 310]
+      Position      [180, 360]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4904,7 +4905,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux torque"
       Show          off
-      Position      [180, 330]
+      Position      [180, 380]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4918,7 +4919,7 @@ Plecs {
       Type          Scope
       Name          "Scope"
       Show          on
-      Position      [260, 330]
+      Position      [260, 380]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -5121,7 +5122,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed (ctrl)"
       SrcTerminal   1
-      Points        [120, 270; 120, 305]
+      Points        [120, 320; 120, 355]
       DstComponent  "Mux speed"
       DstTerminal   2
     }
@@ -5129,7 +5130,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed"
       SrcTerminal   1
-      Points        [130, 310; 130, 315]
+      Points        [130, 360; 130, 365]
       DstComponent  "Mux speed"
       DstTerminal   3
     }
@@ -5137,7 +5138,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque (ctrl)"
       SrcTerminal   1
-      Points        [140, 350; 140, 325]
+      Points        [140, 400; 140, 375]
       DstComponent  "Mux torque"
       DstTerminal   2
     }
@@ -5145,7 +5146,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque"
       SrcTerminal   1
-      Points        [150, 390; 150, 335]
+      Points        [150, 440; 150, 385]
       DstComponent  "Mux torque"
       DstTerminal   3
     }
@@ -5153,7 +5154,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux speed"
       SrcTerminal   1
-      Points        [210, 310; 210, 315]
+      Points        [210, 360; 210, 365]
       DstComponent  "Scope"
       DstTerminal   1
     }
@@ -5161,7 +5162,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux torque"
       SrcTerminal   1
-      Points        [215, 330; 215, 325]
+      Points        [215, 380; 215, 375]
       DstComponent  "Scope"
       DstTerminal   2
     }
@@ -5169,7 +5170,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Currents"
       SrcTerminal   1
-      Points        [220, 430; 220, 335]
+      Points        [220, 480; 220, 385]
       DstComponent  "Scope"
       DstTerminal   3
     }
@@ -5177,7 +5178,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Flux (ctrl)"
       SrcTerminal   1
-      Points        [225, 470; 225, 345]
+      Points        [225, 520; 225, 395]
       DstComponent  "Scope"
       DstTerminal   4
     }

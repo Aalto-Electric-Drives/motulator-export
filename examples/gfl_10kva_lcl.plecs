@@ -34,7 +34,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [195, 5]
+      Position      [185, 5]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -191,7 +191,7 @@ Plecs {
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -30; 50, 30]
+      Frame         [-50, -35; 50, 35]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
@@ -268,7 +268,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1005, 350]
+        Location      [0, 0; 1025, 350]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -296,7 +296,7 @@ Plecs {
       Type          Input
       Name          "p_g_ref"
       Show          on
-      Position      [40, 65]
+      Position      [40, 75]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -315,7 +315,7 @@ Plecs {
       Type          Input
       Name          "q_g_ref"
       Show          on
-      Position      [40, 90]
+      Position      [40, 110]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -334,7 +334,7 @@ Plecs {
       Type          Input
       Name          "i_c_abc"
       Show          on
-      Position      [40, 130]
+      Position      [40, 150]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -353,7 +353,7 @@ Plecs {
       Type          Input
       Name          "u_g_line"
       Show          on
-      Position      [40, 170]
+      Position      [40, 190]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -372,7 +372,7 @@ Plecs {
       Type          Input
       Name          "u_dc"
       Show          on
-      Position      [40, 210]
+      Position      [40, 230]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -391,7 +391,7 @@ Plecs {
       Type          Input
       Name          "u_c_line"
       Show          on
-      Position      [40, 250]
+      Position      [40, 270]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -410,7 +410,7 @@ Plecs {
       Type          Output
       Name          "d_abc"
       Show          on
-      Position      [630, 245]
+      Position      [650, 245]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -429,7 +429,7 @@ Plecs {
       Type          CScript
       Name          "get_measurement"
       Show          on
-      Position      [230, 145]
+      Position      [240, 145]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -539,7 +539,7 @@ Plecs {
       Type          Subsystem
       Name          "PWM"
       Show          on
-      Position      [450, 225]
+      Position      [460, 225]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -784,7 +784,7 @@ Plecs {
       Type          Output
       Name          "d_abc"
       Show          on
-      Position      [545, 120]
+      Position      [545, 130]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1101,7 +1101,7 @@ Plecs {
       SrcTerminal   4
       Points        [300, 100]
       Branch {
-        Points        [500, 100; 500, 120]
+        Points        [500, 100; 500, 130]
         DstComponent  "d_abc"
         DstTerminal   1
       }
@@ -1139,7 +1139,7 @@ Plecs {
       Type          Subsystem
       Name          "CurrentVectorController"
       Show          on
-      Position      [670, 90]
+      Position      [690, 90]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2652,7 +2652,7 @@ Plecs {
       Type          Goto
       Name          "Goto fbk"
       Show          off
-      Position      [790, 45]
+      Position      [810, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2671,7 +2671,7 @@ Plecs {
       Type          Goto
       Name          "Goto ref"
       Show          off
-      Position      [790, 160]
+      Position      [810, 170]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2690,7 +2690,7 @@ Plecs {
       Type          From
       Name          "From fbk"
       Show          off
-      Position      [790, 200]
+      Position      [810, 210]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2709,7 +2709,7 @@ Plecs {
       Type          From
       Name          "From ref"
       Show          off
-      Position      [790, 240]
+      Position      [810, 250]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2728,7 +2728,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.u_c"
       Show          on
-      Position      [785, 125]
+      Position      [805, 125]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2747,7 +2747,7 @@ Plecs {
       Type          CScript
       Name          "modulate"
       Show          on
-      Position      [915, 85]
+      Position      [935, 85]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2857,7 +2857,7 @@ Plecs {
       Type          CScript
       Name          "Monitored signals"
       Show          on
-      Position      [915, 205]
+      Position      [935, 215]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2967,7 +2967,7 @@ Plecs {
       Type          From
       Name          "From PWM.enable"
       Show          off
-      Position      [361, 195]
+      Position      [371, 195]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2986,7 +2986,7 @@ Plecs {
       Type          From
       Name          "From CurrentVectorController.enable"
       Show          off
-      Position      [581, 50]
+      Position      [601, 50]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3038,7 +3038,7 @@ Plecs {
       Type          Signal
       SrcComponent  "p_g_ref"
       SrcTerminal   1
-      Points        [520, 65; 520, 70]
+      Points        [530, 75; 530, 70]
       DstComponent  "CurrentVectorController"
       DstTerminal   2
     }
@@ -3046,6 +3046,7 @@ Plecs {
       Type          Signal
       SrcComponent  "q_g_ref"
       SrcTerminal   1
+      Points        [540, 110; 540, 90]
       DstComponent  "CurrentVectorController"
       DstTerminal   3
     }
@@ -3053,6 +3054,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_c_abc"
       SrcTerminal   1
+      Points        [135, 150; 135, 130]
       DstComponent  "get_measurement"
       DstTerminal   1
     }
@@ -3060,7 +3062,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_g_line"
       SrcTerminal   1
-      Points        [135, 170; 135, 140]
+      Points        [145, 190; 145, 140]
       DstComponent  "get_measurement"
       DstTerminal   2
     }
@@ -3068,7 +3070,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc"
       SrcTerminal   1
-      Points        [145, 210; 145, 150]
+      Points        [155, 230; 155, 150]
       DstComponent  "get_measurement"
       DstTerminal   3
     }
@@ -3076,7 +3078,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_line"
       SrcTerminal   1
-      Points        [155, 250; 155, 160]
+      Points        [165, 270; 165, 160]
       DstComponent  "get_measurement"
       DstTerminal   4
     }
@@ -3084,14 +3086,14 @@ Plecs {
       Type          Signal
       SrcComponent  "get_measurement"
       SrcTerminal   5
-      Points        [300, 145]
+      Points        [310, 145]
       Branch {
-        Points        [300, 215]
+        Points        [310, 215]
         DstComponent  "PWM"
         DstTerminal   2
       }
       Branch {
-        Points        [530, 145; 530, 110]
+        Points        [550, 145; 550, 110]
         DstComponent  "CurrentVectorController"
         DstTerminal   4
       }
@@ -3100,7 +3102,7 @@ Plecs {
       Type          Signal
       SrcComponent  "PWM"
       SrcTerminal   5
-      Points        [540, 205; 540, 130]
+      Points        [560, 205; 560, 130]
       DstComponent  "CurrentVectorController"
       DstTerminal   5
     }
@@ -3115,9 +3117,9 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentVectorController"
       SrcTerminal   6
-      Points        [735, 80]
+      Points        [755, 80]
       Branch {
-        Points        [735, 45]
+        Points        [755, 45]
         DstComponent  "Goto fbk"
         DstTerminal   1
       }
@@ -3130,9 +3132,9 @@ Plecs {
       Type          Signal
       SrcComponent  "CurrentVectorController"
       SrcTerminal   7
-      Points        [745, 100; 745, 125]
+      Points        [765, 100; 765, 125]
       Branch {
-        Points        [745, 160]
+        Points        [765, 170]
         DstComponent  "Goto ref"
         DstTerminal   1
       }
@@ -3145,7 +3147,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.u_c"
       SrcTerminal   2
-      Points        [840, 125; 840, 90]
+      Points        [860, 125; 860, 90]
       DstComponent  "modulate"
       DstTerminal   2
     }
@@ -3153,7 +3155,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   3
-      Points        [995, 80; 995, 310; 310, 310; 310, 235]
+      Points        [1015, 80; 1015, 310; 320, 310; 320, 235]
       DstComponent  "PWM"
       DstTerminal   3
     }
@@ -3161,7 +3163,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   4
-      Points        [985, 90; 985, 300; 320, 300; 320, 255]
+      Points        [1005, 90; 1005, 300; 330, 300; 330, 255]
       DstComponent  "PWM"
       DstTerminal   4
     }
@@ -3176,7 +3178,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref"
       SrcTerminal   1
-      Points        [830, 240; 830, 210]
+      Points        [850, 250; 850, 220]
       DstComponent  "Monitored signals"
       DstTerminal   2
     }
@@ -3824,14 +3826,14 @@ Plecs {
       Type          Signal
       SrcComponent  "enable"
       SrcTerminal   1
-      Points        [155, 20]
+      Points        [145, 20]
       Branch {
-        Points        [160, 20; 160, 70]
+        Points        [150, 20; 150, 70]
         DstComponent  "Grid-following control"
         DstTerminal   1
       }
       Branch {
-        Points        [155, 5]
+        Points        [145, 5]
         DstComponent  "Goto enable"
         DstTerminal   1
       }
@@ -3840,7 +3842,7 @@ Plecs {
       Type          Signal
       SrcComponent  "p_g_ref"
       SrcTerminal   1
-      Points        [140, 70; 140, 80]
+      Points        [130, 70; 130, 80]
       DstComponent  "Grid-following control"
       DstTerminal   2
     }
@@ -3848,7 +3850,7 @@ Plecs {
       Type          Signal
       SrcComponent  "q_g_ref"
       SrcTerminal   1
-      Points        [150, 120; 150, 90]
+      Points        [140, 120; 140, 90]
       DstComponent  "Grid-following control"
       DstTerminal   3
     }
@@ -3856,7 +3858,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_c_abc"
       SrcTerminal   1
-      Points        [170, 170; 170, 100]
+      Points        [160, 170; 160, 100]
       DstComponent  "Grid-following control"
       DstTerminal   4
     }
@@ -3864,7 +3866,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_g_line"
       SrcTerminal   1
-      Points        [180, 220; 180, 110]
+      Points        [170, 220; 170, 110]
       DstComponent  "Grid-following control"
       DstTerminal   5
     }
@@ -3872,7 +3874,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc meas."
       SrcTerminal   1
-      Points        [190, 270; 190, 120]
+      Points        [180, 270; 180, 120]
       DstComponent  "Grid-following control"
       DstTerminal   6
     }
@@ -3880,7 +3882,7 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_line"
       SrcTerminal   1
-      Points        [200, 320; 200, 130]
+      Points        [190, 320; 190, 130]
       DstComponent  "Grid-following control"
       DstTerminal   7
     }

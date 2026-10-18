@@ -302,7 +302,7 @@ def write_model(
     ]
     if block is CVC_BLOCK:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
-    _add_control_system(sch, block, sources, VALUES, init)
+    y_sources = _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
@@ -320,8 +320,8 @@ def write_model(
     _add_im(sch)
     _add_phase_lines(sch, x_c)
     _add_mechanics(sch, tau_L, inertia=False)
-    _add_drive_outputs(sch, block, outputs)
-    size = (880 + sch.dx, 520)
+    y_probes = _add_drive_outputs(sch, block, outputs, y_sources)
+    size = (880 + sch.dx, max(520, y_probes + 50))
     return _write_model(path, init, t_stop, T_s, sch, size, outputs)
 
 
