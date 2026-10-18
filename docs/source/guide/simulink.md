@@ -3,15 +3,19 @@
 `simulink.write_model` writes the MATLAB scripts that build a Simulink model of the system. The model has the same structure as the PLECS model, built from basic Simulink blocks (no toolboxes needed):
 
 ```{image} ../images/simulink_drive.png
-:target: ../_images/simulink_drive.png
-:alt: Simulink model of a 5.6-kW PM-SyRM drive
-:class: only-light
+---
+target: ../_images/simulink_drive.png
+alt: Simulink model of a 5.6-kW PM-SyRM drive
+class: only-light
+---
 ```
 
 ```{image} ../images/simulink_drive_black.png
-:target: ../_images/simulink_drive_black.png
-:alt: Simulink model of a 5.6-kW PM-SyRM drive
-:class: only-dark
+---
+target: ../_images/simulink_drive_black.png
+alt: Simulink model of a 5.6-kW PM-SyRM drive
+class: only-dark
+---
 ```
 
 *Simulink model written by `examples/pmsyrm_6kw_gn_fvc_simulink.py`. The output ports `mdl` and `ctrl` give the signals for simulating from Python.*

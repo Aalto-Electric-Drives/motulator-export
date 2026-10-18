@@ -3,15 +3,19 @@
 `plecs.write_model` writes a PLECS Standalone model of the system. The system model is built from the native blocks of PLECS, and the control system is a subsystem on the left:
 
 ```{image} ../images/plecs_drive.png
-:target: ../_images/plecs_drive.png
-:alt: Top level of the PLECS model of a 2.2-kW IPMSM drive
-:class: only-light
+---
+target: ../_images/plecs_drive.png
+alt: Top level of the PLECS model of a 2.2-kW IPMSM drive
+class: only-light
+---
 ```
 
 ```{image} ../images/plecs_drive_black.png
-:target: ../_images/plecs_drive_black.png
-:alt: Top level of the PLECS model of a 2.2-kW IPMSM drive
-:class: only-dark
+---
+target: ../_images/plecs_drive_black.png
+alt: Top level of the PLECS model of a 2.2-kW IPMSM drive
+class: only-dark
+---
 ```
 
 *Top level of the model written by `examples/ipmsm_2kw_fvc.py`: the control system with its references and measurements, the computational delay, the PWM, the converter, the machine, the load, and the scope.*
@@ -21,15 +25,19 @@
 Inside the control system, each class of *motulator* is a block, nested as in *motulator*. The blocks run the C port of the control algorithms in C-Script blocks:
 
 ```{image} ../images/plecs_control.png
-:target: ../_images/plecs_control.png
-:alt: Blocks of the flux-vector control system in PLECS
-:class: only-light
+---
+target: ../_images/plecs_control.png
+alt: Blocks of the flux-vector control system in PLECS
+class: only-light
+---
 ```
 
 ```{image} ../images/plecs_control_black.png
-:target: ../_images/plecs_control_black.png
-:alt: Blocks of the flux-vector control system in PLECS
-:class: only-dark
+---
+target: ../_images/plecs_control_black.png
+alt: Blocks of the flux-vector control system in PLECS
+class: only-dark
+---
 ```
 
 *Inside the flux-vector control system (`VectorControlSystem`): the measurements, the `SpeedController`, the `FluxVectorController`, and the `PWM`.*
@@ -37,17 +45,21 @@ Inside the control system, each class of *motulator* is a block, nested as in *m
 The mask of each block shows the arguments of its class. The masks of the blocks at this level refer to the parameters of the model, see below.
 
 ```{image} ../images/plecs_mask.png
-:target: ../_images/plecs_mask.png
-:alt: Mask dialog of the SpeedController block
-:width: 500px
-:class: only-light
+---
+target: ../_images/plecs_mask.png
+alt: Mask dialog of the SpeedController block
+width: 500px
+class: only-light
+---
 ```
 
 ```{image} ../images/plecs_mask_black.png
-:target: ../_images/plecs_mask_black.png
-:alt: Mask dialog of the SpeedController block
-:width: 500px
-:class: only-dark
+---
+target: ../_images/plecs_mask_black.png
+alt: Mask dialog of the SpeedController block
+width: 500px
+class: only-dark
+---
 ```
 
 *Mask of the `SpeedController` block.*
@@ -80,17 +92,21 @@ Changing a parameter needs no Python: edit the initialization commands and run t
 The scope shows the speed, the torque, the stator currents, and the flux linkage:
 
 ```{image} ../images/plecs_scope.png
-:target: ../_images/plecs_scope.png
-:alt: Scope of the PLECS model of a 2.2-kW IPMSM drive
-:width: 600px
-:class: only-light
+---
+target: ../_images/plecs_scope.png
+alt: Scope of the PLECS model of a 2.2-kW IPMSM drive
+width: 600px
+class: only-light
+---
 ```
 
 ```{image} ../images/plecs_scope_black.png
-:target: ../_images/plecs_scope_black.png
-:alt: Scope of the PLECS model of a 2.2-kW IPMSM drive
-:width: 600px
-:class: only-dark
+---
+target: ../_images/plecs_scope_black.png
+alt: Scope of the PLECS model of a 2.2-kW IPMSM drive
+width: 600px
+class: only-dark
+---
 ```
 
 *Scope of the model written by `examples/ipmsm_2kw_fvc.py`: a speed step at 0.1 s and a load torque step at 0.7 s. The speed and the torque plots show the reference, the estimate of the control system, and the actual value, and the flux linkage plot the reference and the estimate.*
@@ -100,15 +116,19 @@ The scope shows the speed, the torque, the stator currents, and the flux linkage
 The grid converter systems have the same structure, with the AC filter and the grid in place of the machine:
 
 ```{image} ../images/plecs_grid.png
-:target: ../_images/plecs_grid.png
-:alt: Top level of the PLECS model of a 10-kVA grid converter system
-:class: only-light
+---
+target: ../_images/plecs_grid.png
+alt: Top level of the PLECS model of a 10-kVA grid converter system
+class: only-light
+---
 ```
 
 ```{image} ../images/plecs_grid_black.png
-:target: ../_images/plecs_grid_black.png
-:alt: Top level of the PLECS model of a 10-kVA grid converter system
-:class: only-dark
+---
+target: ../_images/plecs_grid_black.png
+alt: Top level of the PLECS model of a 10-kVA grid converter system
+class: only-dark
+---
 ```
 
 *Top level of the model written by `examples/gfl_10kva_lcl.py`: grid-following control of a converter with an LCL filter.*

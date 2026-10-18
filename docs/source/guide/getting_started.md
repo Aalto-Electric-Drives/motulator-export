@@ -51,9 +51,7 @@ from motulator.drive import model
 
 from motulator_export import StepSignal, plecs, simulink
 
-par = model.SynchronousMachinePars(
-    n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
-)
+par = model.SynchronousMachinePars(n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545)
 mdl = model.Drive(
     model.SynchronousMachine(par),
     model.MechanicalSystem(J=0.015),
