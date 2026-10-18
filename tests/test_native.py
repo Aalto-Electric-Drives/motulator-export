@@ -16,7 +16,7 @@ Run from the repository root (requires gcc):
 """
 
 # %%
-from math import pi
+from math import inf, nan, pi
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ import motulator.grid.control as grid_control
 import motulator.grid.model as grid_model
 import numpy as np
 import pytest
+from motulator.common.control import PIController
 from motulator.common.model import CarrierComparison, DCBus, DiodeBridgeDCBus, SolverCfg
 from motulator.drive import model, utils
 
@@ -214,6 +215,11 @@ def test_interface() -> None:
     with pytest.raises(ZeroDivisionError, match="test"):
         native.Simulation(mdl, ctrl, show_progress=False).simulate(0.02)
 
+    # Invalid arguments
+    for t_stop in (inf, nan):
+        with pytest.raises(ValueError, match="t_stop"):
+            native.Simulation(*ipmsm_drive(), show_progress=False).simulate(t_stop)
+
     # Unsupported systems
     mdl, ctrl = ipmsm_drive()
     with pytest.raises(NotImplementedError, match="RK45"):
@@ -221,6 +227,66 @@ def test_interface() -> None:
     ctrl.set_enable(False)
     with pytest.raises(NotImplementedError, match="Gate blocking"):
         native.Simulation(mdl, ctrl)
+
+
+@pytest.mark.parametrize("case", ["sm", "im_nonlinearity", "sm_dc_bus"])
+def test_final_state(case: str) -> None:
+    """
+    The model ends at the states and the switching state of the simulation, as in
+    motulator, so its outputs (e.g., the converter voltage) are those of motulator.
+    """
+    if case == "sm":
+        build: Build = ipmsm_drive
+    elif case == "im_nonlinearity":  # The current directions affect the voltage
+        build = im_system(
+            sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True
+        )[0]
+    else:
+        build = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0], bridge=False)
+    mdl_py, ctrl_py = build()
+    model.Simulation(mdl_py, ctrl_py, show_progress=False).simulate(0.06)
+    mdl_c, ctrl_c = build()
+    native.Simulation(mdl_c, ctrl_c, show_progress=False).simulate(0.06)
+    assert mdl_c.t0 == mdl_py.t0
+    np.testing.assert_allclose(
+        mdl_c.get_initial_values(), mdl_py.get_initial_values(), rtol=1e-9
+    )
+    for name in ["q_c_ab", "s_c_ab"]:
+        assert np.isclose(
+            getattr(mdl_c.converter.inp, name), getattr(mdl_py.converter.inp, name)
+        )
+    assert np.isclose(mdl_c.converter.out.u_dc, mdl_py.converter.out.u_dc)
+    assert np.isclose(mdl_c.converter.out.u_c_ab, mdl_py.converter.out.u_c_ab)
+    assert np.isclose(mdl_c.machine.inp.u_s_ab, mdl_py.machine.inp.u_s_ab)
+
+
+@pytest.mark.parametrize("N_eval", [0, 4])
+def test_failed_interval(N_eval: int) -> None:
+    """
+    Nothing of an interval in which the solver fails is saved, as in motulator, so
+    the model remains at the start of the interval, and the continued simulation
+    equals an uninterrupted one.
+    """
+    mdl, ctrl = ipmsm_drive()
+    # Infinite load torque within a sampling period
+    mdl.mechanics.set_external_load_torque(lambda t: inf if t > 0.05 + 50e-6 else 0.0)
+    sim = native.Simulation(mdl, ctrl, show_progress=False)
+    with pytest.warns(RuntimeWarning, match="Simulation stopped"):
+        res = sim.simulate(0.1, N_eval)
+    assert not res.success
+    assert mdl.t0 == pytest.approx(0.05)
+    assert res.mdl.t[-1] <= mdl.t0
+    mdl.mechanics.set_external_load_torque(0.0)
+    res = sim.simulate(0.1, N_eval)
+    assert res.success
+    mdl_ref, ctrl_ref = ipmsm_drive()
+    mdl_ref.mechanics.set_external_load_torque(0.0)
+    sim_ref = native.Simulation(mdl_ref, ctrl_ref, show_progress=False)
+    res_ref = sim_ref.simulate(0.1, N_eval)
+    assert np.array_equal(res.mdl.t, res_ref.mdl.t)
+    assert np.array_equal(res.mdl.machine.psi_s_dq, res_ref.mdl.machine.psi_s_dq)
+    assert np.array_equal(res.ctrl.t, res_ref.ctrl.t)
+    assert np.array_equal(res.ctrl.ref.d_abc, res_ref.ctrl.ref.d_abc)
 
 
 # %%
@@ -260,6 +326,20 @@ def test_quadratic_load() -> None:
         return model.Drive(mdl.machine, mechanics, mdl.converter), ctrl
 
     check(*simulate(build_quadratic, 0.3), rtol=1e-9)
+
+
+def test_pi_speed_controller() -> None:
+    """
+    Any PI controller is accepted as the speed controller of an induction machine
+    drive, as of a synchronous machine drive.
+    """
+
+    def build() -> tuple[model.Drive, Any]:
+        mdl, ctrl = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]()
+        ctrl.speed_ctrl = PIController(k_p=1.0, k_i=16.0, k_t=1.0, u_max=20.0)
+        return mdl, ctrl
+
+    check(*simulate(build, 0.3), rtol=1e-9)
 
 
 def with_dc_bus(build: Build, bridge: bool) -> Build:

@@ -36,7 +36,7 @@ The libraries of the native simulation (`native_<name>.c`) combine the C port of
 A model (`Model` in `sim.h`) and a control system (`ControlSystem`) are interfaces of function pointers, embedded as the first members of the concrete types (e.g., `Drive` in `drive.h`).
 The API functions setting the converter, its DC bus, and its modulator are in `sim.c`, those of the models in `drive.c` and `grid.c`, and those of the control systems in the libraries.
 The states are complex and in the order of *motulator*, and the control system logs the signal groups of *motulator* (`ref` and `fbk`), described by a string of their fields (e.g., `FVC_FIELDS` in `native_sm.c`), so that the Python module fills the time series of the *motulator* objects and post-processes them as *motulator* does.
-A new type of system needs its C model (e.g., a machine in `drive.c`), a library combining the model with the C port of its control system, and a Python module setting the parameters (e.g., `motulator_export/native/im.py`).
+A new type of system needs its C model (e.g., a machine in `drive.c`), a library combining the model with the C port of its control system, and a Python module setting the parameters (e.g., `motulator_export/native/_im.py`).
 
 ## Tests
 

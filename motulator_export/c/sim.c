@@ -632,33 +632,35 @@ static int simulation_integrate(Simulation *self, double t1, int N_eval)
     double complex x_eval[SIM_MAX_STATES];
     double dt_eval = (N_eval > 0) ? (t1 - t0) / N_eval : 0.0;
     int i_eval = 0, status = SIM_OK;
+    int rows = self->log.rows; /* Points saved before the interval */
     if (N_eval == 0) {
         status = simulation_save(self, t0, self->x);
     }
     for (int result = RK45_RUNNING; status == SIM_OK && result == RK45_RUNNING;) {
         result = rk45_step(&solver);
         if (result == RK45_FAILED) {
-            return SIM_ERROR_STEP_SIZE;
-        }
-        if (!all_finite(solver.x, mdl->n)) {
-            return SIM_ERROR_NOT_FINITE;
-        }
-        if (N_eval == 0) {
+            status = SIM_ERROR_STEP_SIZE;
+        } else if (!all_finite(solver.x, mdl->n)) {
+            status = SIM_ERROR_NOT_FINITE;
+        } else if (N_eval == 0) {
             status = simulation_save(self, solver.t, solver.x);
-            continue;
-        }
-        for (; i_eval <= N_eval && status == SIM_OK; i_eval++) {
-            double t = (i_eval < N_eval) ? i_eval * dt_eval + t0 : t1;
-            if (t > solver.t) {
-                break;
-            }
-            rk45_dense_output(&solver, t, x_eval);
-            if (i_eval < N_eval) {
-                status = simulation_save(self, t, x_eval);
+        } else {
+            for (; i_eval <= N_eval && status == SIM_OK; i_eval++) {
+                double t = (i_eval < N_eval) ? i_eval * dt_eval + t0 : t1;
+                if (t > solver.t) {
+                    break;
+                }
+                rk45_dense_output(&solver, t, x_eval);
+                if (i_eval < N_eval) {
+                    status = simulation_save(self, t, x_eval);
+                }
             }
         }
     }
     if (status != SIM_OK) {
+        /* Nothing of the failed interval is saved, as in motulator, so the model
+         * remains at the start of the interval */
+        self->log.rows = rows;
         return status;
     }
     const double complex *x1 = (N_eval == 0) ? solver.x : x_eval;
@@ -756,6 +758,17 @@ double sim_state(const Simulation *self, double *x)
         x[2 * i + 1] = cimag(self->x[i]);
     }
     return self->t0;
+}
+
+/* Switching state and current-direction vector of the converter (real and
+ * imaginary parts) */
+void sim_converter_state(const Simulation *self, double *q)
+{
+    const VoltageSourceConverter *converter = &self->mdl->converter;
+    q[0] = creal(converter->q_c_ab);
+    q[1] = cimag(converter->q_c_ab);
+    q[2] = creal(converter->s_c_ab);
+    q[3] = cimag(converter->s_c_ab);
 }
 
 /* Log of the model (control = 0) or of the control system (control = 1) */

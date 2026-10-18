@@ -12,10 +12,10 @@ from motulator.common.model._base import Model, ModelTimeSeries
 from motulator.common.model._simulation import SimulationResults
 from tqdm import tqdm
 
+from motulator_export.native._grid import GridConverterNativeSystem
+from motulator_export.native._im import InductionMachineDriveSystem
+from motulator_export.native._sm import SynchronousMachineDriveSystem
 from motulator_export.native._system import ERRORS, NativeSystem
-from motulator_export.native.grid import GridConverterNativeSystem
-from motulator_export.native.im import InductionMachineDriveSystem
-from motulator_export.native.sm import SynchronousMachineDriveSystem
 
 # Supported systems, each with the class method `supports(mdl, ctrl)`
 SYSTEMS = [
@@ -110,6 +110,8 @@ class Simulation:
             points is selected by the solver.
 
         """
+        if not np.isfinite(t_stop):
+            raise ValueError("t_stop must be finite")
         if N_eval < 0:
             raise ValueError("N_eval must be nonnegative")
         mdl, ctrl = self.mdl, self.ctrl
@@ -144,10 +146,14 @@ class Simulation:
         finally:
             if progress_bar is not None:
                 progress_bar.close()
-            # Save the results, and the model ends at the states of the simulation
+            # Save the results, and the model ends at the states of the simulation,
+            # with the switching state of the converter (set by the simulation of
+            # motulator at the switching instants)
             _save(system, mdl, ctrl)
             mdl.t0, x = system.state()
             mdl.set_states(list(x))
+            inp = mdl.converter.inp
+            inp.q_c_ab, inp.s_c_ab = system.converter_state()
             mdl.set_outputs(mdl.t0)
         if status != 0:
             msg = f"Simulation stopped at {mdl.t0:.2f} s: {ERRORS[status]}"

@@ -40,7 +40,11 @@ from motulator_export.native._system import (
     check_supported_control,
     value,
 )
-from motulator_export.plecs.im import _check_supported_control, export_vhz_values
+from motulator_export.plecs.im import (
+    _check_supported_cvc,
+    _check_supported_vhz_ctrl,
+    export_vhz_values,
+)
 
 # Functions of the library setting the parameters of the control system
 API: Signatures = {
@@ -132,10 +136,17 @@ class InductionMachineDriveSystem(NativeSystem):
     @staticmethod
     def check_supported(mdl: Any, ctrl: Any) -> None:
         """Raise an error if the drive system is not supported."""
-        if type(ctrl) not in (VectorControlSystem, VHzControlSystem):
+        if type(ctrl) is VHzControlSystem:
+            _check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        elif type(ctrl) is VectorControlSystem:
+            _check_supported_cvc(ctrl.vector_ctrl)
+            if not isinstance(ctrl.speed_ctrl, PIController):
+                raise NotImplementedError(
+                    "Speed-control mode with a speed controller required"
+                )
+        else:
             raise NotImplementedError(
                 "Only VectorControlSystem and VHzControlSystem supported"
             )
-        _check_supported_control(ctrl)
         check_supported_control(ctrl, d_err=True)
         check_supported_drive(cast(Drive, mdl))

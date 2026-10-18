@@ -49,6 +49,7 @@ API: Signatures = {
     "start": (None, [c_void_p, c_double, c_double_p] + [c_double] * 5),
     "sim_run": (c_int, [c_void_p, c_double, c_int]),
     "sim_state": (c_double, [c_void_p, c_double_p]),
+    "sim_converter_state": (None, [c_void_p, c_double_p]),
     "sim_log": (c_void_p, [c_void_p, c_int]),
     "sim_fields": (ctypes.c_char_p, [c_void_p, c_int]),
     "log_rows": (c_int, [c_void_p]),
@@ -262,6 +263,12 @@ class NativeSystem:
         t0 = self.lib.sim_state(self.handle, xy)
         x = np.array(xy).reshape(n, 2)
         return t0, x[:, 0] + 1j * x[:, 1]
+
+    def converter_state(self) -> tuple[complex, complex]:
+        """Switching state and current-direction vector of the converter."""
+        q = (c_double * 4)()
+        self.lib.sim_converter_state(self.handle, q)
+        return complex(q[0], q[1]), complex(q[2], q[3])
 
     def fields(self, control: bool) -> list[str]:
         """Names of the states of the model or of the logged fields of the control."""

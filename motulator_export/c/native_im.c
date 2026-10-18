@@ -170,7 +170,7 @@ typedef struct {
     PWM pwm; /* Settings of the PWM */
 } System;
 
-/* API for Python (motulator_export.native.im) ------------------------------ */
+/* API for Python (motulator_export.native._im) ----------------------------- */
 
 System *system_new(void)
 {

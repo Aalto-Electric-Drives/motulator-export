@@ -95,6 +95,8 @@ from motulator_export.plecs._im_vhz_control import init_script as vhz_init_scrip
 from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import _probe, _Schematic, _terminals
 
+__all__ = ["simulate", "write_model"]
+
 
 def _check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
@@ -116,7 +118,12 @@ def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> No
     if isinstance(ctrl, VHzControlSystem):
         _check_supported_vhz(ctrl)
         return
-    cvc = ctrl.vector_ctrl
+    _check_supported_cvc(ctrl.vector_ctrl)
+    _check_supported_speed_control(ctrl, dead_time=True)
+
+
+def _check_supported_cvc(cvc: Any) -> None:
+    """Raise an error if the current-vector controller is not supported."""
     if not isinstance(cvc, CurrentVectorController):
         raise NotImplementedError("Only CurrentVectorController supported")
     if cvc.cfg.k_o is not None:
@@ -125,21 +132,24 @@ def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> No
         raise NotImplementedError("Direct discrete-time current control not supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
-    _check_supported_speed_control(ctrl, dead_time=True)
 
 
 def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
     """Raise an error if the V/Hz control system is not supported."""
-    vhz = ctrl.vhz_ctrl
+    _check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+    if type(ctrl).modulate is not VHzControlSystem.modulate:
+        raise NotImplementedError("Overridden modulate method not supported")
+    _check_supported_pwm(ctrl, d_err=True)
+
+
+def _check_supported_vhz_ctrl(vhz: Any) -> None:
+    """Raise an error if the V/Hz controller is not supported."""
     if not isinstance(vhz, ObserverBasedVHzController):
         raise NotImplementedError("Only ObserverBasedVHzController supported")
     if vhz.cfg.k_o is not None:
         raise NotImplementedError("Only the default observer gain k_o supported")
     if not isinstance(vhz.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
-    if type(ctrl).modulate is not VHzControlSystem.modulate:
-        raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl, d_err=True)
 
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
