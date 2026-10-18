@@ -9,6 +9,8 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 - **Parameters as in *motulator*.** The parameters are defined in the model initialization as in a *motulator* example: the structs of the API (e.g., `par` of `SynchronousMachinePars`, `cfg` of `FluxVectorControllerCfg`, `speed_ctrl`, and `pwm`), with `[]` for the defaults. You can change the parameters without Python.
 - **Verified against *motulator*.** The system model (the machine, the mechanics, the converter, and the grid) is built from native blocks, and the example scripts simulate each system in both tools and in *motulator*. The results agree to about 1e-6 relative to the signal magnitudes.
 
+The same C code also runs natively: `native.Simulation` simulates a *motulator* system in C, with the interface and the results of *motulator*, but much faster, see [Native simulation](#native-simulation).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="examples/pmsyrm_6kw_gn_fvc_black.png">
   <img alt="PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control" src="examples/pmsyrm_6kw_gn_fvc.png">
@@ -27,6 +29,7 @@ You build a system in *motulator*, as usual, and get a ready-to-run simulation m
 
 - Python 3.12 or later. The package installs *motulator* 0.15.1 or a later 0.15 release.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
+- **Native simulation**: a C compiler that supports `complex.h`, by default gcc (or the compiler given by the environment variable `CC`, e.g., clang).
 - **Simulink**: MATLAB with Simulink (no other toolboxes) and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows: the add-on *MATLAB Support for MinGW-w64 C/C++ Compiler*, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks (`code="matlab"`) need no C compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 
 ## Getting started
@@ -111,6 +114,37 @@ mdl_signals, ctrl_signals = simulink.sm.simulate("ipmsm.slx", t_eval)
 
 The controller of *motulator* evaluates the references at its sampling instants, whose times accumulate rounding errors, so a step at a sampling instant may switch at a different sample than in the tools. For an exact comparison, `sampled_step(sig, T_s)` gives the step that switches at the same sample as in *motulator*, as the example scripts use.
 
+## Native simulation
+
+`native.Simulation` simulates a system built in *motulator* in C: the control system runs as the C port of its algorithms, and the system model as C models of its subsystems, integrated by a C port of the simulation of *motulator* and the RK45 solver of scipy. Its interface and results are those of *motulator*, so a script only replaces the simulation object:
+
+```python
+from motulator.drive import utils
+
+from motulator_export import native
+
+sim = native.Simulation(mdl, ctrl)  # Instead of model.Simulation(mdl, ctrl)
+res = sim.simulate(t_stop=1.75)
+utils.plot(res, base)
+```
+
+The results are also stored in the time series of `mdl` and `ctrl`, as in *motulator*, and a subsequent call continues the simulation. The control system runs in C from its initial state. The library of the system type is compiled at the first use and cached in the temporary directory. The references and the load torque can be constants, functions of time (called from C), or `StepSignal` objects (evaluated in C, faster).
+
+The native simulation takes the same solver steps as *motulator*, so the results agree to the rounding errors: about 1e-12 relative to the signal magnitudes, also with the GradNet models, see `tests/test_native.py`. With the carrier comparison (`pwm=True`), a rounding error can change a quantized duty ratio and thereby a switching instant, after which the solutions differ more; with a fine quantization (`CarrierComparison(N=2**24)`), they agree to about 1e-6. The closed-loop simulations of *motulator* itself are equally sensitive to the rounding errors.
+
+Run times of `simulate` with *motulator* 0.15.0 (the wall time including the post-processing of the results, on one core of a laptop):
+
+| System                                                                 | PWM model          | *motulator* | Native | Ratio |
+| ---------------------------------------------------------------------- | ------------------ | ----------: | -----: | ----: |
+| 5.6-kW PM-SyRM, GradNet models (`pmsyrm_6kw_gn_fvc_native.py`), 1.75 s | zero-order hold    |       9.9 s | 0.31 s |    32 |
+| 5.6-kW PM-SyRM, GradNet models, 1.75 s                                 | carrier comparison |      27.9 s | 0.87 s |    32 |
+| 2.2-kW IPMSM, sensorless FVC, 1.6 s                                    | zero-order hold    |       3.3 s | 0.09 s |    36 |
+| 2.2-kW IPMSM, sensorless FVC, 1.6 s                                    | carrier comparison |       9.1 s | 0.24 s |    38 |
+
+In the first case, the native run itself takes 0.17 s, and the rest is the post-processing of the results in Python, as in *motulator*.
+
+Currently supported are synchronous machine drives with flux-vector control (see `motulator_export/native/sm.py` and the table of [supported systems](#supported-systems)); other systems raise `NotImplementedError`. The example `examples/pmsyrm_6kw_gn_fvc_native.py` simulates the GradNet example natively, and with `--compare` also in *motulator*.
+
 ## Examples
 
 The [examples](examples/) build the systems of the *motulator* examples, write the models, and, if the tool is available, simulate them both in the tool and in *motulator* and print the maximum differences.
@@ -126,21 +160,21 @@ The [examples](examples/) build the systems of the *motulator* examples, write t
 
 ## Supported systems
 
-| Feature                                                                                                 | PLECS |   Simulink   |
-| ------------------------------------------------------------------------------------------------------- | :---: | :----------: |
-| Synchronous machine drives: flux-vector control (constant inductances or GradNet models), speed control |  yes  |     yes      |
-| Induction machine drives: current-vector control (constant parameters), speed control                   |  yes  |     yes      |
-| Induction machine drives: observer-based V/Hz control, including open-loop V/Hz control (`L_M = inf`)   |  yes  |     yes      |
-| Grid-following control with an LCL filter (without resistances and grid impedance)                      |  yes  |     yes      |
-| Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |     yes      |
-| Stiff DC bus                                                                                            |  yes  |     yes      |
-| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     |  yes  |      no      |
-| Dead time and threshold voltage of the converter in the system model (drives)                           |  yes  |      no      |
-| Compensation of the dead time and the threshold voltage in the control system (drives)                  |  yes  |     yes      |
-| Single update of the duty ratios in the system model (`single_update`)                                  |  yes  |      no      |
-| Gate blocking (`set_enable`): the control system, and the system model                                  |  yes  | control only |
+| Feature                                                                                                 | PLECS |   Simulink   | Native |
+| ------------------------------------------------------------------------------------------------------- | :---: | :----------: | :----: |
+| Synchronous machine drives: flux-vector control (constant inductances or GradNet models), speed control |  yes  |     yes      |  yes   |
+| Induction machine drives: current-vector control (constant parameters), speed control                   |  yes  |     yes      |   no   |
+| Induction machine drives: observer-based V/Hz control, including open-loop V/Hz control (`L_M = inf`)   |  yes  |     yes      |   no   |
+| Grid-following control with an LCL filter (without resistances and grid impedance)                      |  yes  |     yes      |   no   |
+| Grid-forming control (disturbance observer) with an L filter and the grid inductance                    |  yes  |     yes      |   no   |
+| Stiff DC bus                                                                                            |  yes  |     yes      |  yes   |
+| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)                                     |  yes  |      no      |   no   |
+| Dead time and threshold voltage of the converter in the system model (drives)                           |  yes  |      no      |  yes   |
+| Compensation of the dead time and the threshold voltage in the control system (drives)                  |  yes  |     yes      |  yes   |
+| Single update of the duty ratios in the system model (`single_update`)                                  |  yes  |      no      |  yes   |
+| Gate blocking (`set_enable`): the control system, and the system model                                  |  yes  | control only |   no   |
 
-The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`) with the computational delay of one sampling period, and the grid is balanced with constant voltage and frequency.
+The drives can be sensorless or sensored, the converter uses carrier comparison (`pwm=True`) with the computational delay of one sampling period, and the grid is balanced with constant voltage and frequency. The native simulation also supports the zero-order hold (the default of *motulator*) and other computational delays; its machine model has constant inductances or a GradNet current map with spatial harmonics.
 Grid-following control is supported with the LCL filter and grid-forming control with the L filter.
 Other configurations raise `NotImplementedError` when the model is written.
 

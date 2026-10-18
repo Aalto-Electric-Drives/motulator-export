@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 authors = [
     {name = "Marko Hinkkanen", email = "marko.hinkkanen@aalto.fi"}
 ]
-description = "Export motulator drive and grid converter systems to PLECS and Simulink"
+description = "Export motulator drive and grid converter systems to PLECS and Simulink, and simulate them natively"
 readme = "README.md"
 license = "MIT"
 keywords = ["control", "converter", "motor", "PLECS", "Simulink", "simulation"]
