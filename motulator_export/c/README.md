@@ -38,6 +38,11 @@ The API functions setting the converter, its DC bus, and its modulator are in `s
 The states are complex and in the order of *motulator*, and the control system logs the signal groups of *motulator* (`ref` and `fbk`), described by a string of their fields (e.g., `FVC_FIELDS` in `native_sm.c`), so that the Python module fills the time series of the *motulator* objects and post-processes them as *motulator* does.
 A new type of system needs its C model (e.g., a machine in `drive.c`), a library combining the model with the C port of its control system, and a Python module setting the parameters (e.g., `motulator_export/native/_im.py`).
 
+The native simulation takes the same solver steps as *motulator*, so the results agree to the rounding errors: about 1e-12 relative to the signal magnitudes, also with the GradNet models, see `tests/test_native.py`.
+With the carrier comparison (`pwm=True`), a rounding error can change a quantized duty ratio and thereby a switching instant, after which the solutions differ more; with a fine quantization (`CarrierComparison(N=2**24)`), they agree to about 1e-7.
+Similarly, the diode bridge (`DiodeBridgeDCBus`) clamps its inductor current at zero, which makes the step sizes sensitive to the rounding errors (differences of about 1e-7 to 1e-5, depending on the system and the simulated time).
+The closed-loop simulations of *motulator* itself are equally sensitive to the rounding errors.
+
 ## Tests
 
 The tests in `tests/` compile the C sources with gcc and compare the results with *motulator* step by step, without PLECS.

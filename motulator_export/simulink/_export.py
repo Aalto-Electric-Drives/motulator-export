@@ -25,17 +25,11 @@ def write_model(
     """
     Write the MATLAB scripts that build the Simulink model of the system.
 
-    Running the script `build_<model>.m` in MATLAB compiles the S-functions of the
-    blocks of the control system and saves the model in the folder of the script.
-    The model runs the script `init_<model>.m`, which defines the parameters in the
-    base workspace, after loading and at the start of each simulation. With `code`
-    "matlab", the blocks are MATLAB Function blocks running the MATLAB port of the
-    same code, whose functions are copied into the model, which needs no C compiler.
-
-    The system model, the control system, and their references are those of
-    `plecs.write_model`. The system model of Simulink does not block the gates, so
-    the gate enable of the control system must be 1 (the input `enable` of the
-    exported control system is 1).
+    Running `build_<model>.m` in MATLAB builds the model and saves it in the same
+    folder. The model runs `init_<model>.m`, which defines the parameters, after
+    loading and at the start of each simulation. The references are read from `mdl`
+    and `ctrl` as in `plecs.write_model`, but the gate enable must be 1, since the
+    system model of Simulink does not block the gates.
 
     Parameters
     ----------

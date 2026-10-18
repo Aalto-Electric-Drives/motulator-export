@@ -24,30 +24,22 @@ def write_model(
     """
     Write a PLECS model of the system.
 
-    The system model is a machine drive (`Drive` with a synchronous or an induction
-    machine) or a grid converter system (`GridConverterSystem`), and the control
-    system is its control system of motulator. The references of the control system
-    (e.g., `set_speed_ref`), the external load torque of the mechanics
-    (`set_external_load_torque`), and the gate enable (`set_enable`) are read from
-    them: each is a constant or a `StepSignal`, which the model has as a Constant or
-    a Step block; the signals of the control system switch at the same sampling
-    instants as in motulator. The model starts from the state of the system model
-    (e.g., the initial speed of the mechanics). A system that is not supported raises
-    `NotImplementedError`, and an invalid argument `ValueError`, before any file is
-    written.
+    The references of the control system (e.g., `set_speed_ref`), the external load
+    torque (`set_external_load_torque`), and the gate enable (`set_enable`) are read
+    from `ctrl` and `mdl`, each a constant or a `StepSignal`. The model starts from
+    the state of `mdl`, e.g., its initial speed. A system that is not supported
+    raises `NotImplementedError`, and an invalid argument `ValueError`, before any
+    file is written.
 
     Parameters
     ----------
     path : str | Path
-        Path of the model file (.plecs). The C sources are expected in the `c`
-        directory of the package, referred to by a path relative to the model file.
+        Path of the model file (.plecs). The model refers to the C sources of the
+        package by a path relative to the model file.
     mdl : Drive | GridConverterSystem
         Continuous-time system model.
     ctrl : VectorControlSystem | VHzControlSystem | GridConverterControlSystem
-        Discrete-time control system. Its gate enable, a constant or a `StepSignal`
-        of 0 and 1, is the input `enable` of the exported control system: while it is
-        zero, the gates of the converter are blocked, and the control system computes
-        its standby output, as in motulator.
+        Discrete-time control system.
     t_stop : float
         Simulation stop time (s).
     outputs : bool, optional
