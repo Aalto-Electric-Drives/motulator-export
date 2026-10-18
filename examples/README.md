@@ -55,7 +55,7 @@ After a change in the writers or the C port, regenerate the models by running th
 | `ipmsm_2kw_fvc.py`               | w_M 9.3e-7, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
 | `ipmsm_2kw_fvc.py --diode`       | w_M 9.2e-6, tau_M 7.2e-6, i_s_ab 3.1e-6    | w_M 9.1e-6, tau_M 7.2e-6, tau_M_ref 7.4e-6, psi_s_ref 1.9e-8 |
 | `ipmsm_2kw_fvc.py --blocked`     | w_M 1.0e-6, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
-| `pmsyrm_6kw_gn_fvc.py`           | w_M 5.1e-5, tau_M 2.3e-4, i_s_ab 8.5e-5    |                                                              |
+| `pmsyrm_6kw_gn_fvc.py`           | w_M 5.4e-5, tau_M 2.4e-4, i_s_ab 9.6e-5    |                                                              |
 | `im_2kw_cvc.py`                  | w_M 6.5e-7, tau_M 2.4e-6, i_s_ab 9.7e-7    | w_M 4.3e-6, tau_M 3.1e-6, tau_M_ref 3.3e-6, psi_R 3.2e-8     |
 | `im_2kw_dead_time_cvc.py`        | w_M 0.73, tau_M 1.5, i_s_ab 0.92           | w_M 2.5, tau_M 1.8, tau_M_ref 2.0, psi_R 1.3e-2              |
 | `im_2kw_dead_time_cvc.py --tanh` | w_M 0.36, tau_M 1.0, i_s_ab 0.67           | w_M 2.0, tau_M 1.2, tau_M_ref 1.5, psi_R 8.4e-3              |
@@ -65,7 +65,7 @@ After a change in the writers or the C port, regenerate the models by running th
 | `gfm_13kva_do.py`                | i_c_ab 1.2e-6, i_c_a 1.2e-6                | p_g 4.9e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 1.9e-8           |
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
-In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 3e-6 relative to the torque and the current); they decrease with the tolerances of *motulator* (w_M 5.6e-6, tau_M 2.4e-5, and i_s_ab 9.3e-6 with 1e-10), but not with those of PLECS.
+In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 3e-6 relative to the torque and the current); they decrease with the tolerances of *motulator* (w_M 5.4e-6, tau_M 3.8e-5, and i_s_ab 1.3e-5 with 1e-10), but not with those of PLECS.
 In `ipmsm_2kw_fvc.py --blocked`, the differences are at the level of the drive without the gate blocking, which verifies the standby of the control system with the measured converter voltages and the blocked converter, whose diodes conduct the decaying currents (*motulator* locates the transitions of the diode states as events).
 In `im_2kw_dead_time_cvc.py`, the differences are due to the switching transients during blanking and at the zero crossings of the currents, which *motulator* does not model in detail.
 *motulator* determines the state of a blanked leg and the voltage drop over the threshold voltage from the current direction at the latest switching instant, whereas in PLECS, the current of a blanked leg cannot cross zero, since its diode turns off, and the current of a leg stays at zero while the voltage across its devices is below their forward voltage.
