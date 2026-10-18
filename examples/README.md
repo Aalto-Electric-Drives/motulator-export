@@ -14,7 +14,7 @@ With `--matlab`, the blocks of the control system are MATLAB Function blocks run
 | `gfl_10kva_lcl.py`        | 10-kVA grid converter with an LCL filter, grid-following control (`plot_10kva_lcl_gfl.py`)                                                                                                                                                                                                                                                |
 | `gfm_13kva_do.py`         | 12.5-kVA grid converter with an L filter in a weak grid, disturbance-observer-based grid-forming control (`plot_13kva_do_gfm.py`)                                                                                                                                                                                                         |
 
-`pmsyrm_6kw_gn_fvc_native.py` simulates the system of `pmsyrm_6kw_gn_fvc.py` natively in C (`motulator_export.native`) and plots the results as *motulator* does; with `--compare`, it also simulates the system in *motulator* and prints the run times and the differences, and with `--pwm`, the carrier comparison is used.
+The examples of the native simulation (`motulator_export.native`) are in `native/`.
 
 Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.

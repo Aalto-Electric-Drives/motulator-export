@@ -32,9 +32,19 @@ dev = [
     "pip-audit",
     "pytest",
 ]
+doc = [
+    "myst-parser",
+    "numpydoc",
+    "sphinx",
+    "sphinx-autoapi",
+    "sphinx-book-theme",
+    "sphinx-copybutton",
+    "sphinx-gallery",
+]
 
 [project.urls]
 Homepage = "https://github.com/Aalto-Electric-Drives/motulator-export"
+Documentation = "https://aalto-electric-drives.github.io/motulator-export/"
 motulator = "https://github.com/Aalto-Electric-Drives/motulator"
 
 [tool.hatch.build.targets.wheel]

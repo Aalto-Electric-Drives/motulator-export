@@ -2,6 +2,8 @@
 
 Export [*motulator*](https://github.com/Aalto-Electric-Drives/motulator) drive systems and grid converter systems to [PLECS](https://www.plexim.com/products/plecs) and [Simulink](https://www.mathworks.com/products/simulink.html).
 
+Documentation: https://aalto-electric-drives.github.io/motulator-export/
+
 You build a system in *motulator*, as usual, and get a ready-to-run simulation model of it:
 
 - **The same control code in both tools.** The control algorithms of *motulator* are ported to C, and the same C code runs in C-Script blocks in PLECS and in generated S-functions in Simulink. The C port is tested against *motulator* step by step. In Simulink, the blocks can instead be MATLAB Function blocks running a MATLAB port of the same code, which needs no C compiler.
@@ -134,16 +136,16 @@ The native simulation takes the same solver steps as *motulator*, so the results
 
 Run times of `simulate` with *motulator* 0.15.0 (the wall time including the post-processing of the results, on one core of a laptop):
 
-| System                                                                 | PWM model          | *motulator* | Native | Ratio |
-| ---------------------------------------------------------------------- | ------------------ | ----------: | -----: | ----: |
-| 5.6-kW PM-SyRM, GradNet models (`pmsyrm_6kw_gn_fvc_native.py`), 1.75 s | zero-order hold    |       9.9 s | 0.31 s |    32 |
-| 5.6-kW PM-SyRM, GradNet models, 1.75 s                                 | carrier comparison |      27.9 s | 0.87 s |    32 |
-| 2.2-kW IPMSM, sensorless FVC, 1.6 s                                    | zero-order hold    |       3.3 s | 0.09 s |    36 |
-| 2.2-kW IPMSM, sensorless FVC, 1.6 s                                    | carrier comparison |       9.1 s | 0.24 s |    38 |
+| System                                                               | PWM model          | *motulator* | Native | Ratio |
+| -------------------------------------------------------------------- | ------------------ | ----------: | -----: | ----: |
+| 5.6-kW PM-SyRM, GradNet models (`plot_6kw_pmsyrm_gn_fvc.py`), 1.75 s | zero-order hold    |       9.9 s | 0.31 s |    32 |
+| 5.6-kW PM-SyRM, GradNet models, 1.75 s                               | carrier comparison |      27.9 s | 0.87 s |    32 |
+| 2.2-kW IPMSM, sensorless FVC (`plot_2kw_ipmsm_fvc.py`), 1.6 s        | zero-order hold    |       3.3 s | 0.09 s |    36 |
+| 2.2-kW IPMSM, sensorless FVC, 1.6 s                                  | carrier comparison |       9.1 s | 0.24 s |    38 |
 
 In the first case, the native run itself takes 0.17 s, and the rest is the post-processing of the results in Python, as in *motulator*.
 
-The native simulation supports the drives and the grid converter systems of the table of [supported systems](#supported-systems), except the gate blocking (see the modules of `motulator_export/native/`); other systems raise `NotImplementedError`. The example `examples/pmsyrm_6kw_gn_fvc_native.py` simulates the GradNet example natively, and with `--compare` also in *motulator*.
+The native simulation supports the drives and the grid converter systems of the table of [supported systems](#supported-systems), except the gate blocking (see the modules of `motulator_export/native/`); other systems raise `NotImplementedError`. The examples in [examples/native](examples/native/) simulate systems of the *motulator* examples natively, e.g., `plot_2kw_ipmsm_fvc.py`, which also simulates the system in *motulator* and prints the run times and the differences, and `plot_2kw_ipmsm_fvc_sweep.py`, a parameter sweep.
 
 ## Examples
 
@@ -189,6 +191,8 @@ Other configurations raise `NotImplementedError` when the model is written or th
 
 ## Documentation
 
+The [documentation](https://aalto-electric-drives.github.io/motulator-export/) contains the gallery of the examples of the native simulation and the API reference, and its other pages are generated from this README and the following ones:
+
 - [examples/README.md](examples/README.md): the structure of the PLECS models and their agreement with *motulator*
 - [motulator_export/simulink/README.md](motulator_export/simulink/README.md): the Simulink export, the structure of the models, and their agreement with *motulator*
 - [motulator_export/c/README.md](motulator_export/c/README.md): the C port of the control algorithms and its tests
@@ -199,6 +203,7 @@ Other configurations raise `NotImplementedError` when the model is written or th
 Install the package in editable mode with the development tools, `pip install -e .[dev]`.
 The tests (`pytest`) compile the C sources with gcc and compare the C port and the generated S-functions of the blocks of the control systems with *motulator*, with the parameters computed from the model initialization through the masks; neither PLECS nor MATLAB is needed. The tests of the MATLAB Function blocks (`tests/test_matlab_function.py`) run them in Simulink and are skipped without the MATLAB Engine API.
 On Windows, the MinGW-w64 gcc of MATLAB can be used by adding its `bin` folder to the PATH.
+The documentation is built with `pip install -e .[doc]` and `sphinx-build -b html docs/source docs/build/html`, which runs the examples of `examples/native/` (the gallery) and generates the other pages from the README files (`docs/source/readme_pages.py`), so the README files are edited instead of the generated pages.
 
 ## License
 
