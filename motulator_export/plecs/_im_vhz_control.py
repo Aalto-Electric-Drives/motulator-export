@@ -539,7 +539,7 @@ def init_script(
     """
     Model initialization: the variables of the system model, and the variables of
     the control system (par, cfg, slew_rate, and pwm) from the parameter values of
-    the control system (`im.export_vhz_values`).
+    the control system (`_im.export_vhz_values`).
     """
     cfg = ["psi_s_nom", "i_s_max", "alpha_psi", "alpha_tau", "alpha_f", "k_u", "k_b"]
     open_loop = values["L_M"] == float("inf")

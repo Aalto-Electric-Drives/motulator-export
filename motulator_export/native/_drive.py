@@ -43,7 +43,7 @@ from motulator_export.native._system import (
     c_void_p,
     check_supported_converter,
 )
-from motulator_export.plecs.sm import export_gradnet
+from motulator_export.plecs._sm import export_gradnet
 
 # Functions of the libraries of the drives setting the parameters of the model
 DRIVE_API: Signatures = {

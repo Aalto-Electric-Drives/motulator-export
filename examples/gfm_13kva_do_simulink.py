@@ -28,26 +28,18 @@ from motulator.common.model import SolverCfg
 from motulator.common.utils import abc2complex, complex2abc
 from motulator.grid import control, model
 
-from motulator_export import sampled_step
-from motulator_export.simulink import grid
+from motulator_export import simulink
 
 # %%
 if __name__ == "__main__":
     mdl, ctrl = build_system()
-    T_s = cast(control.ObserverBasedGridFormingController, ctrl.inner_ctrl).T_s
+    ctrl.set_power_ref(P_G_REF)
+    ctrl.set_ac_voltage_ref(V_C_REF)
     code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
     name = "gfm_13kva_do_matlab" if code == "matlab" else "gfm_13kva_do"
     path = Path(__file__).parent / "simulink" / f"{name}.slx"
     path.parent.mkdir(exist_ok=True)
-    script = grid.write_model(
-        path,
-        mdl,
-        ctrl,
-        T_STOP,
-        p_g_ref=sampled_step(P_G_REF, T_s),
-        v_c_ref=V_C_REF,
-        code=code,
-    )
+    script = simulink.write_model(path, mdl, ctrl, T_STOP, code=code)
     print(f"Wrote {script}")
     try:
         import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]
@@ -56,8 +48,7 @@ if __name__ == "__main__":
         sys.exit()
 
     # Simulate in motulator with tight tolerances
-    ctrl.set_power_ref(P_G_REF)
-    ctrl.set_ac_voltage_ref(V_C_REF)
+    T_s = cast(control.ObserverBasedGridFormingController, ctrl.inner_ctrl).T_s
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     res = sim.simulate(t_stop=T_STOP)
     in_mdl = res.mdl.t <= T_STOP
@@ -68,7 +59,7 @@ if __name__ == "__main__":
     t_mdl = res.mdl.t[in_mdl]
     t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
     t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
-    sl_mdl, sl_ctrl = grid.simulate(path, t_eval, mdl, ctrl)
+    sl_mdl, sl_ctrl = simulink.simulate(path, t_eval, mdl, ctrl)
 
     k_mdl = np.searchsorted(sl_mdl["t"], t_mdl)
     i_c_ab = abc2complex(np.array([sl_mdl[f"i_c_{p}"][k_mdl] for p in "abc"]))

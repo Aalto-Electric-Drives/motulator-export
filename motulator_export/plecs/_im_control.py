@@ -641,7 +641,7 @@ def init_script(
     """
     Model initialization: the variables of the system model, and the structs of the
     control system (par, cfg, speed_ctrl, and pwm) from the parameter values of the
-    control system (`im.export_values`).
+    control system (`_im.export_values`).
     """
     cfg = ["psi_s_nom", "i_s_max", "alpha_c", "alpha_i", "alpha_o", "w_s_nom"]
     cfg += ["k_u", "k_fw", "J", "sensorless", "T_s"]

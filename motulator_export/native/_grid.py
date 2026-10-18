@@ -15,7 +15,7 @@ Supported:
   disturbance-observer-based grid-forming control
   (`ObserverBasedGridFormingController`) in `GridConverterControlSystem` in the
   power-control mode, with the features of the C port (see
-  `motulator_export.plecs.grid`), the gates enabled
+  `motulator_export.plecs._grid`), the gates enabled
 - Ideal sensors
 
 """
@@ -45,7 +45,7 @@ from motulator_export.native._system import (
     check_supported_converter,
     value,
 )
-from motulator_export.plecs.grid import export_values
+from motulator_export.plecs._grid import export_values
 
 # Functions of the libraries setting the parameters of the model
 GRID_API: Signatures = {

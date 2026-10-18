@@ -12,7 +12,7 @@ parameters, sample time, and continuous states.
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from motulator_export.plecs import sm
+from motulator_export.plecs import _sm
 from motulator_export.plecs._common import C_DIR
 from motulator_export.plecs._netlist import CBlock
 
@@ -207,10 +207,10 @@ def gradnet_machine_sfunction() -> SFunction:
 
     """
     params = ["machine.n_p", "machine.R_s", "machine.k"]
-    params += [f"machine.current_map.{f}" for f in sm.GRADNET_FIELDS]
+    params += [f"machine.current_map.{f}" for f in _sm.GRADNET_FIELDS]
     return SFunction(
         name="sfun_gradnet_machine",
-        code=sm._machine_cscript_code(),
+        code=_sm._machine_cscript_code(),
         input_widths=[2, 1, 1],
         output_widths=[2, 3, 1, 1, 1],
         params=[f"double({p})" for p in params],

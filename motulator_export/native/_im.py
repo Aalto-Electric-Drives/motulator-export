@@ -10,7 +10,7 @@ models of `motulator_export.native._drive` with an induction machine, and
 - observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
   including open-loop V/Hz control (`L_M = inf`),
 
-with the features of the C port (see `motulator_export.plecs.im`) and the duty-ratio
+with the features of the C port (see `motulator_export.plecs._im`) and the duty-ratio
 error model of the PWM (without the minimum pulses, if compensated), the gates
 enabled.
 
@@ -40,7 +40,7 @@ from motulator_export.native._system import (
     check_supported_control,
     value,
 )
-from motulator_export.plecs.im import (
+from motulator_export.plecs._im import (
     _check_supported_cvc,
     _check_supported_vhz_ctrl,
     export_vhz_values,

@@ -17,9 +17,9 @@ function build_drive(s)
 %     control   Control system, see blocks.add_control_system (the field sfunction
 %               lists the S-functions of its blocks)
 %     enable    Input 'enable' of the control system (the gate enable): a
-%               constant, or steps as w_M_ref
-%     w_M_ref   Speed reference steps [time, before, after], see blocks.add_step
-%     tau_L     Load torque steps
+%               constant, or steps [time, before, after] (see blocks.add_step)
+%     w_M_ref   Speed reference, a constant or steps
+%     tau_L     Load torque, a constant or steps
 %     scope     Scope signals {name, indices in [mdl; ctrl]}
 %     T_s       Sampling period (s), or its expression (cfg.T_s)
 %     t_stop    Stop time (s)
@@ -78,20 +78,15 @@ y = blocks.port_y(sys, 'Machine', 'Outport', 2);
 blocks.align(sys, 'Mechanics', 'Inport', 1, y);
 
 % Sources
-if isscalar(s.enable)
-    add([sys '/enable'], 'built-in/Constant', [80 0 130 20], ...
-        'Value', blocks.num(s.enable));
-else
-    blocks.add_step([sys '/enable'], s.enable, [90 0 120 30]);
-end
+add_source([sys '/enable'], s.enable, [90 0 120 30]);
 blocks.align(sys, 'enable', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 1));
-blocks.add_step([sys '/w_M_ref'], s.w_M_ref, [90 0 120 30]);
+add_source([sys '/w_M_ref'], s.w_M_ref, [90 0 120 30]);
 blocks.align(sys, 'w_M_ref', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 2));
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
 blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 4));
 add([sys '/u_c_line'], 'built-in/Constant', [80 0 130 20], 'Value', '[0 0]');
 blocks.align(sys, 'u_c_line', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 5));
-blocks.add_step([sys '/tau_L'], s.tau_L, [835 0 865 30]);
+add_source([sys '/tau_L'], s.tau_L, [835 0 865 30]);
 blocks.align(sys, 'tau_L', 'Outport', 1, blocks.port_y(sys, 'Mechanics', 'Inport', 2));
 
 % Machine signals [i_a i_b i_c w_M theta_M tau_M] for the output port 'mdl'
@@ -312,4 +307,13 @@ end
 
 function add(blk, type, pos, varargin)
 blocks.add(blk, type, pos, varargin{:});
+end
+
+function add_source(blk, src, pos)
+%ADD_SOURCE Constant block of a constant, or the Step blocks of steps.
+if isscalar(src)
+    add(blk, 'built-in/Constant', pos + [-10 0 10 -10], 'Value', blocks.num(src));
+else
+    blocks.add_step(blk, src, pos);
+end
 end

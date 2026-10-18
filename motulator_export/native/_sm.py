@@ -4,7 +4,7 @@ Native simulation of synchronous machine drives with flux-vector control.
 The system is simulated by the library `c/native_sm.c`. Supported are the drive
 models of `motulator_export.native._drive` with a synchronous machine, and
 flux-vector control (`FluxVectorController`) in `VectorControlSystem` with a speed
-controller, with the features of the C port (see `motulator_export.plecs.sm`) and the
+controller, with the features of the C port (see `motulator_export.plecs._sm`) and the
 duty-ratio error model of the PWM (without the minimum pulses, if compensated), the
 gates enabled.
 
@@ -37,7 +37,7 @@ from motulator_export.native._system import (
     check_supported_control,
     value,
 )
-from motulator_export.plecs.sm import _fit_speed_dependent_gain, export_gradnet
+from motulator_export.plecs._sm import _fit_speed_dependent_gain, export_gradnet
 
 # Functions of the library setting the parameters of the control system
 API: Signatures = {

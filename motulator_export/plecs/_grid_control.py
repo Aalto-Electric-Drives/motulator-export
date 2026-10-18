@@ -900,7 +900,7 @@ def init_script(
     """
     Model initialization: the variables of the system model, and the structs of the
     control system (cfg and pwm) from the parameter values of the control system
-    (`grid.export_values`), of grid-following control (`gfl`) or grid-forming
+    (`_grid.export_values`), of grid-following control (`gfl`) or grid-forming
     control.
     """
     if gfl:

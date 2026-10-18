@@ -27,24 +27,20 @@ import motulator.drive.control.sm as control
 import numpy as np
 from motulator.common.model import SolverCfg
 from motulator.drive import model
-from pmsyrm_6kw_gn_fvc import SPEED_CTRL, T_STOP, TAU_L, W_M_REF, build_system
+from pmsyrm_6kw_gn_fvc import T_STOP, TAU_L, W_M_REF, build_system
 
-from motulator_export import sampled_step
-from motulator_export.simulink import sm
+from motulator_export import simulink
 
 # %%
 if __name__ == "__main__":
     mdl, ctrl = build_system()
-    # Speed reference switching at the same sample as in motulator
-    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
-    w_M_ref = sampled_step(W_M_REF, T_s)
+    ctrl.set_speed_ref(W_M_REF)
+    mdl.mechanics.set_external_load_torque(TAU_L)
     code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
     name = "pmsyrm_6kw_gn_fvc_matlab" if code == "matlab" else "pmsyrm_6kw_gn_fvc"
     path = Path(__file__).parent / "simulink" / f"{name}.slx"
     path.parent.mkdir(exist_ok=True)
-    script = sm.write_model(
-        path, mdl, ctrl, w_M_ref, TAU_L, T_STOP, SPEED_CTRL, code=code
-    )
+    script = simulink.write_model(path, mdl, ctrl, T_STOP, code=code)
     print(f"Wrote {script}")
     try:
         import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]
@@ -53,8 +49,7 @@ if __name__ == "__main__":
         sys.exit()
 
     # Simulate in motulator
-    ctrl.set_speed_ref(W_M_REF)
-    mdl.mechanics.set_external_load_torque(TAU_L)
+    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     start = time.time()
     res = sim.simulate(t_stop=T_STOP)
@@ -64,7 +59,7 @@ if __name__ == "__main__":
     keep = res.mdl.t <= T_STOP
     t, idx = np.unique(res.mdl.t[keep], return_index=True)
     start = time.time()
-    sl_mdl, _ = sm.simulate(path, t)
+    sl_mdl, _ = simulink.simulate(path, t, mdl, ctrl)
     k = np.searchsorted(sl_mdl["t"], t)
     print(f"Simulink, including the start of MATLAB: {time.time() - start:.1f} s")
     i_s_abc = np.array([sl_mdl[p][k] for p in ("i_a", "i_b", "i_c")])

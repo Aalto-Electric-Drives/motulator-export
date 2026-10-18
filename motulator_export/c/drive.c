@@ -168,7 +168,7 @@ static Drive *drive_of(Simulation *self)
     return (Drive *)self->mdl;
 }
 
-/* GradNet from its parameters (export_gradnet of motulator_export.plecs.sm) */
+/* GradNet from its parameters (export_gradnet of motulator_export.plecs._sm) */
 void gradnet_set(GradNet *net, int in_dim, int mu_dim, int embed_dim, const double *W,
                  const double *b, const double *mu_log, const double *bias,
                  int activation, double beta_log, int p, double in_base,

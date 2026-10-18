@@ -626,7 +626,7 @@ def sfunction_params(
     """
     Values of the S-function parameters (the C-Script parameters) of a block.
 
-    The values are those of the motulator API (e.g., `sm.export_values`), and the
+    The values are those of the motulator API (e.g., `_sm.export_values`), and the
     GradNet flux map gives the parameters gn_* (empty without a flux map).
 
     """

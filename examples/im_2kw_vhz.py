@@ -32,8 +32,7 @@ from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.common.utils import abc2complex
 from motulator.drive import model, utils
 
-from motulator_export import StepSignal, sampled_step
-from motulator_export.plecs import im
+from motulator_export import StepSignal, plecs
 
 T_STOP = 1.6
 nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
@@ -82,29 +81,21 @@ def build_system(
 if __name__ == "__main__":
     open_loop = "--open-loop" in sys.argv  # Pure open-loop V/Hz control
     mdl, ctrl = build_system(open_loop)
-    # Speed reference switching at the same sample as in motulator
-    T_s = cast(control.ObserverBasedVHzController, ctrl.vhz_ctrl).cfg.T_s
-    w_M_ref = sampled_step(W_M_REF, T_s)
+    ctrl.set_speed_ref(W_M_REF)
+    mdl.mechanics.set_external_load_torque(TAU_L)
     name = "im_2kw_vhz_open_loop" if open_loop else "im_2kw_vhz"
-    path = im.write_model(
-        Path(__file__).with_name(f"{name}.plecs"), mdl, ctrl, w_M_ref, TAU_L, T_STOP
+    path = plecs.write_model(
+        Path(__file__).with_name(f"{name}.plecs"), mdl, ctrl, T_STOP
     )
     print(f"Wrote {path}")
     # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = im.write_model(
-        path.with_stem(path.stem + "_tmp"),
-        mdl,
-        ctrl,
-        w_M_ref,
-        TAU_L,
-        T_STOP,
-        outputs=True,
+    tmp = plecs.write_model(
+        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
     )
     atexit.register(tmp.unlink, missing_ok=True)
 
     # Simulate in motulator with tight tolerances
-    ctrl.set_speed_ref(W_M_REF)
-    mdl.mechanics.set_external_load_torque(TAU_L)
+    T_s = cast(control.ObserverBasedVHzController, ctrl.vhz_ctrl).cfg.T_s
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     res = sim.simulate(t_stop=T_STOP)
     in_mdl = res.mdl.t <= T_STOP
@@ -116,7 +107,7 @@ if __name__ == "__main__":
     t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
     t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
     try:
-        plecs_mdl, plecs_ctrl = im.simulate(tmp, t_eval, ctrl)
+        plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t_eval, mdl, ctrl)
     except ConnectionRefusedError:
         print("PLECS RPC interface not available, skipping the comparison.")
         sys.exit()

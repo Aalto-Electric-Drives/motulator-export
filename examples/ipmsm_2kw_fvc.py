@@ -37,13 +37,11 @@ import numpy as np
 from motulator.common.model import CarrierComparison, SolverCfg
 from motulator.drive import model
 
-from motulator_export import StepSignal, sampled_step
-from motulator_export.plecs import sm
+from motulator_export import StepSignal, plecs
 
 T_STOP = 1.2
 W_M_REF = StepSignal(time=0.1, after=50.0)  # Speed reference (rad/s)
 TAU_L = StepSignal(time=0.7, after=10.0)  # Load torque (Nm)
-SPEED_CTRL = {"J": 0.015, "alpha_s": 25.0}  # Arguments of SpeedController
 # Gate enable with --blocked: released at 0.05 s, blocked under the load at 0.8 s,
 # and released at 0.83 s
 ENABLE = StepSignal(time=[0.05, 0.8, 0.83], after=[1.0, 0.0, 1.0], before=0.0)
@@ -74,7 +72,8 @@ def build_system(
     mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
     cfg = control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=True)
     ctrl = control.VectorControlSystem(
-        control.FluxVectorController(par, cfg), control.SpeedController(**SPEED_CTRL)
+        control.FluxVectorController(par, cfg),
+        control.SpeedController(J=0.015, alpha_s=25.0),
     )
     return mdl, ctrl
 
@@ -85,41 +84,25 @@ if __name__ == "__main__":
     diode = "--diode" in sys.argv  # Diode bridge and DC-bus LC
     blocked = "--blocked" in sys.argv  # Gates blocked at the start and later
     mdl, ctrl = build_system(diode)
-    # Speed reference switching at the same sample as in motulator
-    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
-    w_M_ref = sampled_step(W_M_REF, T_s)
+    ctrl.set_speed_ref(W_M_REF)
+    mdl.mechanics.set_external_load_torque(TAU_L)
     suffix = "_diode" if diode else ""
     if blocked:
-        # The gate enable of the control system, exported as its input enable,
-        # switching at the same samples in both
-        ctrl.set_enable(sampled_step(ENABLE, T_s))
+        # The gate enable of the control system, exported as its input enable
+        ctrl.set_enable(ENABLE)
         suffix += "_blocked"
-    path = sm.write_model(
-        Path(__file__).with_name(f"ipmsm_2kw_fvc{suffix}.plecs"),
-        mdl,
-        ctrl,
-        w_M_ref,
-        TAU_L,
-        T_STOP,
-        SPEED_CTRL,
+    path = plecs.write_model(
+        Path(__file__).with_name(f"ipmsm_2kw_fvc{suffix}.plecs"), mdl, ctrl, T_STOP
     )
     print(f"Wrote {path}")
     # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = sm.write_model(
-        path.with_stem(path.stem + "_tmp"),
-        mdl,
-        ctrl,
-        w_M_ref,
-        TAU_L,
-        T_STOP,
-        SPEED_CTRL,
-        outputs=True,
+    tmp = plecs.write_model(
+        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
     )
     atexit.register(tmp.unlink, missing_ok=True)
 
     # Simulate in motulator with tight tolerances
-    ctrl.set_speed_ref(W_M_REF)
-    mdl.mechanics.set_external_load_torque(TAU_L)
+    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
     sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     res = sim.simulate(t_stop=T_STOP)
     # Motulator runs to the end of the last sampling period, drop the extra samples
@@ -132,7 +115,7 @@ if __name__ == "__main__":
     t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
     t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
     try:
-        plecs_mdl, plecs_ctrl = sm.simulate(tmp, t_eval)
+        plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t_eval, mdl, ctrl)
     except ConnectionRefusedError:
         print("PLECS RPC interface not available, skipping the comparison.")
         sys.exit()

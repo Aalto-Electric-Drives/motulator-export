@@ -3,7 +3,7 @@ Export motulator induction machine drives to PLECS.
 
 This module converts an induction machine drive with current-vector control or
 observer-based V/Hz control into a PLECS Standalone model, in the same way as
-`motulator_export.plecs.sm` does for synchronous machine drives. In the control
+`motulator_export.plecs._sm` does for synchronous machine drives. In the control
 system, each class of motulator is a block with a mask of its arguments (see
 `_im_control` and `_im_vhz_control`), with the C port in `c/im_current_vector.c`
 and `c/im_flux_vector.c`. The parameters are defined in the initialization commands
@@ -18,7 +18,7 @@ Currently supported:
 - Induction machine with constant parameters (`InductionMachineInvGammaPars`, or
   `InductionMachinePars` with a constant `L_s`) without core losses
 - Mechanical system (`MechanicalSystem` without friction), the converter, and the DC
-  bus as in `motulator_export.plecs.sm`
+  bus as in `motulator_export.plecs._sm`
 - Current-vector control (`CurrentVectorController`) in the sensorless or sensored
   mode with the default observer gain `k_o`, and a speed controller
   (`SpeedController`) in `VectorControlSystem`
@@ -86,6 +86,7 @@ from motulator_export.plecs._drive import (
     _add_phase_lines,
     _check_supported_plant,
     _check_supported_speed_control,
+    drive_references,
     mechanics_and_converter_variables,
     speed_ctrl_values,
 )
@@ -184,9 +185,7 @@ def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
     }
 
 
-def export_values(
-    ctrl: VectorControlSystem, speed_ctrl_args: dict[str, float]
-) -> dict[str, Any]:
+def export_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     """
     Get the parameter values of the control system in the motulator API, None for
     the defaults (see `_im_control.init_script`).
@@ -210,7 +209,7 @@ def export_values(
         "J": cfg.J,
         "sensorless": int(cfg.sensorless),
         "T_s": cfg.T_s,
-        **speed_ctrl_values(ctrl, speed_ctrl_args),
+        **speed_ctrl_values(ctrl),
         **pwm_values(ctrl.pwm),
     }
 
@@ -269,18 +268,14 @@ def write_model(
     path: str | Path,
     mdl: Drive,
     ctrl: VectorControlSystem | VHzControlSystem,
-    w_M_ref: StepSignal,
-    tau_L: StepSignal,
     t_stop: float,
-    speed_ctrl_args: dict[str, float] | None = None,
     outputs: bool = False,
 ) -> Path:
     """
-    Write a PLECS model of the induction machine drive, see `sm.write_model`.
+    Write a PLECS model of the induction machine drive, see `plecs.write_model`.
 
-    The control system is current-vector control (`VectorControlSystem`, whose speed
-    controller is given by `speed_ctrl_args`) or observer-based V/Hz control
-    (`VHzControlSystem`, without `speed_ctrl_args`), whose inputs are `enable` (the
+    The control system is current-vector control (`VectorControlSystem`) or
+    observer-based V/Hz control (`VHzControlSystem`), whose inputs are `enable` (the
     gate enable of `ctrl`), the speed reference, the phase currents, the DC-bus
     voltage, and the converter voltages.
 
@@ -290,16 +285,16 @@ def write_model(
     block = control_block(ctrl)
     variables = _plant_variables(mdl)
     if isinstance(ctrl, VHzControlSystem):
-        init = vhz_init_script(variables, export_vhz_values(ctrl), INIT_COMMENT)
+        values = export_vhz_values(ctrl)
+        init = vhz_init_script(variables, values, INIT_COMMENT)
     else:
-        if speed_ctrl_args is None:
-            raise ValueError("speed_ctrl_args is needed in current-vector control")
-        values = export_values(ctrl, speed_ctrl_args)
+        values = export_values(ctrl)
         init = init_script(variables, values, INIT_COMMENT)
+    w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
     T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
-        (ENABLE, gate_enable(ctrl)),
+        (ENABLE, gate_enable(ctrl, values["T_s"])),
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
@@ -333,14 +328,13 @@ def write_model(
 def simulate(
     path: str | Path,
     t_eval: np.ndarray,
-    ctrl: VectorControlSystem | VHzControlSystem | None = None,
+    mdl: Drive,
+    ctrl: VectorControlSystem | VHzControlSystem,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
-    Simulate the PLECS model of an induction machine drive, see `sm.simulate`. The
-    control system `ctrl` defines the monitored signals, by default those of
-    current-vector control.
+    Simulate the PLECS model of an induction machine drive, see `plecs.simulate`.
+    The control system `ctrl` defines the monitored signals.
     """
-    block = CVC_BLOCK if ctrl is None else control_block(ctrl)
     return simulate_plecs(
-        path, t_eval, mdl_outputs=MDL_OUTPUTS, ctrl_outputs=block.signals
+        path, t_eval, mdl_outputs=MDL_OUTPUTS, ctrl_outputs=control_block(ctrl).signals
     )

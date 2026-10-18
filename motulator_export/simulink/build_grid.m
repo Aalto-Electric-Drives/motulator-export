@@ -2,7 +2,7 @@ function build_grid(s)
 %BUILD_GRID Build a Simulink model of a grid converter system.
 %   BUILD_GRID(S) compiles the S-functions of the control system, builds the model
 %   S.name, and saves it in the folder S.folder. The struct S is written by
-%   motulator_export.simulink.grid, with the fields
+%   motulator_export.simulink._grid, with the fields
 %
 %     name      Model name
 %     code      'c' (the blocks of the control system are S-functions) or
