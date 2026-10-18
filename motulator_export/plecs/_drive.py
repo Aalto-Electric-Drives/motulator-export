@@ -151,7 +151,8 @@ def _check_supported_speed_control(
 def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     """
     Get the parameter values of the speed controller (the struct speed_ctrl of the
-    model initialization): the arguments of `SpeedController`.
+    model initialization): the arguments of `SpeedController`, whose gains must be
+    those of the arguments (the exported controller computes its gains from them).
 
     The controller stores the integral action bandwidth as the ratio of its gains,
     which may differ from the argument by a rounding error. The default (None, i.e.,
@@ -161,10 +162,17 @@ def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     """
     speed_ctrl = cast(SpeedController, ctrl.speed_ctrl)
     J, alpha_s, u_max = speed_ctrl.J, speed_ctrl.alpha_s, speed_ctrl.u_max
-    default = SpeedController(J, alpha_s, None, u_max)
     gains = (speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i)
-    is_default = gains == (default.k_p, default.k_t, default.alpha_i)
-    alpha_i = None if is_default else speed_ctrl.alpha_i
+    default = SpeedController(J, alpha_s, None, u_max)
+    alpha_i = None
+    if gains != (default.k_p, default.k_t, default.alpha_i):
+        alpha_i = speed_ctrl.alpha_i
+        given = SpeedController(J, alpha_s, alpha_i, u_max)
+        if not np.allclose((given.k_p, given.k_t, given.alpha_i), gains, rtol=1e-12):
+            raise NotImplementedError(
+                "The gains of the speed controller must be those of its arguments "
+                "(SpeedController), which the exported controller has"
+            )
     return {
         "speed_J": J,
         "speed_alpha_s": alpha_s,

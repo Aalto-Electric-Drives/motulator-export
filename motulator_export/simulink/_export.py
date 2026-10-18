@@ -1,9 +1,12 @@
 """Export of motulator systems to Simulink, for all the supported system types."""
 
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
+from motulator.drive.model import Drive
+from motulator.grid.control._base import GridConverterControlSystem
+from motulator.grid.model import GridConverterSystem
 
 from motulator_export.plecs._common import system_type
 from motulator_export.simulink import _grid, _im, _sm
@@ -13,7 +16,11 @@ _MODULES = {"sm": _sm, "im": _im, "grid": _grid}
 
 
 def write_model(
-    path: str | Path, mdl: Any, ctrl: Any, t_stop: float, code: str = "c"
+    path: str | Path,
+    mdl: Drive | GridConverterSystem,
+    ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
+    t_stop: float,
+    code: str = "c",
 ) -> Path:
     """
     Write the MATLAB scripts that build the Simulink model of the system.
@@ -58,7 +65,11 @@ def write_model(
 
 
 def simulate(
-    path: str | Path, t_eval: np.ndarray, mdl: Any, ctrl: Any, build: bool = True
+    path: str | Path,
+    t_eval: np.ndarray,
+    mdl: Drive | GridConverterSystem,
+    ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
+    build: bool = True,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
     Simulate the Simulink model of the system via the MATLAB Engine API for Python.

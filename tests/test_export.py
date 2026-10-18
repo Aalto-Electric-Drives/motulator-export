@@ -34,11 +34,19 @@ T_STOP = 0.3
 
 @pytest.mark.parametrize(
     ("time", "after"),
-    [([0.1, 0.2], [1.0]), (0.1, [1.0, 2.0]), ([0.2, 0.1], [1.0, 2.0]), ([], [])],
-    ids=["missing_level", "extra_level", "decreasing", "empty"],
+    [
+        ([0.1, 0.2], [1.0]),
+        (0.1, [1.0, 2.0]),
+        ([0.2, 0.1], [1.0, 2.0]),
+        ([], []),
+        (inf, 1.0),
+        (0.1, np.nan),
+    ],
+    ids=["missing_level", "extra_level", "decreasing", "empty", "inf_time", "nan"],
 )
 def test_step_signal_errors(time: object, after: object) -> None:
-    """The step times and the levels should match, the times increasing."""
+    """The step times and the levels should match, the times increasing, and all
+    finite."""
     with pytest.raises(ValueError, match="step"):
         StepSignal(time, after)  # type: ignore[arg-type]
 
@@ -203,10 +211,13 @@ def test_references(tmp_path: Path, system: str) -> None:
         assert re.search(constant % ("tau_L", r"3\.0"), text)
         assert "s.w_M_ref = 50.0;" in script and "s.tau_L = 3.0;" in script
     files = set(tmp_path.iterdir())
-    set_bad(lambda t: 1.0)
-    for tool, path in TOOLS:
-        with pytest.raises(NotImplementedError, match="StepSignal"):
-            tool.write_model(tmp_path / f"other_{path}", mdl, ctrl, 0.1)
+    for bad, error in [(lambda t: 1.0, NotImplementedError), (inf, ValueError)]:
+        set_bad(bad)
+        for tool, path in TOOLS:
+            with pytest.raises(
+                error, match="StepSignal" if bad is not inf else "finite"
+            ):
+                tool.write_model(tmp_path / f"other_{path}", mdl, ctrl, 0.1)
     assert set(tmp_path.iterdir()) == files  # Nothing is written
 
 
@@ -275,6 +286,17 @@ def test_initial_mechanics(tmp_path: Path) -> None:
         assert "mechanics.w_M0 = 50;" in text
         assert "mechanics.theta_M0 = 0.25;" in text
     assert '"mechanics.w_M0"' in model_plecs  # The initial speed of the machine
+
+
+def test_modified_speed_controller(tmp_path: Path) -> None:
+    """The gains of the speed controller should be those of its arguments, which the
+    exported controller has; modified gains are rejected before anything is written."""
+    mdl, ctrl = _drive(sm=True)
+    ctrl.speed_ctrl.k_p *= 2
+    for tool, path in TOOLS:
+        with pytest.raises(NotImplementedError, match="gains"):
+            tool.write_model(tmp_path / path, mdl, ctrl, T_STOP)
+    assert not list(tmp_path.iterdir())  # Nothing is written
 
 
 @pytest.mark.parametrize("alpha_i", [None, 10.0], ids=["default", "given"])

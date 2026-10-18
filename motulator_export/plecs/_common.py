@@ -96,6 +96,8 @@ class StepSignal:
         times, afters = np.atleast_1d(self.time), np.atleast_1d(self.after)
         if times.ndim != 1 or times.size == 0 or times.shape != afters.shape:
             raise ValueError("time and after must have the same number of steps")
+        if not np.all(np.isfinite([*times, self.before, *afters])):
+            raise ValueError("The step times and the levels must be finite")
         if not np.all(np.isfinite(times)) or np.any(np.diff(times) < 0):
             raise ValueError("The step times must be finite and increasing")
 
@@ -146,6 +148,8 @@ def reference(x: Any, name: str, T_s: float | None = None) -> StepSignal | float
     if isinstance(x, StepSignal):
         return sampled_step(x, T_s) if T_s is not None else x
     if isinstance(x, (int, float, np.integer, np.floating)):
+        if not np.isfinite(x):
+            raise ValueError(f"The {name} must be finite")
         return float(x)
     raise NotImplementedError(
         f"Only a constant {name} or a StepSignal supported (the model has a Constant "

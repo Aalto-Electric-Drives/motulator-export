@@ -1,9 +1,12 @@
 """Export of motulator systems to PLECS, for all the supported system types."""
 
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
+from motulator.drive.model import Drive
+from motulator.grid.control._base import GridConverterControlSystem
+from motulator.grid.model import GridConverterSystem
 
 from motulator_export.plecs import _grid, _im, _sm
 from motulator_export.plecs._common import system_type
@@ -12,7 +15,11 @@ _MODULES = {"sm": _sm, "im": _im, "grid": _grid}
 
 
 def write_model(
-    path: str | Path, mdl: Any, ctrl: Any, t_stop: float, outputs: bool = False
+    path: str | Path,
+    mdl: Drive | GridConverterSystem,
+    ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
+    t_stop: float,
+    outputs: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the system.
@@ -58,7 +65,10 @@ def write_model(
 
 
 def simulate(
-    path: str | Path, t_eval: np.ndarray, mdl: Any, ctrl: Any
+    path: str | Path,
+    t_eval: np.ndarray,
+    mdl: Drive | GridConverterSystem,
+    ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
     Simulate the PLECS model of the system via the RPC interface of PLECS Standalone.
