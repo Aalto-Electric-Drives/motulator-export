@@ -14,6 +14,8 @@ With `--matlab`, the blocks of the control system are MATLAB Function blocks run
 | `gfl_10kva_lcl.py`        | 10-kVA grid converter with an LCL filter, grid-following control (`plot_10kva_lcl_gfl.py`)                                                                                                                                                                                                                                                |
 | `gfm_13kva_do.py`         | 12.5-kVA grid converter with an L filter in a weak grid, disturbance-observer-based grid-forming control (`plot_13kva_do_gfm.py`)                                                                                                                                                                                                         |
 
+The examples of the native simulation (`motulator_export.native`) are in `native/`.
+
 Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.
 The scripts close the model in PLECS before simulating it, since an open model is not reloaded from the file.

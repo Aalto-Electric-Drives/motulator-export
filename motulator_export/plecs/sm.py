@@ -118,6 +118,8 @@ from motulator_export.plecs._schematic import (
 )
 from motulator_export.plecs._sm_control import FVC_BLOCK, init_script
 
+__all__ = ["simulate", "write_model"]
+
 
 # %%
 def _fit_speed_dependent_gain(k: Callable[[float], float], name: str) -> list[float]:

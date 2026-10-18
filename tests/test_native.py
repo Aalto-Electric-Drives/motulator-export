@@ -1,0 +1,536 @@
+"""
+Test the native simulation against the simulation of motulator.
+
+The drive systems and the grid converter systems are simulated in motulator and
+natively, and the results are compared. With the zero-order hold (ZOH), the native
+simulation takes the same steps as motulator, so the results agree to the rounding
+errors. With the carrier comparison, a change of the quantized duty ratios at the
+rounding error changes the switching instants, so a fine quantization is used. With
+the diode bridge, the clamping of the inductor current at zero makes the step sizes
+sensitive to the rounding errors, so the control signals are compared.
+
+Run from the repository root (requires gcc):
+
+    pytest tests/test_native.py
+
+"""
+
+# %%
+from math import inf, nan, pi
+from pathlib import Path
+from typing import Any
+
+import motulator.drive.control.sm as control
+import motulator.drive.gradnet as gn
+import motulator.grid.control as grid_control
+import motulator.grid.model as grid_model
+import numpy as np
+import pytest
+from motulator.common.control import PIController
+from motulator.common.model import CarrierComparison, DCBus, DiodeBridgeDCBus, SolverCfg
+from motulator.drive import model, utils
+
+from motulator_export import StepSignal, native
+from tests.test_simulink import BASE as GRID_BASE
+from tests.test_simulink import NOM as GRID_NOM
+from tests.test_simulink import (
+    Build,
+    gfl_system,
+    gfm_system,
+    im_system,
+    sm_system,
+    vhz_system,
+)
+
+MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
+
+# 2.2-kW IPMSM
+NOM = utils.NominalValues(U=370, I=4.3, f=75, P=2.2e3, tau=14)
+BASE = utils.BaseValues.from_nominal(NOM, n_p=3)
+
+
+def ipmsm_drive(pwm: bool = False) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    2.2-kW IPMSM drive with sensorless FVC. With `pwm`, the carrier comparison, the
+    dead time, and the threshold voltage are modeled, and the PWM of the control
+    system compensates for them with the single update.
+    """
+    par = model.SynchronousMachinePars(
+        n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
+    )
+    t_d, u_th = (2e-6, 1.0) if pwm else (0.0, 0.0)
+    mdl = model.Drive(
+        model.SynchronousMachine(par),
+        model.MechanicalSystem(J=0.015, B_L=0.01),
+        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
+        pwm=pwm,
+        delay=2 if pwm else 1,
+        single_update=pwm,
+    )
+    d_err = None
+    if pwm:
+        mdl.pwm = CarrierComparison(N=2**24, t_d=t_d)
+        d_err = control.InverterNonlinearity(t_d, u_th)
+    cfg = control.FluxVectorControllerCfg(i_s_max=1.5 * BASE.i)
+    ctrl = control.VectorControlSystem(
+        control.FluxVectorController(par, cfg),
+        control.SpeedController(J=0.015, alpha_s=2 * pi * 4),
+        control.PWM(d_err=d_err, single_update=pwm),
+    )
+    ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * BASE.w_M)
+    mdl.mechanics.set_external_load_torque(lambda t: (t > 0.3) * 0.7 * NOM.tau)
+    return mdl, ctrl
+
+
+def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Drive of the example plot_6kw_pmsyrm_gn_fvc_fem_harm.py: GradNet current map with
+    spatial harmonics in the machine model and a GradNet flux map in the control.
+    """
+    nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)
+    base = utils.BaseValues.from_nominal(nom, n_p=2)
+    path = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.npz"
+    current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(path))
+    par = model.SpatialSaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, magnetic_map_fcn=current_map
+    )
+    mdl = model.Drive(
+        model.SynchronousMachine(par),
+        model.MechanicalSystem(J=0.05),
+        model.VoltageSourceConverter(u_dc=540),
+    )
+    path = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
+    flux_map = gn.FluxMap(gn.load_gradnet(path))
+    est_par = control.SaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
+    )
+    cfg = control.FluxVectorControllerCfg(
+        i_s_max=2 * base.i, alpha_i=0, alpha_o=2 * pi * 8, J=0.05, sensorless=False
+    )
+    ctrl = control.VectorControlSystem(
+        control.FluxVectorController(est_par, cfg),
+        control.SpeedController(J=0.05, alpha_s=2 * pi * 4),
+    )
+    ctrl.set_speed_ref(StepSignal(time=0.05, after=2 * base.w_M))
+    mdl.mechanics.set_external_load_torque(StepSignal(time=0.2, after=0.5 * base.tau))
+    return mdl, ctrl
+
+
+def simulate(build: Any, t_stop: float, **kwargs: Any) -> tuple[Any, Any]:
+    """Simulate the system in motulator and natively."""
+    res_py = model.Simulation(*build(), show_progress=False).simulate(t_stop, **kwargs)
+    res_c = native.Simulation(*build(), show_progress=False).simulate(t_stop, **kwargs)
+    assert res_py.success and res_c.success
+    return res_py, res_c
+
+
+def max_errors(groups_py: dict[str, Any], groups_c: dict[str, Any]) -> dict[str, float]:
+    """
+    Maximum errors of the signals relative to their maximum magnitudes, at least 1
+    (e.g., the error signal of a locked PLL is at the level of the rounding errors).
+    """
+    errors = {}
+    for group, signals in groups_py.items():
+        for name, values in vars(signals).items():
+            if name == "s_c_ab":
+                # The current-direction vector is discontinuous at zero currents (it
+                # affects the voltage only with the dead time or threshold voltage)
+                continue
+            x_py = np.asarray(values)
+            x_c = np.asarray(getattr(groups_c[group], name))
+            assert x_c.shape == x_py.shape, f"{group}.{name}"
+            if x_py.dtype == object:  # None, e.g., the DC-bus voltage reference
+                assert all(v is None for v in [*x_py, *x_c]), f"{group}.{name}"
+                errors[f"{group}.{name}"] = 0.0
+                continue
+            x_py, x_c = x_py.astype(complex), x_c.astype(complex)
+            scale = max(np.max(np.abs(x_py), initial=0.0), 1.0)
+            errors[f"{group}.{name}"] = np.max(np.abs(x_c - x_py), initial=0.0) / scale
+    return errors
+
+
+def check(res_py: Any, res_c: Any, rtol: float, same_steps: bool = True) -> None:
+    """
+    Check that the control signals and, with the same solver steps, the time series of
+    the system model agree.
+    """
+    ctrl_py, ctrl_c = res_py.ctrl, res_c.ctrl
+    assert np.array_equal(ctrl_c.t, ctrl_py.t)
+    errors = max_errors(
+        {"ref": ctrl_py.ref, "fbk": ctrl_py.fbk}, {"ref": ctrl_c.ref, "fbk": ctrl_c.fbk}
+    )
+    if same_steps:
+        assert np.max(np.abs(res_c.mdl.t - res_py.mdl.t)) < 1e-12
+        # The time series of the subsystems (e.g., machine and converter)
+        names = [name for name in vars(res_py.mdl) if name != "t"]
+        mdl_py = {name: getattr(res_py.mdl, name) for name in names}
+        errors |= max_errors(mdl_py, {name: getattr(res_c.mdl, name) for name in names})
+    worst = max(errors, key=lambda name: errors[name])
+    print(f"  max relative error {errors[worst]:.3g} ({worst})")
+    assert errors[worst] < rtol
+
+
+def test_ipmsm_zoh() -> None:
+    """Sensorless FVC with the zero-order hold: the same steps as in motulator."""
+    check(*simulate(ipmsm_drive, 0.5), rtol=1e-9)
+
+
+def test_ipmsm_pwm() -> None:
+    """Carrier comparison with the dead time and its compensation, single update."""
+    res_py, res_c = simulate(lambda: ipmsm_drive(pwm=True), 0.4)
+    check(res_py, res_c, rtol=1e-4, same_steps=False)
+
+
+def test_gradnet() -> None:
+    """GradNet current map with spatial harmonics in the machine model."""
+    check(*simulate(gradnet_drive, 0.3), rtol=1e-9)
+
+
+def test_n_eval() -> None:
+    """Evenly spaced points of the solver (N_eval)."""
+    check(*simulate(ipmsm_drive, 0.06, N_eval=4), rtol=1e-9)
+
+
+def test_interface() -> None:
+    """Continued simulation, the step signals, and the errors."""
+    # A continued simulation equals a single one, also with step signals
+    res = native.Simulation(*ipmsm_drive(), show_progress=False).simulate(0.1)
+    mdl, ctrl = ipmsm_drive()
+    sim = native.Simulation(mdl, ctrl, show_progress=False)
+    sim.simulate(0.04)
+    ctrl.set_speed_ref(StepSignal(time=0.05, after=2 * BASE.w_M))
+    res_continued = sim.simulate(0.1)
+    assert np.array_equal(res.mdl.t, res_continued.mdl.t)
+    assert np.array_equal(res.mdl.machine.psi_s_dq, res_continued.mdl.machine.psi_s_dq)
+    assert np.array_equal(res.ctrl.ref.d_abc, res_continued.ctrl.ref.d_abc)
+
+    # An exception in a reference function is raised again
+    def failing(t: float) -> float:
+        if t > 0.01:
+            raise ZeroDivisionError("test")
+        return 0.0
+
+    mdl, ctrl = ipmsm_drive()
+    mdl.mechanics.set_external_load_torque(failing)
+    with pytest.raises(ZeroDivisionError, match="test"):
+        native.Simulation(mdl, ctrl, show_progress=False).simulate(0.02)
+
+    # Invalid arguments
+    for t_stop in (inf, nan):
+        with pytest.raises(ValueError, match="t_stop"):
+            native.Simulation(*ipmsm_drive(), show_progress=False).simulate(t_stop)
+
+    # Unsupported systems
+    mdl, ctrl = ipmsm_drive()
+    with pytest.raises(NotImplementedError, match="RK45"):
+        native.Simulation(mdl, ctrl, cfg=SolverCfg(method="DOP853"))
+    ctrl.set_enable(False)
+    with pytest.raises(NotImplementedError, match="Gate blocking"):
+        native.Simulation(mdl, ctrl)
+
+
+@pytest.mark.parametrize("case", ["sm", "im_nonlinearity", "sm_dc_bus"])
+def test_final_state(case: str) -> None:
+    """
+    The model ends at the states and the switching state of the simulation, as in
+    motulator, so its outputs (e.g., the converter voltage) are those of motulator.
+    """
+    if case == "sm":
+        build: Build = ipmsm_drive
+    elif case == "im_nonlinearity":  # The current directions affect the voltage
+        build = im_system(
+            sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True
+        )[0]
+    else:
+        build = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0], bridge=False)
+    mdl_py, ctrl_py = build()
+    model.Simulation(mdl_py, ctrl_py, show_progress=False).simulate(0.06)
+    mdl_c, ctrl_c = build()
+    native.Simulation(mdl_c, ctrl_c, show_progress=False).simulate(0.06)
+    assert mdl_c.t0 == mdl_py.t0
+    np.testing.assert_allclose(
+        mdl_c.get_initial_values(), mdl_py.get_initial_values(), rtol=1e-9
+    )
+    for name in ["q_c_ab", "s_c_ab"]:
+        assert np.isclose(
+            getattr(mdl_c.converter.inp, name), getattr(mdl_py.converter.inp, name)
+        )
+    assert np.isclose(mdl_c.converter.out.u_dc, mdl_py.converter.out.u_dc)
+    assert np.isclose(mdl_c.converter.out.u_c_ab, mdl_py.converter.out.u_c_ab)
+    assert np.isclose(mdl_c.machine.inp.u_s_ab, mdl_py.machine.inp.u_s_ab)
+
+
+@pytest.mark.parametrize("N_eval", [0, 4])
+def test_failed_interval(N_eval: int) -> None:
+    """
+    Nothing of an interval in which the solver fails is saved, as in motulator, so
+    the model remains at the start of the interval, and the continued simulation
+    equals an uninterrupted one.
+    """
+    mdl, ctrl = ipmsm_drive()
+    # Infinite load torque within a sampling period
+    mdl.mechanics.set_external_load_torque(lambda t: inf if t > 0.05 + 50e-6 else 0.0)
+    sim = native.Simulation(mdl, ctrl, show_progress=False)
+    with pytest.warns(RuntimeWarning, match="Simulation stopped"):
+        res = sim.simulate(0.1, N_eval)
+    assert not res.success
+    assert mdl.t0 == pytest.approx(0.05)
+    assert res.mdl.t[-1] <= mdl.t0
+    mdl.mechanics.set_external_load_torque(0.0)
+    res = sim.simulate(0.1, N_eval)
+    assert res.success
+    mdl_ref, ctrl_ref = ipmsm_drive()
+    mdl_ref.mechanics.set_external_load_torque(0.0)
+    sim_ref = native.Simulation(mdl_ref, ctrl_ref, show_progress=False)
+    res_ref = sim_ref.simulate(0.1, N_eval)
+    assert np.array_equal(res.mdl.t, res_ref.mdl.t)
+    assert np.array_equal(res.mdl.machine.psi_s_dq, res_ref.mdl.machine.psi_s_dq)
+    assert np.array_equal(res.ctrl.t, res_ref.ctrl.t)
+    assert np.array_equal(res.ctrl.ref.d_abc, res_ref.ctrl.ref.d_abc)
+
+
+# %%
+# Induction machine drives, DC buses, and grid converter systems, mostly with the
+# systems of tests/test_simulink.py
+@pytest.mark.parametrize(
+    "build",
+    [
+        im_system(sensorless=True, t_d=0.0, i_0=0.0)[0],
+        im_system(sensorless=False, t_d=0.0, i_0=0.0)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True)[0],
+        vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0],
+        vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0],
+        vhz_system(open_loop=False, t_d=0.0, d_min=0.1)[0],
+    ],
+    ids=[
+        "cvc_sensorless",
+        "cvc_sensored",
+        "cvc_u_th_single",
+        "vhz",
+        "vhz_open_loop",
+        "vhz_d_min",
+    ],
+)
+def test_induction_machine(build: Build) -> None:
+    """Current-vector control and observer-based V/Hz control."""
+    check(*simulate(build, 0.3), rtol=1e-9)
+
+
+def test_quadratic_load() -> None:
+    """Friction coefficient as a function of the speed (a quadratic load torque)."""
+    build = vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0]
+
+    def build_quadratic() -> tuple[model.Drive, Any]:
+        mdl, ctrl = build()
+        mechanics = model.MechanicalSystem(J=0.015, B_L=lambda w_M: 1e-4 * abs(w_M))
+        return model.Drive(mdl.machine, mechanics, mdl.converter), ctrl
+
+    check(*simulate(build_quadratic, 0.3), rtol=1e-9)
+
+
+def test_pi_speed_controller() -> None:
+    """
+    Any PI controller is accepted as the speed controller of an induction machine
+    drive, as of a synchronous machine drive.
+    """
+
+    def build() -> tuple[model.Drive, Any]:
+        mdl, ctrl = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]()
+        ctrl.speed_ctrl = PIController(k_p=1.0, k_i=16.0, k_t=1.0, u_max=20.0)
+        return mdl, ctrl
+
+    check(*simulate(build, 0.3), rtol=1e-9)
+
+
+def with_dc_bus(build: Build, bridge: bool) -> Build:
+    """The drive of `build` fed by a DC-bus model (DCBus or DiodeBridgeDCBus)."""
+
+    def build_dc() -> tuple[model.Drive, Any]:
+        mdl, ctrl = build()
+        c = mdl.converter
+        converter = model.VoltageSourceConverter(t_d=c.t_d, u_th=c.u_th)
+        if bridge:
+            dc_bus = DiodeBridgeDCBus(
+                235e-6, 2e-3, U_g=400, f_g=50, converters=[converter]
+            )
+        else:
+            dc_bus = DCBus(C_dc=1e-3, u_dc=540, converters=[converter])
+        return model.Drive(mdl.machine, mdl.mechanics, converter, dc_bus=dc_bus), ctrl
+
+    return build_dc
+
+
+@pytest.mark.parametrize("bridge", [False, True], ids=["capacitor", "diode_bridge"])
+@pytest.mark.parametrize("machine", ["sm", "im"])
+def test_dc_bus(machine: str, bridge: bool) -> None:
+    """DC-bus models feeding the converter of the drive."""
+    if machine == "sm":
+        build = sm_system(sensorless=True, t_d=0.0)[0]
+    else:
+        build = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]
+    res_py, res_c = simulate(with_dc_bus(build, bridge), 0.3)
+    if bridge:
+        check(res_py, res_c, rtol=1e-5, same_steps=False)
+    else:
+        check(res_py, res_c, rtol=1e-9)
+
+
+def gfl_variant(lcl: bool, pwm: bool = False, dc_bus: bool = False) -> Build:
+    """
+    Grid-following control with the resistances and the grid impedance of the filter,
+    a voltage dip, a phase shift, and a negative-sequence component of the source, and
+    optionally the carrier comparison and a DC-bus model.
+    """
+    B = GRID_BASE
+
+    def build() -> tuple[grid_model.GridConverterSystem, Any]:
+        if lcl:
+            ac_filter: Any = grid_model.LCLFilter(
+                L_fc=0.073 * B.L,
+                L_fg=0.073 * B.L,
+                C_f=0.043 * B.C,
+                R_fc=0.01 * B.Z,
+                R_fg=0.01 * B.Z,
+                L_g=0.2 * B.L,
+                R_g=0.01 * B.Z,
+                u_f0_ab=B.u,
+            )
+        else:
+            ac_filter = grid_model.LFilter(
+                L_f=0.15 * B.L, R_f=0.02 * B.Z, L_g=0.1 * B.L, R_g=0.01 * B.Z
+            )
+        ac_source = grid_model.ThreePhaseSource(
+            w_g=B.w,
+            e_g=StepSignal(time=0.1, after=0.8 * B.u, before=B.u),
+            phi=0.1,
+            e_g_neg=0.05 * B.u,
+            phi_neg=0.3,
+        )
+        converter = grid_model.VoltageSourceConverter(u_dc=None if dc_bus else 650)
+        dc = DCBus(C_dc=1e-3, u_dc=650, converters=[converter]) if dc_bus else None
+        mdl = grid_model.GridConverterSystem(
+            converter, ac_filter, ac_source, dc_bus=dc, pwm=pwm
+        )
+        if pwm:
+            mdl.pwm = CarrierComparison(N=2**24)
+        cfg = grid_control.CurrentVectorControllerCfg(
+            i_max=1.5 * B.i, L=0.073 * B.L, T_s=100e-6
+        )
+        ctrl = grid_control.GridConverterControlSystem(
+            grid_control.CurrentVectorController(cfg)
+        )
+        ctrl.set_power_ref(StepSignal(time=0.02, after=5e3))
+        ctrl.set_reactive_power_ref(lambda t: (t > 0.04) * 4e3)
+        return mdl, ctrl
+
+    return build
+
+
+def gfm_variant() -> Build:
+    """Grid-forming control with an LCL filter and a step in the grid frequency."""
+    B = GRID_BASE
+
+    def build() -> tuple[grid_model.GridConverterSystem, Any]:
+        ac_filter = grid_model.LCLFilter(
+            L_fc=0.15 * B.L,
+            L_fg=0.1 * B.L,
+            C_f=0.043 * B.C,
+            R_fc=0.05 * B.Z,
+            L_g=0.5 * B.L,
+        )
+        ac_source = grid_model.ThreePhaseSource(
+            w_g=lambda t: B.w * (1 + 0.01 * (t > 0.1)), e_g=B.u
+        )
+        mdl = grid_model.GridConverterSystem(
+            grid_model.VoltageSourceConverter(u_dc=650), ac_filter, ac_source
+        )
+        cfg = grid_control.ObserverBasedGridFormingControllerCfg(
+            i_max=1.3 * B.i,
+            L=0.35 * B.L,
+            R=0.05 * B.Z,
+            R_a=0.2 * B.Z,
+            u_nom=B.u,
+            w_nom=B.w,
+        )
+        ctrl = grid_control.GridConverterControlSystem(
+            grid_control.ObserverBasedGridFormingController(cfg)
+        )
+        ctrl.set_power_ref(lambda t: (t > 0.05) * GRID_NOM.P)
+        ctrl.set_ac_voltage_ref(B.u)
+        return mdl, ctrl
+
+    return build
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        gfl_system()[0],
+        gfl_variant(lcl=False),
+        gfl_variant(lcl=True),
+        gfl_variant(lcl=True, dc_bus=True),
+        gfm_system(power_limitation=False)[0],
+        gfm_system(power_limitation=True)[0],
+        gfm_variant(),
+    ],
+    ids=[
+        "gfl",
+        "gfl_l_filter",
+        "gfl_lcl_filter",
+        "gfl_dc_bus",
+        "gfm",
+        "gfm_power_limitation",
+        "gfm_lcl_filter",
+    ],
+)
+def test_grid(build: Build) -> None:
+    """Grid-following and grid-forming control."""
+    check(*simulate(build, 0.2), rtol=1e-9)
+
+
+def test_grid_after_simulation() -> None:
+    """
+    The control system runs in C from its initial state, also if it has been
+    simulated in motulator, and its parameters are read from its configuration
+    (not from the state of the observer of grid-forming control).
+    """
+
+    def build() -> tuple[grid_model.GridConverterSystem, Any]:
+        mdl, ctrl = gfm_system(power_limitation=False)[0]()
+        ctrl.set_power_ref(0.5 * GRID_NOM.P)  # Constant, independent of ctrl.t
+        return mdl, ctrl
+
+    mdl, ctrl = build()
+    model.Simulation(mdl, ctrl, show_progress=False).simulate(0.02)
+    res_c = native.Simulation(build()[0], ctrl, show_progress=False).simulate(0.1)
+    res_ref = native.Simulation(*build(), show_progress=False).simulate(0.1)
+    n = len(res_ref.ctrl.t)
+    assert np.array_equal(res_c.ctrl.ref.d_abc[-n:], res_ref.ctrl.ref.d_abc)
+
+
+def test_grid_pwm() -> None:
+    """Grid-following control with the carrier comparison."""
+    res_py, res_c = simulate(gfl_variant(lcl=True, pwm=True), 0.2)
+    check(res_py, res_c, rtol=1e-6, same_steps=False)
+
+
+def test_unsupported() -> None:
+    """Unsupported systems raise errors."""
+    # Gate blocking
+    mdl, ctrl = gfl_system()[0]()
+    ctrl.set_enable(False)
+    with pytest.raises(NotImplementedError, match="Gate blocking"):
+        native.Simulation(mdl, ctrl)
+    # DC-bus voltage control
+    mdl, ctrl = gfl_system()[0]()
+    ctrl.dc_bus_voltage_ctrl = grid_control.DCBusVoltageController(
+        C_dc=1e-3, alpha_dc=2 * pi * 30
+    )
+    with pytest.raises(NotImplementedError, match="DC-bus voltage control"):
+        native.Simulation(mdl, ctrl)
+    # External DC current
+    mdl, ctrl = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0], False)()
+    cast_dc_bus: Any = mdl.dc_bus
+    cast_dc_bus.set_external_dc_current(1.0)
+    with pytest.raises(NotImplementedError, match="External DC current"):
+        native.Simulation(mdl, ctrl)

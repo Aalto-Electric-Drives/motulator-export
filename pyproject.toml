@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 authors = [
     {name = "Marko Hinkkanen", email = "marko.hinkkanen@aalto.fi"}
 ]
-description = "Export motulator drive and grid converter systems to PLECS and Simulink"
+description = "Export motulator drive and grid converter systems to PLECS and Simulink, and simulate them natively"
 readme = "README.md"
 license = "MIT"
 keywords = ["control", "converter", "motor", "PLECS", "Simulink", "simulation"]
@@ -32,9 +32,19 @@ dev = [
     "pip-audit",
     "pytest",
 ]
+doc = [
+    "myst-parser",
+    "numpydoc",
+    "sphinx",
+    "sphinx-autoapi",
+    "sphinx-book-theme",
+    "sphinx-copybutton",
+    "sphinx-gallery",
+]
 
 [project.urls]
 Homepage = "https://github.com/Aalto-Electric-Drives/motulator-export"
+Documentation = "https://aalto-electric-drives.github.io/motulator-export/"
 motulator = "https://github.com/Aalto-Electric-Drives/motulator"
 
 [tool.hatch.build.targets.wheel]

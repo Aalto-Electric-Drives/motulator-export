@@ -20,5 +20,13 @@ examples/simulink/*.slx
 *.slxc
 slprj/
 
+# Sphinx documentation (the build, the API reference, the gallery, and the pages
+# generated from the README files)
+docs/build/
+docs/source/autoapi/
+docs/source/examples/
+docs/source/pages/
+docs/source/sg_execution_times.rst
+
 # macOS specific
 .DS_Store

@@ -73,6 +73,8 @@ from motulator_export.plecs._grid_control import GFL_BLOCK, GFM_BLOCK, init_scri
 from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import Tap, Terminal, _probe, _Schematic, _scope
 
+__all__ = ["simulate", "write_model"]
+
 
 # %%
 def _check_supported_plant(mdl: GridConverterSystem) -> None:
