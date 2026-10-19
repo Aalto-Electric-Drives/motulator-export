@@ -33,7 +33,9 @@ Python 3.12 or later. Clone the repository, which contains the examples, and ins
 ```bash
 git clone https://github.com/Aalto-Electric-Drives/motulator-export
 cd motulator-export
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python -m pip install -e .
 ```
 
 Then run an example, e.g., `python examples/ipmsm_2kw_fvc.py`, and open the model `examples/ipmsm_2kw_fvc.plecs` in PLECS. See the [documentation](https://aalto-electric-drives.github.io/motulator-export/guide/getting_started.html) for the requirements of PLECS, Simulink, and the native simulation.

@@ -1,6 +1,6 @@
 # Native simulation
 
-`native.Simulation` simulates a system built in *motulator* in C. It has the interface and the results of the simulation of *motulator*, so a script only replaces the simulation object:
+`native.Simulation` simulates a system built in *motulator* in C. It has the interface and the results of the simulation of *motulator*, so a script only replaces the simulation object. For example, with `mdl` and `ctrl` built as in [Getting started](getting_started.md#exporting-your-own-system):
 
 ```python
 from motulator.drive import utils
@@ -8,9 +8,11 @@ from motulator.drive import utils
 from motulator_export import native
 
 sim = native.Simulation(mdl, ctrl)  # Instead of model.Simulation(mdl, ctrl)
-res = sim.simulate(t_stop=1.75)
-utils.plot(res, base)
+res = sim.simulate(t_stop=1.2)
+utils.plot(res)
 ```
+
+To try it out, run `python examples/native/plot_2kw_ipmsm_fvc.py`, see [Getting started](getting_started.md#native-simulation).
 
 The control system runs the C port of its algorithms, and the system model runs as C models of its subsystems, integrated with the same solver steps as in *motulator*. The C code is compiled at the first use and cached. The [examples](../examples/index.rst) show the native simulation of systems of the *motulator* examples, including a parameter sweep.
 

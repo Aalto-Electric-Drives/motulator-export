@@ -9,27 +9,53 @@
 
 ## Installation
 
-Clone the repository, which contains the examples, and install the package:
+Clone the repository, which contains the examples, and install the package in a virtual environment:
 
 ```bash
 git clone https://github.com/Aalto-Electric-Drives/motulator-export
 cd motulator-export
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python -m pip install -e .
 ```
 
 ## A first model
 
-Run an example script, which builds a drive of the *motulator* examples and writes its models:
+Each example script builds a system of the *motulator* examples. Run the examples from the root of the repository.
+
+### PLECS
 
 ```bash
 python examples/ipmsm_2kw_fvc.py
+```
+
+Open `examples/ipmsm_2kw_fvc.plecs` in PLECS and start the simulation. If PLECS is running with the RPC interface enabled, the script also simulates the system in PLECS and in *motulator* and prints the differences.
+
+### Simulink
+
+```bash
 python examples/ipmsm_2kw_fvc_simulink.py
 ```
 
-- **PLECS**: open `examples/ipmsm_2kw_fvc.plecs` and start the simulation.
-- **Simulink**: in MATLAB, run `examples/simulink/build_ipmsm_2kw_fvc.m`, which builds and saves `ipmsm_2kw_fvc.slx`.
+In MATLAB, run `examples/simulink/build_ipmsm_2kw_fvc.m`, which compiles the blocks of the control system and saves `ipmsm_2kw_fvc.slx`. Without a C compiler, use MATLAB Function blocks instead:
 
-If PLECS or the MATLAB Engine API is available, the scripts also simulate the system in the tool and in *motulator* and print the differences. The example scripts are:
+```bash
+python examples/ipmsm_2kw_fvc_simulink.py --matlab
+```
+
+and run `examples/simulink/build_ipmsm_2kw_fvc_matlab.m`, which saves `ipmsm_2kw_fvc_matlab.slx`. With the MATLAB Engine API for Python, the script also builds and simulates the model and prints the differences from *motulator*.
+
+### Native simulation
+
+```bash
+python examples/native/plot_2kw_ipmsm_fvc.py
+```
+
+The script simulates the drive natively and plots the results. After you close the figure, it simulates the same system in *motulator* and prints the run times and the differences. The [examples](../examples/index.rst) include, e.g., a parameter sweep.
+
+### Example scripts
+
+The scripts for PLECS and Simulink are:
 
 | System                                                    | PLECS                     | Simulink                        |
 | --------------------------------------------------------- | ------------------------- | ------------------------------- |
