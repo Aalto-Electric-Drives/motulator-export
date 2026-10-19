@@ -36,7 +36,7 @@ class: only-dark
 To start, see [Getting started](guide/getting_started.md). The user guide then covers the [PLECS models](guide/plecs.md), the [Simulink models](guide/simulink.md), and the [native simulation](guide/native.md).
 
 ```{note}
-The package supports *motulator* 0.15. A new release of *motulator* is supported after it has been tested.
+The package supports *motulator* 0.16. A new release of *motulator* is supported after it has been tested.
 ```
 
 ```{toctree}

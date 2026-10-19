@@ -3,9 +3,9 @@
 ===============================================================
 
 This script builds the drive system of the example
-examples/drive/gradnet/plot_6kw_pmsyrm_gn_fvc_fem_harm.py in motulator, exports it to
-a PLECS model (pmsyrm_6kw_gn_fvc.plecs), and, if PLECS Standalone is running with the
-RPC interface enabled, simulates both and compares the results. The machine model is
+examples/drive/flux_vector/plot_6kw_pmsyrm_gn_fvc_fem_harm.py in motulator, exports it
+to a PLECS model (pmsyrm_6kw_gn_fvc.plecs), and, if PLECS Standalone is running with
+the RPC interface enabled, simulates both and compares the results. The machine model is
 a GradNet current map with spatial harmonics, and the control system uses a GradNet
 flux map (sensored flux-vector control).
 
