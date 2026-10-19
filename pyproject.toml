@@ -20,6 +20,9 @@ license = "MIT"
 keywords = ["control", "converter", "motor", "PLECS", "Simulink", "simulation"]
 classifiers = [
   "Programming Language :: Python",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: C",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
