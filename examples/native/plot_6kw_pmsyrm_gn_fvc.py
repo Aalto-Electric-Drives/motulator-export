@@ -4,7 +4,7 @@
 
 This example simulates flux-vector control (FVC) of a 5.6-kW PM synchronous reluctance
 machine drive natively. The system is that of the *motulator* example
-:doc:`motulator:drive_examples/gradnet/plot_6kw_pmsyrm_gn_fvc_fem_harm`: the machine
+:doc:`motulator:drive_examples/flux_vector/plot_6kw_pmsyrm_gn_fvc_fem_harm`: the machine
 model uses a GradNet current map with spatial harmonics, and the control system uses a
 GradNet flux map, both trained on FEM data. The GradNets are evaluated in C, which
 makes the native simulation about 30 times faster than *motulator*.

@@ -2,7 +2,7 @@
 Test the C port with a GradNet flux map against motulator.
 
 This test uses the control system of the example
-examples/drive/gradnet/plot_6kw_pmsyrm_gn_fvc_fem_harm.py: sensored flux-vector
+examples/drive/flux_vector/plot_6kw_pmsyrm_gn_fvc_fem_harm.py: sensored flux-vector
 control, where the estimated machine model is a GradNet flux map trained on FEM data.
 
 Both the C port and motulator evaluate the GradNets in double precision, so the

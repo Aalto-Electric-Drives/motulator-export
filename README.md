@@ -1,5 +1,7 @@
 # motulator-export
 
+[![PyPI version](https://img.shields.io/pypi/v/motulator-export.svg)](https://pypi.org/project/motulator-export/)
+
 Export [*motulator*](https://github.com/Aalto-Electric-Drives/motulator) drive systems and grid converter systems to [PLECS](https://www.plexim.com/products/plecs) and [Simulink](https://www.mathworks.com/products/simulink.html), and simulate them natively in C.
 
 **Documentation:** https://aalto-electric-drives.github.io/motulator-export/
@@ -28,7 +30,7 @@ res = native.Simulation(mdl, ctrl).simulate(t_stop=1.2)  # Native simulation
 
 ## Installation
 
-Python 3.12 or later. Install the package in a virtual environment, which also installs *motulator* 0.15.2 or a later 0.15 release:
+Python 3.12 or later. Install the package in a virtual environment, which also installs *motulator* 0.16.0 or a later 0.16 release:
 
 ```bash
 python -m venv .venv
