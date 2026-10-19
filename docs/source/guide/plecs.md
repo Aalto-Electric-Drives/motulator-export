@@ -148,5 +148,5 @@ mdl_signals, ctrl_signals = plecs.simulate(path, t_eval, mdl, ctrl)
 ## Good to know
 
 - The first input of the control system is the gate enable (`ctrl.set_enable`). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*.
-- The model refers to the C sources of the package by a path relative to the model file. If you move the model, write it again.
+- The model refers to the C sources of the installed package by a path relative to the model file. If you move the model or update the package, write the model again.
 - `plecs.simulate` closes the model in PLECS before loading it, discarding unsaved changes, since PLECS does not reload an open model from the file.

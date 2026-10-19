@@ -57,6 +57,7 @@ mdl_signals, ctrl_signals = simulink.simulate("ipmsm.slx", t_eval, mdl, ctrl)
 
 ## Good to know
 
+- The build script refers to the files of the installed package by a path relative to the folder of the model. If you move the files or update the package, write the model again.
 - A compiled S-function stays loaded in MATLAB after its model is closed. Run `clear mex` before rebuilding a model that was open.
 - The Simulink models support fewer configurations than the PLECS models, e.g., no dead time or DC-bus dynamics, see [](supported.md).
 - The system model does not block the gates, so the gate enable (`ctrl.set_enable`) must be 1. The exported control system still has the input `enable` and runs in standby while it is zero, e.g., when the control code is reused on hardware.
