@@ -1,13 +1,13 @@
 # Development
 
-Install the package with the development tools:
+Install the package from the cloned repository (see [](getting_started.md#installation)) with the development tools:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
 
 - **Tests**: `pytest` compiles the C port with gcc and compares it, and the blocks of the exported control systems, with *motulator* step by step. Neither PLECS nor MATLAB is needed. The tests of the MATLAB Function blocks (`tests/test_matlab_function.py`) need MATLAB and are skipped without it.
-- **Documentation**: `pip install -e .[doc]` and `sphinx-build -b html docs/source docs/build/html`. The build runs the examples of the native simulation.
+- **Documentation**: `pip install -e ".[doc]"` and `sphinx-build -b html docs/source docs/build/html`. The build runs the examples of the native simulation.
 - **Comparisons**: the example scripts compare the PLECS and Simulink models with *motulator* (see [](getting_started.md#a-first-model)). Rerun them after changing the writers or the C port.
 
 The implementation is described in the developer notes of the repository:

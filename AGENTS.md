@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents working with code in this reposi
 
 ## Commands
 
-Development uses a virtual environment in `.venv` (pyright is configured to use it). Install with `pip install -e .[dev]`.
+Development uses a virtual environment in `.venv` (pyright is configured to use it). Install with `pip install -e ".[dev]"`.
 
 - Lint and format: `pre-commit run --all-files`
 - Type check: `pyright`
@@ -13,7 +13,7 @@ Development uses a virtual environment in `.venv` (pyright is configured to use 
 - Run a comparison with Simulink (requires MATLAB with a MinGW-w64, gcc, or clang compiler for `mex` and the MATLAB Engine API for Python matching the MATLAB release): `python examples/ipmsm_2kw_fvc_simulink.py`; with MATLAB Function blocks (no compiler needed): `python examples/ipmsm_2kw_fvc_simulink.py --matlab`
 - Run the tests of the MATLAB Function blocks in Simulink (requires the MATLAB Engine API for Python, skipped otherwise): `pytest tests/test_matlab_function.py`
 - Run a native simulation and compare it with *motulator*: `python examples/native/plot_2kw_ipmsm_fvc.py` (the examples of `examples/native/` are the gallery of the documentation)
-- Build the documentation (requires `pip install -e .[doc]`): `sphinx-build -b html docs/source docs/build/html`
+- Build the documentation (requires `pip install -e ".[doc]"`): `sphinx-build -b html docs/source docs/build/html`
 
 ## Architecture
 
@@ -31,6 +31,6 @@ Development uses a virtual environment in `.venv` (pyright is configured to use 
 
 - Follow the conventions of *motulator*: peak-valued complex space vectors, SI units, NumPy-style docstrings, and line length 88.
 - Releases: a GitHub release (tag `vX.Y.Z`, the version of `pyproject.toml`) publishes the package to PyPI (`.github/workflows/publish.yml`, with the repository secret `PYPI_API_TOKEN`).
-- The package requires one minor release of *motulator* (e.g., `motulator>=0.16.0,<0.17` in `pyproject.toml`), since a new release may change its API; an update to a new release raises both bounds (and the version in `README.md` and `docs/source/guide/getting_started.md`).
+- The package requires one minor release of *motulator* (e.g., `motulator>=0.16.0,<0.17` in `pyproject.toml`), since a new release may change its API; an update to a new release raises both bounds (and the version in `docs/source/index.md` and `docs/source/guide/getting_started.md`).
 - PLECS: the schematic coordinates are chosen so that wires do not cross and the labels are below the blocks (in the control systems, by the layout hints of the netlists). Only the signals fed back to the control system are measured with meters; the other signals use PLECS probes.
 - Simulink: the blocks are aligned with the ports they connect to (`blocks.align`), so that the lines are straight, and the feedback lines are drawn through given corners (`blocks.route`).
