@@ -9,13 +9,19 @@
 
 ## Installation
 
-Clone the repository, which contains the examples, and install the package in a virtual environment:
+Install the package in a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python -m pip install motulator-export
+```
+
+The examples are in the repository. To run them, clone the repository and install the package from it:
 
 ```bash
 git clone https://github.com/Aalto-Electric-Drives/motulator-export
 cd motulator-export
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 python -m pip install -e .
 ```
 

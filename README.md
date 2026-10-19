@@ -15,11 +15,11 @@ res = native.Simulation(mdl, ctrl).simulate(t_stop=1.2)  # Native simulation
 ```
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/source/images/plecs_drive_black.png">
-  <img alt="PLECS model of a 2.2-kW IPMSM drive" src="docs/source/images/plecs_drive.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Aalto-Electric-Drives/motulator-export/main/docs/source/images/plecs_drive_black.png">
+  <img alt="PLECS model of a 2.2-kW IPMSM drive" src="https://raw.githubusercontent.com/Aalto-Electric-Drives/motulator-export/main/docs/source/images/plecs_drive.png">
 </picture>
 
-*PLECS model of a 2.2-kW IPMSM drive with sensorless flux-vector control, written by [examples/ipmsm_2kw_fvc.py](examples/ipmsm_2kw_fvc.py).*
+*PLECS model of a 2.2-kW IPMSM drive with sensorless flux-vector control, written by [examples/ipmsm_2kw_fvc.py](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/examples/ipmsm_2kw_fvc.py).*
 
 - **One control code everywhere.** The control algorithms of *motulator* are ported to C. The same code runs in PLECS, in Simulink, and in the native simulation.
 - **The structure of *motulator*.** Each class of the control system is a masked block with the arguments of its class, nested as in *motulator*. The parameters are set as in a *motulator* script, and they can be changed without Python.
@@ -28,27 +28,34 @@ res = native.Simulation(mdl, ctrl).simulate(t_stop=1.2)  # Native simulation
 
 ## Installation
 
-Python 3.12 or later. Clone the repository, which contains the examples, and install the package, which installs *motulator* 0.15.2 or a later 0.15 release:
+Python 3.12 or later. Install the package in a virtual environment, which also installs *motulator* 0.15.2 or a later 0.15 release:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python -m pip install motulator-export
+```
+
+The examples are in the repository. To run them, clone the repository and install the package from it:
 
 ```bash
 git clone https://github.com/Aalto-Electric-Drives/motulator-export
 cd motulator-export
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 python -m pip install -e .
+python examples/ipmsm_2kw_fvc.py
 ```
 
-Then run an example, e.g., `python examples/ipmsm_2kw_fvc.py`, and open the model `examples/ipmsm_2kw_fvc.plecs` in PLECS. See the [documentation](https://aalto-electric-drives.github.io/motulator-export/guide/getting_started.html) for the requirements of PLECS, Simulink, and the native simulation.
+Then open the model `examples/ipmsm_2kw_fvc.plecs` in PLECS. See the [documentation](https://aalto-electric-drives.github.io/motulator-export/guide/getting_started.html) for the requirements of PLECS, Simulink, and the native simulation.
 
 ## Development
 
 Install the package with `pip install -e .[dev]` and run the tests with `pytest` (requires gcc). The implementation is described in the developer notes:
 
-- [examples/README.md](examples/README.md): the structure of the PLECS models and their agreement with *motulator*
-- [motulator_export/simulink/README.md](motulator_export/simulink/README.md): the structure of the Simulink models and their agreement with *motulator*
-- [motulator_export/c/README.md](motulator_export/c/README.md): the C port of the control algorithms
-- [motulator_export/matlab/README.md](motulator_export/matlab/README.md): the MATLAB port
+- [examples/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/examples/README.md): the structure of the PLECS models and their agreement with *motulator*
+- [motulator_export/simulink/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/simulink/README.md): the structure of the Simulink models and their agreement with *motulator*
+- [motulator_export/c/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/c/README.md): the C port of the control algorithms
+- [motulator_export/matlab/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/matlab/README.md): the MATLAB port
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/LICENSE)

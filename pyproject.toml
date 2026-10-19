@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "motulator-export"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
     "motulator>=0.15.2,<0.16",
     "numpy",
+    "tqdm",
 ]
 requires-python = ">=3.12"
 authors = [
@@ -49,6 +50,9 @@ motulator = "https://github.com/Aalto-Electric-Drives/motulator"
 
 [tool.hatch.build.targets.wheel]
 packages = ["motulator_export"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/motulator_export", "/README.md", "/LICENSE"]
 
 [tool.ruff]
 line-length = 88
