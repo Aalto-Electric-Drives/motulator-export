@@ -334,6 +334,7 @@ class Geometry:
     channel: int  # Width of a channel without vertical segments
     slot: int  # Distance between the vertical segments in a channel
     gap: int  # Vertical gap between the blocks in a column
+    name_gap: int  # Minimum gap below an aligned block, for the name of the block
     lane: int  # Distance between the lanes
     margin: int  # Distance of the lanes from the blocks
 
@@ -369,6 +370,7 @@ PLECS = Geometry(
     channel=30,
     slot=10,
     gap=30,
+    name_gap=25,
     lane=10,
     margin=25,
 )
@@ -390,6 +392,7 @@ SIMULINK = Geometry(
     channel=40,
     slot=15,
     gap=40,
+    name_gap=20,
     lane=15,
     margin=40,
 )
@@ -698,7 +701,7 @@ def _place_vertically(
                 b.y = 0
                 b.y = refs.point(target)[1] + dy - refs.point(key)[1]
                 # Below the previous block, leaving space for its name
-                top = blocks[prev].rect[3] + geo.gap // 2 if prev is not None else None
+                top = blocks[prev].rect[3] + geo.name_gap if prev is not None else None
             else:
                 top = blocks[prev].rect[3] + geo.gap if prev is not None else 0
                 b.y = _snap(top + b.h / 2, geo.grid)

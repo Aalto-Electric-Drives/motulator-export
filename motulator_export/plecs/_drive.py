@@ -318,12 +318,16 @@ MACHINE_PROBES = ["Stator phase currents", "Rotational speed", "Rotor position"]
 MACHINE_PROBES += ["Electrical torque"]
 
 
-def _add_drive_outputs(sch: _Schematic, block: ControlBlock, outputs: bool) -> None:
+def _add_drive_outputs(
+    sch: _Schematic, block: ControlBlock, outputs: bool, y_sources: int
+) -> int:
     """
     Add the scope and its probes, and optionally the output ports.
 
     The first three monitored signal groups of the block (the speed, the torque, and
-    the flux linkage) are shown in the scope with the machine signals.
+    the flux linkage) are shown in the scope with the machine signals. The probes are
+    below the sources of the control system, the last of which is at `y_sources`.
+    Returns the y-coordinate of the last probe.
 
     """
     speed, torque, flux = list(block.outputs)[:3]
@@ -336,7 +340,7 @@ def _add_drive_outputs(sch: _Schematic, block: ControlBlock, outputs: bool) -> N
     # Scope, fed by probes of the controller outputs and the machine, below the control
     # system (not shifted by sch.dx, since the probes have no wires)
     dx, sch.dx = sch.dx, 0
-    x, y = 80, 270  # Position of the first probe, below the sources
+    x, y = 80, max(270, y_sources + 50)  # Position of the first probe
     probes = [
         ("Speed (ctrl)", block.name, [speed]),
         ("Speed", "Machine", [MACHINE_PROBES[1]]),
@@ -373,3 +377,4 @@ def _add_drive_outputs(sch: _Schematic, block: ControlBlock, outputs: bool) -> N
         points = [(x_jog, y_src), (x_jog, y + 45 + 10 * k)]
         sch.signal((src, 1), ("Scope", k + 1), points)
     sch.dx = dx
+    return y + 40 * (len(probes) - 1)

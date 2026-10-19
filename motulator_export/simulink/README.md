@@ -57,7 +57,7 @@ As in *motulator*, the outputs are computed from the measurements of the same sa
 The state of the C code is in static variables, as in the C-Script block, so a model can contain one instance of the block.
 
 The first input of every control system is `enable`, the gate enable of *motulator* (`ControlSystem.set_enable`), and the control systems have the input `u_c_line` of the line-to-line converter voltages u_ab and u_bc, used while the gates are blocked.
-While `enable` is zero, the control system runs in standby, as in *motulator* (see [the README](../../README.md)).
+While `enable` is zero, the control system runs in standby, as in *motulator* (see [examples/README.md](../../examples/README.md)).
 The system model of Simulink does not block the gates, so in the exported models `enable` is 1 and `u_c_line` zero (`write_model` rejects a control system with the gates blocked); on the hardware, the gate enable also blocks the gates of the converter.
 The control systems limit the measured DC-bus voltage to at least 1 V (`U_DC_MIN`), which avoids the division by zero in the PWM if the DC bus is not charged.
 

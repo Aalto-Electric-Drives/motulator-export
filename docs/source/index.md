@@ -1,24 +1,39 @@
-# *motulator-export:* PLECS, Simulink, and Native Simulation of *motulator* Systems
+# motulator-export
 
-This package exports drive systems and grid converter systems built in [*motulator*](https://aalto-electric-drives.github.io/motulator/) to [PLECS](https://www.plexim.com/products/plecs) and [Simulink](https://www.mathworks.com/products/simulink.html), and simulates them natively in C. You build a system in *motulator*, as usual, and get a ready-to-run simulation model of it. The control algorithms of *motulator* are ported to C, and the same C code runs in the C-Script blocks of PLECS, in the S-functions of Simulink, and in the native simulation; a MATLAB port of the same code runs in MATLAB Function blocks. Each class of the control system is a block with a mask of the arguments of its class, in the hierarchy of *motulator*, and the parameters are defined as in a *motulator* example. The models and the native simulation are verified against *motulator*.
+*motulator-export* turns drive systems and grid converter systems built in [*motulator*](https://aalto-electric-drives.github.io/motulator/) into ready-to-run [PLECS](https://www.plexim.com/products/plecs) and [Simulink](https://www.mathworks.com/products/simulink.html) models, and simulates them natively in C. Build the system in *motulator* as usual, then:
 
-The native simulation (`native.Simulation`) has the interface and the results of the simulation of *motulator*, but it is 30 to 40 times faster, which is useful, e.g., for parameter sweeps. See the [examples](examples/index.rst).
+```python
+from motulator_export import native, plecs, simulink
 
-```{image} ../../examples/pmsyrm_6kw_gn_fvc.png
+plecs.write_model("drive.plecs", mdl, ctrl, t_stop=1.2)  # PLECS model
+simulink.write_model("drive.slx", mdl, ctrl, t_stop=1.2)  # Simulink model
+res = native.Simulation(mdl, ctrl).simulate(t_stop=1.2)  # Native simulation
+```
+
+```{image} images/plecs_drive.png
 ---
-alt: PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control
+target: _images/plecs_drive.png
+alt: PLECS model of a 2.2-kW IPMSM drive
 class: only-light
 ---
 ```
 
-```{image} ../../examples/pmsyrm_6kw_gn_fvc_black.png
+```{image} images/plecs_drive_black.png
 ---
-alt: PLECS model of the 5.6-kW PM-SyRM drive with flux-vector control
+target: _images/plecs_drive_black.png
+alt: PLECS model of a 2.2-kW IPMSM drive
 class: only-dark
 ---
 ```
 
-*PLECS model of a 5.6-kW PM-SyRM drive: the flux-vector control subsystem, the computational delay, the PWM, the converter, the machine with a GradNet model, the mechanics, and the scope.*
+*PLECS model of a 2.2-kW IPMSM drive with sensorless flux-vector control.*
+
+- **One control code everywhere.** The control algorithms of *motulator* are ported to C. The same code runs in PLECS, in Simulink, and in the native simulation.
+- **The structure of *motulator*.** Each class of the control system is a masked block with the arguments of its class, nested as in *motulator*. The parameters are set as in a *motulator* script, and they can be changed without Python.
+- **Verified.** The PLECS and Simulink models agree with *motulator* to about 1e-6 relative to the signal magnitudes, and the native simulation to the rounding errors.
+- **Fast.** The native simulation is 30 to 40 times faster than *motulator*, which is useful, e.g., for parameter sweeps.
+
+To start, see [Getting started](guide/getting_started.md). The user guide then covers the [PLECS models](guide/plecs.md), the [Simulink models](guide/simulink.md), and the [native simulation](guide/native.md).
 
 ```{note}
 The package supports *motulator* 0.15. A new release of *motulator* is supported after it has been tested.
@@ -26,48 +41,36 @@ The package supports *motulator* 0.15. A new release of *motulator* is supported
 
 ```{toctree}
 ---
+hidden:
 titlesonly:
-caption: Getting Started
-name: getting_started
+caption: User guide
 maxdepth: 1
 ---
-pages/installation
-pages/export
-pages/native
-pages/supported
+guide/getting_started
+guide/plecs
+guide/simulink
+guide/native
+guide/supported
 ```
 
 ```{toctree}
 ---
+hidden:
 titlesonly:
 caption: Examples
-name: examples
 maxdepth: 1
 ---
 examples/index
-pages/plecs
 ```
 
 ```{toctree}
 ---
-titlesonly:
-caption: Details
-name: details
-maxdepth: 1
----
-pages/simulink
-pages/c_port
-pages/matlab_port
-pages/development
-```
-
-```{toctree}
----
+hidden:
 titlesonly:
 caption: Reference
-name: reference
 maxdepth: 1
 ---
 API <autoapi/motulator_export/index>
+guide/development
 motulator <https://aalto-electric-drives.github.io/motulator/>
 ```

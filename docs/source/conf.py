@@ -17,11 +17,6 @@ sys.path.insert(0, os.path.abspath("."))
 
 os.environ["BUILDING_DOCS"] = "1"
 
-# The pages generated from the README files of the repository
-from readme_pages import write_pages
-
-write_pages()
-
 # -- Project information ---------------------------------------------------------------
 
 project = "motulator-export"

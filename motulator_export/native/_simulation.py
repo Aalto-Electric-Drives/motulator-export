@@ -32,19 +32,15 @@ class Simulation:
     """
     Native simulation.
 
-    The system model and the control system built in motulator are simulated in C,
-    with the interface and the results of the simulation of motulator
-    (`motulator.common.model.Simulation`). The control system runs as the C port of
-    its algorithms, and the system model as a C model of the subsystems. The solver
-    is a C port of the RK45 method of scipy, which takes the same steps as in
-    motulator, so the results agree with those of motulator to the rounding errors.
-    As in motulator, the results are also stored in the time series of `mdl` and
-    `ctrl`, and the states of `mdl` are updated, while the control system runs in C
-    from its initial state (the states of `ctrl` are not used or updated).
+    Simulates the system model and the control system built in motulator in C, with
+    the interface and the results of `motulator.common.model.Simulation`. As in
+    motulator, the results are also stored in the time series of `mdl` and `ctrl`,
+    and the states of `mdl` are updated. The control system runs in C from its
+    initial state, so the states of `ctrl` are not used or updated.
 
-    The parameters are read from `mdl` and `ctrl` at the first call of `simulate`,
-    and the reference signals and the load torque at each call. They can be
-    constants, `StepSignal` objects (fast), or functions of time (called from C).
+    The parameters are read at the first call of `simulate`, and the references and
+    the load torque at each call. They can be constants, `StepSignal` objects
+    (fastest), or functions of time.
 
     Parameters
     ----------

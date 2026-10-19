@@ -784,8 +784,9 @@ def _control_subsystem(
 ) -> tuple[str, str]:
     """Mask and contents of the control-system subsystem."""
     n_in = len(block.inputs)
+    h = max(30, 5 * n_in)  # Half of the height, the inputs inside the frame
     header = (
-        "      Frame         [-50, -30; 50, 30]\n"
+        f"      Frame         [-50, -{h}; 50, {h}]\n"
         '      SampleTime    "-1"\n'
         '      CodeGenDiscretizationMethod "2"\n'
         '      CodeGenTarget "Generic"\n'
@@ -829,7 +830,7 @@ def _add_control_system(
     sources: list[tuple[str, StepSignal | float | str]],
     values: dict[str, Any],
     init: str,
-) -> None:
+) -> int:
     """
     Add the control system and its inputs (references and measurements).
 
@@ -837,7 +838,8 @@ def _add_control_system(
     signal being a `StepSignal`, a constant, or a probe definition (`_probe`). The
     steps of a `StepSignal` with several steps are summed by a Gain block. The mask
     of the control system passes the variables of the control system in the model
-    initialization `init` to the blocks inside it.
+    initialization `init` to the blocks inside it. Returns the y-coordinate of the
+    last source.
 
     """
     n_in = len(sources)
@@ -846,7 +848,8 @@ def _add_control_system(
     y_0 = max(CS[1] - 25 * (n_in - 1), 20)
     y_src = [y_0 + 50 * k for k in range(n_in)]
     y_in = [CS[1] + 10 * k - 5 * (n_in - 1) for k in range(n_in)]
-    x_jog = _jogs(y_src, y_in, 140, 10)
+    # The vertical segments 10 apart, the last at least 10 left of the frame
+    x_jog = _jogs(y_src, y_in, min(140, CS[0] - 50 - 10 * n_in), 10)
     for k, (name, src) in enumerate(sources):
         out: Terminal = (name, 1)
         if isinstance(src, StepSignal):
@@ -868,6 +871,7 @@ def _add_control_system(
     sch.component(
         "Subsystem", block.name, CS, direction="up", extra=header, trailer=trailer
     )
+    return y_src[-1]
 
 
 def _add_ctrl_output(sch: _Schematic, block: ControlBlock) -> None:

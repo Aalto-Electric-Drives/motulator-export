@@ -1,23 +1,21 @@
 """
-Screenshots of the models for the README
-========================================
+Screenshots of the models for the documentation
+===============================================
 
 This script prints the Simulink model of `pmsyrm_6kw_gn_fvc_simulink.py`
 (simulink/pmsyrm_6kw_gn_fvc.slx, built by the script) to
-pmsyrm_6kw_gn_fvc_simulink.png with the MATLAB Engine API for Python, and writes its
-dark version (`*_black.png`) for the dark mode of GitHub.
+docs/source/images/simulink_drive.png with the MATLAB Engine API for Python. The
+PLECS screenshots in the same folder are not made here: they are exported from PLECS,
+see examples/README.md.
 
-The dark version of an image inverts its lightness and keeps its hues: white becomes
-black, black becomes white, and, e.g., the green signals stay green. The PLECS
-screenshots (pmsyrm_6kw_gn_fvc.png and pmsyrm_6kw_gn_fvc_black.png) are not made
-here: they are exported from PLECS with File > Export > PNG at 300 dpi, with the
-light and the dark theme of PLECS.
+With --dark, the script writes instead the dark versions (`*_black.png`) of all the
+screenshots for the dark mode of the documentation and GitHub (MATLAB is not
+needed). The dark version of an image inverts its lightness and keeps its hues:
+white becomes black, black becomes white, and, e.g., the green signals stay green.
 
 Run from the repository root:
 
-    python examples/screenshots.py [--dark-only]
-
-With --dark-only, only the dark version is written (MATLAB is not needed).
+    python examples/screenshots.py [--dark]
 
 """
 
@@ -31,7 +29,8 @@ from PIL import Image
 
 HERE = Path(__file__).parent
 MODEL = HERE / "simulink" / "pmsyrm_6kw_gn_fvc.slx"
-SCREENSHOT = HERE / "pmsyrm_6kw_gn_fvc_simulink.png"
+IMAGES = HERE.parent / "docs" / "source" / "images"
+SCREENSHOT = IMAGES / "simulink_drive.png"
 DPI = 300
 
 
@@ -78,7 +77,10 @@ def dark_version(png: Path) -> Path:
 
 # %%
 if __name__ == "__main__":
-    if "--dark-only" not in sys.argv:
+    if "--dark" in sys.argv:
+        for png in sorted(IMAGES.glob("*.png")):
+            if not png.stem.endswith("_black"):
+                print(f"Wrote {dark_version(png)}")
+    else:
         print_simulink(MODEL, SCREENSHOT)
         print(f"Wrote {SCREENSHOT}")
-    print(f"Wrote {dark_version(SCREENSHOT)}")
