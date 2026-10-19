@@ -9,21 +9,37 @@
 
 ## Installation
 
-Install the package in a virtual environment:
+Install the package in a [virtual environment](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/). On Linux and macOS:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-python -m pip install motulator-export
+python3 -m venv .venv
+source .venv/bin/activate
+pip install motulator-export
 ```
 
-The examples are in the repository. To run them, clone the repository and install the package from it:
+On Windows:
+
+```powershell
+py -m venv .venv
+.venv\Scripts\activate
+pip install motulator-export
+```
+
+If PowerShell does not allow running the activation script, allow it with `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+
+The plots need a GUI library for *matplotlib*. On some Linux systems, it must be installed separately; see the [installation of *motulator*](https://aalto-electric-drives.github.io/motulator/installation.html).
+
+The examples are in the repository. To run them, clone the repository and install the package from it. On Linux and macOS:
 
 ```bash
 git clone https://github.com/Aalto-Electric-Drives/motulator-export
 cd motulator-export
-python -m pip install -e .
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
+
+On Windows, create and activate the virtual environment as above. In [VS Code](https://code.visualstudio.com/docs/python/environments), the virtual environment can also be created with the Python extension. For development, see [](development.md).
 
 ## A first model
 
