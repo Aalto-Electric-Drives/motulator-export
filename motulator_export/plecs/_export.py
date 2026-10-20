@@ -8,7 +8,7 @@ from motulator.drive.model import Drive
 from motulator.grid.control._base import GridConverterControlSystem
 from motulator.grid.model import GridConverterSystem
 
-from motulator_export._common import system_type
+from motulator_export._common import add_space_vectors, system_type
 from motulator_export.plecs import _grid, _im, _sm
 
 _MODULES = {"sm": _sm, "im": _im, "grid": _grid}
@@ -87,5 +87,33 @@ def simulate(
         Monitored signals of the control system (the output port "ctrl") and the time
         "t".
 
+    Notes
+    -----
+    The signals of the system model are, in SI units:
+
+    - Drives: the phase currents `i_a`, `i_b`, and `i_c`, the stator current
+      `i_s_ab` (a complex space vector in stationary coordinates, as in motulator),
+      the rotor speed `w_M`, the rotor angle `theta_M`, and the torque `tau_M`.
+    - Grid converters: the converter currents `i_c_a`, `i_c_b`, `i_c_c`, and
+      `i_c_ab`, and, with an LCL filter, the grid currents `i_g_a`, `i_g_b`,
+      `i_g_c`, and `i_g_ab`.
+
+    The monitored signals of the control system are real, the magnitudes of the
+    space vectors (e.g., `psi_s`) and the components of the currents in the
+    coordinates of the controller (e.g., `i_d`):
+
+    - Flux-vector control: `w_M_ref`, `w_M`, `tau_M_ref`, `tau_M`, `psi_s_ref`,
+      `psi_s`, `theta_m`, `i_d`, and `i_q`.
+    - Current-vector control: `w_M_ref`, `w_M`, `tau_M_ref`, `tau_M`, `psi_s`,
+      `psi_R`, `i_sd_ref`, `i_sd`, `i_sq_ref`, and `i_sq`.
+    - Observer-based V/Hz control: `w_M_ref`, `w_s`, `tau_M_ref`, `tau_M`,
+      `psi_s_ref`, `psi_s`, `psi_R`, `i_sd`, and `i_sq`.
+    - Grid-following control: `p_g_ref`, `p_g`, `q_g_ref`, `q_g`, `i_c_d_ref`,
+      `i_c_d`, `i_c_q_ref`, `i_c_q`, `u_g`, `w_g`, and `theta_c`.
+    - Grid-forming control: `p_g_ref`, `p_g`, `q_g`, `v_c_ref`, `v_c`, `i_c_d_ref`,
+      `i_c_d`, `i_c_q_ref`, `i_c_q`, and `theta_c` (the angle of the converter
+      voltage).
+
     """
-    return _MODULES[system_type(mdl, ctrl)].simulate(path, t_eval, mdl, ctrl)
+    signals = _MODULES[system_type(mdl, ctrl)].simulate(path, t_eval, mdl, ctrl)
+    return add_space_vectors(signals[0]), signals[1]

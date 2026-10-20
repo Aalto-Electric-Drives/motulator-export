@@ -1,7 +1,8 @@
 """
 Parts shared by the PLECS and Simulink exports and the native simulation: the step
 signals, the references and the gate enable read from the motulator objects, the
-type of the system, the checks of the PWM and the DC bus, and the C sources.
+type of the system, the checks of the PWM and the DC bus, the space vectors of the
+results of `simulate`, and the C sources.
 
 """
 
@@ -18,6 +19,7 @@ from motulator.common.model._converter import (
     DiodeBridgeDCBus,
     VoltageSourceConverter,
 )
+from motulator.common.utils import abc2complex
 from motulator.drive.control._base import DriveControlSystem
 from motulator.drive.model import Drive, InductionMachine, SynchronousMachine
 from motulator.grid.control._base import GridConverterControlSystem
@@ -193,6 +195,22 @@ def check_supported_pwm(
     if pwm.d_err is not None and not d_err:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
     gate_enable(ctrl)  # Raises if not supported
+
+
+# Space vectors in the results of simulate, from their phase signals
+SPACE_VECTORS = {
+    "i_s_ab": ("i_a", "i_b", "i_c"),  # Stator current of a drive
+    "i_c_ab": ("i_c_a", "i_c_b", "i_c_c"),  # Converter current of a grid converter
+    "i_g_ab": ("i_g_a", "i_g_b", "i_g_c"),  # Grid current with an LCL filter
+}
+
+
+def add_space_vectors(signals: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Add the space vectors of the phase signals (`SPACE_VECTORS`) to the signals."""
+    for name, phases in SPACE_VECTORS.items():
+        if all(p in signals for p in phases):
+            signals[name] = abc2complex(np.array([signals[p] for p in phases]))
+    return signals
 
 
 def check_supported_dc_bus(dc_bus: DCBus, converter: VoltageSourceConverter) -> None:

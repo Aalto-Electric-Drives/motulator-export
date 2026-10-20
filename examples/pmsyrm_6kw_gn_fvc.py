@@ -16,21 +16,26 @@ Run from the repository root:
 """
 
 # %%
-import atexit
-import sys
 import time
 from math import pi
 from pathlib import Path
 from typing import cast
 
-import matplotlib.pyplot as plt
 import motulator.drive.control.sm as control
 import motulator.drive.gradnet as gn
 import numpy as np
-from motulator.common.model import CarrierComparison, SolverCfg
+from _compare import (
+    Comparison,
+    drive_signals,
+    plot_drive,
+    simulate_motulator,
+    simulate_plecs,
+    write_plecs_model,
+)
+from motulator.common.model import CarrierComparison
 from motulator.drive import model, utils
 
-from motulator_export import StepSignal, plecs
+from motulator_export import StepSignal
 
 MODEL_DIR = Path(__file__).parent / "trained_models"
 nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)
@@ -77,66 +82,22 @@ if __name__ == "__main__":
     mdl, ctrl = build_system()
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    path = plecs.write_model(
-        Path(__file__).with_name("pmsyrm_6kw_gn_fvc.plecs"), mdl, ctrl, T_STOP
-    )
-    print(f"Wrote {path}")
-    # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = plecs.write_model(
-        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
-    )
-    atexit.register(tmp.unlink, missing_ok=True)
+    path = Path(__file__).with_name("pmsyrm_6kw_gn_fvc.plecs")
+    tmp = write_plecs_model(path, mdl, ctrl, T_STOP)
 
     # Simulate in PLECS first (fast), at a uniform grid
     T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
-    t_grid = np.arange(0, T_STOP, T_s / 4)
     start = time.time()
-    try:
-        plecs_mdl, _ = plecs.simulate(tmp, t_grid, mdl, ctrl)
-    except ConnectionRefusedError:
-        print("PLECS RPC interface not available, skipping the comparison.")
-        sys.exit()
+    simulate_plecs(tmp, np.arange(0, T_STOP, T_s / 4), mdl, ctrl)
     print(f"PLECS: {time.time() - start:.1f} s")
 
     # Simulate in motulator
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     start = time.time()
-    res = sim.simulate(t_stop=T_STOP)
+    res = simulate_motulator(mdl, ctrl, T_STOP)
     print(f"motulator: {time.time() - start:.1f} s")
 
-    # Compare at the motulator solver steps (motulator runs to the end of the last
-    # sampling period, drop the extra samples)
-    keep = res.mdl.t <= T_STOP
-    t, idx = np.unique(res.mdl.t[keep], return_index=True)
-    plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t, mdl, ctrl)
-    i_s_abc = np.array([plecs_mdl[k] for k in ("i_a", "i_b", "i_c")])
-    i_s_ab = (2 / 3) * (i_s_abc[0] - 0.5 * (i_s_abc[1] + i_s_abc[2])) + 1j * (
-        i_s_abc[1] - i_s_abc[2]
-    ) / np.sqrt(3)
-    ref = {
-        "w_M": res.mdl.mechanics.w_M[keep][idx],
-        "tau_M": res.mdl.machine.tau_M[keep][idx],
-        "i_s_ab": res.mdl.machine.i_s_ab[keep][idx],
-    }
-    print("Maximum differences (PLECS - motulator):")
-    print(f"  w_M:    {np.max(np.abs(plecs_mdl['w_M'] - ref['w_M'])):.3g} rad/s")
-    print(f"  tau_M:  {np.max(np.abs(plecs_mdl['tau_M'] - ref['tau_M'])):.3g} Nm")
-    print(f"  i_s_ab: {np.max(np.abs(i_s_ab - ref['i_s_ab'])):.3g} A")
-
-    # Plot
-    fig, axs = plt.subplots(3, 1, sharex=True, figsize=(8, 7))
-    axs[0].plot(t, ref["w_M"], label=r"$\omega_\mathrm{M}$ (motulator)")
-    axs[0].plot(t, plecs_mdl["w_M"], "--", label=r"$\omega_\mathrm{M}$ (PLECS)")
-    axs[0].set_ylabel("Speed (rad/s)")
-    axs[1].plot(t, ref["tau_M"], label=r"$\tau_\mathrm{M}$ (motulator)")
-    axs[1].plot(t, plecs_mdl["tau_M"], "--", label=r"$\tau_\mathrm{M}$ (PLECS)")
-    axs[1].set_ylabel("Torque (Nm)")
-    axs[2].plot(t, ref["i_s_ab"].real, label=r"$i_\alpha$ (motulator)")
-    axs[2].plot(t, i_s_ab.real, "--", label=r"$i_\alpha$ (PLECS)")
-    axs[2].set_ylabel("Current (A)")
-    axs[2].set_xlabel("Time (s)")
-    for ax in axs:
-        ax.legend(loc="upper right")
-        ax.grid(True)
-    fig.tight_layout()
-    plt.show()
+    # Compare at the motulator solver steps
+    cmp = Comparison(res, T_STOP, control=False)
+    plecs_signals = simulate_plecs(tmp, cmp.t_eval, mdl, ctrl)
+    cmp.print_differences("PLECS", plecs_signals, drive_signals(res))
+    plot_drive(cmp, res, plecs_signals[0], "PLECS")

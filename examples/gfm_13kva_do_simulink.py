@@ -18,15 +18,16 @@ Without the MATLAB Engine API, run the generated script in MATLAB.
 """
 
 # %%
-import sys
-from pathlib import Path
-from typing import cast
 
 import numpy as np
+from _compare import (
+    Comparison,
+    require_matlab_engine,
+    simulate_motulator,
+    write_simulink_model,
+)
 from gfm_13kva_do import P_G_REF, T_STOP, V_C_REF, build_system
-from motulator.common.model import SolverCfg
-from motulator.common.utils import abc2complex, complex2abc
-from motulator.grid import control, model
+from motulator.common.utils import complex2abc
 
 from motulator_export import simulink
 
@@ -35,48 +36,20 @@ if __name__ == "__main__":
     mdl, ctrl = build_system()
     ctrl.set_power_ref(P_G_REF)
     ctrl.set_ac_voltage_ref(V_C_REF)
-    code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
-    name = "gfm_13kva_do_matlab" if code == "matlab" else "gfm_13kva_do"
-    path = Path(__file__).parent / "simulink" / f"{name}.slx"
-    path.parent.mkdir(exist_ok=True)
-    script = simulink.write_model(path, mdl, ctrl, T_STOP, code=code)
-    print(f"Wrote {script}")
-    try:
-        import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]
-    except ImportError:
-        print("MATLAB Engine API for Python not available, skipping the comparison.")
-        sys.exit()
+    path = write_simulink_model("gfm_13kva_do", mdl, ctrl, T_STOP)
+    require_matlab_engine()
 
-    # Simulate in motulator with tight tolerances
-    T_s = cast(control.ObserverBasedGridFormingController, ctrl.inner_ctrl).T_s
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
-    res = sim.simulate(t_stop=T_STOP)
-    in_mdl = res.mdl.t <= T_STOP
-    in_ctrl = res.ctrl.t + 0.5 * T_s <= T_STOP
-
-    # Build and simulate in Simulink, with outputs at the motulator solver steps and
-    # just after the sampling instants
-    t_mdl = res.mdl.t[in_mdl]
-    t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
-    t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
-    sl_mdl, sl_ctrl = simulink.simulate(path, t_eval, mdl, ctrl)
-
-    k_mdl = np.searchsorted(sl_mdl["t"], t_mdl)
-    i_c_ab = abc2complex(np.array([sl_mdl[f"i_c_{p}"][k_mdl] for p in "abc"]))
-    print("Maximum differences (Simulink - motulator):")
-    i_c_a = complex2abc(res.mdl.ac_filter.i_c_ab[in_mdl])[0]
-    for name, sl_value, value in [
-        ("i_c_ab", i_c_ab, res.mdl.ac_filter.i_c_ab[in_mdl]),
-        ("i_c_a", sl_mdl["i_c_a"][k_mdl], i_c_a),
-    ]:
-        print(f"  mdl.{name}: {np.max(np.abs(sl_value - value)):.3g}")
-    k_ctrl = np.searchsorted(sl_ctrl["t"], t_ctrl)
-    fbk = res.ctrl.fbk
-    for name, value in [
-        ("p_g", fbk.p_g[in_ctrl]),
-        ("q_g", fbk.q_g[in_ctrl]),
-        ("v_c", np.abs(fbk.v_c[in_ctrl])),
-        ("theta_c", fbk.theta_c[in_ctrl]),
-    ]:
-        err = np.max(np.abs(sl_ctrl[name][k_ctrl] - value))
-        print(f"  ctrl.{name}: {err:.3g}")
+    # Simulate in motulator and in Simulink, and compare, the phase current too, since
+    # the space vectors would hide a zero-sequence current
+    res = simulate_motulator(mdl, ctrl, T_STOP)
+    cmp = Comparison(res, T_STOP)
+    sl_signals = simulink.simulate(path, cmp.t_eval, mdl, ctrl)
+    f, fbk, ref = res.mdl.ac_filter, res.ctrl.fbk, res.ctrl.ref
+    mdl_signals = {"i_c_ab": f.i_c_ab, "i_c_a": complex2abc(f.i_c_ab)[0]}
+    ctrl_signals = {
+        "p_g": fbk.p_g,
+        "q_g": fbk.q_g,
+        "v_c": np.abs(fbk.v_c),
+        "theta_c": fbk.theta_c,
+    }
+    cmp.print_differences("Simulink", sl_signals, mdl_signals, ctrl_signals)

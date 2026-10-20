@@ -20,6 +20,7 @@ The examples of the native simulation (`motulator_export.native`) are in `native
 Run the scripts from the repository root, e.g., `python examples/ipmsm_2kw_fvc.py`.
 For the comparison, a script writes a temporary copy of the model (`*_tmp.plecs`, removed at exit) with output ports, through which the RPC interface returns the signals; the models in this directory have no output ports.
 The scripts close the model in PLECS before simulating it, since an open model is not reloaded from the file.
+The code shared by the scripts (the simulation of *motulator* with the tolerances of 1e-9, the output times at the solver steps and just after the sampling instants, the maximum differences, and the plots) is in `_compare.py`.
 
 ## Screenshots
 
