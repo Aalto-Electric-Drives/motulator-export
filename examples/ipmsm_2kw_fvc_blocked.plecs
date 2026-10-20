@@ -186,7 +186,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "VectorControlSystem (motulator)"
-      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the gates of the converter are blocked, and the control system computes its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator."
+      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
