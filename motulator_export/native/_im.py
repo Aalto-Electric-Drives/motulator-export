@@ -22,7 +22,6 @@ from motulator.common.control._controllers import PIController
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import CurrentVectorController
 from motulator.drive.model import Drive, InductionMachine
-from motulator.drive.utils._parameters import InductionMachineInvGammaPars
 
 from motulator_export.native._build import Signatures
 from motulator_export.native._drive import (
@@ -34,22 +33,30 @@ from motulator_export.native._drive import (
 from motulator_export.native._system import (
     PWM_API,
     NativeSystem,
+    c_args,
     c_double,
     c_int,
     c_void_p,
     check_supported_control,
-    value,
 )
 from motulator_export.plecs._im import (
-    _check_supported_cvc,
-    _check_supported_vhz_ctrl,
+    check_supported_cvc,
+    check_supported_vhz_ctrl,
+    cvc_values,
     export_vhz_values,
 )
+from motulator_export.plecs._im_control import CFG_FIELDS, PAR_FIELDS
+from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 
-# Functions of the library setting the parameters of the control system
+# Functions of the library setting the parameters of the control system, the
+# arguments in the order of PAR_FIELDS and CFG_FIELDS (and the slew rate of V/Hz
+# control)
 API: Signatures = {
     "set_control_machine": (None, [c_void_p] + [c_double] * 5),
-    "set_current_vector_controller": (None, [c_void_p] + [c_double] * 10 + [c_int]),
+    "set_current_vector_controller": (
+        None,
+        [c_void_p] + [c_double] * 9 + [c_int, c_double],
+    ),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 9),
     "speed_reference": (c_void_p, [c_void_p]),
@@ -80,41 +87,13 @@ class InductionMachineDriveSystem(NativeSystem):
         # Control system
         if isinstance(ctrl, VHzControlSystem):
             v = export_vhz_values(ctrl)
-            lib.set_control_machine(
-                h, v["n_p"], v["R_s"], v["R_R"], v["L_sgm"], v["L_M"]
-            )
-            lib.set_vhz_controller(
-                h,
-                v["psi_s_nom"],
-                v["i_s_max"],
-                v["alpha_psi"],
-                v["alpha_tau"],
-                v["alpha_f"],
-                v["k_u"],
-                v["k_b"],
-                v["T_s"],
-                v["slew_rate"],
-            )
+            lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
+            lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
         else:
             ctrl = cast(VectorControlSystem, ctrl)
-            cvc = cast(CurrentVectorController, ctrl.vector_ctrl)
-            par = cast(InductionMachineInvGammaPars, cvc.reference_gen.par)
-            lib.set_control_machine(h, par.n_p, par.R_s, par.R_R, par.L_sgm, par.L_M)
-            cfg = cvc.cfg
-            lib.set_current_vector_controller(
-                h,
-                cfg.psi_s_nom,
-                cfg.i_s_max,
-                cfg.alpha_c,
-                value(cfg.alpha_i),
-                value(cfg.alpha_o),
-                cfg.w_s_nom,
-                cfg.k_u,
-                value(cfg.k_fw),
-                value(cfg.J),
-                cfg.T_s,
-                cfg.sensorless,
-            )
+            v = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
+            lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
+            lib.set_current_vector_controller(h, *c_args(v, CFG_FIELDS))
             speed_ctrl = cast(PIController, ctrl.speed_ctrl)
             lib.set_speed_controller(
                 h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
@@ -124,7 +103,7 @@ class InductionMachineDriveSystem(NativeSystem):
     def set_signals(self, mdl: Any, ctrl: Any) -> None:
         """Set the speed reference and the load torque."""
         if ctrl.ext_ref.w_M is None:
-            raise ValueError("Speed reference must be set")
+            raise ValueError("The speed reference must be set")
         self.set_signal(self.lib.speed_reference(self.handle), ctrl.ext_ref.w_M)
         set_mechanics_signals(self, cast(Drive, mdl))
 
@@ -137,9 +116,9 @@ class InductionMachineDriveSystem(NativeSystem):
     def check_supported(mdl: Any, ctrl: Any) -> None:
         """Raise an error if the drive system is not supported."""
         if type(ctrl) is VHzControlSystem:
-            _check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+            check_supported_vhz_ctrl(ctrl.vhz_ctrl)
         elif type(ctrl) is VectorControlSystem:
-            _check_supported_cvc(ctrl.vector_ctrl)
+            check_supported_cvc(ctrl.vector_ctrl)
             if not isinstance(ctrl.speed_ctrl, PIController):
                 raise NotImplementedError(
                     "Speed-control mode with a speed controller required"

@@ -533,6 +533,13 @@ VHZ_BLOCK = control_block(
 
 
 # %%
+# Fields of the configuration of observer-based V/Hz control
+# (ObserverBasedVHzControllerCfg), in the order of the model initialization and of
+# the native library
+CFG_FIELDS = ["psi_s_nom", "i_s_max", "alpha_psi", "alpha_tau", "alpha_f", "k_u"]
+CFG_FIELDS += ["k_b", "T_s"]
+
+
 def init_script(
     variables: list[tuple[str, Any]], values: dict[str, Any], comment: str
 ) -> str:
@@ -541,7 +548,6 @@ def init_script(
     the control system (par, cfg, slew_rate, and pwm) from the parameter values of
     the control system (`_im.export_vhz_values`).
     """
-    cfg = ["psi_s_nom", "i_s_max", "alpha_psi", "alpha_tau", "alpha_f", "k_u", "k_b"]
     open_loop = values["L_M"] == float("inf")
     return (
         init_header(variables, comment)
@@ -549,7 +555,7 @@ def init_script(
         + (", L_M = inf: pure open-loop V/Hz control)\n" if open_loop else ")\n")
         + "".join(assign(f"par.{n}", values[n]) for n in PAR_FIELDS)
         + "% Observer-based V/Hz control (ObserverBasedVHzControllerCfg)\n"
-        + "".join(assign(f"cfg.{n}", values[n]) for n in [*cfg, "T_s"])
+        + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS)
         + "% Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2\n"
         + assign("slew_rate", values["slew_rate"])
         + pwm_init(values)

@@ -31,18 +31,17 @@ from typing import Any, cast
 import numpy as np
 from motulator.common.control._pwm import PWM, InverterNonlinearity
 
+from motulator_export._common import C_SOURCES, c_define
 from motulator_export.plecs._common import (
     C_DIR,
     C_GRADNET_PARAMS,
     C_PARAMS,
-    C_SOURCES,
     C_U_DC_MIN,
     ENABLE,
     ENABLE_DESCRIPTION,
     MONITOR,
     ControlBlock,
     MaskParam,
-    _c_define,
     _fmt_mask,
     monitored_code,
 )
@@ -181,7 +180,7 @@ class Signals:
         """Value of a macro of the signal vectors."""
         for header in self.headers:
             try:
-                return _c_define(header, name)
+                return c_define(header, name)
             except RuntimeError:
                 pass
         raise RuntimeError(f"{name} not found in {self.headers}")

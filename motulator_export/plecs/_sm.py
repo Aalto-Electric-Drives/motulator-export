@@ -65,6 +65,7 @@ from motulator.drive.utils._parameters import (
     SynchronousMachinePars,
 )
 
+from motulator_export._common import StepSignal, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
     C_DIR,
@@ -79,7 +80,6 @@ from motulator_export.plecs._common import (
     GRADNET_MAX_IN_DIM,
     MACH,
     SRC,
-    StepSignal,
     _add_blanking_time,
     _add_control_system,
     _add_converter,
@@ -87,7 +87,6 @@ from motulator_export.plecs._common import (
     _add_delay,
     _add_pwm,
     _write_model,
-    gate_enable,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._drive import (
@@ -117,13 +116,18 @@ from motulator_export.plecs._schematic import (
     _Schematic,
     _terminals,
 )
-from motulator_export.plecs._sm_control import FVC_BLOCK, init_script
+from motulator_export.plecs._sm_control import (
+    CFG_FIELDS,
+    FVC_BLOCK,
+    PAR_FIELDS,
+    init_script,
+)
 
 __all__ = ["simulate", "write_model"]
 
 
 # %%
-def _fit_speed_dependent_gain(k: Callable[[float], float], name: str) -> list[float]:
+def fit_speed_dependent_gain(k: Callable[[float], float], name: str) -> list[float]:
     """Express the gain as k(w_m) = k0 + k1*abs(w_m), checking the form."""
     k0 = float(k(0.0))
     k1 = (float(k(100.0)) - k0) / 100.0
@@ -172,12 +176,12 @@ def export_gradnet(net_map: Any) -> dict[str, Any]:
     }
 
 
-def _has_gradnet_plant(mdl: Drive) -> bool:
+def has_gradnet_plant(mdl: Drive) -> bool:
     """Whether the machine model is a GradNet current map with spatial harmonics."""
     return isinstance(mdl.machine.par, SpatialSaturatedSynchronousMachinePars)
 
 
-def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
+def check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
     # System model
     par = mdl.machine.par
@@ -204,18 +208,29 @@ def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
 
 def _check_supported_control(ctrl: VectorControlSystem) -> None:
     """Raise an error if the control system is not supported."""
-    fvc = ctrl.vector_ctrl
+    check_supported_fvc(ctrl.vector_ctrl)
+    _check_supported_speed_control(ctrl, dead_time=True)
+
+
+def check_supported_fvc(fvc: Any) -> None:
+    """
+    Raise an error if the flux-vector controller is not supported: the offline
+    references, `k_f=None`, the observer gain `k_o` of the form k0 + k1*abs(w_m), and
+    a machine model with constant inductances or a GradNet flux map.
+    """
     if not isinstance(fvc, FluxVectorController):
         raise NotImplementedError("Only FluxVectorController supported")
-    if fvc.cfg.online_ref or fvc.cfg.k_f is not None:
+    cfg = fvc.cfg
+    if cfg.online_ref or cfg.k_f is not None:
         raise NotImplementedError("Only offline references and k_f=None supported")
+    if cfg.k_o is not None:
+        fit_speed_dependent_gain(cfg.k_o, "k_o")  # Raises if not supported
     if isinstance(fvc.par, SaturatedSynchronousMachinePars):
         if fvc.par.psi_s_dq_fcn is None:
             raise NotImplementedError("A flux map (psi_s_dq_fcn) is required")
         export_gradnet(fvc.par.psi_s_dq_fcn)  # Raises if not supported
     elif not isinstance(fvc.par, SynchronousMachinePars):
         raise NotImplementedError("Machine model of the control system not supported")
-    _check_supported_speed_control(ctrl, dead_time=True)
 
 
 def export_values(
@@ -237,47 +252,40 @@ def export_values(
         GradNet flux map of the control system, None if constant inductances are used.
 
     """
-    fvc = cast(FluxVectorController, ctrl.vector_ctrl)
+    values, flux_map = fvc_values(cast(FluxVectorController, ctrl.vector_ctrl))
+    return values | speed_ctrl_values(ctrl) | pwm_values(ctrl.pwm), flux_map
+
+
+def fvc_values(
+    fvc: FluxVectorController,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """
+    Get the parameter values of the flux-vector controller (see `export_values`):
+    its machine model (`PAR_FIELDS` and `psi_s_dq_fcn`, the name of the struct of a
+    flux map) and its configuration (`CFG_FIELDS`, with `k_o` as [k0, k1]), with the
+    GradNet flux map.
+    """
     cfg: FluxVectorControllerCfg = fvc.cfg
-
-    k_o = None if cfg.k_o is None else _fit_speed_dependent_gain(cfg.k_o, "k_o")
-
-    # Machine model of the control system
     flux_map = None
     if isinstance(fvc.par, SaturatedSynchronousMachinePars):
         flux_map = export_gradnet(fvc.par.psi_s_dq_fcn)
-        machine = {"n_p": fvc.par.n_p, "R_s": fvc.par.R_s, "L_d": None, "L_q": None}
-        machine |= {"psi_f": None, "psi_s_dq_fcn": "est_flux_map"}
+        values = {"n_p": fvc.par.n_p, "R_s": fvc.par.R_s, "L_d": None, "L_q": None}
+        values |= {"psi_f": None, "psi_s_dq_fcn": "est_flux_map"}
     else:
-        par = cast(SynchronousMachinePars, fvc.par)
-        machine = {"n_p": par.n_p, "R_s": par.R_s, "L_d": par.L_d, "L_q": par.L_q}
-        machine |= {"psi_f": par.psi_f, "psi_s_dq_fcn": None}
-
-    values: dict[str, Any] = {
-        **machine,
-        "i_s_max": cfg.i_s_max,
-        "alpha_tau": cfg.alpha_tau,
-        "alpha_psi": cfg.alpha_psi,
-        "alpha_i": cfg.alpha_i,
-        "alpha_o": cfg.alpha_o,
-        "k_o": k_o,
-        "psi_s_min": cfg.psi_s_min,
-        "psi_s_max": cfg.psi_s_max,
-        "k_u": cfg.k_u,
-        "k_mtpv": cfg.k_mtpv,
-        "J": cfg.J,
-        "sensorless": int(cfg.sensorless),
-        "T_s": cfg.T_s,
-        **speed_ctrl_values(ctrl),
-        **pwm_values(ctrl.pwm),
-    }
+        values = {n: getattr(fvc.par, n) for n in PAR_FIELDS}
+        values |= {"psi_s_dq_fcn": None}
+    values |= {n: getattr(cfg, n) for n in CFG_FIELDS}
+    values["k_o"] = (
+        None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
+    )
+    values["sensorless"] = int(cfg.sensorless)
     return values, flux_map
 
 
 def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
     """Get the workspace variables of the system model."""
     variables: list[tuple[str, Any]] = []
-    if _has_gradnet_plant(mdl):
+    if has_gradnet_plant(mdl):
         par = cast(SpatialSaturatedSynchronousMachinePars, mdl.machine.par)
         g = export_gradnet(par.magnetic_map_fcn)
         variables += [("machine.n_p", par.n_p), ("machine.R_s", par.R_s)]
@@ -295,7 +303,7 @@ def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
     return variables + mechanics_and_converter_variables(mdl)
 
 
-def _machine_cscript_code() -> dict[str, str]:
+def machine_cscript_code() -> dict[str, str]:
     """Generate the code sections of the C-Script block of the GradNet machine."""
     declarations = (
         "/* Generated by motulator_export.plecs._sm. The magnetic model is in the\n"
@@ -426,7 +434,7 @@ def _add_gradnet_machine(sch: _Schematic) -> None:
     parameters = ["machine.n_p", "machine.R_s", "machine.k"]
     parameters += [f"machine.current_map.{f}" for f in GRADNET_FIELDS]
     cscript = _cscript(
-        _machine_cscript_code(),
+        machine_cscript_code(),
         "[2 1 1]",
         "[2 3 1 1 1]",
         ", ".join(parameters),
@@ -519,7 +527,7 @@ def write_model(
     Write a PLECS model of the synchronous machine drive, see `plecs.write_model`.
     """
     path = Path(path)
-    _check_supported(mdl, ctrl)
+    check_supported(mdl, ctrl)
     values, flux_map = export_values(ctrl)
     w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
     variables = export_plant_variables(mdl)
@@ -528,7 +536,7 @@ def write_model(
     init = init_script(variables, values, INIT_COMMENT)
     block, T_s = FVC_BLOCK, VALUES["T_s"]  # The model refers to cfg.T_s
     sch = _Schematic()
-    gradnet_plant = _has_gradnet_plant(mdl)
+    gradnet_plant = has_gradnet_plant(mdl)
     sources: list[tuple[str, StepSignal | float | str]] = [
         (ENABLE, gate_enable(ctrl, values["T_s"])),
         ("w_M_ref", w_M_ref),

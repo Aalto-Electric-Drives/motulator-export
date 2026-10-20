@@ -894,6 +894,15 @@ GFM_BLOCK = control_block(
 
 
 # %%
+# Fields of the configurations of grid-following control (CurrentVectorControllerCfg)
+# and grid-forming control (ObserverBasedGridFormingControllerCfg), in the order of
+# the model initialization and of the native libraries
+GFL_CFG_FIELDS = ["i_max", "L", "alpha_c", "alpha_i", "u_nom", "w_nom", "alpha_pll"]
+GFL_CFG_FIELDS += ["T_s"]
+GFM_CFG_FIELDS = ["i_max", "L", "R", "R_a", "k_v", "alpha_o", "alpha_c", "u_nom"]
+GFM_CFG_FIELDS += ["w_nom", "i_d_max", "alpha_l", "T_s"]
+
+
 def init_script(
     variables: list[tuple[str, Any]], values: dict[str, Any], comment: str, gfl: bool
 ) -> str:
@@ -904,15 +913,14 @@ def init_script(
     control.
     """
     if gfl:
-        cfg = ["i_max", "L", "alpha_c", "alpha_i", "u_nom", "w_nom", "alpha_pll"]
+        cfg = GFL_CFG_FIELDS
         title = "% Grid-following control (CurrentVectorControllerCfg)\n"
     else:
-        cfg = ["i_max", "L", "R", "R_a", "k_v", "alpha_o", "alpha_c", "u_nom"]
-        cfg += ["w_nom", "i_d_max", "alpha_l"]
+        cfg = GFM_CFG_FIELDS
         title = "% Grid-forming control (ObserverBasedGridFormingControllerCfg)\n"
     return (
         init_header(variables, comment)
         + title
-        + "".join(assign(f"cfg.{n}", values[n]) for n in [*cfg, "T_s"])
+        + "".join(assign(f"cfg.{n}", values[n]) for n in cfg)
         + pwm_init(values)
     )

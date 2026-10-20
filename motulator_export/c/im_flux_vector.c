@@ -219,18 +219,6 @@ static void im_vhz_control_system_update(IMVHzControlSystem *self)
     im_flux_observer_update(&ctrl->observer, T_s, &self->fbk);
 }
 
-static void im_vhz_control_system_set_resistances(IMVHzControlSystem *self, double R_s,
-                                                  double R_R)
-{
-    IMVHzController *ctrl = &self->vhz_ctrl;
-    ctrl->reference_gen.par.R_s = R_s;
-    ctrl->reference_gen.par.R_R = R_R;
-    ctrl->flux_torque_ctrl.par.R_s = R_s;
-    ctrl->flux_torque_ctrl.par.R_R = R_R;
-    ctrl->observer.par.R_s = R_s;
-    ctrl->observer.par.R_R = R_R;
-}
-
 /* Signal vectors of the control system ------------------------------------ */
 
 static void im_vhz_measurements_pack(const IMVHzMeasurements *meas,

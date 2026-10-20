@@ -127,10 +127,6 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
                                                  const IMVHzMeasurements *meas,
                                                  double w_M_ref, int enabled);
 static void im_vhz_control_system_update(IMVHzControlSystem *self);
-/* Change the stator and rotor resistances of the machine model while the control
- * system runs, as changing par.R_s and par.R_R of the controller in motulator */
-static void im_vhz_control_system_set_resistances(IMVHzControlSystem *self, double R_s,
-                                                  double R_R);
 
 /* Signal vectors of the control system (see sm_flux_vector.h): the measurements
  * (VHZ_MEAS), and the references (VHZ_REF) psi_s, tau_M, and u_s. The feedback

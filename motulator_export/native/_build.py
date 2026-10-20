@@ -21,7 +21,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-C_SOURCES = Path(__file__).parents[1] / "c"
+from motulator_export._common import C_SOURCES
 
 # Flags for a shared library. With MinGW-w64 on Windows, the runtime libraries are
 # linked statically, since Python does not search PATH for the dependencies of a DLL.

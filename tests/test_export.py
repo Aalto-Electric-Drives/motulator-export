@@ -23,10 +23,10 @@ import pytest
 from motulator.drive import model
 
 from motulator_export import StepSignal, plecs, simulink
-from motulator_export.plecs._common import sampled_step
+from motulator_export._common import sampled_step
 from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
-from tests.test_simulink import BASE, CURRENT_MAP, im_system, sm_system
+from tests.systems import BASE, CURRENT_MAP, im_system, sm_system
 
 TOOLS = [(plecs, "model.plecs"), (simulink, "model.slx")]
 T_STOP = 0.3

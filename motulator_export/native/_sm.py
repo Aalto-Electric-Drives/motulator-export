@@ -16,10 +16,6 @@ from motulator.common.control._controllers import PIController
 from motulator.drive.control._base import VectorControlSystem
 from motulator.drive.control._sm_flux_vector import FluxVectorController
 from motulator.drive.model import Drive, SynchronousMachine
-from motulator.drive.utils._parameters import (
-    SaturatedSynchronousMachinePars,
-    SynchronousMachinePars,
-)
 
 from motulator_export.native._build import Signatures
 from motulator_export.native._drive import (
@@ -31,20 +27,25 @@ from motulator_export.native._drive import (
 from motulator_export.native._system import (
     PWM_API,
     NativeSystem,
+    c_args,
     c_double,
     c_int,
     c_void_p,
     check_supported_control,
-    value,
 )
-from motulator_export.plecs._sm import _fit_speed_dependent_gain, export_gradnet
+from motulator_export.plecs._sm import check_supported_fvc, fvc_values
+from motulator_export.plecs._sm_control import CFG_FIELDS, PAR_FIELDS
 
-# Functions of the library setting the parameters of the control system
+# Functions of the library setting the parameters of the control system, the
+# arguments in the order of PAR_FIELDS and CFG_FIELDS (k_o as k_o0 and k_o1)
 API: Signatures = {
     "set_control_machine": (None, [c_void_p] + [c_double] * 5),
     "control_flux_map": (c_void_p, [c_void_p]),
     "set_control_machine_flux_map": (None, [c_void_p, c_double, c_double]),
-    "set_flux_vector_controller": (None, [c_void_p] + [c_double] * 13 + [c_int]),
+    "set_flux_vector_controller": (
+        None,
+        [c_void_p] + [c_double] * 12 + [c_int, c_double],
+    ),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "speed_reference": (c_void_p, [c_void_p]),
     **PWM_API,
@@ -72,35 +73,14 @@ class SynchronousMachineDriveSystem(NativeSystem):
         set_drive(self, mdl)
 
         # Control system
-        fvc = cast(FluxVectorController, ctrl.vector_ctrl)
-        est_par = fvc.par
-        if isinstance(est_par, SaturatedSynchronousMachinePars):
-            g = export_gradnet(est_par.psi_s_dq_fcn)
-            self.set_gradnet(lib.control_flux_map(h), g)
-            lib.set_control_machine_flux_map(h, est_par.n_p, est_par.R_s)
+        v, flux_map = fvc_values(cast(FluxVectorController, ctrl.vector_ctrl))
+        if flux_map is not None:
+            self.set_gradnet(lib.control_flux_map(h), flux_map)
+            lib.set_control_machine_flux_map(h, v["n_p"], v["R_s"])
         else:
-            lib.set_control_machine(
-                h, est_par.n_p, est_par.R_s, est_par.L_d, est_par.L_q, est_par.psi_f
-            )
-        cfg = fvc.cfg
-        k_o = [None, None] if cfg.k_o is None else _speed_gain(cfg.k_o)
-        lib.set_flux_vector_controller(
-            h,
-            cfg.i_s_max,
-            cfg.alpha_tau,
-            value(cfg.alpha_psi),
-            value(cfg.alpha_i),
-            value(cfg.alpha_o),
-            value(k_o[0]),
-            value(k_o[1]),
-            value(cfg.psi_s_min),
-            cfg.psi_s_max,
-            cfg.k_u,
-            cfg.k_mtpv,
-            value(cfg.J),
-            cfg.T_s,
-            cfg.sensorless,
-        )
+            lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
+        k_o = v["k_o"] or [None, None]  # The observer gain k_o0 + k_o1*abs(w_m)
+        lib.set_flux_vector_controller(h, *c_args(v | {"k_o": k_o}, CFG_FIELDS))
         speed_ctrl = cast(PIController, ctrl.speed_ctrl)
         lib.set_speed_controller(
             h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
@@ -111,7 +91,7 @@ class SynchronousMachineDriveSystem(NativeSystem):
         """Set the speed reference and the load torque."""
         mdl, ctrl = cast(Drive, mdl), cast(VectorControlSystem, ctrl)
         if ctrl.ext_ref.w_M is None:
-            raise ValueError("Speed reference must be set")
+            raise ValueError("The speed reference must be set")
         self.set_signal(self.lib.speed_reference(self.handle), ctrl.ext_ref.w_M)
         set_mechanics_signals(self, mdl)
 
@@ -129,29 +109,13 @@ class SynchronousMachineDriveSystem(NativeSystem):
         check_supported_drive(mdl)
 
 
-def _speed_gain(k: Any) -> list[float]:
-    """Express the observer gain as k(w_m) = k0 + k1*abs(w_m)."""
-    return _fit_speed_dependent_gain(k, "k_o")
-
-
 def _check_supported_control(ctrl: Any) -> None:
     """Raise an error if the control system is not supported."""
     if type(ctrl) is not VectorControlSystem:
         raise NotImplementedError("Only VectorControlSystem supported")
-    fvc = ctrl.vector_ctrl
-    if type(fvc) is not FluxVectorController:
+    if type(ctrl.vector_ctrl) is not FluxVectorController:
         raise NotImplementedError("Only FluxVectorController supported")
-    cfg = fvc.cfg
-    if cfg.online_ref or cfg.k_f is not None:
-        raise NotImplementedError("Only offline references and k_f=None supported")
-    if cfg.k_o is not None:
-        _speed_gain(cfg.k_o)  # Raises if not supported
-    if isinstance(fvc.par, SaturatedSynchronousMachinePars):
-        if fvc.par.psi_s_dq_fcn is None:
-            raise NotImplementedError("A flux map (psi_s_dq_fcn) is required")
-        export_gradnet(fvc.par.psi_s_dq_fcn)  # Raises if not supported
-    elif not isinstance(fvc.par, SynchronousMachinePars):
-        raise NotImplementedError("Machine model of the control system not supported")
+    check_supported_fvc(ctrl.vector_ctrl)
     if not isinstance(ctrl.speed_ctrl, PIController):
         raise NotImplementedError("Speed-control mode with a speed controller required")
     check_supported_control(ctrl, d_err=True)

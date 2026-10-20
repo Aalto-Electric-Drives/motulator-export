@@ -158,13 +158,6 @@ void system_free(System *self)
     }
 }
 
-
-
-
-
-
-
-
 /* Machine model of the control system: SynchronousMachinePars */
 void set_control_machine(System *self, double n_p, double R_s, double L_d, double L_q,
                          double psi_f)
@@ -186,12 +179,13 @@ void set_control_machine_flux_map(System *self, double n_p, double R_s)
     self->est_par = saturated_synchronous_machine_pars(n_p, R_s, &flux_map);
 }
 
-/* FluxVectorControllerCfg, NAN for None; the observer gain is k_o0 + k_o1*abs(w_m) */
+/* FluxVectorControllerCfg, NAN for None, in the order of CFG_FIELDS of
+ * plecs/_sm_control.py; the observer gain is k_o0 + k_o1*abs(w_m) */
 void set_flux_vector_controller(System *self, double i_s_max, double alpha_tau,
                                 double alpha_psi, double alpha_i, double alpha_o,
                                 double k_o0, double k_o1, double psi_s_min,
                                 double psi_s_max, double k_u, double k_mtpv, double J,
-                                double T_s, int sensorless)
+                                int sensorless, double T_s)
 {
     FluxVectorControllerCfg *cfg = &self->cfg;
     *cfg = flux_vector_controller_cfg(i_s_max);

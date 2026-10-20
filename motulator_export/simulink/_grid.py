@@ -24,8 +24,8 @@ import numpy as np
 from motulator.grid.control import GridConverterControlSystem
 from motulator.grid.model import GridConverterSystem, LCLFilter
 
+from motulator_export._common import StepSignal
 from motulator_export.plecs import _grid, _grid_control
-from motulator_export.plecs._common import StepSignal
 from motulator_export.plecs._control import VALUES
 from motulator_export.simulink._common import (
     _m_source,
@@ -38,10 +38,10 @@ from motulator_export.simulink._common import simulate as _simulate
 
 
 def _plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
-    """Workspace variables of the system model, see `_grid._plant_variables`."""
+    """Workspace variables of the system model, see `_grid.export_plant_variables`."""
     # The initial capacitor voltage as a space vector [real imag]
     variables = []
-    for name, value in _grid._plant_variables(mdl):
+    for name, value in _grid.export_plant_variables(mdl):
         if name == "ac_filter.u_f0_abc":
             u_f0_ab = cast(LCLFilter, mdl.ac_filter).state.u_f_ab
             variables.append(("ac_filter.u_f0_ab", [u_f0_ab.real, u_f0_ab.imag]))
@@ -62,7 +62,7 @@ def write_model(
     system, see `simulink.write_model` and `plecs._grid.write_model`.
     """
     path = Path(path)
-    _grid._check_supported(mdl, ctrl)
+    _grid.check_supported(mdl, ctrl)
     check_supported_model(mdl, ctrl)
     block, values = _grid.control_block(ctrl), _grid.export_values(ctrl)
     # The references are checked before anything is written
@@ -87,7 +87,7 @@ def write_model(
         ("init_script", script),
         ("ac_filter", "lcl" if isinstance(mdl.ac_filter, LCLFilter) else "l"),
         ("refs", refs),
-        ("scope", scope_indices(scope, _grid._mdl_outputs(mdl), block.signals)),
+        ("scope", scope_indices(scope, _grid.mdl_outputs(mdl), block.signals)),
     ]
     return write_script(
         path, block, VALUES, fields, "build_grid", VALUES["T_s"], t_stop, code=code
@@ -105,4 +105,4 @@ def simulate(
     Simulate the Simulink model of a grid converter system, see `simulink.simulate`.
     """
     signals = _grid.control_block(ctrl).signals
-    return _simulate(path, t_eval, _grid._mdl_outputs(mdl), signals, build)
+    return _simulate(path, t_eval, _grid.mdl_outputs(mdl), signals, build)

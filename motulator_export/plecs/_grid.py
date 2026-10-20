@@ -49,13 +49,18 @@ from motulator.grid.model import (
     ThreePhaseSource,
 )
 
+from motulator_export._common import (
+    StepSignal,
+    check_supported_pwm,
+    gate_enable,
+    reference,
+)
 from motulator_export.plecs._common import (
     CONV,
     DC_DX,
     ENABLE,
     GATE_DX,
     ControlBlock,
-    StepSignal,
     _add_control_system,
     _add_converter,
     _add_ctrl_output,
@@ -64,13 +69,16 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _check_delay,
     _check_initial_states,
-    _check_supported_pwm,
     _write_model,
-    gate_enable,
-    reference,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
-from motulator_export.plecs._grid_control import GFL_BLOCK, GFM_BLOCK, init_script
+from motulator_export.plecs._grid_control import (
+    GFL_BLOCK,
+    GFL_CFG_FIELDS,
+    GFM_BLOCK,
+    GFM_CFG_FIELDS,
+    init_script,
+)
 from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import Tap, Terminal, _probe, _Schematic, _scope
 
@@ -116,12 +124,10 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
     _check_initial_states(states, exported)
 
 
-def _check_supported(
-    mdl: GridConverterSystem, ctrl: GridConverterControlSystem
-) -> None:
+def check_supported(mdl: GridConverterSystem, ctrl: GridConverterControlSystem) -> None:
     """Raise an error if the grid converter system is not supported."""
     _check_supported_plant(mdl)
-    _check_supported_pwm(ctrl)
+    check_supported_pwm(ctrl)
     f = mdl.ac_filter
     inner = ctrl.inner_ctrl
     if not isinstance(
@@ -138,7 +144,7 @@ def _check_supported(
         raise NotImplementedError("DC-bus voltage control not supported")
 
 
-def _plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
+def export_plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
     """Workspace variables of the system model."""
     f = mdl.ac_filter
     src = cast(ThreePhaseSource, mdl.ac_source)
@@ -191,17 +197,16 @@ def export_values(ctrl: GridConverterControlSystem) -> dict[str, Any]:
     """
     inner = ctrl.inner_ctrl
     if isinstance(inner, CurrentVectorController):
-        cfg = inner.cfg
-        names = ["i_max", "L", "alpha_c", "alpha_i", "u_nom", "w_nom", "alpha_pll"]
-        values = {n: getattr(cfg, n) for n in [*names, "T_s"]}
-        return values | pwm_values(ctrl.pwm)
-    cfg = cast(ObserverBasedGridFormingController, inner).cfg
-    names = ["i_max", "L", "R", "R_a", "k_v", "alpha_o", "alpha_c", "u_nom", "w_nom"]
-    values = {n: getattr(cfg, n) for n in [*names, "T_s", "i_d_max", "alpha_l"]}
+        cfg, fields = inner.cfg, GFL_CFG_FIELDS
+    else:
+        cfg, fields = (
+            cast(ObserverBasedGridFormingController, inner).cfg,
+            GFM_CFG_FIELDS,
+        )
+    values = {n: getattr(cfg, n) for n in fields}
     return values | pwm_values(ctrl.pwm)
 
 
-# %%
 # %%
 def _abc_probe(comp: str, signal: str) -> str:
     """Probe of the three-phase measurements comp + "a", comp + "b", comp + "c"."""
@@ -348,7 +353,7 @@ def _add_l_filter_and_grid(sch: _Schematic) -> None:
     sch.bus(("e_ga", 2), "Wire", taps + [([(930, y_ph[2])], [(("e_gc", 2), [])])])
 
 
-def _mdl_outputs(mdl: GridConverterSystem) -> list[str]:
+def mdl_outputs(mdl: GridConverterSystem) -> list[str]:
     """Signals of the output port "mdl": the converter (and grid) currents."""
     names = ["i_c_a", "i_c_b", "i_c_c"]
     if isinstance(mdl.ac_filter, LCLFilter):
@@ -411,10 +416,10 @@ def write_model(
 
     """
     path = Path(path)
-    _check_supported(mdl, ctrl)
+    check_supported(mdl, ctrl)
     block, values = control_block(ctrl), export_values(ctrl)
     init = init_script(
-        _plant_variables(mdl), values, INIT_COMMENT, gfl=block is GFL_BLOCK
+        export_plant_variables(mdl), values, INIT_COMMENT, gfl=block is GFL_BLOCK
     )
     T_s = VALUES["T_s"]  # The model refers to cfg.T_s
     lcl = isinstance(mdl.ac_filter, LCLFilter)
@@ -456,6 +461,6 @@ def simulate(
     return simulate_plecs(
         path,
         t_eval,
-        mdl_outputs=_mdl_outputs(mdl),
+        mdl_outputs=mdl_outputs(mdl),
         ctrl_outputs=control_block(ctrl).signals,
     )

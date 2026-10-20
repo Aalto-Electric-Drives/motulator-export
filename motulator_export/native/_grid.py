@@ -38,14 +38,15 @@ from motulator_export.native._build import Signatures
 from motulator_export.native._system import (
     PWM_API,
     NativeSystem,
+    c_args,
     c_double,
     c_int,
     c_void_p,
     check_supported_control,
     check_supported_converter,
-    value,
 )
 from motulator_export.plecs._grid import export_values
+from motulator_export.plecs._grid_control import GFL_CFG_FIELDS, GFM_CFG_FIELDS
 
 # Functions of the libraries setting the parameters of the model
 GRID_API: Signatures = {
@@ -53,7 +54,8 @@ GRID_API: Signatures = {
     "set_lcl_filter": (None, [c_void_p] + [c_double] * 7),
     "source_signal": (c_void_p, [c_void_p, c_int]),
 }
-# Functions of the libraries setting the parameters of the control systems
+# Functions of the libraries setting the parameters of the control systems, the
+# arguments of set_controller in the order of GFL_CFG_FIELDS or GFM_CFG_FIELDS
 GFL_API: Signatures = {
     "set_controller": (None, [c_void_p] + [c_double] * 8),
     "power_reference": (c_void_p, [c_void_p]),
@@ -102,35 +104,8 @@ class GridConverterNativeSystem(NativeSystem):
         self.set_converter(mdl)
 
         # Control system
-        v = export_values(ctrl)
-        if self.grid_forming:
-            lib.set_controller(
-                h,
-                v["i_max"],
-                v["L"],
-                v["R"],
-                value(v["R_a"]),
-                value(v["k_v"]),
-                v["alpha_o"],
-                v["alpha_c"],
-                v["u_nom"],
-                v["w_nom"],
-                v["T_s"],
-                value(v["i_d_max"]),
-                v["alpha_l"],
-            )
-        else:
-            lib.set_controller(
-                h,
-                v["i_max"],
-                v["L"],
-                v["alpha_c"],
-                value(v["alpha_i"]),
-                v["u_nom"],
-                v["w_nom"],
-                v["alpha_pll"],
-                v["T_s"],
-            )
+        fields = GFM_CFG_FIELDS if self.grid_forming else GFL_CFG_FIELDS
+        lib.set_controller(h, *c_args(export_values(ctrl), fields))
         self.set_pwm(ctrl.pwm)
 
     def set_signals(self, mdl: Any, ctrl: Any) -> None:
@@ -141,15 +116,15 @@ class GridConverterNativeSystem(NativeSystem):
             self.set_signal(lib.source_signal(h, k), x)
         ext_ref = ctrl.ext_ref
         if ext_ref.p_g is None:
-            raise ValueError("Active power reference must be set")
+            raise ValueError("The active power reference must be set")
         self.set_signal(lib.power_reference(h), ext_ref.p_g)
         if self.grid_forming:
             if ext_ref.v_c is None:
-                raise ValueError("AC voltage reference must be set")
+                raise ValueError("The AC voltage reference must be set")
             self.set_signal(lib.ac_voltage_reference(h), ext_ref.v_c)
         else:
             if ext_ref.q_g is None:
-                raise ValueError("Reactive power reference must be set")
+                raise ValueError("The reactive power reference must be set")
             self.set_signal(lib.reactive_power_reference(h), ext_ref.q_g)
 
     @staticmethod

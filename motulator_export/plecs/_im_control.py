@@ -101,6 +101,11 @@ PAR_INIT = (
     "% C-Script\n" + "".join(f"par_{f} = par.{f};\n" for f in PAR_FIELDS)
 )
 PAR_PROMPT = "par: Machine model (InductionMachineInvGammaPars) as a struct"
+
+# Fields of the configuration of current-vector control (CurrentVectorControllerCfg),
+# in the order of the model initialization and of the native library
+CFG_FIELDS = ["psi_s_nom", "i_s_max", "alpha_c", "alpha_i", "alpha_o", "w_s_nom"]
+CFG_FIELDS += ["k_u", "k_fw", "J", "sensorless", "T_s"]
 PAR_DESCRIPTION = (
     " The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and "
     "L_M of InductionMachineInvGammaPars."
@@ -643,14 +648,12 @@ def init_script(
     control system (par, cfg, speed_ctrl, and pwm) from the parameter values of the
     control system (`_im.export_values`).
     """
-    cfg = ["psi_s_nom", "i_s_max", "alpha_c", "alpha_i", "alpha_o", "w_s_nom"]
-    cfg += ["k_u", "k_fw", "J", "sensorless", "T_s"]
     return (
         init_header(variables, comment)
         + "% Machine model of the control system (InductionMachineInvGammaPars)\n"
         + "".join(assign(f"par.{n}", values[n]) for n in PAR_FIELDS)
         + "% Current-vector control (CurrentVectorControllerCfg)\n"
-        + "".join(assign(f"cfg.{n}", values[n]) for n in cfg)
+        + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS)
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

@@ -212,7 +212,7 @@ void set_control_machine(System *self, double n_p, double R_s, double R_R,
 void set_current_vector_controller(System *self, double psi_s_nom, double i_s_max,
                                    double alpha_c, double alpha_i, double alpha_o,
                                    double w_s_nom, double k_u, double k_fw, double J,
-                                   double T_s, int sensorless)
+                                   int sensorless, double T_s)
 {
     IMCurrentVectorControllerCfg *cfg = &self->cvc_cfg;
     *cfg = im_current_vector_controller_cfg(psi_s_nom, i_s_max);

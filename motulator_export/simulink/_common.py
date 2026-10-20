@@ -21,18 +21,12 @@ from motulator.common.model._base import Model
 from motulator.drive.control._base import DriveControlSystem
 from motulator.grid.control._base import GridConverterControlSystem
 
-from motulator_export.plecs._common import (
-    MONITOR,
-    ControlBlock,
-    StepSignal,
-    _fmt_mask,
-    gate_enable,
-)
+from motulator_export._common import StepSignal, gate_enable
+from motulator_export.plecs._common import MONITOR, ControlBlock, _fmt_mask
 from motulator_export.plecs._schematic import _fmt
 from motulator_export.simulink._mfunction import MFunction, path_functions
 from motulator_export.simulink._render import (
     ASCII,
-    CODES,
     mfunctions,
     netlist_rows,
     sfunction_params,
@@ -226,8 +220,6 @@ def write_script(
         Path of the script.
 
     """
-    if code not in CODES:
-        raise ValueError(f"Unknown code {code}, not in {CODES}")
     netlist = block.netlist()
     ctrl_sfuns = sfunctions(netlist) if code == "c" else []
     ctrl_mfuns = mfunctions(netlist) if code == "matlab" else []

@@ -48,31 +48,33 @@ from tests.c_port import arr
 from tests.matlab import block_params
 from tests.monolithic import MonolithicBlock, sfunction_params
 from tests.netlist import Netlist
-from tests.test_simulink import (
-    BASE,
+from tests.sfunctions import (
     GFL_INPUTS,
     GFM_INPUTS,
     IM_INPUTS,
-    IM_PAR,
-    IM_SPEED,
     SM_INPUTS,
-    SM_PAR,
-    SM_SPEED,
-    VHZ_CASES,
-    VHZ_IDS,
     VHZ_INPUTS,
     check_dc_bus_limit,
     compare,
     compile_sfunction,
     drive_sfun,
+    gradnet_inputs,
+    grid_sfun,
+    start,
+)
+from tests.systems import (
+    BASE,
+    IM_PAR,
+    IM_SPEED,
+    SM_PAR,
+    SM_SPEED,
+    VHZ_CASES,
+    VHZ_IDS,
     gfl_system,
     gfm_system,
     gradnet_control_system,
-    gradnet_inputs,
-    grid_sfun,
     im_system,
     sm_system,
-    start,
     vhz_system,
 )
 
