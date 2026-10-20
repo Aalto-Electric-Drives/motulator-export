@@ -1,7 +1,7 @@
 % Disturbance-observer-based grid-forming control of grid converters, ported from
 % motulator (MATLAB port of the classes of ../c/gfm_observer.c used by the blocks of
-% the control system). The functions are embedded in the MATLAB Function blocks by
-% motulator_export.simulink.
+% the control system). The functions are copied into the MATLAB functions of the
+% blocks (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterpart:
 %   motulator/grid/control/_gfm_observer.py  Observer,

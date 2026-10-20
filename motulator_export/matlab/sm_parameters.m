@@ -1,6 +1,6 @@
 % Synchronous machine model parameters, ported from motulator (MATLAB port of
-% ../c/sm_parameters.c). The functions are embedded in the MATLAB Function blocks by
-% motulator_export.simulink.
+% ../c/sm_parameters.c). The functions are copied into the MATLAB functions of the
+% blocks (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterpart:
 %   motulator/drive/utils/_parameters.py  SynchronousMachinePars,

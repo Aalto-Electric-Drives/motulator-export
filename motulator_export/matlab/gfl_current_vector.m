@@ -1,7 +1,7 @@
 % Grid-following control of grid converters, ported from motulator (MATLAB port of
 % the classes of ../c/gfl_current_vector.c used by the blocks of the control
-% system). The functions are embedded in the MATLAB Function blocks by
-% motulator_export.simulink.
+% system). The functions are copied into the MATLAB functions of the blocks
+% (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterparts:
 %   motulator/grid/control/_common.py            PLL

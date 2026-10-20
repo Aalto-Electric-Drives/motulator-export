@@ -1,6 +1,6 @@
 % Optimal control loci of synchronous machines, ported from motulator (MATLAB port of
-% ../c/sm_control_loci.c). The functions are embedded in the MATLAB Function blocks
-% by motulator_export.simulink.
+% ../c/sm_control_loci.c). The functions are copied into the MATLAB functions of the
+% blocks (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterpart:
 %   motulator/drive/utils/_sm_control_loci.py  ControlLoci

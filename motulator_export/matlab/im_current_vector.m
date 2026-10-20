@@ -1,7 +1,7 @@
 % Current-vector control of induction machine drives, ported from motulator (MATLAB
 % port of the classes of ../c/im_current_vector.c used by the blocks of the control
-% systems). The functions are embedded in the MATLAB Function blocks by
-% motulator_export.simulink.
+% systems). The functions are copied into the MATLAB functions of the blocks
+% (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterparts:
 %   motulator/drive/utils/_parameters.py        InductionMachineInvGammaPars

@@ -36,7 +36,8 @@ def write_model(
     path : str | Path
         Path of the model (.slx). The scripts `build_<model>.m` and `init_<model>.m`
         are written in the same folder, with the sources of the S-functions
-        (`sfun_*.c`) or the MATLAB functions (`mfun_*.m`) of the blocks.
+        (`sfun_*.c`) or the MATLAB functions (`mfun_*.m`) of the blocks, which the
+        model needs.
     mdl : Drive | GridConverterSystem
         Continuous-time system model.
     ctrl : VectorControlSystem | VHzControlSystem | GridConverterControlSystem

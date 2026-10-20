@@ -6,7 +6,7 @@ Where the C port loops over arrays (e.g., the GradNets), the MATLAB port uses th
 The whole-system functions of the C port (e.g., `vector_control_system_compute_output`), which only the reference control systems of the tests use, are not ported.
 
 Each file corresponds to a file of the C port and lists its Python counterparts.
-The files are collections of functions: the generator `../simulink/_mfunction.py` copies the functions that a block uses (directly or via other functions) into its MATLAB function as local functions, so that the MATLAB Function block is self-contained and the model does not need the files.
+The files are collections of functions: the generator `../simulink/_mfunction.py` copies the functions that a block uses (directly or via other functions) into its MATLAB function (`mfun_*.m` next to the model, called by the MATLAB Function block) as local functions, so that the file of the function is self-contained and the model does not need the files of the port.
 
 | File                   | Contents                                                                                                                                                                                                                                                                                                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

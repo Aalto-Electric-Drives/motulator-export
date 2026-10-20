@@ -42,7 +42,7 @@ Without a C compiler, write the model with MATLAB Function blocks:
 simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2, code="matlab")
 ```
 
-The blocks then run a MATLAB port of the same control code, and the model contains their code. The results are the same as with the S-functions, to the rounding errors.
+The blocks then run a MATLAB port of the same control code, which is in the files `mfun_*.m` written next to the model, so you can read it without MATLAB. The results are the same as with the S-functions, to the rounding errors.
 
 ## Simulating from Python
 

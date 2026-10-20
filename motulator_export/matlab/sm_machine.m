@@ -1,6 +1,7 @@
 % Synchronous machine model with a GradNet current map with spatial harmonics,
-% ported from motulator (MATLAB port of ../c/sm_machine.c). The functions are
-% embedded in the MATLAB Function block of the machine by motulator_export.simulink.
+% ported from motulator (MATLAB port of ../c/sm_machine.c). The functions are copied
+% into the MATLAB function of the machine (mfun_gradnet_machine.m) by
+% motulator_export.simulink.
 %
 % Python counterparts:
 %   motulator/drive/utils/_parameters.py  SpatialSaturatedSynchronousMachinePars
