@@ -64,7 +64,7 @@ BLOCK = _sm.FVC_BLOCK
 
 def _check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
-    _sm._check_supported(mdl, ctrl)  # The PLECS export supports a superset
+    _sm.check_supported(mdl, ctrl)  # The PLECS export supports a superset
     check_supported_converter(mdl, ctrl)
 
 
@@ -85,7 +85,7 @@ def write_model(
     w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
     variables = _sm.export_plant_variables(mdl)
     functions: list[SFunction | MFunction] = []
-    if _sm._has_gradnet_plant(mdl):
+    if _sm.has_gradnet_plant(mdl):
         machine = "gn"
         if code == "matlab":
             # The initial state of the integrator of the stator flux linkage

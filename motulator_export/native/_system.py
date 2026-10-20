@@ -13,7 +13,7 @@ subclasses set the parameters from the motulator objects.
 
 import ctypes
 import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from math import nan
 from typing import Any
 
@@ -27,13 +27,14 @@ from motulator.common.model._converter import (
 )
 from motulator.common.model._pwm import ZOH, CarrierComparison
 
-from motulator_export.native._build import Signatures, declare, load_library
-from motulator_export.plecs._common import (
+from motulator_export._common import (
     StepSignal,
-    _c_define,
-    _check_supported_pwm,
+    c_define,
+    check_supported_dc_bus,
+    check_supported_pwm,
     gate_enable,
 )
+from motulator_export.native._build import Signatures, declare, load_library
 from motulator_export.plecs._control import pwm_values
 
 c_double_p = ctypes.POINTER(ctypes.c_double)
@@ -81,7 +82,7 @@ GRADNET_API: Signatures = {
     )
 }
 
-DELAY_MAX_LENGTH = _c_define("sim.h", "DELAY_MAX_LENGTH")
+DELAY_MAX_LENGTH = c_define("sim.h", "DELAY_MAX_LENGTH")
 # Types of the DC-bus models (DC_BUS_* in sim.h)
 DC_BUS_TYPES = {DCBus: 1, DiodeBridgeDCBus: 2}
 
@@ -105,6 +106,17 @@ def array(values: Any) -> Any:
 def value(x: float | None) -> float:
     """Double for ctypes, None as NaN (the default values are resolved in C)."""
     return nan if x is None else float(x)
+
+
+def c_args(values: dict[str, Any], fields: Sequence[str]) -> list[Any]:
+    """
+    Arguments of a function of a library from the parameter values of the fields
+    (e.g., `_sm_control.CFG_FIELDS`), None as NaN and a list as its elements.
+    """
+    args: list[Any] = []
+    for x in (values[name] for name in fields):
+        args += [value(v) for v in x] if isinstance(x, list) else [x]
+    return [nan if x is None else x for x in args]
 
 
 class NativeSystem:
@@ -303,14 +315,7 @@ def check_supported_converter(mdl: Model) -> None:
             "DC-bus model"
         )
     if dc_bus is not None:
-        if type(dc_bus) not in DC_BUS_TYPES:
-            raise NotImplementedError("Only DCBus and DiodeBridgeDCBus supported")
-        if dc_bus.converters != [converter]:
-            raise NotImplementedError(
-                "DC bus shared with other converters not supported"
-            )
-        if dc_bus.inp.i_dc is not None:
-            raise NotImplementedError("External DC current not supported")
+        check_supported_dc_bus(dc_bus, converter)
     if type(pwm) not in (ZOH, CarrierComparison):
         raise NotImplementedError(
             "Only the PWM models ZOH and CarrierComparison supported"
@@ -331,7 +336,7 @@ def check_supported_control(ctrl: Any, d_err: bool) -> None:
     error model only if `d_err`, and then without the minimum pulses if compensated)
     or the gates are blocked.
     """
-    _check_supported_pwm(ctrl, d_err=d_err)
+    check_supported_pwm(ctrl, d_err=d_err)
     pwm = ctrl.pwm
     pwm_values(pwm)  # Raises if the duty-ratio error model is not supported
     if pwm.d_err is not None and pwm.feedforward and pwm.d_min > 0:

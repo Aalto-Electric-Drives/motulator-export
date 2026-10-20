@@ -3,7 +3,7 @@
 MATLAB port of the *motulator* control algorithms used by the blocks of the control systems, run in the MATLAB Function blocks of the Simulink models (`code="matlab"` of the Simulink export, see [the Simulink export](../simulink/README.md)).
 It is a port of the [C port](../c/README.md) function by function, so both follow the Python code of *motulator* in the same way, including the order of the state updates, and a change in *motulator* is mirrored in both.
 Where the C port loops over arrays (e.g., the GradNets), the MATLAB port uses the vector operations of MATLAB, which give the results of the C port to the rounding errors.
-The whole-system functions of the C port (e.g., `vector_control_system_compute_output`), which only the reference control systems of the tests use, are not ported.
+The whole-system functions of the C port (e.g., `vector_control_system_compute_output`), which only the reference control systems of the tests use, are not ported, nor the functions that the blocks do not need (e.g., `matched_pole`, which the masks compute, and the PM-flux linkage of the GradNet machine, which the model takes from *motulator*); `tests/test_matlab_function.py` checks that the blocks use every function of the port.
 
 Each file corresponds to a file of the C port and lists its Python counterparts.
 The files are collections of functions: the generator `../simulink/_mfunction.py` copies the functions that a block uses (directly or via other functions) into its MATLAB function (`mfun_*.m` next to the model, called by the MATLAB Function block) as local functions, so that the file of the function is self-contained and the model does not need the files of the port.

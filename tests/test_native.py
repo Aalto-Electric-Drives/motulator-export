@@ -17,7 +17,6 @@ Run from the repository root (requires gcc):
 
 # %%
 from math import inf, nan, pi
-from pathlib import Path
 from typing import Any
 
 import motulator.drive.control.sm as control
@@ -31,9 +30,10 @@ from motulator.common.model import CarrierComparison, DCBus, DiodeBridgeDCBus, S
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal, native
-from tests.test_simulink import BASE as GRID_BASE
-from tests.test_simulink import NOM as GRID_NOM
-from tests.test_simulink import (
+from tests.systems import BASE as GRID_BASE
+from tests.systems import (
+    CURRENT_MAP,
+    FLUX_MAP,
     Build,
     gfl_system,
     gfm_system,
@@ -41,8 +41,7 @@ from tests.test_simulink import (
     sm_system,
     vhz_system,
 )
-
-MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
+from tests.systems import NOM as GRID_NOM
 
 # 2.2-kW IPMSM
 NOM = utils.NominalValues(U=370, I=4.3, f=75, P=2.2e3, tau=14)
@@ -89,8 +88,7 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
     """
     nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)
     base = utils.BaseValues.from_nominal(nom, n_p=2)
-    path = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.npz"
-    current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(path))
+    current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(CURRENT_MAP))
     par = model.SpatialSaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, magnetic_map_fcn=current_map
     )
@@ -99,8 +97,7 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
         model.MechanicalSystem(J=0.05),
         model.VoltageSourceConverter(u_dc=540),
     )
-    path = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
-    flux_map = gn.FluxMap(gn.load_gradnet(path))
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
     est_par = control.SaturatedSynchronousMachinePars(
         n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
     )
@@ -291,7 +288,7 @@ def test_failed_interval(N_eval: int) -> None:
 
 # %%
 # Induction machine drives, DC buses, and grid converter systems, mostly with the
-# systems of tests/test_simulink.py
+# systems of tests/systems.py
 @pytest.mark.parametrize(
     "build",
     [

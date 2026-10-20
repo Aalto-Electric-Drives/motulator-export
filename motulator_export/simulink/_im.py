@@ -40,10 +40,10 @@ def write_model(
     drive, see `simulink.write_model`. The control system is current-vector control
     (`VectorControlSystem`) or observer-based V/Hz control (`VHzControlSystem`).
     """
-    _im._check_supported(mdl, ctrl)
+    _im.check_supported(mdl, ctrl)
     check_supported_converter(mdl, ctrl)
     path = Path(path)
-    variables = _im._plant_variables(mdl)
+    variables = _im.export_plant_variables(mdl)
     # The references are checked before anything is written
     if isinstance(ctrl, VHzControlSystem):
         vhz_values = _im.export_vhz_values(ctrl)

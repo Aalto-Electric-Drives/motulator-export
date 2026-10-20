@@ -8,6 +8,6 @@ the control algorithms of motulator.
 """
 
 from motulator_export import native, plecs, simulink
-from motulator_export.plecs._common import StepSignal
+from motulator_export._common import StepSignal
 
 __all__ = ["StepSignal", "native", "plecs", "simulink"]

@@ -10,7 +10,8 @@ from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.model import Drive
 
-from motulator_export.plecs._common import ControlBlock, StepSignal
+from motulator_export._common import StepSignal
+from motulator_export.plecs._common import ControlBlock
 from motulator_export.plecs._control import VALUES
 from motulator_export.plecs._drive import MDL_OUTPUTS
 from motulator_export.simulink._common import (

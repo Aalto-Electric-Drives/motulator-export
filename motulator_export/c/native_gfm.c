@@ -143,7 +143,7 @@ void system_free(System *self)
 /* Configuration (see GFMControllerCfg of gfm_observer.h), NAN for the defaults */
 void set_controller(System *self, double i_max, double L, double R, double R_a,
                     double k_v, double alpha_o, double alpha_c, double u_nom,
-                    double w_nom, double T_s, double i_d_max, double alpha_l)
+                    double w_nom, double i_d_max, double alpha_l, double T_s)
 {
     GFMControllerCfg *cfg = &self->cfg;
     *cfg = gfm_controller_cfg(i_max, L);

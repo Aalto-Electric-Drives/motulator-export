@@ -44,33 +44,38 @@ from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
 from motulator_export.simulink._common import write_script
 from motulator_export.simulink._mfunction import (
     block_mfunction,
+    functions,
+    gradnet_machine_mfunction,
+    library,
     reference_luts_mfunction,
 )
 from motulator_export.simulink._render import netlist_rows, with_signals, wrapper
 from tests.c_port import arr
 from tests.matlab import block_params
 from tests.netlist import Netlist
-from tests.test_control import SYSTEMS, Compiled, init_script
-from tests.test_simulink import (
+from tests.sfunctions import (
     GFL_INPUTS,
     GFM_INPUTS,
     IM_INPUTS,
     SM_INPUTS,
-    VHZ_CASES,
-    VHZ_IDS,
     VHZ_INPUTS,
     compare,
     drive_sfun,
+    gradnet_inputs,
+    grid_sfun,
+    start,
+)
+from tests.systems import (
+    VHZ_CASES,
+    VHZ_IDS,
     gfl_system,
     gfm_system,
     gradnet_control_system,
-    gradnet_inputs,
-    grid_sfun,
     im_system,
     sm_system,
-    start,
     vhz_system,
 )
+from tests.test_control import SYSTEMS, Compiled, init_script
 
 TESTS = Path(__file__).parent
 # Tolerance of the outputs relative to their magnitudes (at least 1)
@@ -105,6 +110,18 @@ def test_functions() -> None:
             assert f.sample_time is None or f.sample_time in fields
             assert f.source.startswith("function ")
             assert f"{f.name}(" in f.source.splitlines()[0]
+
+
+def test_port_used() -> None:
+    """
+    Every function of the MATLAB port should be used by a block or by the machine
+    model, since the others would not be tested.
+    """
+    sources = [gradnet_machine_mfunction(), reference_luts_mfunction()]
+    for block, _ in SYSTEMS.values():
+        sources += [block_mfunction(b) for _, b in leaves(block.netlist())]
+    used = {name for f in sources for name in functions(f.source)}
+    assert sorted(set(library()) - used) == []
 
 
 # %%

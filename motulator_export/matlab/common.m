@@ -305,13 +305,6 @@ Phi = exp_jx*exp_jx;
 Gamma = T_s*(sin(y)/y)*exp_jx;
 end
 
-function alpha = matched_pole(alpha, T_s)
-%MATCHED_POLE Pole for the gain formulas of estimators updated by the forward Euler
-%   method (matched_pole): (1 - exp(-alpha*T_s))/T_s, placing the discrete-time
-%   poles at exp(-alpha*T_s).
-alpha = -expm1(-alpha*T_s)/T_s;
-end
-
 function self = rate_limiter_init(rate_limit)
 %RATE_LIMITER_INIT Rate limiter (RateLimiter), the falling rate limit being the
 %   negative rising one.

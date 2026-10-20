@@ -8,7 +8,6 @@ from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import (
-    DCBus,
     DiodeBridgeDCBus,
     DiodeBridgeDCBusStates,
     VoltageSourceConverter,
@@ -19,17 +18,20 @@ from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._common import SpeedController
 from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
 
+from motulator_export._common import (
+    StepSignal,
+    check_supported_dc_bus,
+    check_supported_pwm,
+    reference,
+)
 from motulator_export.plecs._common import (
     CONV,
     MACH,
     ControlBlock,
-    StepSignal,
     _add_ctrl_output,
     _add_step,
     _check_delay,
     _check_initial_states,
-    _check_supported_pwm,
-    reference,
 )
 from motulator_export.plecs._schematic import _fmt, _probe, _Schematic, _scope
 
@@ -56,7 +58,7 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
     if mdl.dc_bus is not None:
-        _check_supported_dc_bus(mdl.dc_bus, mdl.converter)
+        check_supported_dc_bus(mdl.dc_bus, mdl.converter)
     if mdl.machine.i_s_sensor is not None or mdl.converter.u_dc_sensor is not None:
         raise NotImplementedError("Sensor models not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
@@ -75,19 +77,6 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
             raise NotImplementedError("Only t_d >= 0 and u_th >= 0 supported")
     _check_delay(mdl)
     _check_initial_drive_states(mdl)
-
-
-def _check_supported_dc_bus(dc_bus: DCBus, converter: VoltageSourceConverter) -> None:
-    """
-    Raise an error if the DC bus is not supported: it must feed only the converter of
-    the drive (e.g., not an active front end), without an external DC current.
-    """
-    if type(dc_bus) not in (DCBus, DiodeBridgeDCBus):
-        raise NotImplementedError("Only DCBus and DiodeBridgeDCBus supported")
-    if dc_bus.converters != [converter]:
-        raise NotImplementedError("DC bus shared with other converters not supported")
-    if dc_bus.inp.i_dc is not None:
-        raise NotImplementedError("External DC current not supported")
 
 
 def _check_initial_drive_states(mdl: Drive) -> None:
@@ -145,7 +134,7 @@ def _check_supported_speed_control(
         raise NotImplementedError("Speed-control mode with SpeedController required")
     if type(ctrl).modulate is not VectorControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl, d_err=dead_time)
+    check_supported_pwm(ctrl, d_err=dead_time)
 
 
 def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:

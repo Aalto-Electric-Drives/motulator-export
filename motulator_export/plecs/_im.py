@@ -54,6 +54,7 @@ from motulator.drive.utils._parameters import (
     InductionMachinePars,
 )
 
+from motulator_export._common import StepSignal, check_supported_pwm, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
     CONV,
@@ -62,16 +63,13 @@ from motulator_export.plecs._common import (
     GATE_DX,
     MACH,
     ControlBlock,
-    StepSignal,
     _add_blanking_time,
     _add_control_system,
     _add_converter,
     _add_dc_bus,
     _add_delay,
     _add_pwm,
-    _check_supported_pwm,
     _write_model,
-    gate_enable,
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._drive import (
@@ -90,7 +88,13 @@ from motulator_export.plecs._drive import (
     mechanics_and_converter_variables,
     speed_ctrl_values,
 )
-from motulator_export.plecs._im_control import CVC_BLOCK, init_script
+from motulator_export.plecs._im_control import (
+    CFG_FIELDS,
+    CVC_BLOCK,
+    PAR_FIELDS,
+    init_script,
+)
+from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._im_vhz_control import VHZ_BLOCK
 from motulator_export.plecs._im_vhz_control import init_script as vhz_init_script
 from motulator_export.plecs._rpc import simulate_plecs
@@ -99,7 +103,7 @@ from motulator_export.plecs._schematic import _probe, _Schematic, _terminals
 __all__ = ["simulate", "write_model"]
 
 
-def _check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) -> None:
+def check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
     par = mdl.machine.par
     if (
@@ -119,11 +123,11 @@ def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> No
     if isinstance(ctrl, VHzControlSystem):
         _check_supported_vhz(ctrl)
         return
-    _check_supported_cvc(ctrl.vector_ctrl)
+    check_supported_cvc(ctrl.vector_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
 
 
-def _check_supported_cvc(cvc: Any) -> None:
+def check_supported_cvc(cvc: Any) -> None:
     """Raise an error if the current-vector controller is not supported."""
     if not isinstance(cvc, CurrentVectorController):
         raise NotImplementedError("Only CurrentVectorController supported")
@@ -137,13 +141,13 @@ def _check_supported_cvc(cvc: Any) -> None:
 
 def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
     """Raise an error if the V/Hz control system is not supported."""
-    _check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+    check_supported_vhz_ctrl(ctrl.vhz_ctrl)
     if type(ctrl).modulate is not VHzControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
-    _check_supported_pwm(ctrl, d_err=True)
+    check_supported_pwm(ctrl, d_err=True)
 
 
-def _check_supported_vhz_ctrl(vhz: Any) -> None:
+def check_supported_vhz_ctrl(vhz: Any) -> None:
     """Raise an error if the V/Hz controller is not supported."""
     if not isinstance(vhz, ObserverBasedVHzController):
         raise NotImplementedError("Only ObserverBasedVHzController supported")
@@ -164,25 +168,10 @@ def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
     `_im_vhz_control.init_script`).
     """
     vhz = cast(ObserverBasedVHzController, ctrl.vhz_ctrl)
-    cfg = vhz.cfg
-    par = cast(InductionMachineInvGammaPars, vhz.reference_gen.par)
-    return {
-        "n_p": par.n_p,
-        "R_s": par.R_s,
-        "R_R": par.R_R,
-        "L_sgm": par.L_sgm,
-        "L_M": par.L_M,
-        "psi_s_nom": cfg.psi_s_nom,
-        "i_s_max": cfg.i_s_max,
-        "alpha_psi": cfg.alpha_psi,
-        "alpha_tau": cfg.alpha_tau,
-        "alpha_f": cfg.alpha_f,
-        "k_u": cfg.k_u,
-        "k_b": cfg.k_b,
-        "T_s": cfg.T_s,
-        "slew_rate": ctrl.rate_limiter.rate_limit,
-        **pwm_values(ctrl.pwm),
-    }
+    values = _fields(vhz.reference_gen.par, PAR_FIELDS)
+    values |= _fields(vhz.cfg, VHZ_CFG_FIELDS)
+    values["slew_rate"] = ctrl.rate_limiter.rate_limit
+    return values | pwm_values(ctrl.pwm)
 
 
 def export_values(ctrl: VectorControlSystem) -> dict[str, Any]:
@@ -191,41 +180,30 @@ def export_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     the defaults (see `_im_control.init_script`).
     """
     cvc = cast(CurrentVectorController, ctrl.vector_ctrl)
-    cfg, par = cvc.cfg, cast(InductionMachineInvGammaPars, cvc.reference_gen.par)
-    return {
-        "n_p": par.n_p,
-        "R_s": par.R_s,
-        "R_R": par.R_R,
-        "L_sgm": par.L_sgm,
-        "L_M": par.L_M,
-        "psi_s_nom": cfg.psi_s_nom,
-        "i_s_max": cfg.i_s_max,
-        "alpha_c": cfg.alpha_c,
-        "alpha_i": cfg.alpha_i,
-        "alpha_o": cfg.alpha_o,
-        "w_s_nom": cfg.w_s_nom,
-        "k_u": cfg.k_u,
-        "k_fw": cfg.k_fw,
-        "J": cfg.J,
-        "sensorless": int(cfg.sensorless),
-        "T_s": cfg.T_s,
-        **speed_ctrl_values(ctrl),
-        **pwm_values(ctrl.pwm),
-    }
+    return cvc_values(cvc) | speed_ctrl_values(ctrl) | pwm_values(ctrl.pwm)
 
 
-def _plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
+def cvc_values(cvc: CurrentVectorController) -> dict[str, Any]:
+    """
+    Get the parameter values of the current-vector controller (see `export_values`):
+    its machine model (`PAR_FIELDS`) and its configuration (`CFG_FIELDS`).
+    """
+    values = _fields(cvc.reference_gen.par, PAR_FIELDS) | _fields(cvc.cfg, CFG_FIELDS)
+    values["sensorless"] = int(cvc.cfg.sensorless)
+    return values
+
+
+def _fields(obj: Any, names: list[str]) -> dict[str, Any]:
+    """Values of the fields of an object."""
+    return {name: getattr(obj, name) for name in names}
+
+
+def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
     """Workspace variables of the system model (inverse-Γ machine parameters)."""
     par = InductionMachineInvGammaPars.from_gamma_pars(
         cast(InductionMachinePars, mdl.machine.par)
     )
-    variables: list[tuple[str, Any]] = [
-        ("machine.n_p", par.n_p),
-        ("machine.R_s", par.R_s),
-        ("machine.R_R", par.R_R),
-        ("machine.L_sgm", par.L_sgm),
-        ("machine.L_M", par.L_M),
-    ]
+    variables = [(f"machine.{n}", v) for n, v in _fields(par, PAR_FIELDS).items()]
     return variables + mechanics_and_converter_variables(mdl)
 
 
@@ -281,9 +259,9 @@ def write_model(
 
     """
     path = Path(path)
-    _check_supported(mdl, ctrl)
+    check_supported(mdl, ctrl)
     block = control_block(ctrl)
-    variables = _plant_variables(mdl)
+    variables = export_plant_variables(mdl)
     if isinstance(ctrl, VHzControlSystem):
         values = export_vhz_values(ctrl)
         init = vhz_init_script(variables, values, INIT_COMMENT)

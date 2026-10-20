@@ -3,6 +3,7 @@
 Export of *motulator* systems to PLECS Standalone models (`write_model` and `simulate` of `motulator_export.plecs`).
 The system model is built from the native blocks of PLECS, and the control system runs the C port of the *motulator* control algorithms (`../c`) in C-Script blocks.
 The control systems are described as netlists, which the Simulink export renders too (see [the Simulink export](../simulink/README.md)).
+The parts shared with the Simulink export and the native simulation, e.g., the step signals, the gate enable, and the checks of the PWM, are in `../_common.py`.
 The example scripts are in [examples/](../../examples/README.md).
 
 ## Files

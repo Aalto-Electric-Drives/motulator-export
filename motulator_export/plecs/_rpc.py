@@ -10,7 +10,6 @@ import numpy as np
 def simulate_plecs(
     path: str | Path,
     t_eval: np.ndarray,
-    model_vars: dict[str, float] | None = None,
     url: str = "http://localhost:1080/RPC2",
     mdl_outputs: list[str] | None = None,
     ctrl_outputs: list[str] | None = None,
@@ -24,8 +23,6 @@ def simulate_plecs(
         Path of the model file.
     t_eval : ndarray
         Output times (s).
-    model_vars : dict[str, float], optional
-        Workspace variables to be overridden.
     url : str, optional
         URL of the RPC interface, defaults to "http://localhost:1080/RPC2".
     mdl_outputs, ctrl_outputs : list[str]
@@ -49,8 +46,6 @@ def simulate_plecs(
         pass
     server.plecs.load(str(path))
     opts: dict[str, Any] = {"SolverOpts": {"OutputTimes": [float(t) for t in t_eval]}}
-    if model_vars:
-        opts["ModelVars"] = model_vars
     try:
         res: Any = server.plecs.simulate(path.stem, opts)
     finally:

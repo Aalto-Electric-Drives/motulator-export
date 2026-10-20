@@ -17,7 +17,6 @@ Run from the repository root (requires gcc):
 # %%
 import ctypes
 from math import pi
-from pathlib import Path
 from typing import Any, cast
 
 import motulator.drive.control.sm as control
@@ -32,8 +31,7 @@ from motulator.drive.control._base import Measurements
 
 from motulator_export.plecs._sm import export_gradnet
 from tests.c_port import arr, compile_library, d
-
-MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"
+from tests.systems import CURRENT_MAP, FLUX_MAP
 
 CAPI = r"""
 #include "common.c"
@@ -186,9 +184,7 @@ def set_net(dll: ctypes.CDLL, g: dict[str, Any]) -> None:
 # Machine model and control system of the example
 nom = utils.NominalValues(U=460, I=8.8, f=60, P=5.6e3, tau=29.7)
 base = utils.BaseValues.from_nominal(nom, n_p=2)
-FLUX_MAP = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
 RTOL = 1e-9  # Rounding errors, e.g., of the root finding of the loci
-CURRENT_MAP = MODEL_DIR / "baldor_fem_curr_map_harm_softmax_d48_sub10.npz"
 
 
 def setup(dll: ctypes.CDLL) -> Any:

@@ -755,6 +755,14 @@ FVC_BLOCK = control_block(
 
 
 # %%
+# Fields of the machine model (SynchronousMachinePars) and of the configuration
+# (FluxVectorControllerCfg, without k_f) of the control system, in the order of the
+# model initialization and of the native library
+PAR_FIELDS = ["n_p", "R_s", "L_d", "L_q", "psi_f"]
+CFG_FIELDS = ["i_s_max", "alpha_tau", "alpha_psi", "alpha_i", "alpha_o", "k_o"]
+CFG_FIELDS += ["psi_s_min", "psi_s_max", "k_u", "k_mtpv", "J", "sensorless", "T_s"]
+
+
 def init_script(
     variables: list[tuple[str, Any]], values: dict[str, Any], comment: str
 ) -> str:
@@ -764,9 +772,8 @@ def init_script(
     control system (`_sm.export_values`).
     """
     flux_map = values["psi_s_dq_fcn"]
-    machine = ["n_p", "R_s"] + (["L_d", "L_q", "psi_f"] if flux_map is None else [])
-    cfg = ["i_s_max", "alpha_tau", "alpha_psi", "alpha_i", "alpha_o", "k_o"]
-    cfg += ["psi_s_min", "psi_s_max", "k_u", "k_mtpv", "J", "sensorless", "T_s"]
+    machine = PAR_FIELDS if flux_map is None else PAR_FIELDS[:2]
+    k_f = CFG_FIELDS.index("k_o") + 1  # cfg.k_f follows cfg.k_o
     return (
         init_header(variables, comment)
         + "% Machine model of the control system (SynchronousMachinePars"
@@ -774,9 +781,9 @@ def init_script(
         + "".join(assign(f"par.{n}", values[n]) for n in machine)
         + ("" if flux_map is None else f"par.psi_s_dq_fcn = {flux_map};\n")
         + "% Flux-vector control (FluxVectorControllerCfg)\n"
-        + "".join(assign(f"cfg.{n}", values[n]) for n in cfg[:6])
+        + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS[:k_f])
         + "cfg.k_f = [];\n"
-        + "".join(assign(f"cfg.{n}", values[n]) for n in cfg[6:])
+        + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS[k_f:])
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

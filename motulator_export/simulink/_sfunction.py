@@ -210,7 +210,7 @@ def gradnet_machine_sfunction() -> SFunction:
     params += [f"machine.current_map.{f}" for f in _sm.GRADNET_FIELDS]
     return SFunction(
         name="sfun_gradnet_machine",
-        code=_sm._machine_cscript_code(),
+        code=_sm.machine_cscript_code(),
         input_widths=[2, 1, 1],
         output_widths=[2, 3, 1, 1, 1],
         params=[f"double({p})" for p in params],
