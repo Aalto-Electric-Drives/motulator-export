@@ -12,7 +12,8 @@ pip install -e ".[dev]"
 
 The implementation is described in the developer notes of the repository:
 
-- [examples/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/examples/README.md): the structure of the PLECS models and their agreement with *motulator*
+- [examples/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/examples/README.md): the example scripts and the screenshots
+- [motulator_export/plecs/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/plecs/README.md): the structure of the PLECS models and their agreement with *motulator*
 - [motulator_export/simulink/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/simulink/README.md): the structure of the Simulink models and their agreement with *motulator*
-- [motulator_export/c/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/c/README.md): the C port of the control algorithms
+- [motulator_export/c/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/c/README.md): the C port of the control algorithms and the C models and solver of the native simulation
 - [motulator_export/matlab/README.md](https://github.com/Aalto-Electric-Drives/motulator-export/blob/main/motulator_export/matlab/README.md): the MATLAB port

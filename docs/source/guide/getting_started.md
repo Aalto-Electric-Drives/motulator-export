@@ -120,4 +120,11 @@ simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2)
 
 - The references, the load torque, and the gate enable (`ctrl.set_enable`) can be constants or `StepSignal` objects. A function of time cannot be exported.
 - The models start from the state of the system model, e.g., a given initial speed (`mdl.mechanics.state.w_M = 50.0`). Write the models before simulating the system in *motulator*.
-- A system that is not supported raises `NotImplementedError` before any file is written.
+- A system that is not supported raises `NotImplementedError` before any file is written, see [](supported.md).
+
+## Troubleshooting
+
+- **The C compiler is not found** (native simulation): install gcc and put it on the `PATH`, or give the compiler in the environment variable `CC`. On Windows, gcc is included, e.g., in [WinLibs](https://winlibs.com/), [MSYS2](https://www.msys2.org/), and the MinGW-w64 add-on of MATLAB. The compiled libraries are cached in the folder `motulator_export` of the temporary directory.
+- **PLECS does not respond** (`PLECS RPC interface not available`): start PLECS Standalone and enable its RPC interface on the port 1080.
+- **The MATLAB Engine API cannot be imported or started**: install the version of `matlabengine` that matches your MATLAB release.
+- **An S-function cannot be rebuilt** (Windows): run `clear mex` in MATLAB, which unloads the compiled S-functions of a model that was open.

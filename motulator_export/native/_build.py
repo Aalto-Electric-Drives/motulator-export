@@ -59,7 +59,13 @@ def _load_library(name: str) -> ctypes.CDLL:
         # load a partially written library
         tmp = library.with_name(f"{library.stem}-{os.getpid()}{suffix}")
         cmd = [compiler, *FLAGS, str(source), "-lm", "-o", str(tmp)]
-        subprocess.run(cmd, check=True)
+        try:
+            subprocess.run(cmd, check=True)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"C compiler {compiler!r} not found: install gcc on the PATH, or give "
+                "the compiler in the environment variable CC"
+            ) from None
         os.replace(tmp, library)
     return ctypes.CDLL(str(library))
 

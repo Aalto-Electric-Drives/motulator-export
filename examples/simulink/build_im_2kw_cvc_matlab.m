@@ -27,7 +27,7 @@ s.scope = { ...
 s.control.name = 'Current-vector control';
 s.control.sfunction = [];
 s.control.mask_type = 'VectorControlSystem (motulator)';
-s.control.description = 'Speed control of an induction machine drive with current-vector control (VectorControlSystem with CurrentVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the gates of the converter are blocked, and the control system computes its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
+s.control.description = 'Speed control of an induction machine drive with current-vector control (VectorControlSystem with CurrentVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'VectorControlSystem', 'cfg.T_s'
     };

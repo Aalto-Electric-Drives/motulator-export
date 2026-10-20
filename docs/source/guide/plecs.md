@@ -145,6 +145,10 @@ t_eval = np.linspace(0, 1.2, 1201)
 mdl_signals, ctrl_signals = plecs.simulate(path, t_eval, mdl, ctrl)
 ```
 
+## Accuracy
+
+In the comparisons of the examples, the PLECS models agree with *motulator* to about 1e-6 relative to the signal magnitudes. The comparisons use tight tolerances in *motulator* and a fine quantization of the duty ratios (`CarrierComparison(N=2**24)`), since the PLECS model does not quantize them; with the default quantization of 4096 levels, the differences are about 1e-2. With the dead time of the converter, the differences are larger, since PLECS models the switching transients during the blanking in more detail.
+
 ## Good to know
 
 - The first input of the control system is the gate enable (`ctrl.set_enable`). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*.

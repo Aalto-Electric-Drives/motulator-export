@@ -30,7 +30,8 @@ This writes, in the folder of the model:
 
 - `build_ipmsm.m`, which builds the model and saves `ipmsm.slx`;
 - `init_ipmsm.m`, which defines the parameters, as in the [PLECS models](plecs.md#parameters);
-- the C sources of the blocks of the control system (`sfun_*.c`).
+- the C sources of the blocks of the control system (`sfun_*.c`);
+- for a synchronous machine drive, `sm_reference_luts.m`, which the mask of the `ReferenceGenerator` calls to compute its lookup tables.
 
 Run the build script in MATLAB. It compiles the blocks of the control system into S-functions, so it needs a C compiler. The model runs the initialization script after loading and at the start of each simulation, so a change in the script takes effect in the next simulation.
 
@@ -42,7 +43,7 @@ Without a C compiler, write the model with MATLAB Function blocks:
 simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2, code="matlab")
 ```
 
-The blocks then run a MATLAB port of the same control code, which is in the files `mfun_*.m` written next to the model, so you can read it without MATLAB. The results are the same as with the S-functions, to the rounding errors.
+The blocks then run a MATLAB port of the same control code, which is in the files `mfun_*.m` written next to the model, so you can read it without MATLAB. The blocks call these files, so a change in a file takes effect in the next simulation. The results are the same as with the S-functions, to the rounding errors.
 
 ## Simulating from Python
 
@@ -58,6 +59,8 @@ mdl_signals, ctrl_signals = simulink.simulate("ipmsm.slx", t_eval, mdl, ctrl)
 ## Good to know
 
 - The build script refers to the files of the installed package by a path relative to the folder of the model. If you move the files or update the package, write the model again.
+- The models agree with *motulator* as the PLECS models do, see [](plecs.md#accuracy).
 - A compiled S-function stays loaded in MATLAB after its model is closed. Run `clear mex` before rebuilding a model that was open.
+- An S-function keeps its state in static variables, so a model can contain only one instance of each block of the control system. The MATLAB Function blocks have no such limit.
 - The Simulink models support fewer configurations than the PLECS models, e.g., no dead time or DC-bus dynamics, see [](supported.md).
 - The system model does not block the gates, so the gate enable (`ctrl.set_enable`) must be 1. The exported control system still has the input `enable` and runs in standby while it is zero, e.g., when the control code is reused on hardware.
