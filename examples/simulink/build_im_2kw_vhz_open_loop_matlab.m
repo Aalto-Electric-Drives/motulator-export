@@ -4,7 +4,7 @@
 %
 % The blocks of the control system are MATLAB Function blocks running
 % the MATLAB port of motulator (the functions mfun_*.m of this folder,
-% copied into the blocks), so no C compiler is needed.
+% which the blocks call), so no C compiler is needed.
 
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(here, '..', '..', 'motulator_export', 'simulink'));

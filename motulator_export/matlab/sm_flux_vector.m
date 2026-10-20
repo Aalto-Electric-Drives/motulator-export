@@ -1,7 +1,7 @@
 % Sensorless flux-vector control of synchronous machine drives, ported from
 % motulator (MATLAB port of the classes of ../c/sm_flux_vector.c used by the blocks
-% of the control system). The functions are embedded in the MATLAB Function blocks
-% by motulator_export.simulink.
+% of the control system). The functions are copied into the MATLAB functions of the
+% blocks (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterparts:
 %   motulator/drive/control/_sm_observers.py      FluxObserver

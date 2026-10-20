@@ -1,6 +1,7 @@
 % Common control functions and classes, ported from motulator (MATLAB port of
-% ../c/common.c). The functions are embedded in the MATLAB Function blocks by
-% motulator_export.simulink, as local functions of the blocks that use them.
+% ../c/common.c). The functions are copied into the MATLAB functions of the
+% blocks (mfun_*.m) by motulator_export.simulink, as local functions of the
+% blocks that use them.
 %
 % Python counterparts:
 %   motulator/common/utils/_utils.py         abc2complex, complex2abc, line2complex,

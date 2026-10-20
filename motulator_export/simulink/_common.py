@@ -3,11 +3,11 @@ Common parts of the Simulink export: the build scripts and the simulation.
 
 A model is exported as a MATLAB script, which sets the fields of a struct `s` (the
 control system and the signals) and calls a builder function of this directory
-(e.g., `build_drive.m`). The builder compiles the S-functions (or reads the MATLAB
-functions of the MATLAB Function blocks), builds the model with the Simulink API,
-and saves it in the folder of the script. The parameters are defined by the script
-`init_<model>.m` in the base workspace, which the model runs after loading and at
-the start of each simulation.
+(e.g., `build_drive.m`). The builder compiles the S-functions (or adds the MATLAB
+Function blocks calling the MATLAB functions of the folder), builds the model with
+the Simulink API, and saves it in the folder of the script. The parameters are
+defined by the script `init_<model>.m` in the base workspace, which the model runs
+after loading and at the start of each simulation.
 
 """
 
@@ -259,7 +259,7 @@ def write_script(
         comment = (
             "% The blocks of the control system are MATLAB Function blocks running\n"
             "% the MATLAB port of motulator (the functions mfun_*.m of this folder,\n"
-            "% copied into the blocks), so no C compiler is needed.\n"
+            "% which the blocks call), so no C compiler is needed.\n"
         )
     text = (
         f"% Build the Simulink model {path.stem}.slx in the folder of this script.\n"

@@ -1,6 +1,6 @@
 % Gradient networks (GradNets) for magnetics modeling, ported from motulator (MATLAB
-% port of ../c/gradnet.c). The functions are embedded in the MATLAB Function blocks
-% by motulator_export.simulink.
+% port of ../c/gradnet.c). The functions are copied into the MATLAB functions of the
+% blocks (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterpart:
 %   motulator/drive/gradnet/_maps.py  GradNetFunction, FluxMap, CurrentMap,
