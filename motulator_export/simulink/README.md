@@ -104,9 +104,17 @@ Maximum differences (Simulink − *motulator*) printed by the comparison scripts
 
 With the MATLAB Function blocks (`--matlab`), the differences are the same to the printed digits (psi_s 2.2e-16 in open-loop V/Hz control), since the MATLAB port gives the results of the C port to the rounding errors.
 
-The simulation of the IPMSM drive takes about 1.5 s in the normal mode (about 100 000 solver steps, mostly at the switching instants located by the zero-crossing detection) and 0.6 s in the accelerator mode, plus about 1 s of initialization.
-Most of the run time of a comparison script is the start of MATLAB, the build of the model, and the compilation of the MATLAB Function block.
-With the MATLAB Function blocks, the simulation takes about as long (in a measurement on the same computer, 2.3 s vs. 2.9 s with the S-functions in the normal mode, and 2.2 s vs. 1.9 s in the accelerator mode), but the first simulation after loading the model compiles the blocks (21 s vs. 13 s).
+Run times of the simulation of the IPMSM drive (`ipmsm_2kw_fvc_simulink.py`, 1.2 s) with `sim` on a laptop with MATLAB R2026b, in a new MATLAB session with an empty cache folder (the times vary by about 30 % between the runs):
+
+| Simulation                                         | S-functions | MATLAB Function blocks |
+| -------------------------------------------------- | ----------: | ---------------------: |
+| First after loading the model (compiles the model) |        10 s |                35–45 s |
+| Later, normal mode                                 |       2–3 s |                  2–3 s |
+| Later, accelerator mode                            |         2 s |                    2 s |
+
+The normal mode takes about 100 000 solver steps, mostly at the switching instants located by the zero-crossing detection.
+The first simulation with MATLAB Function blocks compiles them just in time; since the blocks call the functions of the files, this takes about 1.5 times as long as with the code of the functions copied into the blocks (as up to version 0.8.0, 22–25 s).
+Most of the run time of a comparison script is the start of MATLAB, the build of the model, and the first simulation.
 
 In `pmsyrm_6kw_gn_fvc_simulink.py`, the differences are larger, as in the PLECS model (cf. [examples/README.md](../../examples/README.md)).
 
