@@ -58,7 +58,6 @@ theta_c = self.theta_c;
 % the previous and ongoing sampling periods is set by the control system
 % (DriveControlSystem.get_feedback).
 i_s = exp(-1i*theta_c)*i_s_ab;
-u_s_zoh = exp(-1i*theta_c)*u_s_ab;
 % Mechanical and electrical angular speeds of the rotor
 w_m = par.n_p*w_M;
 % Rotor flux estimate
@@ -72,6 +71,18 @@ else
 end
 % Angular speed of the coordinate system equals synchronous angular frequency
 w_s = w_m + w_r;
+% Voltage vector in the observer coordinates, or the open-circuit voltage of the
+% model if the voltage is unknown (NaN, blocked gates): the back-EMF of the flux
+% estimate at the rotor speed, averaged over the sampling period (that of the
+% previous period), and the resistive voltage drop
+if ~isnan(real(u_s_ab))
+    u_s_zoh = exp(-1i*theta_c)*u_s_ab;
+elseif self.T_s_old > 0
+    emf = (exp(1i*w_m*self.T_s_old) - 1)/self.T_s_old*psi_s;
+    u_s_zoh = emf + par.R_s*i_s;
+else
+    u_s_zoh = 1i*w_m*psi_s + par.R_s*i_s;
+end
 % Estimation error, i.e., the difference between the rotor flux predictions of the
 % current model and the voltage model
 if self.T_s_old > 0

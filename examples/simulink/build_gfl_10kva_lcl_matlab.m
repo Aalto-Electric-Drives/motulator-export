@@ -29,12 +29,12 @@ s.scope = { ...
 s.control.name = 'Grid-following control';
 s.control.sfunction = [];
 s.control.mask_type = 'GridConverterControlSystem (motulator)';
-s.control.description = 'Current-vector grid-following control with a PLL in the power-control mode (GridConverterControlSystem with CurrentVectorController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
+s.control.description = 'Current-vector grid-following control with a PLL in the power-control mode (GridConverterControlSystem with CurrentVectorController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'GridConverterControlSystem', 'cfg.T_s'
     };
 s.control.mask_init = '';
-s.control.inputs = {'enable', 'p_g_ref', 'q_g_ref', 'i_c_abc', 'u_g_line', 'u_dc', 'u_c_line'};
+s.control.inputs = {'enable', 'p_g_ref', 'q_g_ref', 'i_c_abc', 'u_g_line', 'u_dc'};
 s.control.netlist.blocks = { ...
     'enable', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'p_g_ref', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
@@ -42,22 +42,21 @@ s.control.netlist.blocks = { ...
     'i_c_abc', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
     'u_g_line', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
     'u_dc', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
-    'u_c_line', 'Inport', [40.0 353.0 70.0 367.0], {'Port', '7'}
-    'd_abc', 'Outport', [920.0 381.0 950.0 395.0], {'Port', '1'}
-    'signals', 'Outport', [1560.0 280.0 1590.0 294.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [280.0 165.0 420.0 285.0], {'mfun_gfl_get_measurement', 'p.T_s', [7.0]}
-    'PWM', 'Subsystem', [600.0 255.0 740.0 415.0], {'ContentPreviewEnabled', 'off'}
-    'CurrentVectorController', 'Subsystem', [920.0 40.0 1060.0 240.0], {'ContentPreviewEnabled', 'off'}
-    'Goto fbk', 'Goto', [1135.0 38.0 1205.0 52.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto ref', 'Goto', [1135.0 203.0 1205.0 217.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'From fbk', 'From', [1135.0 258.0 1205.0 272.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
-    'From ref', 'From', [1135.0 313.0 1205.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'ref.u_c', 'Selector', [1135.0 150.0 1185.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
-    'modulate', 'MATLAB Function', [1295.0 75.0 1435.0 135.0], {'mfun_gfl_modulate', 'p.T_s', [2.0 1.0]}
-    'Monitored signals', 'MATLAB Function', [1295.0 242.0 1435.0 332.0], {'mfun_gfl_monitored_signals', 'p.T_s', [4.0 4.0 3.0]}
-    'Mux signals', 'Mux', [1508.0 242.0 1513.0 332.0], {'Inputs', '[4 4 3]', 'ShowName', 'off'}
-    'From PWM.enable', 'From', [505.0 268.0 575.0 282.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From CurrentVectorController.enable', 'From', [825.0 53.0 895.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'd_abc', 'Outport', [890.0 381.0 920.0 395.0], {'Port', '1'}
+    'signals', 'Outport', [1530.0 280.0 1560.0 294.0], {'Port', '2'}
+    'get_measurement', 'MATLAB Function', [250.0 180.0 390.0 270.0], {'mfun_gfl_get_measurement', 'p.T_s', [5.0]}
+    'PWM', 'Subsystem', [570.0 255.0 710.0 415.0], {'ContentPreviewEnabled', 'off'}
+    'CurrentVectorController', 'Subsystem', [890.0 40.0 1030.0 240.0], {'ContentPreviewEnabled', 'off'}
+    'Goto fbk', 'Goto', [1105.0 38.0 1175.0 52.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto ref', 'Goto', [1105.0 203.0 1175.0 217.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'From fbk', 'From', [1105.0 258.0 1175.0 272.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
+    'From ref', 'From', [1105.0 313.0 1175.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
+    'ref.u_c', 'Selector', [1105.0 150.0 1155.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
+    'modulate', 'MATLAB Function', [1265.0 75.0 1405.0 135.0], {'mfun_gfl_modulate', 'p.T_s', [2.0 1.0]}
+    'Monitored signals', 'MATLAB Function', [1265.0 242.0 1405.0 332.0], {'mfun_gfl_monitored_signals', 'p.T_s', [4.0 4.0 3.0]}
+    'Mux signals', 'Mux', [1478.0 242.0 1483.0 332.0], {'Inputs', '[4 4 3]', 'ShowName', 'off'}
+    'From PWM.enable', 'From', [475.0 268.0 545.0 282.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'From CurrentVectorController.enable', 'From', [795.0 53.0 865.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'Goto enable', 'Goto', [110.0 43.0 180.0 57.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/enable', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '1'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
@@ -138,25 +137,24 @@ s.control.netlist.aligns = { ...
 s.control.netlist.lines = { ...
     '', 'From PWM.enable/1', 'PWM/1', []
     '', 'From CurrentVectorController.enable/1', 'CurrentVectorController/1', []
-    '', 'p_g_ref/1', 'CurrentVectorController/2', {'x', 765.0}
+    '', 'p_g_ref/1', 'CurrentVectorController/2', {'x', 735.0}
     '', 'q_g_ref/1', 'CurrentVectorController/3', []
-    '', 'i_c_abc/1', 'get_measurement/1', {'x', 200.0}
-    '', 'u_g_line/1', 'get_measurement/2', {'x', 215.0}
-    '', 'u_dc/1', 'get_measurement/3', {'x', 230.0}
-    '', 'u_c_line/1', 'get_measurement/4', {'x', 245.0}
-    '', 'get_measurement/1', 'PWM/2', {'x', 445.0}
-    '', 'get_measurement/1', 'CurrentVectorController/4', {'x', 780.0}
-    '', 'PWM/1', 'CurrentVectorController/5', {'x', 795.0}
+    '', 'i_c_abc/1', 'get_measurement/1', []
+    '', 'u_g_line/1', 'get_measurement/2', {'x', 200.0}
+    '', 'u_dc/1', 'get_measurement/3', {'x', 215.0}
+    '', 'get_measurement/1', 'PWM/2', {'x', 415.0}
+    '', 'get_measurement/1', 'CurrentVectorController/4', {'x', 750.0}
+    '', 'PWM/1', 'CurrentVectorController/5', {'x', 765.0}
     '', 'PWM/3', 'd_abc/1', []
-    '', 'CurrentVectorController/1', 'Goto fbk/1', {'x', 1085.0}
+    '', 'CurrentVectorController/1', 'Goto fbk/1', {'x', 1055.0}
     '', 'CurrentVectorController/1', 'modulate/1', []
-    '', 'CurrentVectorController/2', 'Goto ref/1', {'x', 1100.0}
-    '', 'CurrentVectorController/2', 'ref.u_c/1', {'x', 1100.0}
-    '', 'ref.u_c/1', 'modulate/2', {'x', 1260.0}
-    '', 'modulate/1', 'PWM/3', {'x', 1475.0, 'y', 470.0, 'x', 460.0}
-    '', 'modulate/2', 'PWM/4', {'x', 1460.0, 'y', 455.0, 'x', 475.0}
-    '', 'From fbk/1', 'Monitored signals/1', {'x', 1230.0}
-    '', 'From ref/1', 'Monitored signals/2', {'x', 1245.0}
+    '', 'CurrentVectorController/2', 'Goto ref/1', {'x', 1070.0}
+    '', 'CurrentVectorController/2', 'ref.u_c/1', {'x', 1070.0}
+    '', 'ref.u_c/1', 'modulate/2', {'x', 1230.0}
+    '', 'modulate/1', 'PWM/3', {'x', 1445.0, 'y', 470.0, 'x', 430.0}
+    '', 'modulate/2', 'PWM/4', {'x', 1430.0, 'y', 455.0, 'x', 445.0}
+    '', 'From fbk/1', 'Monitored signals/1', {'x', 1200.0}
+    '', 'From ref/1', 'Monitored signals/2', {'x', 1215.0}
     '', 'Monitored signals/1', 'Mux signals/1', []
     '', 'Monitored signals/2', 'Mux signals/2', []
     '', 'Monitored signals/3', 'Mux signals/3', []
@@ -216,7 +214,7 @@ s.control.netlist.masks = { ...
     'end'}, newline), { ...
     'T_s', 'T_s: T_s', 'T_s'
     }, 'disp(''mfun_gfl_get_measurement'');'
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured PCC voltage, as in get_feedback of the control system.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'

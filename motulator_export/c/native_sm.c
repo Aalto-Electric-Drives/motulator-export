@@ -96,7 +96,6 @@ static int fvc_run(ControlSystem *base, const Model *mdl, double t,
     meas.i_c_ab = drive_meas_current(drive, x);
     meas.u_dc = model_dc_voltage(mdl, x);
     meas.theta_M = drive_meas_position(drive, x);
-    meas.u_c_ab = 0.0;
     double w_M_ref = signal_value(&self->w_M_ref, self->t);
     if (!isfinite(w_M_ref)) {
         return SIM_ERROR_SIGNAL;

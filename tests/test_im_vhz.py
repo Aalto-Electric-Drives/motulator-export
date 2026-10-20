@@ -55,9 +55,9 @@ void init(const double *p, const double *c, double slew_rate, const double *pwm)
 }
 
 void step(const double *i_s_abc, double u_dc, double w_M_ref, double enabled,
-          const double *u_c_ab, double *out)
+          double *out)
 {
-    IMVHzMeasurements meas = {abc2complex(i_s_abc), u_dc, u_c_ab[0] + I * u_c_ab[1]};
+    IMVHzMeasurements meas = {abc2complex(i_s_abc), u_dc};
     im_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref, (int)enabled);
     double o[9] = {ctrl.ref.d_abc[0],     ctrl.ref.d_abc[1], ctrl.ref.d_abc[2],
                    ctrl.ref.w_M,          ctrl.fbk.w_s,      ctrl.fbk.tau_M,
@@ -159,14 +159,10 @@ class CControlSystem(control.VHzControlSystem):
 
     def run_control_loop(self, mdl: model.Drive) -> tuple[float, Sequence[float]]:
         self.enabled = self.get_enable()
-        meas = self.get_measurement(mdl)  # The converter voltage with blocked gates
+        meas = self.get_measurement(mdl)
         w_M_ref = cast(Any, self.ext_ref.w_M)(self.t)
         i_abc = complex2abc(meas.i_c_ab)
-        u_c = meas.u_c_ab or 0j
-        u = arr([u_c.real, u_c.imag])
-        self.dll.step(
-            arr(i_abc), d(meas.u_dc), d(w_M_ref), d(self.enabled), u, self.out
-        )
+        self.dll.step(arr(i_abc), d(meas.u_dc), d(w_M_ref), d(self.enabled), self.out)
         out = np.array(self.out)
         self.save(self.t, out=SimpleNamespace(**dict(zip(NAMES, out, strict=True))))
         self.t = (self.t + self.T_s) % 1e9

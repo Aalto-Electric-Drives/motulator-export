@@ -84,8 +84,6 @@ add_source([sys '/w_M_ref'], s.w_M_ref, [90 0 120 30]);
 blocks.align(sys, 'w_M_ref', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 2));
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
 blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 4));
-add([sys '/u_c_line'], 'built-in/Constant', [80 0 130 20], 'Value', '[0 0]');
-blocks.align(sys, 'u_c_line', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', 5));
 add_source([sys '/tau_L'], s.tau_L, [835 0 865 30]);
 blocks.align(sys, 'tau_L', 'Outport', 1, blocks.port_y(sys, 'Mechanics', 'Inport', 2));
 
@@ -105,7 +103,6 @@ y_ctrl = y_theta_M + 30;
 blocks.connect(sys, 'enable/1', [cs '/1']);
 blocks.connect(sys, 'w_M_ref/1', [cs '/2']);
 blocks.connect(sys, 'u_dc/1', [cs '/4']);
-blocks.connect(sys, 'u_c_line/1', [cs '/5']);
 blocks.connect(sys, [cs '/1'], 'Delay/1');
 blocks.connect(sys, 'Delay/1', 'PWM/1');
 blocks.connect(sys, 'PWM/1', 'Converter/1');
@@ -123,12 +120,12 @@ switch s.machine
         % The rotor angle to the machine and to the control system
         blocks.route(sys, 'Mechanics/2', 'Machine/3', ...
             'x', 1025, 'y', y_theta_M, 'x', 640);
-        blocks.route(sys, 'Mechanics/2', [cs '/6'], ...
+        blocks.route(sys, 'Mechanics/2', [cs '/5'], ...
             'x', 1025, 'y', y_theta_M, 'x', 140);
     case 'im'
         % The rotor speed to the control system (not in V/Hz control)
-        if n_in >= 6
-            blocks.route(sys, 'Mechanics/1', [cs '/6'], ...
+        if n_in >= 5
+            blocks.route(sys, 'Mechanics/1', [cs '/5'], ...
                 'x', 1010, 'y', y_w_M, 'x', 140);
         end
 end

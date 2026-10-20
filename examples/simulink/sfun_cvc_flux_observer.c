@@ -42,7 +42,7 @@ static double h;
 static IMObserverOutputs out;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {6, 2, 2, 1};
+static const int INPUT_WIDTHS[] = {4, 2, 2, 1};
 static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {21};
 #define NUM_INPUTS 4
@@ -155,8 +155,11 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;
     im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps, h,
                                     &out);
-    /* Voltage for the control laws (DriveControlSystem.get_feedback) */
-    out.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));
+    /* Voltage for the control laws (DriveControlSystem.get_feedback), or the
+     * open-circuit voltage of the observer if unknown */
+    double complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));
+    out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh
+                                   : cexp(-I * out.theta_c) * u_s_ab;
     double y[FBK_WIDTH];
     im_observer_outputs_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {

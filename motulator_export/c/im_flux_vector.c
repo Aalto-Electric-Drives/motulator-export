@@ -168,10 +168,11 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
 
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. With blocked gates, both are
-     * the measured voltage. */
-    double complex u_c_ab_zoh = meas->u_c_ab;
-    double complex u_c_ab = meas->u_c_ab;
+     * averaged over the previous and ongoing periods. With blocked gates, the
+     * voltage is unknown (NAN), and the observer runs on its open-circuit model,
+     * whose voltage is used for the control laws too. */
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
     if (enabled) {
         u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
         u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
@@ -183,7 +184,7 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
     /* The rotor speed of the observer is the speed reference */
     im_flux_observer_compute_output(&ctrl->observer, u_c_ab_zoh, meas->i_c_ab, w_M_ref,
                                     0.0, ctrl->h, fbk);
-    fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
+    fbk->u_s = enabled ? cexp(-I * fbk->theta_c) * u_c_ab : fbk->u_s_zoh;
     fbk->u_dc = meas->u_dc;
 
     /* References, or with blocked gates, the standby references: the flux and
@@ -227,8 +228,6 @@ static void im_vhz_measurements_pack(const IMVHzMeasurements *meas,
     y[VHZ_MEAS_i_c_ab] = creal(meas->i_c_ab);
     y[VHZ_MEAS_i_c_ab + 1] = cimag(meas->i_c_ab);
     y[VHZ_MEAS_u_dc] = meas->u_dc;
-    y[VHZ_MEAS_u_c_ab] = creal(meas->u_c_ab);
-    y[VHZ_MEAS_u_c_ab + 1] = cimag(meas->u_c_ab);
 }
 
 static void im_vhz_measurements_unpack(const double u[VHZ_MEAS_WIDTH],
@@ -236,7 +235,6 @@ static void im_vhz_measurements_unpack(const double u[VHZ_MEAS_WIDTH],
 {
     meas->i_c_ab = complex_from(u[VHZ_MEAS_i_c_ab], u[VHZ_MEAS_i_c_ab + 1]);
     meas->u_dc = u[VHZ_MEAS_u_dc];
-    meas->u_c_ab = complex_from(u[VHZ_MEAS_u_c_ab], u[VHZ_MEAS_u_c_ab + 1]);
 }
 
 static void im_vhz_references_unpack(const double u[VHZ_REF_WIDTH],

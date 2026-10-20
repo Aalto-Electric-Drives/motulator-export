@@ -84,7 +84,6 @@ static int gfl_run(ControlSystem *base, const Model *mdl, double t,
     meas.i_c_ab = grid_meas_current(grid, x);
     meas.u_g_ab = grid_meas_pcc_voltage(grid, t, x);
     meas.u_dc = model_dc_voltage(mdl, x);
-    meas.u_c_ab = 0.0;
     gfl_control_system_compute_output(&self->ctrl, &meas, p_g_ref, q_g_ref, 1);
     int status = gfl_save(self);
     if (status != SIM_OK) {

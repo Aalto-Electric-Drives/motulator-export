@@ -33,9 +33,8 @@ from motulator_export.plecs._control import (
     checks,
     complex_in,
     complex_out,
-    compute_standby_output,
     control_block,
-    converter_voltage_input,
+    flying_start,
     get_measurement,
     init_header,
     mask_params,
@@ -77,7 +76,6 @@ CTRL_INPUTS = [
     Port("w_M_ref", 1),
     Port("i_s_abc", 3),
     Port("u_dc", 1),
-    Port("u_c_line", 2),
     Port("w_M", 1),
 ]
 CTRL_OUTPUTS = {
@@ -142,7 +140,9 @@ def _flux_observer() -> CBlock:
         "Reduced-order flux observer in synchronous coordinates (FluxObserver). The "
         "observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the "
         "output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing "
-        "periods (DriveControlSystem.get_feedback). In the sensored mode (h = 1), the "
+        "periods (DriveControlSystem.get_feedback). While the gates are blocked, the "
+        "voltages are unknown (NaN), and the observer runs on its open-circuit model. "
+        "In the sensored mode (h = 1), the "
         "speed error signal is computed from the measured rotor speed "
         "(compute_feedback)." + PAR_DESCRIPTION,
         [
@@ -178,8 +178,11 @@ def _flux_observer() -> CBlock:
         "double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\n"
         "im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps, h,\n"
         "                                &out);\n"
-        "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
-        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(1)};\n"
+        "/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n"
+        " * open-circuit voltage of the observer if unknown */\n"
+        f"double complex u_s_ab = {complex_in(1)};\n"
+        "out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n"
+        "                               : cexp(-I * out.theta_c) * u_s_ab;\n"
         + SIGNALS.write(0, "fbk", "out")
     )
     return CBlock(
@@ -211,8 +214,14 @@ def _flux_observer() -> CBlock:
             "end\n"
             "out = im_flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, "
             "w_M, eps, p.h);\n"
-            "% Voltage for the control laws (DriveControlSystem.get_feedback)\n"
-            "out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n",
+            "% Voltage for the control laws (DriveControlSystem.get_feedback), or "
+            "the\n"
+            "% open-circuit voltage of the observer if unknown\n"
+            "if isnan(real(u_s_ab))\n"
+            "    out.u_s = out.u_s_zoh;\n"
+            "else\n"
+            "    out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n"
+            "end\n",
             update="self = im_flux_observer_update(self, p.T_s, out);\n",
             inputs={
                 "meas": SIGNALS.vector("meas"),
@@ -332,7 +341,9 @@ def _current_reference_generator() -> CBlock:
         "and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux "
         "estimate fbk.psi_R. The outputs are the limited torque reference and "
         "the current reference, transformed to the coordinates of the feedback signals "
-        "(CurrentVectorController.compute_output)." + PAR_DESCRIPTION,
+        "(CurrentVectorController.compute_output). The torque reference is zero if "
+        "the input zero_torque is set (while the gates are blocked and at the flying "
+        "start)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -368,10 +379,13 @@ def _current_reference_generator() -> CBlock:
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
-        f"double complex psi_R = {complex_in(3)};\n"
+        f"double complex psi_R = {complex_in(4)};\n"
+        "/* The torque reference is zero while the gates are blocked and at the\n"
+        " * flying start */\n"
+        "double tau_M_ref_in = (InputSignal(0, 0) > 0.0) ? 0.0 : InputSignal(1, 0);\n"
         "double tau_M_ref;\n"
         "double complex i_s_ref;\n"
-        "im_reference_gen_compute_output(&self, InputSignal(0, 0), cabs(psi_R),\n"
+        "im_reference_gen_compute_output(&self, tau_M_ref_in, cabs(psi_R),\n"
         "                                &i_s_ref, &tau_M_ref);\n"
         "/* Transform the reference to the same coordinates as the feedback */\n"
         "i_s_ref = cexp(I * carg(psi_R)) * i_s_ref;\n"
@@ -379,24 +393,36 @@ def _current_reference_generator() -> CBlock:
     )
     update = (
         "/* Field weakening based on the unlimited voltage reference */\n"
-        f"im_reference_gen_update(&self, T_s, {complex_in(1)},\n"
-        "                        InputSignal(2, 0));\n"
+        f"im_reference_gen_update(&self, T_s, {complex_in(2)},\n"
+        "                        InputSignal(3, 0));\n"
     )
     return CBlock(
         "CurrentReferenceGenerator",
-        [Port("tau_M_ref", 1), Port("u_s", 2), Port("u_dc", 1), Port("psi_R", 2)],
+        [
+            Port("zero_torque", 1),
+            Port("tau_M_ref", 1),
+            Port("u_s", 2),
+            Port("u_dc", 1),
+            Port("psi_R", 2),
+        ],
         [Port("tau_M", 1), Port("i_s", 2)],
         SIGNALS.class_code(
             "IMCurrentReferenceGenerator", start, output, update, SAMPLING
         ),
         params,
         SIGNALS.sfunction("current_reference_generator"),
-        feedthrough=[1, 0, 0, 1],
+        feedthrough=[1, 1, 0, 0, 1],
         mask=mask,
         mcode=MCode(
             start=M_PAR + "self = im_reference_gen_init(par, p.psi_s_nom, p.i_s_max, "
             "p.w_s_nom, p.k_u, p.k_fw);\n",
-            output="[i_s_ref, tau_M] = im_reference_gen_compute_output(self, "
+            output="% The torque reference is zero while the gates are blocked and at "
+            "the\n"
+            "% flying start\n"
+            "if zero_torque > 0\n"
+            "    tau_M_ref = 0;\n"
+            "end\n"
+            "[i_s_ref, tau_M] = im_reference_gen_compute_output(self, "
             "tau_M_ref, abs(psi_R));\n"
             "% Transform the reference to the same coordinates as the feedback\n"
             "i_s = exp(1i*angle(psi_R))*i_s_ref;\n",
@@ -515,65 +541,64 @@ def _current_vector_controller() -> Subsystem:
             Port("u_c_ab", 2),
             Port("u_c_zoh_ab", 2),
         ],
-        [SIGNALS.port("fbk"), SIGNALS.port("ref")],
+        [SIGNALS.port("fbk"), SIGNALS.port("ref"), Port("step", 1)],
         [
+            flying_start(SIGNALS),
+            Tag("Goto zero_torque", "zero_torque", 1, goto=True),
             _speed_flux_observer(),
             Tag("From u_s", "u_s", 2, goto=False),
             SIGNALS.selector("meas", "u_dc"),
             SIGNALS.selector("fbk", "psi_R", complex_=True),
+            Tag("From zero_torque", "zero_torque", 1, goto=False),
             _current_reference_generator(),
-            # Standby: the current controller tracks the measured current
-            compute_standby_output(
-                SIGNALS,
-                [Port("tau_M", 1), Port("i_s", 2)],
-                ["0.0", "creal(fbk.i_s)", "cimag(fbk.i_s)"],
-            ),
             _current_controller(),
             Mux("Mux ref", [Port("tau_M", 1), Port("i_s", 2), Port("u_s", 2)]),
             Tag("Goto u_s", "u_s", 2, goto=True),
         ],
         [
-            (ENABLE, "compute_standby_output:enable"),
+            (ENABLE, "FlyingStart:enable"),
+            ("FlyingStart:step", "step"),
+            ("FlyingStart:zero_torque", "Goto zero_torque"),
+            ("From zero_torque", f"{crg}:zero_torque"),
             ("meas", "SpeedFluxObserver:meas"),
             ("u_c_ab", "SpeedFluxObserver:u_s_ab"),
             ("u_c_zoh_ab", "SpeedFluxObserver:u_s_zoh_ab"),
             ("meas", "meas.u_dc:u"),
             ("SpeedFluxObserver:out", "fbk.psi_R:u"),
-            ("SpeedFluxObserver:out", "compute_standby_output:fbk"),
             ("SpeedFluxObserver:out", "CurrentController:fbk"),
             ("SpeedFluxObserver:out", "fbk"),
             ("tau_M_ref", f"{crg}:tau_M_ref"),
             ("fbk.psi_R:y", f"{crg}:psi_R"),
             ("From u_s", f"{crg}:u_s"),
             ("meas.u_dc:y", f"{crg}:u_dc"),
-            (f"{crg}:tau_M", "compute_standby_output:tau_M_in"),
-            (f"{crg}:i_s", "compute_standby_output:i_s_in"),
-            ("compute_standby_output:i_s", "CurrentController:i_s_ref"),
-            ("compute_standby_output:tau_M", "Mux ref:tau_M"),
-            ("compute_standby_output:i_s", "Mux ref:i_s"),
+            (f"{crg}:i_s", "CurrentController:i_s_ref"),
+            (f"{crg}:tau_M", "Mux ref:tau_M"),
+            (f"{crg}:i_s", "Mux ref:i_s"),
             ("CurrentController:u_s", "Mux ref:u_s"),
             ("CurrentController:u_s", "Goto u_s"),
             ("Mux ref:y", "ref"),
         ],
         columns=[
             ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab", ENABLE],
-            ["SpeedFluxObserver"],
-            ["From u_s", "meas.u_dc", "fbk.psi_R"],
+            ["FlyingStart"],
+            ["SpeedFluxObserver", "Goto zero_torque"],
+            ["From zero_torque", "From u_s", "meas.u_dc", "fbk.psi_R"],
             [crg],
-            ["compute_standby_output"],
             ["CurrentController"],
             ["Mux ref", "Goto u_s"],
-            ["ref", "fbk"],
+            ["ref", "fbk", "step"],
         ],
         align={
+            "FlyingStart:enable": ENABLE,
+            "From zero_torque": f"{crg}:zero_torque",
+            "Goto zero_torque": "FlyingStart:zero_torque",
             "tau_M_ref": f"{crg}:tau_M_ref",
             "From u_s": f"{crg}:u_s",
             "meas.u_dc:y": f"{crg}:u_dc+1",
             "fbk.psi_R:y": f"{crg}:psi_R+2",
             "SpeedFluxObserver:out": "fbk.psi_R:u+1",
             "meas": "SpeedFluxObserver:meas",
-            "compute_standby_output:i_s_in": f"{crg}:i_s",
-            "CurrentController:i_s_ref": "compute_standby_output:i_s",
+            "CurrentController:i_s_ref": f"{crg}:i_s",
             "Mux ref:u_s": "CurrentController:u_s",
             "ref": "Mux ref:y",
             "fbk": "SpeedFluxObserver:out",
@@ -611,10 +636,9 @@ def control_system() -> Subsystem:
         [
             ("i_c_ab", "abc2complex(i_s_abc)"),
             ("u_dc", "fmax(InputSignal(1, 0), U_DC_MIN)"),
-            ("w_M", "InputSignal(3, 0)"),
-            ("u_c_ab", "line2complex(u_c_line)"),
+            ("w_M", "InputSignal(2, 0)"),
         ],
-        abc_input("i_s_abc", 0) + converter_voltage_input(2),
+        abc_input("i_s_abc", 0),
     )
     signals = monitor(
         SIGNALS,

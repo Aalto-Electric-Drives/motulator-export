@@ -40,10 +40,10 @@ static PWM self;
 static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {6, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1};
+static const int INPUT_WIDTHS[] = {4, 2, 1, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {3};
-#define NUM_INPUTS 3
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 8
 
@@ -147,9 +147,14 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     IMMeasurements meas;
     im_measurements_unpack(meas_u, &meas);
+    double complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));
+    /* The zero vector at the flying start (step 2) */
+    if (InputSignal(3, 0) == 2.0) {
+        u_c_ref_ab = 0.0;
+    }
     double d_abc[3];
-    pwm_compute_output(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)), meas.u_dc,
-                       InputSignal(2, 0), meas.i_c_ab, d_abc);
+    pwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),
+                       meas.i_c_ab, d_abc);
     for (int k = 0; k < 3; k++) {
         OutputSignal(0, k) = d_abc[k];
     }

@@ -109,9 +109,9 @@ static void gfl_control_system_compute_output(GFLControlSystem *self,
 
     /* Feedback signals from the PLL, which does not use the converter voltage. The
      * control laws use the voltage averaged over the previous and ongoing periods,
-     * or with blocked gates, the measured voltage. */
+     * or with blocked gates, the measured PCC voltage. */
     pll_compute_output(&self->pll, meas->i_c_ab, meas->u_g_ab, fbk);
-    double complex u_c_ab = meas->u_c_ab;
+    double complex u_c_ab = meas->u_g_ab;
     if (enabled) {
         u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     }
@@ -171,7 +171,6 @@ static void grid_measurements_pack(const GridMeasurements *meas, double y[MEAS_W
     SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
     SET_COMPLEX(y, MEAS_u_g_ab, meas->u_g_ab);
     y[MEAS_u_dc] = meas->u_dc;
-    SET_COMPLEX(y, MEAS_u_c_ab, meas->u_c_ab);
 }
 
 static void grid_measurements_unpack(const double u[MEAS_WIDTH],
@@ -180,7 +179,6 @@ static void grid_measurements_unpack(const double u[MEAS_WIDTH],
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_g_ab = COMPLEX_AT(u, MEAS_u_g_ab);
     meas->u_dc = u[MEAS_u_dc];
-    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void gfl_feedbacks_pack(const GFLFeedbacks *fbk, double y[FBK_WIDTH])

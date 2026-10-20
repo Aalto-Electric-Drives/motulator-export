@@ -38,6 +38,7 @@ static void flux_observer_init(FluxObserver *self, SynchronousMachinePars par,
     self->k_o[1] = k_o[1];
     self->theta_m = 0.0;
     self->psi_s = par.psi_f;
+    self->T_s_prev = 0.0;
 }
 
 static double complex flux_observer_aux_flux(const FluxObserver *self,
@@ -68,12 +69,11 @@ static void flux_observer_compute_output(const FluxObserver *self,
     /* Coordinate system angle equals the estimated rotor angle */
     out->theta_c = out->theta_m = self->theta_m;
 
-    /* Current and voltage vectors in (estimated) rotor coordinates. The voltage
-     * averaged over the previous and ongoing sampling periods is set by the control
-     * system (DriveControlSystem.get_feedback). */
+    /* Current vector in (estimated) rotor coordinates. The voltage averaged over
+     * the previous and ongoing sampling periods is set by the control system
+     * (DriveControlSystem.get_feedback). */
     out->i_s = cexp(-I * out->theta_c) * i_s_ab;
     out->u_s = 0.0;
-    out->u_s_zoh = cexp(-I * out->theta_c) * u_s_ab;
 
     /* Flux estimation error */
     double complex psi_s_model = psi_s_dq(par, out->i_s);
@@ -89,6 +89,20 @@ static void flux_observer_compute_output(const FluxObserver *self,
 
     /* Angular speed of the coordinate system */
     out->w_c = out->w_m + self->k_theta * par->n_p * out->eps;
+
+    /* Voltage vector in the observer coordinates, or the open-circuit voltage of
+     * the model if the voltage is unknown (NAN, blocked gates): the back-EMF of the
+     * flux estimate at the rotor speed, averaged over the sampling period (that of
+     * the previous period), and the resistive voltage drop */
+    if (!isnan(creal(u_s_ab))) {
+        out->u_s_zoh = cexp(-I * out->theta_c) * u_s_ab;
+    } else if (self->T_s_prev > 0.0) {
+        double complex emf =
+            (cexp(I * out->w_m * self->T_s_prev) - 1.0) / self->T_s_prev * out->psi_s;
+        out->u_s_zoh = emf + par->R_s * out->i_s;
+    } else {
+        out->u_s_zoh = I * out->w_m * out->psi_s + par->R_s * out->i_s;
+    }
 
     /* Torque estimate */
     out->tau_M = 1.5 * par->n_p * cimag(out->i_s * conj(out->psi_s));
@@ -117,6 +131,7 @@ static void flux_observer_update(FluxObserver *self, double T_s,
     hold_equivalent(T_s, out->w_c, &Phi, &Gamma);
     self->psi_s = Phi * (psi_s + T_s * out->u_s_zoh) - Gamma * par->R_s * out->i_s;
     self->theta_m = wrap(self->theta_m + T_s * out->w_c);
+    self->T_s_prev = T_s;
 }
 
 /* SpeedFluxObserver -------------------------------------------------------- */
@@ -158,6 +173,39 @@ static void speed_flux_observer_update(SpeedFluxObserver *self, double T_s,
 {
     speed_observer_update(&self->speed_observer, T_s, out->eps, out->tau_M);
     flux_observer_update(&self->flux_observer, T_s, out);
+}
+
+/* Estimates initialized from the current response delta_i_s_ab to a zero-voltage
+ * period of length T_s, i_s_ab being the current at its end (SpeedFluxObserver.catch):
+ * with zero voltage, the back-EMF drives the current along the negative q axis of
+ * the rotor, so the current response gives the rotor angle and the speed magnitude.
+ * The direction of rotation is taken from the speed estimate w_M, which is updated
+ * with the angle and flux estimates. Returns 0 at standstill (no response), when the
+ * estimates are left unchanged. */
+static int flux_observer_catch(const SynchronousMachinePars *par,
+                               double complex delta_i_s_ab, double complex i_s_ab,
+                               double T_s, double *w_M, double *theta_m,
+                               double complex *psi_s)
+{
+    IncrIndMat L = incr_ind_mat(par, 0.0);
+    double complex e_s_ab = -L.L_qq * delta_i_s_ab / T_s; /* Back-EMF */
+    if (e_s_ab == 0.0) {
+        return 0;
+    }
+    double sign = (*w_M >= 0.0) ? 1.0 : -1.0;
+    *theta_m = wrap(carg(e_s_ab) - sign * M_PI / 2.0);
+    *w_M = sign * cabs(e_s_ab) / (par->psi_f * par->n_p);
+    *psi_s = psi_s_dq(par, cexp(-I * *theta_m) * i_s_ab);
+    return 1;
+}
+
+static void speed_flux_observer_catch(SpeedFluxObserver *self,
+                                      double complex delta_i_s_ab,
+                                      double complex i_s_ab, double T_s)
+{
+    FluxObserver *fo = &self->flux_observer;
+    flux_observer_catch(&fo->par, delta_i_s_ab, i_s_ab, T_s,
+                        &self->speed_observer.w_M, &fo->theta_m, &fo->psi_s);
 }
 
 /* ReferenceGenerator ------------------------------------------------------- */
@@ -348,18 +396,6 @@ static void flux_vector_ctrl_compute_output(FluxVectorController *self,
                                                ref->tau_M, fbk);
 }
 
-static void flux_vector_ctrl_compute_standby_output(FluxVectorController *self,
-                                                    const ObserverOutputs *fbk,
-                                                    References *ref)
-{
-    /* The flux and torque controller tracks the estimated flux and torque */
-    ref->T_s = self->T_s;
-    ref->tau_M = fbk->tau_M;
-    ref->psi_s = cabs(fbk->psi_s);
-    ref->u_s = flux_torque_ctrl_compute_output(&self->flux_torque_ctrl, ref->psi_s,
-                                               ref->tau_M, fbk);
-}
-
 static void flux_vector_ctrl_update(FluxVectorController *self, const References *ref,
                                     const ObserverOutputs *fbk)
 {
@@ -381,6 +417,9 @@ static void vector_control_system_init(VectorControlSystem *self,
     self->speed_ctrl.u_i = 0.0;
     self->speed_ctrl.v = 0.0;
     self->enabled = 1;
+    self->catch_step = 0;
+    self->i_c_ab_catch = 0.0;
+    self->T_s_catch = 0.0;
 }
 
 static void vector_control_system_compute_output(VectorControlSystem *self,
@@ -391,12 +430,33 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
     References *ref = &self->ref;
     self->enabled = enabled;
 
+    /* Flying start of a sensorless drive after the release of the gates
+     * (VectorControlSystem.get_feedback): the first output after the release is
+     * the zero vector, applied in the next sampling period, and the estimates are
+     * initialized from the current response at the end of that period */
+    if (self->vector_ctrl.sensorless) {
+        if (!enabled) {
+            self->catch_step = 1;
+        } else if (self->catch_step == 1) {
+            self->catch_step = 2; /* The zero vector is computed at this step */
+        } else if (self->catch_step == 2) {
+            self->catch_step = 3; /* The zero-voltage period starts */
+            self->i_c_ab_catch = meas->i_c_ab;
+        } else if (self->catch_step == 3) {
+            self->catch_step = 0;
+            speed_flux_observer_catch(&self->vector_ctrl.observer,
+                                      meas->i_c_ab - self->i_c_ab_catch,
+                                      meas->i_c_ab, self->T_s_catch);
+        }
+    }
+
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. With blocked gates, both are
-     * the measured voltage. */
-    double complex u_c_ab_zoh = meas->u_c_ab;
-    double complex u_c_ab = meas->u_c_ab;
+     * averaged over the previous and ongoing periods. With blocked gates, the
+     * voltage is unknown (NAN), and the observer runs on its open-circuit model,
+     * whose voltage is used for the control laws too. */
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
     if (enabled) {
         u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
         u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
@@ -413,17 +473,22 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
         speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
                                            1.0, fbk);
     }
-    fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
+    fbk->u_s = enabled ? cexp(-I * fbk->theta_c) * u_c_ab : fbk->u_s_zoh;
     fbk->u_dc = meas->u_dc;
 
-    /* Speed controller and vector controller, or with blocked gates, the standby
-     * output of the vector controller */
+    /* Speed controller and vector controller, or with blocked gates and at the
+     * flying start, the vector controller with zero torque reference */
+    double tau_M_ref = 0.0;
     if (enabled) {
-        double tau_M_ref =
-            pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
-        flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
-    } else {
-        flux_vector_ctrl_compute_standby_output(&self->vector_ctrl, fbk, ref);
+        tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
+    }
+    if (self->catch_step == 2) {
+        tau_M_ref = 0.0;
+    }
+    flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
+    if (self->catch_step == 2) {
+        ref->u_s = 0.0; /* The zero vector */
+        self->T_s_catch = ref->T_s;
     }
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
@@ -454,8 +519,6 @@ static void measurements_pack(const Measurements *meas, double y[MEAS_WIDTH])
     y[MEAS_i_c_ab + 1] = cimag(meas->i_c_ab);
     y[MEAS_u_dc] = meas->u_dc;
     y[MEAS_theta_M] = meas->theta_M;
-    y[MEAS_u_c_ab] = creal(meas->u_c_ab);
-    y[MEAS_u_c_ab + 1] = cimag(meas->u_c_ab);
 }
 
 static void measurements_unpack(const double u[MEAS_WIDTH], Measurements *meas)
@@ -463,7 +526,6 @@ static void measurements_unpack(const double u[MEAS_WIDTH], Measurements *meas)
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_dc = u[MEAS_u_dc];
     meas->theta_M = u[MEAS_theta_M];
-    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void observer_outputs_pack(const ObserverOutputs *fbk, double y[FBK_WIDTH])

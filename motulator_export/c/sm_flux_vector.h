@@ -57,6 +57,8 @@ typedef struct {
     /* States */
     double theta_m;
     double complex psi_s;
+    /* Other memory variables */
+    double T_s_prev; /* Length of the previous sampling period */
 } FluxObserver;
 
 typedef struct {
@@ -112,13 +114,15 @@ typedef struct {
     double complex i_c_ab; /* Converter current in stationary coordinates */
     double u_dc;
     double theta_M; /* Mechanical rotor angle, used only in the sensored mode */
-    double complex u_c_ab; /* Converter voltage, used only with blocked gates */
 } Measurements;
 
 /* Vector control system (VectorControlSystem). While the gates are blocked (the gate
- * enable is zero, see ControlSystem.set_enable), the feedback voltage is the measured
- * converter voltage, the controller computes its standby output, and the speed
- * controller is not updated. */
+ * enable is zero, see ControlSystem.set_enable), the converter voltage is unknown:
+ * the observer runs on its open-circuit model, the controller computes its output
+ * for zero torque, and the speed controller is not updated. After the release, a
+ * sensorless drive catches the rotating machine with a flying start: the first
+ * output is the zero vector, and the estimates are initialized from its current
+ * response (speed_flux_observer_catch). */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
@@ -128,6 +132,10 @@ typedef struct {
     int enabled; /* Gate enable */
     ObserverOutputs fbk;
     References ref;
+    /* Flying start after the release (VectorControlSystem.get_feedback) */
+    int catch_step;              /* Step of the flying start, 0 if none */
+    double complex i_c_ab_catch; /* Current at the start of the zero-voltage period */
+    double T_s_catch;            /* Length of the zero-voltage period */
 } VectorControlSystem;
 
 /* Flux-vector controller configuration (FluxVectorControllerCfg). As in motulator,
@@ -173,8 +181,7 @@ static void vector_control_system_update(VectorControlSystem *self);
 #define MEAS_i_c_ab 0
 #define MEAS_u_dc 2
 #define MEAS_theta_M 3
-#define MEAS_u_c_ab 4
-#define MEAS_WIDTH 6
+#define MEAS_WIDTH 4
 
 #define FBK_i_s 0
 #define FBK_u_s 2

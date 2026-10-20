@@ -57,7 +57,6 @@ from motulator.drive.utils._parameters import (
 from motulator_export._common import StepSignal, check_supported_pwm, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
-    CONV,
     DC_DX,
     ENABLE,
     GATE_DX,
@@ -73,12 +72,10 @@ from motulator_export.plecs._common import (
 )
 from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
 from motulator_export.plecs._drive import (
-    CONVERTER_VOLTAGES,
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
     MDL_OUTPUTS,
-    MEAS_DX,
     _add_drive_outputs,
     _add_mechanics,
     _add_phase_lines,
@@ -276,7 +273,6 @@ def write_model(
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
-        ("u_c_line", CONVERTER_VOLTAGES),
     ]
     if block is CVC_BLOCK:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
@@ -293,10 +289,8 @@ def write_model(
     sch.dx += DC_DX + GATE_DX
     _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
-    x_c = CONV[0] + 30 + sch.dx  # The AC terminals of the converter
-    sch.dx += MEAS_DX
     _add_im(sch)
-    _add_phase_lines(sch, x_c)
+    _add_phase_lines(sch)
     _add_mechanics(sch, tau_L, inertia=False)
     y_probes = _add_drive_outputs(sch, block, outputs, y_sources)
     size = (880 + sch.dx, max(520, y_probes + 50))

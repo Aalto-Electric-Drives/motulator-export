@@ -135,10 +135,10 @@ static void gfm_control_system_compute_output(GFMControlSystem *self,
 
     /* Feedback signals from the observer, which uses the voltage of the ongoing
      * sampling period, while the control laws use the voltage averaged over the
-     * previous and ongoing periods. With blocked gates, both are the measured
+     * previous and ongoing periods. With blocked gates, both are the measured PCC
      * voltage. */
-    double complex u_c_ab_zoh = meas->u_c_ab;
-    double complex u_c_ab = meas->u_c_ab;
+    double complex u_c_ab_zoh = meas->u_g_ab;
+    double complex u_c_ab = meas->u_g_ab;
     if (enabled) {
         u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
         u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
@@ -200,14 +200,14 @@ static void gfm_measurements_pack(const GFMMeasurements *meas, double y[MEAS_WID
 {
     SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
     y[MEAS_u_dc] = meas->u_dc;
-    SET_COMPLEX(y, MEAS_u_c_ab, meas->u_c_ab);
+    SET_COMPLEX(y, MEAS_u_g_ab, meas->u_g_ab);
 }
 
 static void gfm_measurements_unpack(const double u[MEAS_WIDTH], GFMMeasurements *meas)
 {
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_dc = u[MEAS_u_dc];
-    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
+    meas->u_g_ab = COMPLEX_AT(u, MEAS_u_g_ab);
 }
 
 static void gfm_feedbacks_pack(const GFMFeedbacks *fbk, double y[FBK_WIDTH])

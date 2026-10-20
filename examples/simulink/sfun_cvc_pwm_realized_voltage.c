@@ -40,7 +40,7 @@ static PWM self;
 static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 6, 3};
+static const int INPUT_WIDTHS[] = {1, 4, 3};
 static const int FEEDTHROUGH[] = {1, 1, 0};
 static const int OUTPUT_WIDTHS[] = {2, 2};
 #define NUM_INPUTS 3
@@ -148,9 +148,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     IMMeasurements meas;
     im_measurements_unpack(meas_u, &meas);
     /* Average of the previous and the ongoing periods, and of the ongoing
-     * period, or while the gates are blocked, the measured voltage */
-    double complex u_c_ab = meas.u_c_ab;
-    double complex u_c_zoh_ab = meas.u_c_ab;
+     * period, or while the gates are blocked, unknown (NAN) */
+    double complex u_c_ab = NAN;
+    double complex u_c_zoh_ab = NAN;
     if (InputSignal(0, 0) > 0.0) {
         u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);
         u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);

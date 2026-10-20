@@ -11,7 +11,7 @@ Plecs {
   AbsTol        "-1"
   InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
-    Location      [0, 0; 1060, 570]
+    Location      [0, 0; 1000, 520]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -142,28 +142,9 @@ Plecs {
     }
     Component {
       Type          PlecsProbe
-      Name          "u_c_line"
-      Show          on
-      Position      [60, 220]
-      Direction     right
-      Flipped       off
-      LabelPosition south
-      Probe {
-        Component     "u_cab"
-        Path          ""
-        Signals       {"Measured voltage"}
-      }
-      Probe {
-        Component     "u_cbc"
-        Path          ""
-        Signals       {"Measured voltage"}
-      }
-    }
-    Component {
-      Type          PlecsProbe
       Name          "theta_M"
       Show          on
-      Position      [60, 270]
+      Position      [60, 220]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -186,7 +167,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "VectorControlSystem (motulator)"
-      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator."
+      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -237,32 +218,27 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -25]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -15]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -5]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 5]
+        Position      [-50, 10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 15]
-        Direction     left
-      }
-      Terminal {
-        Type          Input
-        Position      [-50, 25]
+        Position      [-50, 20]
         Direction     left
       }
       Terminal {
@@ -271,7 +247,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1155, 395]
+        Location      [0, 0; 1175, 475]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -354,7 +330,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_c_line"
+      Name          "theta_M"
       Show          on
       Position      [40, 215]
       Direction     right
@@ -372,10 +348,10 @@ Plecs {
       }
     }
     Component {
-      Type          Input
-      Name          "theta_M"
+      Type          Output
+      Name          "d_abc"
       Show          on
-      Position      [40, 255]
+      Position      [720, 265]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -391,33 +367,14 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "d_abc"
-      Show          on
-      Position      [720, 255]
-      Direction     right
-      Flipped       off
-      LabelPosition south
-      Parameter {
-        Variable      "Index"
-        Value         "7"
-        Show          off
-      }
-      Parameter {
-        Variable      "Width"
-        Value         "-1"
-        Show          off
-      }
-    }
-    Component {
       Type          CScript
       Name          "get_measurement"
       Show          on
-      Position      [240, 155]
+      Position      [230, 155]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -30; 50, 30]
+      Frame         [-50, -25; 50, 25]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -425,12 +382,12 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[3 1 2 1]"
+        Value         "[3 1 1]"
         Show          off
       }
       Parameter {
         Variable      "NumOutputs"
-        Value         "[6]"
+        Value         "[4]"
         Show          off
       }
       Parameter {
@@ -450,7 +407,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1 1]"
+        Value         "[1 1 1]"
         Show          off
       }
       Parameter {
@@ -490,7 +447,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double i_s_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\n/* Line-to-line converter voltages u_ab and u_bc, used while the gates are\n * blocked */\ndouble u_c_line[2] = {InputSignal(2, 0), InputSignal(2, 1)};\nMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_s_abc);\nmeas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);\nmeas.theta_M = InputSignal(3, 0);\nmeas.u_c_ab = line2complex(u_c_line);\ndouble y[MEAS_WIDTH];\nmeasurements_pack(&meas, y);\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double i_s_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\nMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_s_abc);\nmeas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);\nmeas.theta_M = InputSignal(2, 0);\ndouble y[MEAS_WIDTH];\nmeasurements_pack(&meas, y);\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -523,7 +480,7 @@ Plecs {
       Type          Goto
       Name          "Goto fbk"
       Show          off
-      Position      [885, 110]
+      Position      [895, 100]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -542,7 +499,7 @@ Plecs {
       Type          Goto
       Name          "Goto ref"
       Show          off
-      Position      [885, 235]
+      Position      [895, 225]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -558,10 +515,29 @@ Plecs {
       }
     }
     Component {
+      Type          Goto
+      Name          "Goto step"
+      Show          off
+      Position      [895, 265]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "step"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
       Type          From
       Name          "From fbk"
       Show          off
-      Position      [210, 55]
+      Position      [200, 55]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -580,7 +556,7 @@ Plecs {
       Type          From
       Name          "From ref"
       Show          off
-      Position      [210, 95]
+      Position      [200, 95]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -597,9 +573,28 @@ Plecs {
     }
     Component {
       Type          From
+      Name          "From step"
+      Show          off
+      Position      [895, 385]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "step"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          From
       Name          "From fbk 2"
       Show          off
-      Position      [885, 275]
+      Position      [895, 305]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -618,7 +613,7 @@ Plecs {
       Type          From
       Name          "From ref 2"
       Show          off
-      Position      [885, 315]
+      Position      [895, 345]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -637,7 +632,7 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.w_M"
       Show          on
-      Position      [350, 55]
+      Position      [340, 55]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -656,7 +651,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.tau_M"
       Show          on
-      Position      [350, 105]
+      Position      [340, 105]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1014,16 +1009,16 @@ Plecs {
       Type          Subsystem
       Name          "PWM"
       Show          on
-      Position      [545, 235]
+      Position      [545, 245]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -50; 50, 50]
+      Frame         [-50, -60; 50, 60]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "PWM (motulator)"
-      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback."
+      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system. At the flying start after the release (the input step is 2), the duty ratios are those of the zero vector."
       MaskInit      "% MME overmodulation, or MPE\nmme = strcmp(overmodulation, 'MME');\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -1102,22 +1097,27 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -30]
+        Position      [-50, -40]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -10]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 10]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 30]
+        Position      [-50, 20]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 40]
         Direction     left
       }
       Terminal {
@@ -1136,7 +1136,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 595, 220]
+        Location      [0, 0; 595, 260]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1145,7 +1145,7 @@ Plecs {
       Type          Input
       Name          "enable"
       Show          on
-      Position      [40, 175]
+      Position      [40, 215]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1218,6 +1218,25 @@ Plecs {
       }
     }
     Component {
+      Type          Input
+      Name          "step"
+      Show          on
+      Position      [40, 175]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          Output
       Name          "u_c_ab"
       Show          on
@@ -1227,7 +1246,7 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "Index"
-        Value         "5"
+        Value         "6"
         Show          off
       }
       Parameter {
@@ -1246,7 +1265,7 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "Index"
-        Value         "6"
+        Value         "7"
         Show          off
       }
       Parameter {
@@ -1265,7 +1284,7 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "Index"
-        Value         "7"
+        Value         "8"
         Show          off
       }
       Parameter {
@@ -1282,7 +1301,7 @@ Plecs {
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -25; 50, 25]
+      Frame         [-50, -30; 50, 30]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -1290,7 +1309,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[6 2 1]"
+        Value         "[4 2 1 1]"
         Show          off
       }
       Parameter {
@@ -1315,7 +1334,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1]"
+        Value         "[1 1 1 1]"
         Show          off
       }
       Parameter {
@@ -1355,7 +1374,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble d_abc[3];\npwm_compute_output(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)), meas.u_dc,\n                   InputSignal(2, 0), meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\n/* The zero vector at the flying start (step 2) */\nif (InputSignal(3, 0) == 2.0) {\n    u_c_ref_ab = 0.0;\n}\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -1400,7 +1419,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 6 3]"
+        Value         "[1 4 3]"
         Show          off
       }
       Parameter {
@@ -1465,7 +1484,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, the measured voltage */\ndouble complex u_c_ab = meas.u_c_ab;\ndouble complex u_c_zoh_ab = meas.u_c_ab;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, unknown (NAN) */\ndouble complex u_c_ab = NAN;\ndouble complex u_c_zoh_ab = NAN;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
         Show          off
       }
       Parameter {
@@ -1517,7 +1536,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [100, 175]
+      Position      [100, 215]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1543,9 +1562,9 @@ Plecs {
       Type          Signal
       SrcComponent  "meas"
       SrcTerminal   1
-      Points        [155, 55]
+      Points        [135, 55]
       Branch {
-        Points        [155, 90]
+        Points        [135, 85]
         DstComponent  "compute_output"
         DstTerminal   1
       }
@@ -1558,7 +1577,6 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_ref_ab"
       SrcTerminal   1
-      Points        [135, 95; 135, 100]
       DstComponent  "compute_output"
       DstTerminal   2
     }
@@ -1566,14 +1584,22 @@ Plecs {
       Type          Signal
       SrcComponent  "w"
       SrcTerminal   1
-      Points        [145, 135; 145, 110]
+      Points        [145, 135; 145, 105]
       DstComponent  "compute_output"
       DstTerminal   3
     }
     Connection {
       Type          Signal
+      SrcComponent  "step"
+      SrcTerminal   1
+      Points        [155, 175; 155, 115]
+      DstComponent  "compute_output"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "compute_output"
-      SrcTerminal   4
+      SrcTerminal   5
       Points        [300, 100]
       Branch {
         Points        [500, 100; 500, 130]
@@ -1673,16 +1699,21 @@ Plecs {
       }
       Terminal {
         Type          Output
-        Position      [54, -10]
+        Position      [54, -20]
         Direction     right
       }
       Terminal {
         Type          Output
-        Position      [54, 10]
+        Position      [54, 0]
+        Direction     right
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 20]
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1010, 355]
+        Location      [0, 0; 1030, 395]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1691,7 +1722,7 @@ Plecs {
       Type          Input
       Name          "enable"
       Show          on
-      Position      [40, 310]
+      Position      [40, 315]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1710,7 +1741,7 @@ Plecs {
       Type          Input
       Name          "tau_M_ref"
       Show          on
-      Position      [40, 60]
+      Position      [40, 65]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1729,7 +1760,7 @@ Plecs {
       Type          Input
       Name          "meas"
       Show          on
-      Position      [40, 190]
+      Position      [40, 195]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1748,7 +1779,7 @@ Plecs {
       Type          Input
       Name          "u_c_ab"
       Show          on
-      Position      [40, 230]
+      Position      [40, 235]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1767,7 +1798,7 @@ Plecs {
       Type          Input
       Name          "u_c_zoh_ab"
       Show          on
-      Position      [40, 270]
+      Position      [40, 275]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1786,7 +1817,7 @@ Plecs {
       Type          Output
       Name          "fbk"
       Show          on
-      Position      [960, 210]
+      Position      [980, 205]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1805,7 +1836,7 @@ Plecs {
       Type          Output
       Name          "ref"
       Show          on
-      Position      [960, 70]
+      Position      [980, 70]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1821,14 +1852,338 @@ Plecs {
       }
     }
     Component {
-      Type          Subsystem
-      Name          "SpeedFluxObserver"
+      Type          Output
+      Name          "step"
       Show          on
-      Position      [230, 210]
+      Position      [980, 245]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "8"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "FlyingStart"
+      Show          on
+      Position      [265, 315]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -40; 50, 40]
+      Frame         [-50, -20; 50, 20]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "FlyingStart (motulator)"
+      MaskDescription "Flying start of a sensorless drive after the release of the gates (VectorControlSystem.get_feedback): the first output after the release is the zero vector, applied in the next sampling period, and the estimates are initialized from the current response at the end of that period. The output step is 1 while the gates are blocked, 2 when the zero vector is computed, 3 when the zero-voltage period starts, and 0 otherwise. The output zero_torque flags the zero torque reference, while the gates are blocked and at step 2."
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "sensorless"
+        Prompt        "sensorless: Sensorless mode (1) or sensored mode (0)"
+        Type          FreeText
+        Value         "cfg.sensorless"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "T_s"
+        Prompt        "T_s: Sampling period (s)"
+        Type          FreeText
+        Value         "cfg.T_s"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 0]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, -5]
+        Direction     right
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 5]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 300, 130]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "enable"
+      Show          on
+      Position      [40, 35]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "zero_torque"
+      Show          on
+      Position      [250, 45]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "step"
+      Show          on
+      Position      [250, 85]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "C-Script"
+      Show          on
+      Position      [145, 50]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -20; 50, 20]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "sensorless, T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gradnet.c\"\n#include \"../motulator_export/c/sm_parameters.c\"\n#include \"../motulator_export/c/sm_control_loci.c\"\n#include \"../motulator_export/c/sm_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n * in the arrays of the C port (in the start function only, returns on error) */\n#define CHECK_GRADNET(i0) \\\n    do { \\\n        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n            SetErrorMessage(\"GradNet too large: in_dim must be at most \" \\\n                            \"4 and embed_dim at most \" \\\n                            \"64.\"); \\\n            return; \\\n        } \\\n    } while (0)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\nstatic int self;\nstatic double T_s; /* Sampling period */\nstatic int sensorless, next;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"sensorless must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nsensorless = (int)P(0, 0);\nself = 0;\nT_s = P(1, 0);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "/* The step of the flying start of a sensorless drive (the state self),\n * advanced in the update function */\ndouble enable = InputSignal(0, 0);\nnext = 0;\nif (sensorless) {\n    if (enable <= 0.0) {\n        next = 1;\n    } else if (self == 1) {\n        next = 2;\n    } else if (self == 2) {\n        next = 3;\n    }\n}\nOutputSignal(0, 0) = (enable <= 0.0 || next == 2) ? 1.0 : 0.0;\nOutputSignal(1, 0) = next;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         "self = next;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "enable"
+      SrcTerminal   1
+      Points        [70, 35; 70, 50]
+      DstComponent  "C-Script"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   2
+      DstComponent  "zero_torque"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   3
+      Points        [215, 55; 215, 85]
+      DstComponent  "step"
+      DstTerminal   1
+    }
+      }
+    }
+    Component {
+      Type          From
+      Name          "From step"
+      Show          off
+      Position      [235, 175]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "step"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto zero_torque"
+      Show          off
+      Position      [400, 310]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "zero_torque"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto step"
+      Show          off
+      Position      [400, 350]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "step"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "SpeedFluxObserver"
+      Show          on
+      Position      [430, 205]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -50; 50, 50]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
@@ -1903,17 +2258,22 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -20]
+        Position      [-50, -30]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 0]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 20]
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 30]
         Direction     left
       }
       Terminal {
@@ -1922,16 +2282,16 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 545, 235]
+        Location      [0, 0; 565, 280]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
         BrowserWidth  100
     Component {
       Type          Input
-      Name          "meas"
+      Name          "step"
       Show          on
-      Position      [40, 35]
+      Position      [40, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1948,9 +2308,9 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_s_ab"
+      Name          "meas"
       Show          on
-      Position      [40, 75]
+      Position      [40, 85]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1967,9 +2327,9 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_s_zoh_ab"
+      Name          "u_s_ab"
       Show          on
-      Position      [40, 115]
+      Position      [40, 125]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1985,10 +2345,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "out"
+      Type          Input
+      Name          "u_s_zoh_ab"
       Show          on
-      Position      [495, 60]
+      Position      [40, 165]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2004,19 +2364,38 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "out"
+      Show          on
+      Position      [515, 70]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          Subsystem
       Name          "FluxObserver"
       Show          on
-      Position      [175, 60]
+      Position      [175, 65]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -30; 50, 30]
+      Frame         [-50, -35; 50, 35]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Flux observer in estimated rotor coordinates (FluxObserver). The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In the sensored mode (h = 1), the position error signal is computed from the measured rotor angle (compute_feedback). The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskDescription "Flux observer in estimated rotor coordinates (FluxObserver). The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). While the gates are blocked, the voltages are unknown (NaN), and the observer runs on its open-circuit model. At the flying start after the release (the input step), the estimates are initialized from the current response to the zero-voltage period (SpeedFluxObserver.catch), and the output init = [flag w_M] initializes the SpeedObserver. In the sensored mode (h = 1), the position error signal is computed from the measured rotor angle (compute_feedback). The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
       MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -2077,38 +2456,48 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -15]
+        Position      [-50, -20]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -5]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 5]
+        Position      [-50, 0]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 15]
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 20]
         Direction     left
       }
       Terminal {
         Type          Output
-        Position      [54, 0]
+        Position      [54, -5]
+        Direction     right
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 5]
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 320, 200]
+        Location      [0, 0; 340, 240]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
         BrowserWidth  100
     Component {
       Type          Input
-      Name          "meas"
+      Name          "step"
       Show          on
       Position      [40, 35]
       Direction     right
@@ -2127,7 +2516,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_s_ab"
+      Name          "meas"
       Show          on
       Position      [40, 75]
       Direction     right
@@ -2146,7 +2535,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_s_zoh_ab"
+      Name          "u_s_ab"
       Show          on
       Position      [40, 115]
       Direction     right
@@ -2165,7 +2554,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "w_M"
+      Name          "u_s_zoh_ab"
       Show          on
       Position      [40, 155]
       Direction     right
@@ -2183,10 +2572,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "out"
+      Type          Input
+      Name          "w_M"
       Show          on
-      Position      [270, 60]
+      Position      [40, 195]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2202,14 +2591,52 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "init"
+      Show          on
+      Position      [290, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "6"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "out"
+      Show          on
+      Position      [290, 100]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "7"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [175, 60]
+      Position      [185, 65]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -30; 50, 30]
+      Frame         [-50, -35; 50, 35]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -2217,12 +2644,12 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[6 2 2 1]"
+        Value         "[1 4 2 2 1]"
         Show          off
       }
       Parameter {
         Variable      "NumOutputs"
-        Value         "[22]"
+        Value         "[2 22]"
         Show          off
       }
       Parameter {
@@ -2242,7 +2669,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1 1]"
+        Value         "[1 1 1 1 1]"
         Show          off
       }
       Parameter {
@@ -2272,7 +2699,7 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gradnet.c\"\n#include \"../motulator_export/c/sm_parameters.c\"\n#include \"../motulator_export/c/sm_control_loci.c\"\n#include \"../motulator_export/c/sm_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n * in the arrays of the C port (in the start function only, returns on error) */\n#define CHECK_GRADNET(i0) \\\n    do { \\\n        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n            SetErrorMessage(\"GradNet too large: in_dim must be at most \" \\\n                            \"4 and embed_dim at most \" \\\n                            \"64.\"); \\\n            return; \\\n        } \\\n    } while (0)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\nstatic FluxObserver self;\nstatic double T_s; /* Sampling period */\nstatic double h;\nstatic ObserverOutputs out;\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gradnet.c\"\n#include \"../motulator_export/c/sm_parameters.c\"\n#include \"../motulator_export/c/sm_control_loci.c\"\n#include \"../motulator_export/c/sm_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n * in the arrays of the C port (in the start function only, returns on error) */\n#define CHECK_GRADNET(i0) \\\n    do { \\\n        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n            SetErrorMessage(\"GradNet too large: in_dim must be at most \" \\\n                            \"4 and embed_dim at most \" \\\n                            \"64.\"); \\\n            return; \\\n        } \\\n    } while (0)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\nstatic FluxObserver self;\nstatic double T_s; /* Sampling period */\nstatic double h;\nstatic ObserverOutputs out;\n/* Flying start: the current at the start of the zero-voltage period */\nstatic double complex i_s_ab_start;\nstatic int catching;\n"
         Show          off
       }
       Parameter {
@@ -2282,7 +2709,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\ndouble w_M = InputSignal(3, 0);\nif (h == 0.0) {\n    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,\n                                 0.0, &out);\n} else {\n    /* Position error from the measured rotor angle (compute_feedback) */\n    double n_p = self.par.n_p;\n    double eps = wrap(n_p * meas.theta_M - self.theta_m) / n_p;\n    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps,\n                                 h, &out);\n}\n/* Voltage for the control laws (DriveControlSystem.get_feedback) */\nout.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble y[FBK_WIDTH];\nobserver_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_s_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\ndouble complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));\ndouble w_M = InputSignal(4, 0);\n/* Flying start: the current at the start of the zero-voltage period (step\n * 3), and the estimates initialized from the current response at its end\n * (the next step), see SpeedFluxObserver.catch */\ndouble init = 0.0;\nif (InputSignal(0, 0) == 3.0) {\n    i_s_ab_start = meas.i_c_ab;\n    catching = 1;\n} else if (catching) {\n    catching = 0;\n    init = flux_observer_catch(&self.par, meas.i_c_ab - i_s_ab_start,\n                               meas.i_c_ab, T_s, &w_M, &self.theta_m,\n                               &self.psi_s);\n}\nOutputSignal(0, 0) = init;\nOutputSignal(0, 1) = w_M;\nif (h == 0.0) {\n    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,\n                                 0.0, &out);\n} else {\n    /* Position error from the measured rotor angle (compute_feedback) */\n    double n_p = self.par.n_p;\n    double eps = wrap(n_p * meas.theta_M - self.theta_m) / n_p;\n    flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps,\n                                 h, &out);\n}\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n * open-circuit voltage of the observer if unknown */\nout.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n                               : cexp(-I * out.theta_c) * u_s_ab;\ndouble y[FBK_WIDTH];\nobserver_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(1, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -2313,7 +2740,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "meas"
+      SrcComponent  "step"
       SrcTerminal   1
       Points        [70, 35; 70, 45]
       DstComponent  "C-Script"
@@ -2321,7 +2748,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_s_ab"
+      SrcComponent  "meas"
       SrcTerminal   1
       Points        [80, 75; 80, 55]
       DstComponent  "C-Script"
@@ -2329,7 +2756,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_s_zoh_ab"
+      SrcComponent  "u_s_ab"
       SrcTerminal   1
       Points        [90, 115; 90, 65]
       DstComponent  "C-Script"
@@ -2337,7 +2764,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "w_M"
+      SrcComponent  "u_s_zoh_ab"
       SrcTerminal   1
       Points        [100, 155; 100, 75]
       DstComponent  "C-Script"
@@ -2345,18 +2772,53 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "w_M"
+      SrcTerminal   1
+      Points        [110, 195; 110, 85]
+      DstComponent  "C-Script"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   5
+      SrcTerminal   6
+      DstComponent  "init"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   7
+      Points        [255, 70; 255, 100]
       DstComponent  "out"
       DstTerminal   1
     }
       }
     }
     Component {
+      Type          Goto
+      Name          "Goto init"
+      Show          off
+      Position      [290, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "init"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
       Type          SignalSelector
       Name          "fbk.eps"
       Show          on
-      Position      [285, 110]
+      Position      [285, 120]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2372,10 +2834,29 @@ Plecs {
       }
     }
     Component {
+      Type          From
+      Name          "From init"
+      Show          off
+      Position      [290, 160]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "init"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
       Type          SignalSelector
       Name          "fbk.tau_M"
       Show          on
-      Position      [285, 160]
+      Position      [285, 205]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2394,16 +2875,16 @@ Plecs {
       Type          Subsystem
       Name          "SpeedObserver"
       Show          on
-      Position      [390, 115]
+      Position      [410, 130]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -20; 50, 20]
+      Frame         [-50, -25; 50, 25]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -2445,12 +2926,17 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -5]
+        Position      [-50, -10]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 5]
+        Position      [-50, 0]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 10]
         Direction     left
       }
       Terminal {
@@ -2464,7 +2950,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 310, 130]
+        Location      [0, 0; 320, 160]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -2490,7 +2976,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "tau_M"
+      Name          "init"
       Show          on
       Position      [40, 75]
       Direction     right
@@ -2508,10 +2994,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "w_M"
+      Type          Input
+      Name          "tau_M"
       Show          on
-      Position      [260, 45]
+      Position      [40, 115]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2528,9 +3014,9 @@ Plecs {
     }
     Component {
       Type          Output
-      Name          "tau_L"
+      Name          "w_M"
       Show          on
-      Position      [260, 85]
+      Position      [270, 50]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2546,14 +3032,33 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "tau_L"
+      Show          on
+      Position      [270, 90]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [155, 50]
+      Position      [165, 55]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -20; 50, 20]
+      Frame         [-50, -25; 50, 25]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -2561,7 +3066,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 1]"
+        Value         "[1 2 1]"
         Show          off
       }
       Parameter {
@@ -2586,7 +3091,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[0 0]"
+        Value         "[0 0 0]"
         Show          off
       }
       Parameter {
@@ -2631,7 +3136,7 @@ Plecs {
       }
       Parameter {
         Variable      "UpdateFcn"
-        Value         "speed_observer_update(&self, T_s, InputSignal(0, 0), InputSignal(1, 0));\n"
+        Value         "/* The speed estimate initialized at the flying start */\nif (InputSignal(1, 0) > 0.0) {\n    self.w_M = InputSignal(1, 1);\n}\nspeed_observer_update(&self, T_s, InputSignal(0, 0), InputSignal(2, 0));\n"
         Show          off
       }
       Parameter {
@@ -2665,7 +3170,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "tau_M"
+      SrcComponent  "init"
       SrcTerminal   1
       Points        [80, 75; 80, 55]
       DstComponent  "C-Script"
@@ -2673,16 +3178,24 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "tau_M"
+      SrcTerminal   1
+      Points        [90, 115; 90, 65]
+      DstComponent  "C-Script"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   3
+      SrcTerminal   4
       DstComponent  "w_M"
       DstTerminal   1
     }
     Connection {
       Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   4
-      Points        [225, 55; 225, 85]
+      SrcTerminal   5
+      Points        [235, 60; 235, 90]
       DstComponent  "tau_L"
       DstTerminal   1
     }
@@ -2692,55 +3205,77 @@ Plecs {
       Type          Signal
       SrcComponent  "meas"
       SrcTerminal   1
-      Points        [70, 35; 70, 45]
-      DstComponent  "FluxObserver"
-      DstTerminal   1
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "u_s_ab"
-      SrcTerminal   1
-      Points        [80, 75; 80, 55]
+      Points        [70, 85; 70, 55]
       DstComponent  "FluxObserver"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_s_zoh_ab"
+      SrcComponent  "u_s_ab"
       SrcTerminal   1
-      Points        [90, 115; 90, 65]
+      Points        [80, 125; 80, 65]
       DstComponent  "FluxObserver"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "SpeedObserver"
-      SrcTerminal   3
-      Points        [460, 110; 460, 195; 100, 195; 100, 75]
+      SrcComponent  "u_s_zoh_ab"
+      SrcTerminal   1
+      Points        [90, 165; 90, 75]
       DstComponent  "FluxObserver"
       DstTerminal   4
     }
     Connection {
       Type          Signal
+      SrcComponent  "step"
+      SrcTerminal   1
+      DstComponent  "FluxObserver"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "SpeedObserver"
+      SrcTerminal   4
+      Points        [480, 125; 480, 240; 100, 240; 100, 85]
+      DstComponent  "FluxObserver"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "FluxObserver"
-      SrcTerminal   5
-      Points        [245, 60]
+      SrcTerminal   7
+      Points        [245, 70]
       Branch {
         DstComponent  "out"
         DstTerminal   1
       }
       Branch {
-        Points        [245, 110]
+        Points        [245, 120]
         Branch {
           DstComponent  "fbk.eps"
           DstTerminal   1
         }
         Branch {
-          Points        [245, 160]
+          Points        [245, 205]
           DstComponent  "fbk.tau_M"
           DstTerminal   1
         }
       }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "FluxObserver"
+      SrcTerminal   6
+      DstComponent  "Goto init"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From init"
+      SrcTerminal   1
+      Points        [325, 160; 325, 130]
+      DstComponent  "SpeedObserver"
+      DstTerminal   2
     }
     Connection {
       Type          Signal
@@ -2753,23 +3288,42 @@ Plecs {
       Type          Signal
       SrcComponent  "fbk.tau_M"
       SrcTerminal   2
-      Points        [315, 160; 315, 120]
+      Points        [335, 205; 335, 140]
       DstComponent  "SpeedObserver"
-      DstTerminal   2
+      DstTerminal   3
     }
+      }
+    }
+    Component {
+      Type          From
+      Name          "From zero_torque"
+      Show          off
+      Position      [545, 55]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "zero_torque"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
       }
     }
     Component {
       Type          SignalSelector
       Name          "meas.u_dc"
       Show          on
-      Position      [340, 105]
+      Position      [540, 110]
       Direction     right
       Flipped       off
       LabelPosition south
       Parameter {
         Variable      "InputWidth"
-        Value         "6"
+        Value         "4"
         Show          off
       }
       Parameter {
@@ -2782,7 +3336,7 @@ Plecs {
       Type          SignalSelector
       Name          "fbk.w_m"
       Show          on
-      Position      [340, 155]
+      Position      [540, 160]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2801,16 +3355,16 @@ Plecs {
       Type          Subsystem
       Name          "ReferenceGenerator"
       Show          on
-      Position      [460, 70]
+      Position      [665, 70]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -25; 50, 25]
+      Frame         [-50, -30; 50, 30]
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ReferenceGenerator (motulator)"
-      MaskDescription "Flux and torque reference generator (ReferenceGenerator) with the lookup tables of the MTPA, MTPV, and current-limit loci, computed by the function sm_reference_luts.m next to the model in the mask initialization (Simulink) or by the block at the start (PLECS). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskDescription "Flux and torque reference generator (ReferenceGenerator) with the lookup tables of the MTPA, MTPV, and current-limit loci, computed by the function sm_reference_luts.m next to the model in the mask initialization (Simulink) or by the block at the start (PLECS). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The torque reference is zero if the input zero_torque is set (while the gates are blocked and at the flying start). The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
       MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n% Lookup tables of the loci: empty, so the block computes them at the start\nluts = [];\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -2871,17 +3425,22 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -10]
+        Position      [-50, -15]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 0]
+        Position      [-50, -5]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 10]
+        Position      [-50, 5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 15]
         Direction     left
       }
       Terminal {
@@ -2890,14 +3449,14 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 310, 160]
+        Location      [0, 0; 320, 200]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
         BrowserWidth  100
     Component {
       Type          Input
-      Name          "tau_M_ref"
+      Name          "zero_torque"
       Show          on
       Position      [40, 35]
       Direction     right
@@ -2916,7 +3475,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_dc"
+      Name          "tau_M_ref"
       Show          on
       Position      [40, 75]
       Direction     right
@@ -2935,7 +3494,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "w_m"
+      Name          "u_dc"
       Show          on
       Position      [40, 115]
       Direction     right
@@ -2953,10 +3512,10 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "ref"
+      Type          Input
+      Name          "w_m"
       Show          on
-      Position      [260, 55]
+      Position      [40, 155]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2972,14 +3531,33 @@ Plecs {
       }
     }
     Component {
+      Type          Output
+      Name          "ref"
+      Show          on
+      Position      [270, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [165, 55]
+      Position      [175, 60]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -25; 50, 25]
+      Frame         [-50, -30; 50, 30]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -2987,7 +3565,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 1 1]"
+        Value         "[1 1 1 1]"
         Show          off
       }
       Parameter {
@@ -3012,7 +3590,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1]"
+        Value         "[1 1 1 1]"
         Show          off
       }
       Parameter {
@@ -3052,7 +3630,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "/* Flux and limited torque references (ref.psi_s, ref.tau_M) */\ndouble psi_s_ref, tau_M_ref;\nreference_gen_compute_flux_and_torque_refs(&self, InputSignal(0, 0),\n    InputSignal(2, 0), InputSignal(1, 0), &psi_s_ref, &tau_M_ref);\nOutputSignal(0, 0) = psi_s_ref;\nOutputSignal(0, 1) = tau_M_ref;\n"
+        Value         "/* Flux and limited torque references (ref.psi_s, ref.tau_M), the torque\n * reference being zero while the gates are blocked and at the flying\n * start */\ndouble tau_M_ref_in = (InputSignal(0, 0) > 0.0) ? 0.0 : InputSignal(1, 0);\ndouble psi_s_ref, tau_M_ref;\nreference_gen_compute_flux_and_torque_refs(&self, tau_M_ref_in,\n    InputSignal(3, 0), InputSignal(2, 0), &psi_s_ref, &tau_M_ref);\nOutputSignal(0, 0) = psi_s_ref;\nOutputSignal(0, 1) = tau_M_ref;\n"
         Show          off
       }
       Parameter {
@@ -3083,7 +3661,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "tau_M_ref"
+      SrcComponent  "zero_torque"
       SrcTerminal   1
       Points        [70, 35; 70, 45]
       DstComponent  "C-Script"
@@ -3091,7 +3669,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc"
+      SrcComponent  "tau_M_ref"
       SrcTerminal   1
       Points        [80, 75; 80, 55]
       DstComponent  "C-Script"
@@ -3099,7 +3677,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "w_m"
+      SrcComponent  "u_dc"
       SrcTerminal   1
       Points        [90, 115; 90, 65]
       DstComponent  "C-Script"
@@ -3107,128 +3685,26 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "w_m"
+      SrcTerminal   1
+      Points        [100, 155; 100, 75]
+      DstComponent  "C-Script"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "C-Script"
-      SrcTerminal   4
+      SrcTerminal   5
       DstComponent  "ref"
       DstTerminal   1
     }
       }
     }
     Component {
-      Type          CScript
-      Name          "compute_standby_output"
-      Show          on
-      Position      [655, 70]
-      Direction     up
-      Flipped       off
-      LabelPosition south
-      Frame         [-50, -25; 50, 25]
-      Parameter {
-        Variable      "DialogGeometry"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "NumInputs"
-        Value         "[1 2 22]"
-        Show          off
-      }
-      Parameter {
-        Variable      "NumOutputs"
-        Value         "[2]"
-        Show          off
-      }
-      Parameter {
-        Variable      "NumContStates"
-        Value         "0"
-        Show          off
-      }
-      Parameter {
-        Variable      "NumDiscStates"
-        Value         "0"
-        Show          off
-      }
-      Parameter {
-        Variable      "NumZCSignals"
-        Value         "0"
-        Show          off
-      }
-      Parameter {
-        Variable      "DirectFeedthrough"
-        Value         "[1 1 1]"
-        Show          off
-      }
-      Parameter {
-        Variable      "Ts"
-        Value         "-1"
-        Show          off
-      }
-      Parameter {
-        Variable      "Parameters"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "LangStandard"
-        Value         "2"
-        Show          off
-      }
-      Parameter {
-        Variable      "GnuExtensions"
-        Value         "2"
-        Show          off
-      }
-      Parameter {
-        Variable      "RuntimeCheck"
-        Value         "2"
-        Show          off
-      }
-      Parameter {
-        Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gradnet.c\"\n#include \"../motulator_export/c/sm_parameters.c\"\n#include \"../motulator_export/c/sm_control_loci.c\"\n#include \"../motulator_export/c/sm_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n * in the arrays of the C port (in the start function only, returns on error) */\n#define CHECK_GRADNET(i0) \\\n    do { \\\n        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n            SetErrorMessage(\"GradNet too large: in_dim must be at most \" \\\n                            \"4 and embed_dim at most \" \\\n                            \"64.\"); \\\n            return; \\\n        } \\\n    } while (0)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\n"
-        Show          off
-      }
-      Parameter {
-        Variable      "StartFcn"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "OutputFcn"
-        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(2, k);\n}\nObserverOutputs fbk;\nobserver_outputs_unpack(fbk_u, &fbk);\n/* References of compute_output, or while the gates are blocked, of\n * compute_standby_output */\nif (InputSignal(0, 0) > 0.0) {\n    OutputSignal(0, 0) = InputSignal(1, 0);\n    OutputSignal(0, 1) = InputSignal(1, 1);\n} else {\n    OutputSignal(0, 0) = cabs(fbk.psi_s);\n    OutputSignal(0, 1) = fbk.tau_M;\n}\n"
-        Show          off
-      }
-      Parameter {
-        Variable      "UpdateFcn"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "DerivativeFcn"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "TerminateFcn"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "StoreCustomStateFcn"
-        Value         ""
-        Show          off
-      }
-      Parameter {
-        Variable      "RestoreCustomStateFcn"
-        Value         ""
-        Show          off
-      }
-    }
-    Component {
       Type          Subsystem
       Name          "FluxTorqueController"
       Show          on
-      Position      [810, 75]
+      Position      [820, 75]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3504,7 +3980,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux ref"
       Show          off
-      Position      [910, 70]
+      Position      [920, 70]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3516,9 +3992,9 @@ Plecs {
     }
     Component {
       Type          From
-      Name          "From compute_standby_output.enable"
+      Name          "From FlyingStart.enable"
       Show          off
-      Position      [566, 60]
+      Position      [176, 315]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3537,7 +4013,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [100, 310]
+      Position      [100, 315]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3554,22 +4030,59 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "From compute_standby_output.enable"
+      SrcComponent  "From FlyingStart.enable"
       SrcTerminal   1
-      DstComponent  "compute_standby_output"
+      DstComponent  "FlyingStart"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "FlyingStart"
+      SrcTerminal   3
+      Points        [345, 320]
+      Branch {
+        Points        [345, 350]
+        DstComponent  "Goto step"
+        DstTerminal   1
+      }
+      Branch {
+        Points        [945, 320; 945, 245]
+        DstComponent  "step"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From step"
+      SrcTerminal   1
+      DstComponent  "SpeedFluxObserver"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "FlyingStart"
+      SrcTerminal   2
+      DstComponent  "Goto zero_torque"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From zero_torque"
+      SrcTerminal   1
+      DstComponent  "ReferenceGenerator"
       DstTerminal   1
     }
     Connection {
       Type          Signal
       SrcComponent  "meas"
       SrcTerminal   1
-      Points        [155, 190]
+      Points        [135, 195]
       Branch {
         DstComponent  "SpeedFluxObserver"
-        DstTerminal   1
+        DstTerminal   2
       }
       Branch {
-        Points        [155, 105]
+        Points        [135, 110]
         DstComponent  "meas.u_dc"
         DstTerminal   1
       }
@@ -3578,46 +4091,38 @@ Plecs {
       Type          Signal
       SrcComponent  "u_c_ab"
       SrcTerminal   1
-      Points        [135, 230; 135, 210]
-      DstComponent  "SpeedFluxObserver"
-      DstTerminal   2
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "u_c_zoh_ab"
-      SrcTerminal   1
-      Points        [145, 270; 145, 230]
+      Points        [335, 235; 335, 215]
       DstComponent  "SpeedFluxObserver"
       DstTerminal   3
     }
     Connection {
       Type          Signal
+      SrcComponent  "u_c_zoh_ab"
+      SrcTerminal   1
+      Points        [355, 275; 355, 235]
+      DstComponent  "SpeedFluxObserver"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "SpeedFluxObserver"
-      SrcTerminal   4
-      Points        [300, 210]
+      SrcTerminal   5
+      Points        [500, 205]
       Branch {
-        Points        [300, 155]
+        Points        [500, 160]
         DstComponent  "fbk.w_m"
         DstTerminal   1
       }
       Branch {
-        Points        [525, 210]
+        Points        [745, 205]
         Branch {
-          Points        [525, 80]
-          DstComponent  "compute_standby_output"
-          DstTerminal   3
+          Points        [745, 80]
+          DstComponent  "FluxTorqueController"
+          DstTerminal   2
         }
         Branch {
-          Points        [735, 210]
-          Branch {
-            Points        [735, 80]
-            DstComponent  "FluxTorqueController"
-            DstTerminal   2
-          }
-          Branch {
-            DstComponent  "fbk"
-            DstTerminal   1
-          }
+          DstComponent  "fbk"
+          DstTerminal   1
         }
       }
     }
@@ -3626,42 +4131,35 @@ Plecs {
       SrcComponent  "tau_M_ref"
       SrcTerminal   1
       DstComponent  "ReferenceGenerator"
-      DstTerminal   1
+      DstTerminal   2
     }
     Connection {
       Type          Signal
       SrcComponent  "meas.u_dc"
       SrcTerminal   2
-      Points        [375, 105; 375, 70]
-      DstComponent  "ReferenceGenerator"
-      DstTerminal   2
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "fbk.w_m"
-      SrcTerminal   2
-      Points        [385, 155; 385, 80]
+      Points        [580, 110; 580, 75]
       DstComponent  "ReferenceGenerator"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "ReferenceGenerator"
-      SrcTerminal   4
-      DstComponent  "compute_standby_output"
-      DstTerminal   2
+      SrcComponent  "fbk.w_m"
+      SrcTerminal   2
+      Points        [590, 160; 590, 85]
+      DstComponent  "ReferenceGenerator"
+      DstTerminal   4
     }
     Connection {
       Type          Signal
-      SrcComponent  "compute_standby_output"
-      SrcTerminal   4
-      Points        [725, 70]
+      SrcComponent  "ReferenceGenerator"
+      SrcTerminal   5
+      Points        [735, 70]
       Branch {
         DstComponent  "FluxTorqueController"
         DstTerminal   1
       }
       Branch {
-        Points        [725, 30; 880, 30; 880, 65]
+        Points        [735, 30; 890, 30; 890, 65]
         DstComponent  "Mux ref"
         DstTerminal   2
       }
@@ -3693,7 +4191,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.u_s"
       Show          on
-      Position      [880, 190]
+      Position      [890, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3712,7 +4210,7 @@ Plecs {
       Type          CScript
       Name          "modulate"
       Show          on
-      Position      [1065, 150]
+      Position      [1085, 140]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3822,7 +4320,7 @@ Plecs {
       Type          CScript
       Name          "Monitored signals"
       Show          on
-      Position      [1065, 285]
+      Position      [1085, 315]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -4008,7 +4506,7 @@ Plecs {
       Type          From
       Name          "From Monitored signals.w_M_ref"
       Show          off
-      Position      [976, 295]
+      Position      [996, 325]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4084,6 +4582,22 @@ Plecs {
     }
     Connection {
       Type          Signal
+      SrcComponent  "FluxVectorController"
+      SrcTerminal   8
+      Points        [840, 175; 840, 265]
+      DstComponent  "Goto step"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From step"
+      SrcTerminal   1
+      Points        [945, 385; 945, 415; 415, 415; 415, 285]
+      DstComponent  "PWM"
+      DstTerminal   5
+    }
+    Connection {
+      Type          Signal
       SrcComponent  "From SpeedController.w_M_ref"
       SrcTerminal   1
       DstComponent  "SpeedController"
@@ -4100,7 +4614,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [135, 135; 135, 140]
+      Points        [135, 135; 135, 145]
       DstComponent  "get_measurement"
       DstTerminal   1
     }
@@ -4108,33 +4622,25 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc"
       SrcTerminal   1
-      Points        [145, 175; 145, 150]
+      Points        [145, 175; 145, 155]
       DstComponent  "get_measurement"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_c_line"
+      SrcComponent  "theta_M"
       SrcTerminal   1
-      Points        [155, 215; 155, 160]
+      Points        [155, 215; 155, 165]
       DstComponent  "get_measurement"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "theta_M"
-      SrcTerminal   1
-      Points        [165, 255; 165, 170]
-      DstComponent  "get_measurement"
-      DstTerminal   4
-    }
-    Connection {
-      Type          Signal
       SrcComponent  "get_measurement"
-      SrcTerminal   5
-      Points        [395, 155]
+      SrcTerminal   4
+      Points        [385, 155]
       Branch {
-        Points        [395, 225]
+        Points        [385, 225]
         DstComponent  "PWM"
         DstTerminal   2
       }
@@ -4154,7 +4660,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref"
       SrcTerminal   1
-      Points        [310, 95; 310, 105]
+      Points        [300, 95; 300, 105]
       DstComponent  "ref.tau_M"
       DstTerminal   1
     }
@@ -4169,7 +4675,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.tau_M"
       SrcTerminal   2
-      Points        [385, 105; 385, 65]
+      Points        [375, 105; 375, 65]
       DstComponent  "SpeedController"
       DstTerminal   3
     }
@@ -4184,23 +4690,23 @@ Plecs {
     Connection {
       Type          Signal
       SrcComponent  "PWM"
-      SrcTerminal   5
-      Points        [610, 215; 610, 175]
+      SrcTerminal   6
+      Points        [610, 225; 610, 175]
       DstComponent  "FluxVectorController"
       DstTerminal   4
     }
     Connection {
       Type          Signal
       SrcComponent  "PWM"
-      SrcTerminal   6
-      Points        [620, 235; 620, 195]
+      SrcTerminal   7
+      Points        [620, 245; 620, 195]
       DstComponent  "FluxVectorController"
       DstTerminal   5
     }
     Connection {
       Type          Signal
       SrcComponent  "PWM"
-      SrcTerminal   7
+      SrcTerminal   8
       DstComponent  "d_abc"
       DstTerminal   1
     }
@@ -4208,9 +4714,9 @@ Plecs {
       Type          Signal
       SrcComponent  "FluxVectorController"
       SrcTerminal   6
-      Points        [830, 145]
+      Points        [830, 135]
       Branch {
-        Points        [830, 110]
+        Points        [830, 100]
         DstComponent  "Goto fbk"
         DstTerminal   1
       }
@@ -4223,9 +4729,9 @@ Plecs {
       Type          Signal
       SrcComponent  "FluxVectorController"
       SrcTerminal   7
-      Points        [840, 165; 840, 190]
+      Points        [850, 155; 850, 180]
       Branch {
-        Points        [840, 235]
+        Points        [850, 225]
         DstComponent  "Goto ref"
         DstTerminal   1
       }
@@ -4238,7 +4744,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.u_s"
       SrcTerminal   2
-      Points        [935, 190; 935, 155]
+      Points        [955, 180; 955, 145]
       DstComponent  "modulate"
       DstTerminal   2
     }
@@ -4246,7 +4752,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   3
-      Points        [1145, 145; 1145, 355; 405, 355; 405, 245]
+      Points        [1165, 135; 1165, 435; 395, 435; 395, 245]
       DstComponent  "PWM"
       DstTerminal   3
     }
@@ -4254,7 +4760,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   4
-      Points        [1135, 155; 1135, 345; 415, 345; 415, 265]
+      Points        [1155, 145; 1155, 425; 405, 425; 405, 265]
       DstComponent  "PWM"
       DstTerminal   4
     }
@@ -4269,7 +4775,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref 2"
       SrcTerminal   1
-      Points        [925, 315; 925, 285]
+      Points        [935, 345; 935, 315]
       DstComponent  "Monitored signals"
       DstTerminal   2
     }
@@ -4515,7 +5021,7 @@ Plecs {
       SrcComponent  "Components/Electrical/Machines/Perm.-Magnet SM"
       Name          "Machine"
       Show          on
-      Position      [920, 100]
+      Position      [860, 100]
       Direction     up
       Flipped       off
       LabelPosition east
@@ -4592,28 +5098,10 @@ Plecs {
       }
     }
     Component {
-      Type          Voltmeter
-      Name          "u_cab"
-      Show          off
-      Position      [815, 80]
-      Direction     up
-      Flipped       off
-      LabelPosition south
-    }
-    Component {
-      Type          Voltmeter
-      Name          "u_cbc"
-      Show          off
-      Position      [815, 120]
-      Direction     up
-      Flipped       off
-      LabelPosition south
-    }
-    Component {
       Type          Step
       Name          "tau_L"
       Show          on
-      Position      [880, 180]
+      Position      [820, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4642,7 +5130,7 @@ Plecs {
       Type          ControlledTorque
       Name          "Load"
       Show          on
-      Position      [950, 180]
+      Position      [890, 180]
       Direction     left
       Flipped       off
       LabelPosition east
@@ -4661,7 +5149,7 @@ Plecs {
       Type          RotationalReference
       Name          "Frame"
       Show          off
-      Position      [950, 225]
+      Position      [890, 225]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -4670,7 +5158,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed (ctrl)"
       Show          on
-      Position      [80, 320]
+      Position      [80, 270]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4684,7 +5172,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Speed"
       Show          on
-      Position      [80, 360]
+      Position      [80, 310]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4698,7 +5186,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque (ctrl)"
       Show          on
-      Position      [80, 400]
+      Position      [80, 350]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4712,7 +5200,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Torque"
       Show          on
-      Position      [80, 440]
+      Position      [80, 390]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4726,7 +5214,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Currents"
       Show          on
-      Position      [80, 480]
+      Position      [80, 430]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4740,7 +5228,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Flux (ctrl)"
       Show          on
-      Position      [80, 520]
+      Position      [80, 470]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4754,7 +5242,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux speed"
       Show          off
-      Position      [180, 360]
+      Position      [180, 310]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4768,7 +5256,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux torque"
       Show          off
-      Position      [180, 380]
+      Position      [180, 330]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4782,7 +5270,7 @@ Plecs {
       Type          Scope
       Name          "Scope"
       Show          on
-      Position      [260, 380]
+      Position      [260, 330]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -4858,7 +5346,7 @@ Plecs {
       SrcTerminal   2
       Points        [155, 20]
       Branch {
-        Points        [160, 20; 160, 75]
+        Points        [160, 20; 160, 80]
         DstComponent  "Flux-vector control"
         DstTerminal   1
       }
@@ -4872,7 +5360,7 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M_ref"
       SrcTerminal   1
-      Points        [140, 70; 140, 85]
+      Points        [140, 70; 140, 90]
       DstComponent  "Flux-vector control"
       DstTerminal   2
     }
@@ -4880,7 +5368,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [150, 120; 150, 95]
+      Points        [150, 120; 150, 100]
       DstComponent  "Flux-vector control"
       DstTerminal   3
     }
@@ -4888,30 +5376,22 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc meas."
       SrcTerminal   1
-      Points        [170, 170; 170, 105]
+      Points        [170, 170; 170, 110]
       DstComponent  "Flux-vector control"
       DstTerminal   4
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_c_line"
+      SrcComponent  "theta_M"
       SrcTerminal   1
-      Points        [180, 220; 180, 115]
+      Points        [180, 220; 180, 120]
       DstComponent  "Flux-vector control"
       DstTerminal   5
     }
     Connection {
       Type          Signal
-      SrcComponent  "theta_M"
-      SrcTerminal   1
-      Points        [190, 270; 190, 125]
-      DstComponent  "Flux-vector control"
-      DstTerminal   6
-    }
-    Connection {
-      Type          Signal
       SrcComponent  "Flux-vector control"
-      SrcTerminal   7
+      SrcTerminal   6
       DstComponent  "Delay"
       DstTerminal   1
     }
@@ -4954,6 +5434,27 @@ Plecs {
       DstTerminal   4
     }
     Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   1
+      DstComponent  "Machine"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   2
+      DstComponent  "Machine"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   3
+      DstComponent  "Machine"
+      DstTerminal   3
+    }
+    Connection {
       Type          Rotational
       SrcComponent  "Machine"
       SrcTerminal   4
@@ -4978,7 +5479,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed (ctrl)"
       SrcTerminal   1
-      Points        [120, 320; 120, 355]
+      Points        [120, 270; 120, 305]
       DstComponent  "Mux speed"
       DstTerminal   2
     }
@@ -4986,7 +5487,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Speed"
       SrcTerminal   1
-      Points        [130, 360; 130, 365]
+      Points        [130, 310; 130, 315]
       DstComponent  "Mux speed"
       DstTerminal   3
     }
@@ -4994,7 +5495,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque (ctrl)"
       SrcTerminal   1
-      Points        [140, 400; 140, 375]
+      Points        [140, 350; 140, 325]
       DstComponent  "Mux torque"
       DstTerminal   2
     }
@@ -5002,7 +5503,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Torque"
       SrcTerminal   1
-      Points        [150, 440; 150, 385]
+      Points        [150, 390; 150, 335]
       DstComponent  "Mux torque"
       DstTerminal   3
     }
@@ -5010,7 +5511,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux speed"
       SrcTerminal   1
-      Points        [210, 360; 210, 365]
+      Points        [210, 310; 210, 315]
       DstComponent  "Scope"
       DstTerminal   1
     }
@@ -5018,7 +5519,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Mux torque"
       SrcTerminal   1
-      Points        [215, 380; 215, 375]
+      Points        [215, 330; 215, 325]
       DstComponent  "Scope"
       DstTerminal   2
     }
@@ -5026,7 +5527,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Currents"
       SrcTerminal   1
-      Points        [220, 480; 220, 385]
+      Points        [220, 430; 220, 335]
       DstComponent  "Scope"
       DstTerminal   3
     }
@@ -5034,7 +5535,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Flux (ctrl)"
       SrcTerminal   1
-      Points        [225, 520; 225, 395]
+      Points        [225, 470; 225, 345]
       DstComponent  "Scope"
       DstTerminal   4
     }
@@ -5066,54 +5567,6 @@ Plecs {
         Points        [740, 160]
         DstComponent  "Converter"
         DstTerminal   6
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "Converter"
-      SrcTerminal   1
-      Points        [785, 90; 785, 60; 815, 60]
-      Branch {
-        DstComponent  "u_cab"
-        DstTerminal   1
-      }
-      Branch {
-        Points        [875, 60; 875, 90]
-        DstComponent  "Machine"
-        DstTerminal   1
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "Converter"
-      SrcTerminal   2
-      Points        [815, 100]
-      Branch {
-        DstComponent  "u_cab"
-        DstTerminal   2
-      }
-      Branch {
-        DstComponent  "u_cbc"
-        DstTerminal   1
-      }
-      Branch {
-        DstComponent  "Machine"
-        DstTerminal   2
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "Converter"
-      SrcTerminal   3
-      Points        [785, 110; 785, 140; 815, 140]
-      Branch {
-        DstComponent  "u_cbc"
-        DstTerminal   2
-      }
-      Branch {
-        Points        [875, 140; 875, 110]
-        DstComponent  "Machine"
-        DstTerminal   3
       }
     }
   }

@@ -79,13 +79,16 @@ static FluxObserver self;
 static double T_s; /* Sampling period */
 static double h;
 static ObserverOutputs out;
+/* Flying start: the current at the start of the zero-voltage period */
+static double complex i_s_ab_start;
+static int catching;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {6, 2, 2, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
-static const int OUTPUT_WIDTHS[] = {22};
-#define NUM_INPUTS 4
-#define NUM_OUTPUTS 1
+static const int INPUT_WIDTHS[] = {1, 4, 2, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1, 1, 1};
+static const int OUTPUT_WIDTHS[] = {2, 22};
+#define NUM_INPUTS 5
+#define NUM_OUTPUTS 2
 #define NUM_PARAMS 21
 
 static void mdlInitializeSizes(SimStruct *S)
@@ -192,12 +195,28 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     UNUSED_ARG(tid);
     double meas_u[MEAS_WIDTH];
     for (int k = 0; k < MEAS_WIDTH; k++) {
-        meas_u[k] = InputSignal(0, k);
+        meas_u[k] = InputSignal(1, k);
     }
     Measurements meas;
     measurements_unpack(meas_u, &meas);
-    double complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));
-    double w_M = InputSignal(3, 0);
+    double complex u_s_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));
+    double complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));
+    double w_M = InputSignal(4, 0);
+    /* Flying start: the current at the start of the zero-voltage period (step
+     * 3), and the estimates initialized from the current response at its end
+     * (the next step), see SpeedFluxObserver.catch */
+    double init = 0.0;
+    if (InputSignal(0, 0) == 3.0) {
+        i_s_ab_start = meas.i_c_ab;
+        catching = 1;
+    } else if (catching) {
+        catching = 0;
+        init = flux_observer_catch(&self.par, meas.i_c_ab - i_s_ab_start,
+                                   meas.i_c_ab, T_s, &w_M, &self.theta_m,
+                                   &self.psi_s);
+    }
+    OutputSignal(0, 0) = init;
+    OutputSignal(0, 1) = w_M;
     if (h == 0.0) {
         flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, 0.0,
                                      0.0, &out);
@@ -208,12 +227,14 @@ static void mdlOutputs(SimStruct *S, int_T tid)
         flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab, w_M, eps,
                                      h, &out);
     }
-    /* Voltage for the control laws (DriveControlSystem.get_feedback) */
-    out.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));
+    /* Voltage for the control laws (DriveControlSystem.get_feedback), or the
+     * open-circuit voltage of the observer if unknown */
+    out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh
+                                   : cexp(-I * out.theta_c) * u_s_ab;
     double y[FBK_WIDTH];
     observer_outputs_pack(&out, y);
     for (int k = 0; k < FBK_WIDTH; k++) {
-        OutputSignal(0, k) = y[k];
+        OutputSignal(1, k) = y[k];
     }
 }
 

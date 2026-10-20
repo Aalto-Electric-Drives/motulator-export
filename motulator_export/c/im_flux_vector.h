@@ -101,12 +101,11 @@ typedef struct {
 typedef struct {
     double complex i_c_ab; /* Converter current in stationary coordinates */
     double u_dc;
-    double complex u_c_ab; /* Converter voltage, used only with blocked gates */
 } IMVHzMeasurements;
 
-/* V/Hz control system (VHzControlSystem). While the gates are blocked, the feedback
- * voltage is the measured converter voltage, and the controller computes its
- * standby output. */
+/* V/Hz control system (VHzControlSystem). While the gates are blocked, the converter
+ * voltage is unknown: the observer runs on its open-circuit model, and the
+ * controller computes its standby output. */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
@@ -133,8 +132,7 @@ static void im_vhz_control_system_update(IMVHzControlSystem *self);
  * signals are those of current-vector control (FBK of im_current_vector.h). */
 #define VHZ_MEAS_i_c_ab 0
 #define VHZ_MEAS_u_dc 2
-#define VHZ_MEAS_u_c_ab 3
-#define VHZ_MEAS_WIDTH 5
+#define VHZ_MEAS_WIDTH 3
 
 #define VHZ_REF_psi_s 0
 #define VHZ_REF_tau_M 1

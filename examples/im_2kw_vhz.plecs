@@ -11,7 +11,7 @@ Plecs {
   AbsTol        "-1"
   InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Observer-based V/Hz control (ObserverBasedVHzControllerCfg)\ncfg.psi_s_nom = 1.0395957349782348;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_psi = 2*pi*100;\ncfg.alpha_tau = 2*pi*20;\ncfg.alpha_f = 2*pi*1;\ncfg.k_u = 0.9;\ncfg.k_b = 0.9;\ncfg.T_s = 0.00025;\n% Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2\nslew_rate = 2*pi*120;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MME';\n"
   Schematic {
-    Location      [0, 0; 1060, 520]
+    Location      [0, 0; 1000, 520]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -20,7 +20,7 @@ Plecs {
       Type          Constant
       Name          "enable"
       Show          on
-      Position      [60, 20]
+      Position      [60, 25]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -34,7 +34,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [195, 5]
+      Position      [195, 10]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -53,7 +53,7 @@ Plecs {
       Type          Step
       Name          "w_M_ref"
       Show          on
-      Position      [60, 70]
+      Position      [60, 75]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -82,7 +82,7 @@ Plecs {
       Type          PlecsProbe
       Name          "i_s_abc"
       Show          on
-      Position      [60, 120]
+      Position      [60, 125]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -96,31 +96,12 @@ Plecs {
       Type          PlecsProbe
       Name          "u_dc meas."
       Show          on
-      Position      [60, 170]
+      Position      [60, 175]
       Direction     right
       Flipped       off
       LabelPosition south
       Probe {
         Component     "u_dc"
-        Path          ""
-        Signals       {"Measured voltage"}
-      }
-    }
-    Component {
-      Type          PlecsProbe
-      Name          "u_c_line"
-      Show          on
-      Position      [60, 220]
-      Direction     right
-      Flipped       off
-      LabelPosition south
-      Probe {
-        Component     "u_cab"
-        Path          ""
-        Signals       {"Measured voltage"}
-      }
-      Probe {
-        Component     "u_cbc"
         Path          ""
         Signals       {"Measured voltage"}
       }
@@ -138,7 +119,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "VHzControlSystem (motulator)"
-      MaskDescription "Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator."
+      MaskDescription "Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -189,27 +170,22 @@ Plecs {
       }
       Terminal {
         Type          Input
-        Position      [-50, -20]
+        Position      [-50, -15]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, -10]
+        Position      [-50, -5]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 0]
+        Position      [-50, 5]
         Direction     left
       }
       Terminal {
         Type          Input
-        Position      [-50, 10]
-        Direction     left
-      }
-      Terminal {
-        Type          Input
-        Position      [-50, 20]
+        Position      [-50, 15]
         Direction     left
       }
       Terminal {
@@ -218,7 +194,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1025, 370]
+        Location      [0, 0; 1015, 370]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -300,10 +276,10 @@ Plecs {
       }
     }
     Component {
-      Type          Input
-      Name          "u_c_line"
+      Type          Output
+      Name          "d_abc"
       Show          on
-      Position      [40, 190]
+      Position      [630, 235]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -319,33 +295,14 @@ Plecs {
       }
     }
     Component {
-      Type          Output
-      Name          "d_abc"
-      Show          on
-      Position      [640, 235]
-      Direction     right
-      Flipped       off
-      LabelPosition south
-      Parameter {
-        Variable      "Index"
-        Value         "6"
-        Show          off
-      }
-      Parameter {
-        Variable      "Width"
-        Value         "-1"
-        Show          off
-      }
-    }
-    Component {
       Type          CScript
       Name          "get_measurement"
       Show          on
-      Position      [230, 135]
+      Position      [220, 135]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -25; 50, 25]
+      Frame         [-50, -20; 50, 20]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -353,12 +310,12 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[3 1 2]"
+        Value         "[3 1]"
         Show          off
       }
       Parameter {
         Variable      "NumOutputs"
-        Value         "[5]"
+        Value         "[3]"
         Show          off
       }
       Parameter {
@@ -378,7 +335,7 @@ Plecs {
       }
       Parameter {
         Variable      "DirectFeedthrough"
-        Value         "[1 1 1]"
+        Value         "[1 1]"
         Show          off
       }
       Parameter {
@@ -418,7 +375,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double i_s_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\n/* Line-to-line converter voltages u_ab and u_bc, used while the gates are\n * blocked */\ndouble u_c_line[2] = {InputSignal(2, 0), InputSignal(2, 1)};\nIMVHzMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_s_abc);\nmeas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);\nmeas.u_c_ab = line2complex(u_c_line);\ndouble y[VHZ_MEAS_WIDTH];\nim_vhz_measurements_pack(&meas, y);\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double i_s_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\nIMVHzMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_s_abc);\nmeas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);\ndouble y[VHZ_MEAS_WIDTH];\nim_vhz_measurements_pack(&meas, y);\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -451,7 +408,7 @@ Plecs {
       Type          Subsystem
       Name          "RateLimiter"
       Show          on
-      Position      [230, 70]
+      Position      [220, 70]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -667,7 +624,7 @@ Plecs {
       Type          Subsystem
       Name          "PWM"
       Show          on
-      Position      [460, 215]
+      Position      [450, 215]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -676,7 +633,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "PWM (motulator)"
-      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback."
+      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system."
       MaskInit      "% MME overmodulation, or MPE\nmme = strcmp(overmodulation, 'MME');\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -943,7 +900,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[5 2 1]"
+        Value         "[3 2 1]"
         Show          off
       }
       Parameter {
@@ -1008,7 +965,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble d_abc[3];\npwm_compute_output(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)), meas.u_dc,\n                   InputSignal(2, 0), meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
+        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -1053,7 +1010,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[1 5 3]"
+        Value         "[1 3 3]"
         Show          off
       }
       Parameter {
@@ -1118,7 +1075,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, the measured voltage */\ndouble complex u_c_ab = meas.u_c_ab;\ndouble complex u_c_zoh_ab = meas.u_c_ab;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
+        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, unknown (NAN) */\ndouble complex u_c_ab = NAN;\ndouble complex u_c_zoh_ab = NAN;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
         Show          off
       }
       Parameter {
@@ -1267,7 +1224,7 @@ Plecs {
       Type          Subsystem
       Name          "ObserverBasedVHzController"
       Show          on
-      Position      [680, 90]
+      Position      [670, 90]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -1678,7 +1635,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[5 2 2 1]"
+        Value         "[3 2 2 1]"
         Show          off
       }
       Parameter {
@@ -1743,7 +1700,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\n/* The rotor speed is the speed reference, without the external speed\n * error signal */\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n                                InputSignal(3, 0), 0.0, h, &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback) */\nout.u_s = cexp(-I * out.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\n/* The rotor speed is the speed reference, without the external speed\n * error signal */\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n                                InputSignal(3, 0), 0.0, h, &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n * open-circuit voltage of the observer if unknown */\ndouble complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\nout.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n                               : cexp(-I * out.theta_c) * u_s_ab;\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -1823,7 +1780,7 @@ Plecs {
       LabelPosition south
       Parameter {
         Variable      "InputWidth"
-        Value         "5"
+        Value         "3"
         Show          off
       }
       Parameter {
@@ -2854,7 +2811,7 @@ Plecs {
       Type          Goto
       Name          "Goto w_M"
       Show          off
-      Position      [430, 35]
+      Position      [420, 35]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2873,7 +2830,7 @@ Plecs {
       Type          Goto
       Name          "Goto fbk"
       Show          off
-      Position      [800, 45]
+      Position      [790, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2892,7 +2849,7 @@ Plecs {
       Type          Goto
       Name          "Goto ref"
       Show          off
-      Position      [800, 170]
+      Position      [790, 170]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2911,7 +2868,7 @@ Plecs {
       Type          From
       Name          "From fbk"
       Show          off
-      Position      [800, 210]
+      Position      [790, 210]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2930,7 +2887,7 @@ Plecs {
       Type          From
       Name          "From ref"
       Show          off
-      Position      [800, 250]
+      Position      [790, 250]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2949,7 +2906,7 @@ Plecs {
       Type          From
       Name          "From w_M"
       Show          off
-      Position      [800, 290]
+      Position      [790, 290]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2968,7 +2925,7 @@ Plecs {
       Type          SignalSelector
       Name          "ref.u_s"
       Show          on
-      Position      [795, 125]
+      Position      [785, 125]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2987,7 +2944,7 @@ Plecs {
       Type          CScript
       Name          "modulate"
       Show          on
-      Position      [935, 85]
+      Position      [925, 85]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3097,7 +3054,7 @@ Plecs {
       Type          CScript
       Name          "Monitored signals"
       Show          on
-      Position      [935, 220]
+      Position      [925, 220]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3207,7 +3164,7 @@ Plecs {
       Type          From
       Name          "From PWM.enable"
       Show          off
-      Position      [371, 185]
+      Position      [361, 185]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3226,7 +3183,7 @@ Plecs {
       Type          From
       Name          "From ObserverBasedVHzController.enable"
       Show          off
-      Position      [591, 50]
+      Position      [581, 50]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3285,13 +3242,13 @@ Plecs {
       Type          Signal
       SrcComponent  "RateLimiter"
       SrcTerminal   2
-      Points        [300, 70]
+      Points        [290, 70]
       Branch {
         DstComponent  "ObserverBasedVHzController"
         DstTerminal   2
       }
       Branch {
-        Points        [300, 35]
+        Points        [290, 35]
         DstComponent  "Goto w_M"
         DstTerminal   1
       }
@@ -3300,7 +3257,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [135, 110; 135, 125]
+      Points        [145, 110; 145, 130]
       DstComponent  "get_measurement"
       DstTerminal   1
     }
@@ -3308,30 +3265,22 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc"
       SrcTerminal   1
-      Points        [145, 150; 145, 135]
+      Points        [135, 150; 135, 140]
       DstComponent  "get_measurement"
       DstTerminal   2
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_c_line"
-      SrcTerminal   1
-      Points        [155, 190; 155, 145]
-      DstComponent  "get_measurement"
-      DstTerminal   3
-    }
-    Connection {
-      Type          Signal
       SrcComponent  "get_measurement"
-      SrcTerminal   4
-      Points        [310, 135]
+      SrcTerminal   3
+      Points        [300, 135]
       Branch {
-        Points        [310, 205]
+        Points        [300, 205]
         DstComponent  "PWM"
         DstTerminal   2
       }
       Branch {
-        Points        [530, 135; 530, 90]
+        Points        [520, 135; 520, 90]
         DstComponent  "ObserverBasedVHzController"
         DstTerminal   3
       }
@@ -3340,7 +3289,7 @@ Plecs {
       Type          Signal
       SrcComponent  "PWM"
       SrcTerminal   5
-      Points        [540, 195; 540, 110]
+      Points        [530, 195; 530, 110]
       DstComponent  "ObserverBasedVHzController"
       DstTerminal   4
     }
@@ -3348,7 +3297,7 @@ Plecs {
       Type          Signal
       SrcComponent  "PWM"
       SrcTerminal   6
-      Points        [550, 215; 550, 130]
+      Points        [540, 215; 540, 130]
       DstComponent  "ObserverBasedVHzController"
       DstTerminal   5
     }
@@ -3363,9 +3312,9 @@ Plecs {
       Type          Signal
       SrcComponent  "ObserverBasedVHzController"
       SrcTerminal   6
-      Points        [745, 80]
+      Points        [735, 80]
       Branch {
-        Points        [745, 45]
+        Points        [735, 45]
         DstComponent  "Goto fbk"
         DstTerminal   1
       }
@@ -3378,9 +3327,9 @@ Plecs {
       Type          Signal
       SrcComponent  "ObserverBasedVHzController"
       SrcTerminal   7
-      Points        [755, 100; 755, 125]
+      Points        [745, 100; 745, 125]
       Branch {
-        Points        [755, 170]
+        Points        [745, 170]
         DstComponent  "Goto ref"
         DstTerminal   1
       }
@@ -3393,7 +3342,7 @@ Plecs {
       Type          Signal
       SrcComponent  "ref.u_s"
       SrcTerminal   2
-      Points        [850, 125; 850, 90]
+      Points        [840, 125; 840, 90]
       DstComponent  "modulate"
       DstTerminal   2
     }
@@ -3401,7 +3350,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   3
-      Points        [1015, 80; 1015, 330; 320, 330; 320, 225]
+      Points        [1005, 80; 1005, 330; 310, 330; 310, 225]
       DstComponent  "PWM"
       DstTerminal   3
     }
@@ -3409,7 +3358,7 @@ Plecs {
       Type          Signal
       SrcComponent  "modulate"
       SrcTerminal   4
-      Points        [1005, 90; 1005, 320; 330, 320; 330, 245]
+      Points        [995, 90; 995, 320; 320, 320; 320, 245]
       DstComponent  "PWM"
       DstTerminal   4
     }
@@ -3424,7 +3373,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From ref"
       SrcTerminal   1
-      Points        [840, 250; 840, 220]
+      Points        [830, 250; 830, 220]
       DstComponent  "Monitored signals"
       DstTerminal   2
     }
@@ -3432,7 +3381,7 @@ Plecs {
       Type          Signal
       SrcComponent  "From w_M"
       SrcTerminal   1
-      Points        [860, 290; 860, 230]
+      Points        [850, 290; 850, 230]
       DstComponent  "Monitored signals"
       DstTerminal   3
     }
@@ -3671,7 +3620,7 @@ Plecs {
       SrcComponent  "Components/Electrical/Machines/Squirrel-Cage IM"
       Name          "Machine"
       Show          on
-      Position      [920, 100]
+      Position      [860, 100]
       Direction     up
       Flipped       off
       LabelPosition east
@@ -3758,28 +3707,10 @@ Plecs {
       }
     }
     Component {
-      Type          Voltmeter
-      Name          "u_cab"
-      Show          off
-      Position      [815, 80]
-      Direction     up
-      Flipped       off
-      LabelPosition south
-    }
-    Component {
-      Type          Voltmeter
-      Name          "u_cbc"
-      Show          off
-      Position      [815, 120]
-      Direction     up
-      Flipped       off
-      LabelPosition south
-    }
-    Component {
       Type          Step
       Name          "tau_L"
       Show          on
-      Position      [880, 180]
+      Position      [820, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3808,7 +3739,7 @@ Plecs {
       Type          ControlledTorque
       Name          "Load"
       Show          on
-      Position      [950, 180]
+      Position      [890, 180]
       Direction     left
       Flipped       off
       LabelPosition east
@@ -3827,7 +3758,7 @@ Plecs {
       Type          RotationalReference
       Name          "Frame"
       Show          off
-      Position      [950, 225]
+      Position      [890, 225]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -4015,14 +3946,14 @@ Plecs {
       Type          Signal
       SrcComponent  "enable"
       SrcTerminal   1
-      Points        [155, 20]
+      Points        [155, 25]
       Branch {
-        Points        [160, 20; 160, 80]
+        Points        [160, 25; 160, 85]
         DstComponent  "Observer-based VHz control"
         DstTerminal   1
       }
       Branch {
-        Points        [155, 5]
+        Points        [155, 10]
         DstComponent  "Goto enable"
         DstTerminal   1
       }
@@ -4031,7 +3962,7 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M_ref"
       SrcTerminal   1
-      Points        [140, 70; 140, 90]
+      Points        [140, 75; 140, 95]
       DstComponent  "Observer-based VHz control"
       DstTerminal   2
     }
@@ -4039,7 +3970,7 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [150, 120; 150, 100]
+      Points        [150, 125; 150, 105]
       DstComponent  "Observer-based VHz control"
       DstTerminal   3
     }
@@ -4047,22 +3978,14 @@ Plecs {
       Type          Signal
       SrcComponent  "u_dc meas."
       SrcTerminal   1
-      Points        [170, 170; 170, 110]
+      Points        [170, 175; 170, 115]
       DstComponent  "Observer-based VHz control"
       DstTerminal   4
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_c_line"
-      SrcTerminal   1
-      Points        [180, 220; 180, 120]
-      DstComponent  "Observer-based VHz control"
-      DstTerminal   5
-    }
-    Connection {
-      Type          Signal
       SrcComponent  "Observer-based VHz control"
-      SrcTerminal   6
+      SrcTerminal   5
       DstComponent  "Delay"
       DstTerminal   1
     }
@@ -4103,6 +4026,27 @@ Plecs {
       Points        [755, 25]
       DstComponent  "Converter"
       DstTerminal   4
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   1
+      DstComponent  "Machine"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   2
+      DstComponent  "Machine"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "Converter"
+      SrcTerminal   3
+      DstComponent  "Machine"
+      DstTerminal   3
     }
     Connection {
       Type          Rotational
@@ -4217,54 +4161,6 @@ Plecs {
         Points        [740, 160]
         DstComponent  "Converter"
         DstTerminal   6
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "Converter"
-      SrcTerminal   1
-      Points        [785, 90; 785, 60; 815, 60]
-      Branch {
-        DstComponent  "u_cab"
-        DstTerminal   1
-      }
-      Branch {
-        Points        [875, 60; 875, 90]
-        DstComponent  "Machine"
-        DstTerminal   1
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "Converter"
-      SrcTerminal   2
-      Points        [815, 100]
-      Branch {
-        DstComponent  "u_cab"
-        DstTerminal   2
-      }
-      Branch {
-        DstComponent  "u_cbc"
-        DstTerminal   1
-      }
-      Branch {
-        DstComponent  "Machine"
-        DstTerminal   2
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "Converter"
-      SrcTerminal   3
-      Points        [785, 110; 785, 140; 815, 140]
-      Branch {
-        DstComponent  "u_cbc"
-        DstTerminal   2
-      }
-      Branch {
-        Points        [875, 140; 875, 110]
-        DstComponent  "Machine"
-        DstTerminal   3
       }
     }
   }

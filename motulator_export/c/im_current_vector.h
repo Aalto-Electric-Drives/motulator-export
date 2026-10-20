@@ -130,11 +130,11 @@ typedef struct {
     double complex i_c_ab; /* Converter current in stationary coordinates */
     double u_dc;
     double w_M; /* Mechanical rotor speed, used only in the sensored mode */
-    double complex u_c_ab; /* Converter voltage, used only with blocked gates */
 } IMMeasurements;
 
 /* Vector control system (VectorControlSystem), with the gate enable as in
- * sm_flux_vector.h */
+ * sm_flux_vector.h. The flying start applies the zero vector, but the estimates
+ * are not initialized, since the rotor flux has decayed. */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
@@ -144,6 +144,8 @@ typedef struct {
     int enabled; /* Gate enable */
     IMObserverOutputs fbk;
     IMReferences ref;
+    /* Flying start after the release (VectorControlSystem.get_feedback) */
+    int catch_step; /* Step of the flying start, 0 if none */
 } IMVectorControlSystem;
 
 static IMCurrentVectorControllerCfg im_current_vector_controller_cfg(double psi_s_nom,
@@ -164,8 +166,7 @@ static void im_vector_control_system_update(IMVectorControlSystem *self);
 #define MEAS_i_c_ab 0
 #define MEAS_u_dc 2
 #define MEAS_w_M 3
-#define MEAS_u_c_ab 4
-#define MEAS_WIDTH 6
+#define MEAS_WIDTH 4
 
 #define FBK_i_s 0
 #define FBK_u_s 2
