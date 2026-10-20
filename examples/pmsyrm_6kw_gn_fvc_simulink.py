@@ -18,15 +18,15 @@ Without the MATLAB Engine API, run the generated script in MATLAB.
 """
 
 # %%
-import sys
 import time
-from pathlib import Path
-from typing import cast
 
-import motulator.drive.control.sm as control
-import numpy as np
-from motulator.common.model import SolverCfg
-from motulator.drive import model
+from _compare import (
+    Comparison,
+    drive_signals,
+    require_matlab_engine,
+    simulate_motulator,
+    write_simulink_model,
+)
 from pmsyrm_6kw_gn_fvc import T_STOP, TAU_L, W_M_REF, build_system
 
 from motulator_export import simulink
@@ -36,40 +36,17 @@ if __name__ == "__main__":
     mdl, ctrl = build_system()
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    code = "matlab" if "--matlab" in sys.argv else "c"  # MATLAB Function blocks
-    name = "pmsyrm_6kw_gn_fvc_matlab" if code == "matlab" else "pmsyrm_6kw_gn_fvc"
-    path = Path(__file__).parent / "simulink" / f"{name}.slx"
-    path.parent.mkdir(exist_ok=True)
-    script = simulink.write_model(path, mdl, ctrl, T_STOP, code=code)
-    print(f"Wrote {script}")
-    try:
-        import matlab.engine  # noqa: F401, PLC0415  # pyright: ignore[reportMissingImports]
-    except ImportError:
-        print("MATLAB Engine API for Python not available, skipping the comparison.")
-        sys.exit()
+    path = write_simulink_model("pmsyrm_6kw_gn_fvc", mdl, ctrl, T_STOP)
+    require_matlab_engine()
 
     # Simulate in motulator
-    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
     start = time.time()
-    res = sim.simulate(t_stop=T_STOP)
+    res = simulate_motulator(mdl, ctrl, T_STOP)
     print(f"motulator: {time.time() - start:.1f} s")
 
-    # Build and simulate in Simulink at the motulator solver steps
-    keep = res.mdl.t <= T_STOP
-    t, idx = np.unique(res.mdl.t[keep], return_index=True)
+    # Build and simulate in Simulink, and compare at the motulator solver steps
+    cmp = Comparison(res, T_STOP, control=False)
     start = time.time()
-    sl_mdl, _ = simulink.simulate(path, t, mdl, ctrl)
-    k = np.searchsorted(sl_mdl["t"], t)
+    sl_signals = simulink.simulate(path, cmp.t_eval, mdl, ctrl)
     print(f"Simulink, including the start of MATLAB: {time.time() - start:.1f} s")
-    i_s_abc = np.array([sl_mdl[p][k] for p in ("i_a", "i_b", "i_c")])
-    i_s_ab = (2 / 3) * (i_s_abc[0] - 0.5 * (i_s_abc[1] + i_s_abc[2])) + 1j * (
-        i_s_abc[1] - i_s_abc[2]
-    ) / np.sqrt(3)
-    print("Maximum differences (Simulink - motulator):")
-    for name, sl_value, value in [
-        ("w_M", sl_mdl["w_M"][k], res.mdl.mechanics.w_M[keep][idx]),
-        ("tau_M", sl_mdl["tau_M"][k], res.mdl.machine.tau_M[keep][idx]),
-        ("i_s_ab", i_s_ab, res.mdl.machine.i_s_ab[keep][idx]),
-    ]:
-        print(f"  mdl.{name}: {np.max(np.abs(sl_value - value)):.3g}")
+    cmp.print_differences("Simulink", sl_signals, drive_signals(res))

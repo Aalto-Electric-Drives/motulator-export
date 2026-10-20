@@ -8,7 +8,7 @@ from motulator.drive.model import Drive
 from motulator.grid.control._base import GridConverterControlSystem
 from motulator.grid.model import GridConverterSystem
 
-from motulator_export._common import system_type
+from motulator_export._common import add_space_vectors, system_type
 from motulator_export.simulink import _grid, _im, _sm
 from motulator_export.simulink._render import CODES
 
@@ -72,7 +72,8 @@ def simulate(
     Parameters
     ----------
     path : str | Path
-        Path of the model (.slx), next to its scripts.
+        Path of the model (.slx), next to its scripts, or of its build script
+        (`build_<model>.m`, returned by `write_model`).
     t_eval : ndarray
         Output times (s).
     mdl : Drive | GridConverterSystem
@@ -91,5 +92,19 @@ def simulate(
         Monitored signals of the control system (the output port "ctrl") and the time
         "t".
 
+    Notes
+    -----
+    The signals are those of `plecs.simulate`.
+
     """
-    return _MODULES[system_type(mdl, ctrl)].simulate(path, t_eval, mdl, ctrl, build)
+    module = _MODULES[system_type(mdl, ctrl)]
+    signals = module.simulate(model_path(path), t_eval, mdl, ctrl, build)
+    return add_space_vectors(signals[0]), signals[1]
+
+
+def model_path(path: str | Path) -> Path:
+    """Path of the model (.slx), also given by that of its build script."""
+    path = Path(path)
+    if path.suffix == ".m" and path.stem.startswith("build_"):
+        return path.with_name(path.stem.removeprefix("build_") + ".slx")
+    return path

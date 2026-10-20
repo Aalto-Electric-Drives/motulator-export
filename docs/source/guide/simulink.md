@@ -47,14 +47,17 @@ The blocks then run a MATLAB port of the same control code, which is in the file
 
 ## Simulating from Python
 
-With the MATLAB Engine API for Python, `simulink.simulate` builds the model and simulates it:
+With the MATLAB Engine API for Python, `simulink.simulate` builds the model and simulates it. It takes the path of the model or that of its build script, which `write_model` returns:
 
 ```python
 import numpy as np
 
+script = simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2)
 t_eval = np.linspace(0, 1.2, 1201)
-mdl_signals, ctrl_signals = simulink.simulate("ipmsm.slx", t_eval, mdl, ctrl)
+mdl_signals, ctrl_signals = simulink.simulate(script, t_eval, mdl, ctrl)
 ```
+
+The signals are those of the [PLECS models](plecs.md#simulating-from-python).
 
 ## Good to know
 

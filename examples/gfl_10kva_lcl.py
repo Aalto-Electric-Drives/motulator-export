@@ -14,17 +14,20 @@ Run from the repository root:
 """
 
 # %%
-import atexit
-import sys
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import numpy as np
-from motulator.common.model import CarrierComparison, SolverCfg
-from motulator.common.utils import abc2complex, complex2abc
+from _compare import (
+    Comparison,
+    plot_grid,
+    simulate_motulator,
+    simulate_plecs,
+    write_plecs_model,
+)
+from motulator.common.model import CarrierComparison
+from motulator.common.utils import complex2abc
 from motulator.grid import control, model, utils
 
-from motulator_export import StepSignal, plecs
+from motulator_export import StepSignal
 
 T_STOP = 0.08
 P_G_REF = StepSignal(time=0.02, after=5e3)  # Active power reference (W)
@@ -57,75 +60,26 @@ if __name__ == "__main__":
     mdl, ctrl = build_system()
     ctrl.set_power_ref(P_G_REF)
     ctrl.set_reactive_power_ref(Q_G_REF)
-    path = plecs.write_model(
-        Path(__file__).with_name("gfl_10kva_lcl.plecs"), mdl, ctrl, T_STOP
-    )
-    print(f"Wrote {path}")
-    # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = plecs.write_model(
-        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
-    )
-    atexit.register(tmp.unlink, missing_ok=True)
+    path = Path(__file__).with_name("gfl_10kva_lcl.plecs")
+    tmp = write_plecs_model(path, mdl, ctrl, T_STOP)
 
-    # Simulate in motulator with tight tolerances
-    T_s = 100e-6
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
-    res = sim.simulate(t_stop=T_STOP)
-    in_mdl = res.mdl.t <= T_STOP
-    in_ctrl = res.ctrl.t + 0.5 * T_s <= T_STOP
-
-    # Simulate in PLECS at the motulator solver steps and just after the sampling
-    # instants
-    t_mdl = res.mdl.t[in_mdl]
-    t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
-    t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
-    try:
-        plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t_eval, mdl, ctrl)
-    except ConnectionRefusedError:
-        print("PLECS RPC interface not available, skipping the comparison.")
-        sys.exit()
-
-    k_mdl = np.searchsorted(t_eval, t_mdl)
-    i_c_ab = abc2complex(np.array([plecs_mdl[f"i_c_{p}"][k_mdl] for p in "abc"]))
-    i_g_ab = abc2complex(np.array([plecs_mdl[f"i_g_{p}"][k_mdl] for p in "abc"]))
-    print("Maximum differences (PLECS - motulator):")
-    # The phase currents are compared too, since the space vectors would hide a
-    # zero-sequence current
-    i_c_a = complex2abc(res.mdl.ac_filter.i_c_ab[in_mdl])[0]
-    for name, plecs_value, value in [
-        ("i_c_ab", i_c_ab, res.mdl.ac_filter.i_c_ab[in_mdl]),
-        ("i_g_ab", i_g_ab, res.mdl.ac_filter.i_g_ab[in_mdl]),
-        ("i_c_a", plecs_mdl["i_c_a"][k_mdl], i_c_a),
-    ]:
-        print(f"  mdl.{name}: {np.max(np.abs(plecs_value - value)):.3g}")
-    k_ctrl = np.searchsorted(t_eval, t_ctrl)
-    fbk, ref = res.ctrl.fbk, res.ctrl.ref
-    for name, value in [
-        ("p_g", fbk.p_g[in_ctrl]),
-        ("q_g", fbk.q_g[in_ctrl]),
-        ("u_g", fbk.u_g[in_ctrl]),
-        ("w_g", fbk.w_g[in_ctrl]),
-        ("i_c_d_ref", ref.i_c.real[in_ctrl]),
-    ]:
-        err = np.max(np.abs(plecs_ctrl[name][k_ctrl] - value))
-        print(f"  ctrl.{name}: {err:.3g}")
-
-    # Plot
-    fig, axs = plt.subplots(2, 1, sharex=True, figsize=(8, 6))
-    t = t_mdl
-    axs[0].plot(res.ctrl.t, fbk.p_g, label=r"$p_\mathrm{g}$ (motulator)")
-    axs[0].plot(t_eval, plecs_ctrl["p_g"], "--", label=r"$p_\mathrm{g}$ (PLECS)")
-    axs[0].plot(res.ctrl.t, fbk.q_g, label=r"$q_\mathrm{g}$ (motulator)")
-    axs[0].plot(t_eval, plecs_ctrl["q_g"], "--", label=r"$q_\mathrm{g}$ (PLECS)")
-    axs[0].set_ylabel("Power (W, VAr)")
-    axs[1].plot(
-        t, res.mdl.ac_filter.i_c_ab[in_mdl].real, label=r"$i_{c\alpha}$ (motulator)"
-    )
-    axs[1].plot(t, i_c_ab.real, "--", label=r"$i_{c\alpha}$ (PLECS)")
-    axs[1].set_ylabel("Current (A)")
-    axs[1].set_xlabel("Time (s)")
-    for ax in axs:
-        ax.legend(loc="upper right")
-        ax.grid(True)
-    fig.tight_layout()
-    plt.show()
+    # Simulate in motulator and in PLECS, and compare, the phase current too, since
+    # the space vectors would hide a zero-sequence current
+    res = simulate_motulator(mdl, ctrl, T_STOP)
+    cmp = Comparison(res, T_STOP)
+    plecs_signals = simulate_plecs(tmp, cmp.t_eval, mdl, ctrl)
+    f, fbk, ref = res.mdl.ac_filter, res.ctrl.fbk, res.ctrl.ref
+    mdl_signals = {
+        "i_c_ab": f.i_c_ab,
+        "i_g_ab": f.i_g_ab,
+        "i_c_a": complex2abc(f.i_c_ab)[0],
+    }
+    ctrl_signals = {
+        "p_g": fbk.p_g,
+        "q_g": fbk.q_g,
+        "u_g": fbk.u_g,
+        "w_g": fbk.w_g,
+        "i_c_d_ref": ref.i_c.real,
+    }
+    cmp.print_differences("PLECS", plecs_signals, mdl_signals, ctrl_signals)
+    plot_grid(cmp, res, plecs_signals, "PLECS")

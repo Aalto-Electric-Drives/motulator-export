@@ -20,12 +20,14 @@ import motulator.grid.control as grid_control
 import motulator.grid.model as grid_model
 import numpy as np
 import pytest
+from motulator.common.utils import complex2abc
 from motulator.drive import model
 
 from motulator_export import StepSignal, plecs, simulink
-from motulator_export._common import sampled_step
+from motulator_export._common import add_space_vectors, sampled_step
 from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
+from motulator_export.simulink._export import model_path
 from tests.systems import BASE, CURRENT_MAP, im_system, sm_system
 
 TOOLS = [(plecs, "model.plecs"), (simulink, "model.slx")]
@@ -70,6 +72,22 @@ def test_sampled_step_time_errors(time: float) -> None:
     time (1e9 s), which the sampling repeats."""
     with pytest.raises(ValueError, match="step times"):
         sampled_step(StepSignal(time, 1.0), 1e-4)
+
+
+def test_space_vectors() -> None:
+    """The results of simulate should have the space vectors of the phase signals."""
+    i_c_ab = np.array([3 + 4j, -1j])
+    phases = dict(zip(["i_c_a", "i_c_b", "i_c_c"], complex2abc(i_c_ab), strict=True))
+    signals = add_space_vectors({"t": np.zeros(2), **phases})
+    assert np.allclose(signals["i_c_ab"], i_c_ab)
+    assert "i_s_ab" not in signals
+    assert "i_g_ab" not in signals
+
+
+def test_simulink_model_path() -> None:
+    """simulink.simulate should take the path of the model or of its build script."""
+    assert model_path("models/build_ipmsm.m") == Path("models/ipmsm.slx")
+    assert model_path("models/ipmsm.slx") == Path("models/ipmsm.slx")
 
 
 def _grid_model(lcl: bool) -> grid_model.GridConverterSystem:

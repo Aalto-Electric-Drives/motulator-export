@@ -28,20 +28,24 @@ Run from the repository root:
 """
 
 # %%
-import atexit
 import sys
 from math import pi
 from pathlib import Path
-from typing import cast
 
-import matplotlib.pyplot as plt
 import motulator.drive.control.im as control
 import numpy as np
-from motulator.common.model import CarrierComparison, SolverCfg
-from motulator.common.utils import abc2complex
+from _compare import (
+    Comparison,
+    drive_signals,
+    plot_drive,
+    simulate_motulator,
+    simulate_plecs,
+    write_plecs_model,
+)
+from motulator.common.model import CarrierComparison
 from motulator.drive import model, utils
 
-from motulator_export import StepSignal, plecs
+from motulator_export import StepSignal
 
 T_STOP = 2.4
 nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
@@ -106,78 +110,21 @@ if __name__ == "__main__":
     mdl, ctrl = build_system(tanh)
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    path = plecs.write_model(
-        Path(__file__).with_name(
-            f"im_2kw_dead_time_cvc{'_tanh' if tanh else ''}.plecs"
-        ),
-        mdl,
-        ctrl,
-        T_STOP,
+    name = "im_2kw_dead_time_cvc_tanh" if tanh else "im_2kw_dead_time_cvc"
+    tmp = write_plecs_model(
+        Path(__file__).with_name(f"{name}.plecs"), mdl, ctrl, T_STOP
     )
-    print(f"Wrote {path}")
-    # Temporary copy with the output ports for the comparison, removed at exit
-    tmp = plecs.write_model(
-        path.with_stem(path.stem + "_tmp"), mdl, ctrl, T_STOP, outputs=True
-    )
-    atexit.register(tmp.unlink, missing_ok=True)
 
-    # Simulate in motulator with tight tolerances
-    T_s = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg.T_s
-    sim = model.Simulation(mdl, ctrl, cfg=SolverCfg(rtol=1e-9, atol=1e-9))
-    res = sim.simulate(t_stop=T_STOP)
-    in_mdl = res.mdl.t <= T_STOP
-    in_ctrl = res.ctrl.t + 0.5 * T_s <= T_STOP
-
-    # Simulate in PLECS at the motulator solver steps and just after the sampling
-    # instants
-    t_mdl = res.mdl.t[in_mdl]
-    t_ctrl = res.ctrl.t[in_ctrl] + 0.5 * T_s
-    t_eval = np.unique(np.concatenate((t_mdl, t_ctrl)))
-    try:
-        plecs_mdl, plecs_ctrl = plecs.simulate(tmp, t_eval, mdl, ctrl)
-    except ConnectionRefusedError:
-        print("PLECS RPC interface not available, skipping the comparison.")
-        sys.exit()
-
-    k_mdl = np.searchsorted(t_eval, t_mdl)
-    i_s_ab = abc2complex(np.array([plecs_mdl[f"i_{p}"][k_mdl] for p in "abc"]))
-    print("Maximum differences (PLECS - motulator):")
-    for name, plecs_value, value in [
-        ("w_M", plecs_mdl["w_M"][k_mdl], res.mdl.mechanics.w_M[in_mdl]),
-        ("tau_M", plecs_mdl["tau_M"][k_mdl], res.mdl.machine.tau_M[in_mdl]),
-        ("i_s_ab", i_s_ab, res.mdl.machine.i_s_ab[in_mdl]),
-    ]:
-        print(f"  mdl.{name}: {np.max(np.abs(plecs_value - value)):.3g}")
-    k_ctrl = np.searchsorted(t_eval, t_ctrl)
+    # Simulate in motulator and in PLECS, and compare
+    res = simulate_motulator(mdl, ctrl, T_STOP)
+    cmp = Comparison(res, T_STOP)
+    plecs_signals = simulate_plecs(tmp, cmp.t_eval, mdl, ctrl)
     fbk, ref = res.ctrl.fbk, res.ctrl.ref
-    for name, value in [
-        ("w_M", fbk.w_M[in_ctrl]),
-        ("tau_M", fbk.tau_M[in_ctrl]),
-        ("tau_M_ref", ref.tau_M[in_ctrl]),
-        ("psi_R", np.abs(fbk.psi_R[in_ctrl])),
-    ]:
-        err = np.max(np.abs(plecs_ctrl[name][k_ctrl] - value))
-        print(f"  ctrl.{name}: {err:.3g}")
-
-    # Plot
-    fig, axs = plt.subplots(3, 1, sharex=True, figsize=(8, 7))
-    t = t_mdl
-    axs[0].plot(
-        t, res.mdl.mechanics.w_M[in_mdl], label=r"$\omega_\mathrm{M}$ (motulator)"
-    )
-    axs[0].plot(t, plecs_mdl["w_M"][k_mdl], "--", label=r"$\omega_\mathrm{M}$ (PLECS)")
-    axs[0].set_ylabel("Speed (rad/s)")
-    axs[1].plot(
-        t, res.mdl.machine.tau_M[in_mdl], label=r"$\tau_\mathrm{M}$ (motulator)"
-    )
-    axs[1].plot(t, plecs_mdl["tau_M"][k_mdl], "--", label=r"$\tau_\mathrm{M}$ (PLECS)")
-    axs[1].set_ylabel("Torque (Nm)")
-    axs[2].plot(t, res.mdl.machine.i_s_ab[in_mdl].real, label=r"$i_\alpha$ (motulator)")
-    axs[2].plot(t, i_s_ab.real, "--", label=r"$i_\alpha$ (PLECS)")
-    axs[2].set_ylabel("Current (A)")
-    axs[2].set_xlabel("Time (s)")
-    for ax in axs:
-        ax.legend(loc="upper right")
-        ax.grid(True)
-    fig.tight_layout()
-    plt.show()
+    ctrl_signals = {
+        "w_M": fbk.w_M,
+        "tau_M": fbk.tau_M,
+        "tau_M_ref": ref.tau_M,
+        "psi_R": np.abs(fbk.psi_R),
+    }
+    cmp.print_differences("PLECS", plecs_signals, drive_signals(res), ctrl_signals)
+    plot_drive(cmp, res, plecs_signals[0], "PLECS")
