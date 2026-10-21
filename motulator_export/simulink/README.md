@@ -75,7 +75,7 @@ The synchronous machine with a GradNet current map is a MATLAB Function block to
 
 ## Agreement with *motulator*
 
-Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.16.0 and MATLAB R2026b with the MinGW-w64 compiler (gcc 14.2), at the level of the PLECS models (cf. [the PLECS export](../plecs/README.md#agreement-with-motulator)).
+Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.17.0 and MATLAB R2026b with the MinGW-w64 compiler (gcc 14.2), at the level of the PLECS models (cf. [the PLECS export](../plecs/README.md#agreement-with-motulator)).
 
 | Script                               | System model                               | Control system                                               |
 | ------------------------------------ | ------------------------------------------ | ------------------------------------------------------------ |
