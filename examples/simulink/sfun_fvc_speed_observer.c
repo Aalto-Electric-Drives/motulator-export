@@ -79,10 +79,10 @@ static SpeedObserver self;
 static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1};
-static const int FEEDTHROUGH[] = {0, 0};
+static const int INPUT_WIDTHS[] = {1, 2, 1};
+static const int FEEDTHROUGH[] = {0, 0, 0};
 static const int OUTPUT_WIDTHS[] = {1, 1};
-#define NUM_INPUTS 2
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 2
 #define NUM_PARAMS 4
 
@@ -164,7 +164,11 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    speed_observer_update(&self, T_s, InputSignal(0, 0), InputSignal(1, 0));
+    /* The speed estimate initialized at the flying start */
+    if (InputSignal(1, 0) > 0.0) {
+        self.w_M = InputSignal(1, 1);
+    }
+    speed_observer_update(&self, T_s, InputSignal(0, 0), InputSignal(2, 0));
 }
 
 static void mdlTerminate(SimStruct *S)

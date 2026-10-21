@@ -166,8 +166,7 @@ MONITOR = "Monitored signals"
 ENABLE_DESCRIPTION = (
     " The input enable is the gate enable (ControlSystem.set_enable): while it is "
     "zero, the control system runs in standby for the blocked gates, computing its "
-    "standby output, the feedback voltage being the measured converter voltage "
-    "u_c_line, as in motulator."
+    "standby output without measuring the converter voltage, as in motulator."
 )
 
 

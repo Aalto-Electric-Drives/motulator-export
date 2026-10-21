@@ -147,9 +147,10 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     GFMMeasurements meas;
     gfm_measurements_unpack(meas_u, &meas);
+    double complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));
     double d_abc[3];
-    pwm_compute_output(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)), meas.u_dc,
-                       InputSignal(2, 0), meas.i_c_ab, d_abc);
+    pwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),
+                       meas.i_c_ab, d_abc);
     for (int k = 0; k < 3; k++) {
         OutputSignal(0, k) = d_abc[k];
     }

@@ -148,9 +148,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     GFMMeasurements meas;
     gfm_measurements_unpack(meas_u, &meas);
     /* Average of the previous and the ongoing periods, and of the ongoing
-     * period, or while the gates are blocked, the measured voltage */
-    double complex u_c_ab = meas.u_c_ab;
-    double complex u_c_zoh_ab = meas.u_c_ab;
+     * period, or while the gates are blocked, the measured PCC voltage */
+    double complex u_c_ab = meas.u_g_ab;
+    double complex u_c_zoh_ab = meas.u_g_ab;
     if (InputSignal(0, 0) > 0.0) {
         u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);
         u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);

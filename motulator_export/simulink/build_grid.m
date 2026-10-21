@@ -70,7 +70,7 @@ for blk = {'Delay', 'PWM', 'Converter', 'AC filter'}
 end
 blocks.align(sys, 'Grid', 'Outport', 1, blocks.port_y(sys, 'AC filter', 'Inport', 2));
 
-% Input 'enable', the references, the DC-bus voltage, and the converter voltages
+% Input 'enable', the references, and the DC-bus voltage
 for k = 1:size(s.refs, 1)
     name = s.refs{k, 1};
     if strcmp(s.refs{k, 2}, 'step')
@@ -83,11 +83,8 @@ for k = 1:size(s.refs, 1)
     blocks.connect(sys, [name '/1'], sprintf('%s/%d', cs, k));
 end
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
-blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', n_in - 1));
-blocks.connect(sys, 'u_dc/1', sprintf('%s/%d', cs, n_in - 1));
-add([sys '/u_c_line'], 'built-in/Constant', [80 0 130 20], 'Value', '[0 0]');
-blocks.align(sys, 'u_c_line', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', n_in));
-blocks.connect(sys, 'u_c_line/1', sprintf('%s/%d', cs, n_in));
+blocks.align(sys, 'u_dc', 'Outport', 1, blocks.port_y(sys, cs, 'Inport', n_in));
+blocks.connect(sys, 'u_dc/1', sprintf('%s/%d', cs, n_in));
 
 % Converter (and grid) currents for the output port 'mdl'
 n_mdl = 1 + lcl;
@@ -107,10 +104,12 @@ blocks.connect(sys, 'Converter/1', 'AC filter/1');
 blocks.connect(sys, 'Grid/1', 'AC filter/2');
 blocks.connect(sys, 'AC filter/1', 'Mux mdl/1');
 blocks.route(sys, 'AC filter/1', i_c, 'x', 840, 'y', 60, 'x', 60);
+u_g = sprintf('%s/%d', cs, n_refs + 2);
 if lcl
     blocks.connect(sys, 'AC filter/2', 'Mux mdl/2');
-    blocks.route(sys, 'AC filter/3', sprintf('%s/%d', cs, n_refs + 2), ...
-        'x', 870, 'y', 40, 'x', 40);
+    blocks.route(sys, 'AC filter/3', u_g, 'x', 870, 'y', 40, 'x', 40);
+else
+    blocks.route(sys, 'AC filter/2', u_g, 'x', 870, 'y', 40, 'x', 40);
 end
 
 % Output ports and the scope, with the monitored signals in a lane below the blocks
@@ -147,17 +146,20 @@ end
 
 function add_l_filter(blk, pos)
 % L filter and the grid inductance (LFilter), with the converter current in
-% stationary coordinates as the state
+% stationary coordinates as the state. The PCC voltage between the filter and the
+% grid inductance is measured as the line-to-line voltages u_ab and u_bc.
 script = {
-    'function [d_i_c, i_c_abc] = fcn(u_c_ab, i_c, e_g_ab, par)'
+    'function [d_i_c, i_c_abc, u_g_line] = fcn(u_c_ab, i_c, e_g_ab, par)'
     '% L filter and grid impedance in stationary coordinates (LFilter)'
     'L_t = par(1) + par(3); R_t = par(2);'
     'd_i_c = (u_c_ab - e_g_ab - R_t*i_c)/L_t;'
-    '% Phase currents (no zero sequence)'
+    '% Phase currents (no zero sequence) and line-to-line PCC voltages'
     'i_c_abc = [1 0; -0.5 sqrt(3)/2; -0.5 -sqrt(3)/2]*i_c;'
+    'u_g_ab = (par(3)*(u_c_ab - par(2)*i_c) + par(1)*e_g_ab)/L_t;'
+    'u_g_line = [1.5*u_g_ab(1) - sqrt(3)/2*u_g_ab(2); sqrt(3)*u_g_ab(2)];'
     };
 add_ac_filter(blk, pos, script, '[0; 0]', ...
-    '[ac_filter.L_f ac_filter.R_f ac_filter.L_g]', {'i_c_abc'});
+    '[ac_filter.L_f ac_filter.R_f ac_filter.L_g]', {'i_c_abc', 'u_g_line'});
 end
 
 function add_ac_filter(blk, pos, script, ic, par, outputs)

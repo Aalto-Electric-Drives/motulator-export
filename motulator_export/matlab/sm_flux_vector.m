@@ -15,21 +15,21 @@ function self = flux_observer_init(par, k_theta, k_o)
 %FLUX_OBSERVER_INIT Flux observer in estimated rotor coordinates (FluxObserver),
 %   with the observer gain k_o(w_m) = k_o(1) + k_o(2)*abs(w_m).
 self = struct('par', par, 'k_theta', k_theta, 'k_o', [k_o(1), k_o(2)], ...
-    'theta_m', 0, 'psi_s', complex(par.psi_f));
+    'theta_m', 0, 'psi_s', complex(par.psi_f), 'T_s_prev', 0);
 end
 
 function out = flux_observer_compute_output(self, u_s_ab, i_s_ab, w_M, eps_ext, h)
 %FLUX_OBSERVER_COMPUTE_OUTPUT Feedback signals (ObserverOutputs) without u_dc and
 %   tau_L. The weight h of the external position error signal eps_ext selects
-%   between the sensorless (h = 0) and sensored (h = 1) modes.
+%   between the sensorless (h = 0) and sensored (h = 1) modes. The voltage u_s_ab is
+%   NaN if unknown (blocked gates).
 par = self.par;
 % Coordinate system angle equals the estimated rotor angle
 theta_c = self.theta_m;
-% Current and voltage vectors in (estimated) rotor coordinates. The voltage averaged
-% over the previous and ongoing sampling periods is set by the control system
+% Current vector in (estimated) rotor coordinates. The voltage averaged over the
+% previous and ongoing sampling periods is set by the control system
 % (DriveControlSystem.get_feedback).
 i_s = exp(-1i*theta_c)*i_s_ab;
-u_s_zoh = exp(-1i*theta_c)*u_s_ab;
 % Flux estimation error
 psi_s_model = psi_s_dq(par, i_s);
 e_o = psi_s_model - self.psi_s;
@@ -47,12 +47,22 @@ eps_f = -(1 - h)*real(ratio);
 % Rotor speed and the angular speed of the coordinate system
 w_m = par.n_p*w_M;
 w_c = w_m + self.k_theta*par.n_p*eps;
+% Voltage vector in the observer coordinates, or the open-circuit voltage if unknown
+% (NaN, blocked gates), averaged over a period of the length of the previous one
+if ~isnan(real(u_s_ab))
+    u_s_zoh = exp(-1i*theta_c)*u_s_ab;
+elseif self.T_s_prev > 0
+    emf = (exp(1i*w_m*self.T_s_prev) - 1)/self.T_s_prev*self.psi_s;
+    u_s_zoh = emf + par.R_s*i_s;
+else
+    u_s_zoh = 1i*w_m*self.psi_s + par.R_s*i_s;
+end
 % Torque estimate
 tau_M = 1.5*par.n_p*imag(i_s*conj(self.psi_s));
 out = struct('i_s', i_s, 'u_s', complex(0), 'u_s_zoh', u_s_zoh, ...
     'psi_s', self.psi_s, 'e_o', e_o, 'eps', eps, 'eps_f', eps_f, 'psi_a', psi_a, ...
     'tau_M', tau_M, 'w_c', w_c, 'w_m', w_m, 'w_M', w_M, 'theta_c', theta_c, ...
-    'theta_m', self.theta_m, 'psi_f', par.psi_f, 'h', h);
+    'theta_m', self.theta_m, 'psi_f', par.psi_f, 'h', h, 'caught', false);
 end
 
 function self = flux_observer_update(self, T_s, out)
@@ -73,6 +83,67 @@ psi_s = out.psi_s + T_s*v_err;
 [Phi, Gamma] = hold_equivalent(T_s, out.w_c);
 self.psi_s = Phi*(psi_s + T_s*out.u_s_zoh) - Gamma*par.R_s*out.i_s;
 self.theta_m = wrap(self.theta_m + T_s*out.w_c);
+self.T_s_prev = T_s;
+end
+
+function [caught, w_M, theta_m, psi_s] = flux_observer_catch(par, delta_i_s_ab, ...
+    i_s_ab, T_s, w_M)
+%FLUX_OBSERVER_CATCH Estimates initialized from the current response delta_i_s_ab to
+%   a zero-voltage period of length T_s, i_s_ab being the current at its end
+%   (SpeedFluxObserver.catch): the back-EMF drives the current along the negative q
+%   axis of the rotor, which gives the rotor angle and the speed magnitude, the
+%   direction of rotation being taken from the speed estimate w_M, which is updated
+%   with the angle and flux estimates. If the back-EMF estimate does not exceed the
+%   resistive voltage drop of the current (standstill, or a current that has not
+%   decayed) or the machine has no magnets, caught is false and the estimates are
+%   not valid.
+L = incr_ind_mat(par, complex(0));
+e_s_ab = -L.L_qq*delta_i_s_ab/T_s; % Back-EMF
+% The resistive decay of a residual current (the d-axis current through L_d) must
+% not be taken for the back-EMF
+i_max = max(abs(i_s_ab), abs(i_s_ab - delta_i_s_ab));
+caught = abs(e_s_ab) > par.R_s*i_max*max(L.L_qq/L.L_dd, 1) && par.psi_f ~= 0;
+theta_m = 0;
+psi_s = complex(0);
+if ~caught
+    return
+end
+if w_M >= 0
+    sign_w = 1;
+else
+    sign_w = -1;
+end
+w_m = sign_w*abs(e_s_ab)/par.psi_f;
+% The response lags the rotor angle at the end of the period, since the back-EMF
+% rotates during the period
+theta_m = wrap(angle(e_s_ab) - sign_w*pi/2 + w_m*T_s*L.L_qq/(2*L.L_dd));
+w_M = w_m/par.n_p;
+psi_s = complex(psi_s_dq(par, exp(-1i*theta_m)*i_s_ab));
+end
+
+function [self, i_s_ab_prev, caught, w_M] = flux_observer_flying_start(self, ...
+    i_s_ab_prev, u_s_ab, i_s_ab, h, w_M)
+%FLUX_OBSERVER_FLYING_START Flying start (SpeedFluxObserver.compute_output): the
+%   current is stored in i_s_ab_prev while the voltage u_s_ab is unknown (NaN), and
+%   at the first sampling instant with a known voltage, the estimates are
+%   initialized from the current response to the last period with an unknown
+%   voltage, in which the control system applies the zero vector after the release
+%   of the gates (flux_observer_catch), unless h = 1.
+caught = false;
+if isnan(real(u_s_ab))
+    i_s_ab_prev = i_s_ab;
+elseif ~isnan(real(i_s_ab_prev))
+    if h < 1
+        [caught, w_M_init, theta_m, psi_s] = flux_observer_catch(self.par, ...
+            i_s_ab - i_s_ab_prev, i_s_ab, self.T_s_prev, w_M);
+        if caught
+            w_M = w_M_init;
+            self.theta_m = theta_m;
+            self.psi_s = psi_s;
+        end
+    end
+    i_s_ab_prev = complex(NaN);
+end
 end
 
 function self = reference_gen_init(par, psi_s_min, psi_s_max, k_u, k_mtpv, luts)

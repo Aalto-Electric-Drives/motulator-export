@@ -44,7 +44,7 @@ static GFMControllerCfg gfm_controller_cfg(double i_max, double L);
 typedef struct {
     double complex i_c_ab; /* Converter current (A) */
     double u_dc;           /* DC-bus voltage (V) */
-    double complex u_c_ab; /* Converter voltage (V), used only with blocked gates */
+    double complex u_g_ab; /* PCC voltage (V), used only with blocked gates */
 } GFMMeasurements;
 
 /* Feedback signals (ObserverOutputs) */
@@ -124,8 +124,8 @@ static void gfm_voltage_reference(const GFMController *self, const GFMFeedbacks 
 
 /* Control system (GridConverterControlSystem with
  * ObserverBasedGridFormingController). While the gates are blocked, the feedback
- * voltage is the measured converter voltage, and the controller computes its
- * standby output. */
+ * voltage is the measured PCC voltage, which the converter voltage equals once the
+ * current has decayed, and the controller computes its standby output. */
 typedef struct {
     GFMControllerCfg cfg;
     GFMController ctrl;
@@ -149,7 +149,7 @@ static void gfm_control_system_update(GFMControlSystem *self);
  * (ref) p_g, v_c, i_c, and u_c */
 #define MEAS_i_c_ab 0
 #define MEAS_u_dc 2
-#define MEAS_u_c_ab 3
+#define MEAS_u_g_ab 3
 #define MEAS_WIDTH 5
 
 #define FBK_i_c 0

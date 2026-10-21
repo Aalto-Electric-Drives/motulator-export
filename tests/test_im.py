@@ -59,9 +59,9 @@ void init(const double *p, const double *c, const double *s)
 }
 
 void step(const double *i_s_abc, double u_dc, double w_M, double w_M_ref,
-          double enabled, const double *u_c_ab, double *out)
+          double enabled, double *out)
 {
-    IMMeasurements meas = {abc2complex(i_s_abc), u_dc, w_M, u_c_ab[0] + I * u_c_ab[1]};
+    IMMeasurements meas = {abc2complex(i_s_abc), u_dc, w_M};
     im_vector_control_system_compute_output(&ctrl, &meas, w_M_ref, (int)enabled);
     /* Current reference in estimated rotor flux coordinates and the angle of these
      * coordinates, as in the post-processed results of motulator */
@@ -168,19 +168,12 @@ class CControlSystem(control.VectorControlSystem):
 
     def run_control_loop(self, mdl: model.Drive) -> tuple[float, Sequence[float]]:
         self.enabled = self.get_enable()
-        meas = self.get_measurement(mdl)  # The converter voltage with blocked gates
+        meas = self.get_measurement(mdl)
         w_M_ref = cast(Any, self.ext_ref.w_M)(self.t)
         i_abc = complex2abc(meas.i_c_ab)
         w_M = meas.w_M or 0.0  # Measured only in the sensored mode
-        u_c = meas.u_c_ab or 0j
         self.dll.step(
-            arr(i_abc),
-            d(meas.u_dc),
-            d(w_M),
-            d(w_M_ref),
-            d(self.enabled),
-            arr([u_c.real, u_c.imag]),
-            self.out,
+            arr(i_abc), d(meas.u_dc), d(w_M), d(w_M_ref), d(self.enabled), self.out
         )
         out = np.array(self.out)
         self.save(self.t, out=SimpleNamespace(**dict(zip(NAMES, out, strict=True))))

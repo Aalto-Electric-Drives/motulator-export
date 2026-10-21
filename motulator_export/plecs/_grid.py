@@ -80,7 +80,7 @@ from motulator_export.plecs._grid_control import (
     init_script,
 )
 from motulator_export.plecs._rpc import simulate_plecs
-from motulator_export.plecs._schematic import Tap, Terminal, _probe, _Schematic, _scope
+from motulator_export.plecs._schematic import Tap, _probe, _Schematic, _scope
 
 __all__ = ["simulate", "write_model"]
 
@@ -213,44 +213,30 @@ def _abc_probe(comp: str, signal: str) -> str:
     return "".join(_probe(f"{comp}{ph}", [signal]) for ph in "abc")
 
 
-# Voltmeters of the converter voltages between the ammeters and the filter, and the
-# space for them (horizontal shift of the filter and the grid)
-X_V, MEAS_DX = 730, 40
-
-
 def _grid_source(k: int) -> dict[str, str]:
     """Grid voltage e_g*cos(w_g*t - k*2*pi/3) of the phase k, exp_j_theta_g(0) = 1."""
     return {"V": "ac_source.e_g", "w": "ac_source.w_g", "phi": f"pi/2 - {k}*2*pi/3"}
 
 
 def _add_converter_meters(sch: _Schematic, y_ph: list[int]) -> None:
-    """
-    Add the ammeters of the converter currents and the voltmeters of the line-to-line
-    converter voltages u_ab and u_bc (measured for the control system, the voltages
-    used while the gates are blocked), with the voltmeters between the phase lines
-    `y_ph`, and shift the components after them by `MEAS_DX`.
-    """
+    """Add the ammeters of the converter currents at the phase lines `y_ph`."""
     for k, ph in enumerate("abc"):
         sch.component(
             "Ammeter", f"i_c{ph}", (690, y_ph[k]), direction="left", show=False
         )
         jog = [] if k == 1 else [(660, CONV[1] - 10 + 10 * k), (660, y_ph[k])]
         sch.wire(("Converter", k + 1), (f"i_c{ph}", 1), jog)
-    sch.component("Voltmeter", "u_cab", (X_V, y_ph[0] + 20), direction="up", show=False)
-    sch.component("Voltmeter", "u_cbc", (X_V, y_ph[1] + 20), direction="up", show=False)
-    sch.dx += MEAS_DX
 
 
-def _wire_converter_meters(sch: _Schematic, k: int, dst: Terminal) -> None:
-    """
-    Wire the ammeter of the phase k to the first element `dst` of the filter (added
-    after `_add_converter_meters`), with the voltmeters of the converter voltages
-    branching from the line.
-    """
-    meters = [[("u_cab", 1)], [("u_cab", 2), ("u_cbc", 1)], [("u_cbc", 2)]][k]
-    y = 60 + 40 * k  # The phase line
-    taps: list[Tap] = [([(X_V - MEAS_DX, y)], [(m, []) for m in meters])]
-    sch.bus((f"i_c{'abc'[k]}", 2), "Wire", taps + [([], [(dst, [])])])
+# Line-to-line PCC voltages u_ab and u_bc (measured for the control system), with
+# the voltmeters between the phase lines
+PCC_METERS = [[("u_gab", 1)], [("u_gab", 2), ("u_gbc", 1)], [("u_gbc", 2)]]
+
+
+def _add_pcc_meters(sch: _Schematic, x_v: int, y_ph: list[int]) -> None:
+    """Add the voltmeters of the PCC voltages at `x_v` between the phase lines."""
+    sch.component("Voltmeter", "u_gab", (x_v, y_ph[0] + 20), direction="up", show=False)
+    sch.component("Voltmeter", "u_gbc", (x_v, y_ph[1] + 20), direction="up", show=False)
 
 
 def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
@@ -272,7 +258,7 @@ def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
             label="north",
             show=k == 0,
         )
-        _wire_converter_meters(sch, k, (f"L_fc{ph}", 1))
+        sch.wire((f"i_c{ph}", 2), (f"L_fc{ph}", 1))
         capacitor = {"C": "ac_filter.C_f", "v_init": f"ac_filter.u_f0_abc({k + 1})"}
         sch.component(
             "Capacitor",
@@ -307,13 +293,9 @@ def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
     # Star point of the capacitors
     taps = [([(x_cap[0], 200), (x_cap[1], 200)], [(("C_fb", 2), [])])]
     sch.bus(("C_fa", 2), "Wire", taps + [([(x_cap[2], 200)], [(("C_fc", 2), [])])])
-    # Line-to-line PCC voltages u_ab and u_bc (measured for the control system), with
-    # the voltmeters between the phase lines
-    sch.component("Voltmeter", "u_gab", (x_v, 80), direction="up", show=False)
-    sch.component("Voltmeter", "u_gbc", (x_v, 120), direction="up", show=False)
-    meters = [[("u_gab", 1)], [("u_gab", 2), ("u_gbc", 1)], [("u_gbc", 2)]]
+    _add_pcc_meters(sch, x_v, y_ph)
     for k, ph in enumerate("abc"):
-        dsts = [(m, []) for m in meters[k]]
+        dsts = [(m, []) for m in PCC_METERS[k]]
         taps = [([(x_v, y_ph[k])], dsts), ([], [((f"e_g{ph}", 1), [])])]
         sch.bus((f"L_fg{ph}", 2), "Wire", taps)
     # Star point of the grid (not grounded, the circuit is floating as in motulator)
@@ -322,9 +304,14 @@ def _add_lcl_filter_and_grid(sch: _Schematic) -> None:
 
 
 def _add_l_filter_and_grid(sch: _Schematic) -> None:
-    """Add the L filter with its resistance, the grid inductance, and the grid."""
+    """
+    Add the L filter with its resistance, the grid inductance, and the grid, with the
+    PCC voltmeters between the filter and the grid inductance.
+    """
     y_ph = [60, 100, 140]  # Phase lines a, b, and c
+    x_v = 815  # Line-to-line voltmeters between the phase lines
     _add_converter_meters(sch, y_ph)
+    _add_pcc_meters(sch, x_v, y_ph)
     for k, ph in enumerate("abc"):
         elements = [
             ("Inductor", "L_f", {"i_init": "0", "L": "ac_filter.L_f"}),
@@ -343,8 +330,10 @@ def _add_l_filter_and_grid(sch: _Schematic) -> None:
                 label="north",
                 show=k == 0,
             )
-            if n == 0:
-                _wire_converter_meters(sch, k, (f"{name}{ph}", 1))
+            if n == 2:  # The PCC voltmeters branch from the line
+                dsts = [(m, []) for m in PCC_METERS[k]]
+                taps = [([(x_v, y_ph[k])], dsts), ([], [((f"{name}{ph}", 1), [])])]
+                sch.bus((prev, 2), "Wire", taps)
             else:
                 sch.wire((prev, 2), (f"{name}{ph}", 1))
             prev = f"{name}{ph}"
@@ -429,13 +418,10 @@ def write_model(
     ]
     sources += list(grid_references(ctrl, block is GFL_BLOCK, values["T_s"]))
     sources += [("i_c_abc", _abc_probe("i_c", "Measured current"))]
-    if block is GFL_BLOCK:
-        voltages = _probe("u_gab", ["Measured voltage"])
-        voltages += _probe("u_gbc", ["Measured voltage"])
-        sources += [("u_g_line", voltages)]
+    voltages = _probe("u_gab", ["Measured voltage"])
+    voltages += _probe("u_gbc", ["Measured voltage"])
+    sources += [("u_g_line", voltages)]
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
-    voltages = _probe("u_cab", ["Measured voltage"])
-    sources += [("u_c_line", voltages + _probe("u_cbc", ["Measured voltage"]))]
     _add_control_system(sch, block, sources, VALUES, init)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)

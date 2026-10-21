@@ -39,7 +39,6 @@ from motulator_export.plecs._control import (
     complex_out,
     compute_standby_output,
     control_block,
-    converter_voltage_input,
     get_measurement,
     init_header,
     mask_params,
@@ -83,13 +82,7 @@ SIGNALS = Signals(
 # Name of the control-system block, its inputs, and the monitored signals (mask
 # probes)
 NAME = "Observer-based VHz control"  # No slash, the path separator of Simulink
-CTRL_INPUTS = [
-    Port(ENABLE, 1),
-    Port("w_M_ref", 1),
-    Port("i_s_abc", 3),
-    Port("u_dc", 1),
-    Port("u_c_line", 2),
-]
+CTRL_INPUTS = [Port(ENABLE, 1), Port("w_M_ref", 1), Port("i_s_abc", 3), Port("u_dc", 1)]
 CTRL_OUTPUTS = {
     "Speed (w_M_ref, w_s)": ["w_M_ref", "w_s"],
     "Torque (tau_M_ref, tau_M)": ["tau_M_ref", "tau_M"],
@@ -147,8 +140,11 @@ def _flux_observer() -> CBlock:
         " * error signal */\n"
         "im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n"
         "                                InputSignal(3, 0), 0.0, h, &out);\n"
-        "/* Voltage for the control laws (DriveControlSystem.get_feedback) */\n"
-        f"out.u_s = cexp(-I * out.theta_c) * {complex_in(1)};\n"
+        "/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n"
+        " * open-circuit voltage of the observer if unknown */\n"
+        f"double complex u_s_ab = {complex_in(1)};\n"
+        "out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n"
+        "                               : cexp(-I * out.theta_c) * u_s_ab;\n"
         + SIGNALS.write(0, "fbk", "out")
     )
     return CBlock(
@@ -180,8 +176,14 @@ def _flux_observer() -> CBlock:
             "% error signal\n"
             "out = im_flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, "
             "w_M, 0, p.h);\n"
-            "% Voltage for the control laws (DriveControlSystem.get_feedback)\n"
-            "out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n",
+            "% Voltage for the control laws (DriveControlSystem.get_feedback), or "
+            "the\n"
+            "% open-circuit voltage of the observer if unknown\n"
+            "if isnan(real(u_s_ab))\n"
+            "    out.u_s = out.u_s_zoh;\n"
+            "else\n"
+            "    out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n"
+            "end\n",
             update="self = im_flux_observer_update(self, p.T_s, out);\n",
             inputs={
                 "meas": SIGNALS.vector("meas"),
@@ -503,9 +505,8 @@ def control_system() -> Subsystem:
         [
             ("i_c_ab", "abc2complex(i_s_abc)"),
             ("u_dc", "fmax(InputSignal(1, 0), U_DC_MIN)"),
-            ("u_c_ab", "line2complex(u_c_line)"),
         ],
-        abc_input("i_s_abc", 0) + converter_voltage_input(2),
+        abc_input("i_s_abc", 0),
     )
     signals = monitor(
         SIGNALS,

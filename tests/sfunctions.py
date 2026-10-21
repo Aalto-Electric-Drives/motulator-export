@@ -210,11 +210,9 @@ def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem
             mech = mdl.mechanics
             i_s_abc = mdl.machine.meas_currents()
             u_dc = mdl.converter.meas_dc_voltage()
-            # The gate enable, and the converter voltage, used with blocked gates
-            enabled = float(bool(get_value(ctrl._enable, t)))
-            u_c_line = mdl.converter.meas_voltages()
+            enabled = float(bool(get_value(ctrl._enable, t)))  # The gate enable
             w_M_ref = cast(Any, ctrl.ext_ref.w_M)(t)
-            u = [enabled, w_M_ref, *i_s_abc, u_dc, *u_c_line]
+            u = [enabled, w_M_ref, *i_s_abc, u_dc]
             if "theta_M" in block.inputs:
                 u.append(wrap(mech.meas_position()))
             elif "w_M" in block.inputs:
@@ -243,15 +241,13 @@ def grid_sfun(
         def inputs(mdl: grid_model.GridConverterSystem, t: float) -> list[float]:
             i_c_abc = mdl.ac_filter.meas_currents()
             u_dc = mdl.converter.meas_dc_voltage()
-            # The gate enable, and the converter voltage, used with blocked gates
-            enabled = float(bool(get_value(ctrl._enable, t)))
-            u_c_line = mdl.converter.meas_voltages()
+            enabled = float(bool(get_value(ctrl._enable, t)))  # The gate enable
+            u_g_line = mdl.ac_filter.meas_pcc_voltages()
             if "q_g_ref" in block.inputs:
-                u_g_line = mdl.ac_filter.meas_pcc_voltages()
                 refs = [ext_ref.p_g(t), ext_ref.q_g(t)]
-                return [enabled, *refs, *i_c_abc, *u_g_line, u_dc, *u_c_line]
-            refs = [ext_ref.p_g(t), ext_ref.v_c]
-            return [enabled, *refs, *i_c_abc, u_dc, *u_c_line]
+            else:
+                refs = [ext_ref.p_g(t), ext_ref.v_c]
+            return [enabled, *refs, *i_c_abc, *u_g_line, u_dc]
 
         T_s = _grid.export_values(ctrl)["T_s"]
         sl = SFunctionControlSystem(dll, block, T_s, inputs)
@@ -263,12 +259,12 @@ def grid_sfun(
 
 # Constant inputs of `check_dc_bus_limit` (without enable), with zero converter
 # voltages
-SM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0, 0.0, 0.3]
-IM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0, 0.0, 0.0]
-VHZ_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0, 0.0]
+SM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.3]
+IM_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0, 0.0]
+VHZ_INPUTS = [100.0, 3.0, -1.0, -2.0, 540.0]
 # Line-to-line PCC voltages u_ab and u_bc of the voltage vector BASE.u
-GFL_INPUTS = [5e3, 1e3, 3.0, -1.0, -2.0, 1.5 * BASE.u, 0.0, 650.0, 0.0, 0.0]
-GFM_INPUTS = [5e3, BASE.u, 3.0, -1.0, -2.0, 650.0, 0.0, 0.0]
+GFL_INPUTS = [5e3, 1e3, 3.0, -1.0, -2.0, 1.5 * BASE.u, 0.0, 650.0]
+GFM_INPUTS = [5e3, BASE.u, 3.0, -1.0, -2.0, 1.5 * BASE.u, 0.0, 650.0]
 
 
 def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[float]]]:
@@ -290,6 +286,6 @@ def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[fl
     for k in range(n):
         th = float(wrap(theta_M[k]))
         meas = Measurements(i_s_ab[k], 540.0, w_M[k], th)
-        u = [1.0, float(w_M_ref[k]), *complex2abc(i_s_ab[k]), 540.0, 0.0, 0.0, th]
+        u = [1.0, float(w_M_ref[k]), *complex2abc(i_s_ab[k]), 540.0, th]
         out.append((meas, u))
     return out

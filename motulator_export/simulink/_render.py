@@ -122,6 +122,17 @@ def wrapper(b: CBlock, fun: MFunction) -> Subsystem:
         Delay(f"Delay {b.inputs[k].name}", b.inputs[k].width, sample_time)
         for k in fun.delayed
     ]
+    # The delay of an input next to a delayed input goes to the next column, so that
+    # the delays are aligned with their ports (as high as the port pitch)
+    delay_cols: list[list[str]] = []
+    last: list[int] = []  # The last delayed input of each column
+    for k in fun.delayed:
+        c = next((c for c, j in enumerate(last) if j < k - 1), len(last))
+        if c == len(last):
+            delay_cols.append([])
+            last.append(k)
+        delay_cols[c].append(f"Delay {b.inputs[k].name}")
+        last[c] = k
     connections: list[tuple[str, str]] = []
     align: dict[str, str] = {}
     for k, p in enumerate(b.inputs):
@@ -143,7 +154,7 @@ def wrapper(b: CBlock, fun: MFunction) -> Subsystem:
         connections,
         columns=[
             [p.name for p in b.inputs],
-            [d.name for d in delays],
+            *delay_cols,
             [name],
             [p.name for p in b.outputs],
         ],

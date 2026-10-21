@@ -99,9 +99,9 @@ void init(const double *p, const double *c, const double *s)
 }
 
 void step(const double *i_s_abc, double u_dc, double w_M_ref, double enabled,
-          const double *u_c_ab, double *out)
+          double *out)
 {
-    Measurements meas = {abc2complex(i_s_abc), u_dc, 0.0, u_c_ab[0] + I * u_c_ab[1]};
+    Measurements meas = {abc2complex(i_s_abc), u_dc, 0.0};
     vector_control_system_compute_output(&ctrl, &meas, w_M_ref, (int)enabled);
     out[0] = ctrl.ref.d_abc[0];
     out[1] = ctrl.ref.d_abc[1];
@@ -164,7 +164,7 @@ def test_luts(dll: ctypes.CDLL) -> None:
 def test_control_system(dll: ctypes.CDLL, J: float | None) -> None:
     """The control system should give the same outputs as motulator, also with the
     default speed estimation poles of the mechanical model (J) and while the gates
-    are blocked (the standby output with the measured converter voltage)."""
+    are blocked (the standby output and the flying start after the release)."""
     par = model.SynchronousMachinePars(**PAR)
     cfg = control.FluxVectorControllerCfg(**CFG, J=J)
     ctrl = control.VectorControlSystem(
@@ -195,10 +195,8 @@ def test_control_system(dll: ctypes.CDLL, J: float | None) -> None:
     i_s_ab = (2 + np.sin(2 * pi * 3 * t)) * np.exp(1j * 2 * pi * 20 * t)
     i_s_ab += 0.05 * (rng.standard_normal(n) + 1j * rng.standard_normal(n))
     ctrl.set_speed_ref(lambda t_: 50.0 if t_ > 0.05 else 0.0)
-    # The gates blocked at the start and during an interval, with the measured
-    # converter voltage
+    # The gates blocked at the start and during an interval
     enabled = (t >= 0.01) & ((t < 0.2) | (t >= 0.25))
-    u_c_ab = 100 * np.exp(1j * 2 * pi * 20 * t) * (1 + 0.1 * np.sin(2 * pi * 7 * t))
 
     out = (ctypes.c_double * 8)()
     err = np.zeros(8)
@@ -209,13 +207,11 @@ def test_control_system(dll: ctypes.CDLL, J: float | None) -> None:
             0.5 * (-i_s_ab[k].real - np.sqrt(3) * i_s_ab[k].imag),
         ]
         # motulator
-        u_c = u_c_ab[k] if not enabled[k] else None
-        meas = Measurements(abc2complex(i_abc), 540.0, u_c_ab=u_c)
+        meas = Measurements(abc2complex(i_abc), 540.0)
         fbk, ref = control_step(ctrl, meas, bool(enabled[k]))
         py = [*ref.d_abc, fbk.w_M, fbk.tau_M, ref.tau_M, ref.psi_s, fbk.theta_m]
         # C port, with the speed reference of motulator (sampled at its control time)
-        u = [u_c_ab[k].real, u_c_ab[k].imag]
-        dll.step(arr(i_abc), d(540.0), d(ref.w_M), d(enabled[k]), arr(u), out)
+        dll.step(arr(i_abc), d(540.0), d(ref.w_M), d(enabled[k]), out)
         err = np.maximum(err, np.abs(np.array(out) - np.array(py)))
     names = ["d_a", "d_b", "d_c", "w_M", "tau_M", "tau_M_ref", "psi_s_ref", "theta_m"]
     for name, e in zip(names, err, strict=True):

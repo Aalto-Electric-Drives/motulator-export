@@ -11,7 +11,7 @@ Plecs {
   AbsTol        "-1"
   InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nconverter.u_dc = 650;\nac_filter.L_f = 0.006125876615797688;\nac_filter.R_f = 0.6415002990995841;\nac_filter.L_g = 0.030220991304601926;\nac_source.e_g = 326.5986323710904;\nac_source.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Grid-forming control (ObserverBasedGridFormingControllerCfg)\ncfg.i_max = 33.09259735953043;\ncfg.L = 0.014293712103527936;\ncfg.R = 0.6415002990995841;\ncfg.R_a = 2.5660011963983362;\ncfg.k_v = [];\ncfg.alpha_o = 2*pi*50;\ncfg.alpha_c = 2*pi*400;\ncfg.u_nom = 326.5986323710904;\ncfg.w_nom = 2*pi*50;\ncfg.i_d_max = [];\ncfg.alpha_l = 2*pi*50;\ncfg.T_s = 0.000125;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
-    Location      [0, 0; 1360, 440]
+    Location      [0, 0; 1320, 440]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -137,33 +137,33 @@ Plecs {
     }
     Component {
       Type          PlecsProbe
-      Name          "u_dc meas."
+      Name          "u_g_line"
       Show          on
       Position      [60, 220]
       Direction     right
       Flipped       off
       LabelPosition south
       Probe {
-        Component     "u_dc"
+        Component     "u_gab"
+        Path          ""
+        Signals       {"Measured voltage"}
+      }
+      Probe {
+        Component     "u_gbc"
         Path          ""
         Signals       {"Measured voltage"}
       }
     }
     Component {
       Type          PlecsProbe
-      Name          "u_c_line"
+      Name          "u_dc meas."
       Show          on
       Position      [60, 270]
       Direction     right
       Flipped       off
       LabelPosition south
       Probe {
-        Component     "u_cab"
-        Path          ""
-        Signals       {"Measured voltage"}
-      }
-      Probe {
-        Component     "u_cbc"
+        Component     "u_dc"
         Path          ""
         Signals       {"Measured voltage"}
       }
@@ -181,7 +181,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "GridConverterControlSystem (motulator)"
-      MaskDescription "Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator."
+      MaskDescription "Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -331,7 +331,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_dc"
+      Name          "u_g_line"
       Show          on
       Position      [40, 190]
       Direction     right
@@ -350,7 +350,7 @@ Plecs {
     }
     Component {
       Type          Input
-      Name          "u_c_line"
+      Name          "u_dc"
       Show          on
       Position      [40, 230]
       Direction     right
@@ -402,7 +402,7 @@ Plecs {
       }
       Parameter {
         Variable      "NumInputs"
-        Value         "[3 1 2]"
+        Value         "[3 2 1]"
         Show          off
       }
       Parameter {
@@ -467,7 +467,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double i_c_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\n/* Line-to-line converter voltages u_ab and u_bc, used while the gates are\n * blocked */\ndouble u_c_line[2] = {InputSignal(2, 0), InputSignal(2, 1)};\nGFMMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_c_abc);\nmeas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);\nmeas.u_c_ab = line2complex(u_c_line);\ndouble y[MEAS_WIDTH];\ngfm_measurements_pack(&meas, y);\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double i_c_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\n/* Line-to-line PCC voltages u_ab and u_bc */\ndouble u_g_line[2] = {InputSignal(1, 0), InputSignal(1, 1)};\nGFMMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_c_abc);\nmeas.u_dc = fmax(InputSignal(2, 0), U_DC_MIN);\nmeas.u_g_ab = line2complex(u_g_line);\ndouble y[MEAS_WIDTH];\ngfm_measurements_pack(&meas, y);\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -509,7 +509,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "PWM (motulator)"
-      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback."
+      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured PCC voltage, as in get_feedback of the control system."
       MaskInit      "% MME overmodulation, or MPE\nmme = strcmp(overmodulation, 'MME');\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -841,7 +841,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nGFMMeasurements meas;\ngfm_measurements_unpack(meas_u, &meas);\ndouble d_abc[3];\npwm_compute_output(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)), meas.u_dc,\n                   InputSignal(2, 0), meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nGFMMeasurements meas;\ngfm_measurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -951,7 +951,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nGFMMeasurements meas;\ngfm_measurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, the measured voltage */\ndouble complex u_c_ab = meas.u_c_ab;\ndouble complex u_c_zoh_ab = meas.u_c_ab;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nGFMMeasurements meas;\ngfm_measurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, the measured PCC voltage */\ndouble complex u_c_ab = meas.u_g_ab;\ndouble complex u_c_zoh_ab = meas.u_g_ab;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
         Show          off
       }
       Parameter {
@@ -2158,7 +2158,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 290, 100]
+        Location      [0, 0; 250, 100]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -2186,7 +2186,7 @@ Plecs {
       Type          Output
       Name          "i_lim"
       Show          on
-      Position      [240, 45]
+      Position      [200, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2205,11 +2205,11 @@ Plecs {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [145, 45]
+      Position      [125, 45]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -15; 50, 15]
+      Frame         [-30, -15; 30, 15]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -3235,7 +3235,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc"
+      SrcComponent  "u_g_line"
       SrcTerminal   1
       Points        [145, 190; 145, 145]
       DstComponent  "get_measurement"
@@ -3243,7 +3243,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_c_line"
+      SrcComponent  "u_dc"
       SrcTerminal   1
       Points        [155, 230; 155, 155]
       DstComponent  "get_measurement"
@@ -3616,18 +3616,18 @@ Plecs {
     }
     Component {
       Type          Voltmeter
-      Name          "u_cab"
+      Name          "u_gab"
       Show          off
-      Position      [850, 80]
+      Position      [935, 80]
       Direction     up
       Flipped       off
       LabelPosition south
     }
     Component {
       Type          Voltmeter
-      Name          "u_cbc"
+      Name          "u_gbc"
       Show          off
-      Position      [850, 120]
+      Position      [935, 120]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -3636,7 +3636,7 @@ Plecs {
       Type          Inductor
       Name          "L_fa"
       Show          on
-      Position      [900, 60]
+      Position      [860, 60]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3655,7 +3655,7 @@ Plecs {
       Type          Resistor
       Name          "R_fa"
       Show          on
-      Position      [950, 60]
+      Position      [910, 60]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3669,7 +3669,7 @@ Plecs {
       Type          Inductor
       Name          "L_ga"
       Show          on
-      Position      [1000, 60]
+      Position      [960, 60]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3688,7 +3688,7 @@ Plecs {
       Type          ACVoltageSource
       Name          "e_ga"
       Show          on
-      Position      [1050, 60]
+      Position      [1010, 60]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3712,7 +3712,7 @@ Plecs {
       Type          Inductor
       Name          "L_fb"
       Show          off
-      Position      [900, 100]
+      Position      [860, 100]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3731,7 +3731,7 @@ Plecs {
       Type          Resistor
       Name          "R_fb"
       Show          off
-      Position      [950, 100]
+      Position      [910, 100]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3745,7 +3745,7 @@ Plecs {
       Type          Inductor
       Name          "L_gb"
       Show          off
-      Position      [1000, 100]
+      Position      [960, 100]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3764,7 +3764,7 @@ Plecs {
       Type          ACVoltageSource
       Name          "e_gb"
       Show          off
-      Position      [1050, 100]
+      Position      [1010, 100]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3788,7 +3788,7 @@ Plecs {
       Type          Inductor
       Name          "L_fc"
       Show          off
-      Position      [900, 140]
+      Position      [860, 140]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3807,7 +3807,7 @@ Plecs {
       Type          Resistor
       Name          "R_fc"
       Show          off
-      Position      [950, 140]
+      Position      [910, 140]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3821,7 +3821,7 @@ Plecs {
       Type          Inductor
       Name          "L_gc"
       Show          off
-      Position      [1000, 140]
+      Position      [960, 140]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3840,7 +3840,7 @@ Plecs {
       Type          ACVoltageSource
       Name          "e_gc"
       Show          off
-      Position      [1050, 140]
+      Position      [1010, 140]
       Direction     left
       Flipped       off
       LabelPosition north
@@ -3864,7 +3864,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Powers"
       Show          on
-      Position      [880, 300]
+      Position      [840, 300]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3878,7 +3878,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Converter currents"
       Show          on
-      Position      [880, 340]
+      Position      [840, 340]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3902,7 +3902,7 @@ Plecs {
       Type          PlecsProbe
       Name          "Voltages"
       Show          on
-      Position      [880, 380]
+      Position      [840, 380]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3916,7 +3916,7 @@ Plecs {
       Type          Scope
       Name          "Scope"
       Show          on
-      Position      [1060, 320]
+      Position      [1020, 320]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -4016,7 +4016,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc meas."
+      SrcComponent  "u_g_line"
       SrcTerminal   1
       Points        [180, 220; 180, 115]
       DstComponent  "Grid-forming control"
@@ -4024,7 +4024,7 @@ Plecs {
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_c_line"
+      SrcComponent  "u_dc meas."
       SrcTerminal   1
       Points        [190, 270; 190, 125]
       DstComponent  "Grid-forming control"
@@ -4100,16 +4100,16 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "L_fa"
+      SrcComponent  "i_ca"
       SrcTerminal   2
-      DstComponent  "R_fa"
+      DstComponent  "L_fa"
       DstTerminal   1
     }
     Connection {
       Type          Wire
-      SrcComponent  "R_fa"
+      SrcComponent  "L_fa"
       SrcTerminal   2
-      DstComponent  "L_ga"
+      DstComponent  "R_fa"
       DstTerminal   1
     }
     Connection {
@@ -4121,16 +4121,16 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "L_fb"
+      SrcComponent  "i_cb"
       SrcTerminal   2
-      DstComponent  "R_fb"
+      DstComponent  "L_fb"
       DstTerminal   1
     }
     Connection {
       Type          Wire
-      SrcComponent  "R_fb"
+      SrcComponent  "L_fb"
       SrcTerminal   2
-      DstComponent  "L_gb"
+      DstComponent  "R_fb"
       DstTerminal   1
     }
     Connection {
@@ -4142,16 +4142,16 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "L_fc"
+      SrcComponent  "i_cc"
       SrcTerminal   2
-      DstComponent  "R_fc"
+      DstComponent  "L_fc"
       DstTerminal   1
     }
     Connection {
       Type          Wire
-      SrcComponent  "R_fc"
+      SrcComponent  "L_fc"
       SrcTerminal   2
-      DstComponent  "L_gc"
+      DstComponent  "R_fc"
       DstTerminal   1
     }
     Connection {
@@ -4165,7 +4165,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Powers"
       SrcTerminal   1
-      Points        [920, 300; 920, 310]
+      Points        [880, 300; 880, 310]
       DstComponent  "Scope"
       DstTerminal   1
     }
@@ -4173,7 +4173,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Converter currents"
       SrcTerminal   1
-      Points        [930, 340; 930, 320]
+      Points        [890, 340; 890, 320]
       DstComponent  "Scope"
       DstTerminal   2
     }
@@ -4181,7 +4181,7 @@ Plecs {
       Type          Signal
       SrcComponent  "Voltages"
       SrcTerminal   1
-      Points        [940, 380; 940, 330]
+      Points        [900, 380; 900, 330]
       DstComponent  "Scope"
       DstTerminal   3
     }
@@ -4217,47 +4217,47 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "i_ca"
+      SrcComponent  "R_fa"
       SrcTerminal   2
-      Points        [850, 60]
+      Points        [935, 60]
       Branch {
-        DstComponent  "u_cab"
+        DstComponent  "u_gab"
         DstTerminal   1
       }
       Branch {
-        DstComponent  "L_fa"
+        DstComponent  "L_ga"
         DstTerminal   1
       }
     }
     Connection {
       Type          Wire
-      SrcComponent  "i_cb"
+      SrcComponent  "R_fb"
       SrcTerminal   2
-      Points        [850, 100]
+      Points        [935, 100]
       Branch {
-        DstComponent  "u_cab"
+        DstComponent  "u_gab"
         DstTerminal   2
       }
       Branch {
-        DstComponent  "u_cbc"
+        DstComponent  "u_gbc"
         DstTerminal   1
       }
       Branch {
-        DstComponent  "L_fb"
+        DstComponent  "L_gb"
         DstTerminal   1
       }
     }
     Connection {
       Type          Wire
-      SrcComponent  "i_cc"
+      SrcComponent  "R_fc"
       SrcTerminal   2
-      Points        [850, 140]
+      Points        [935, 140]
       Branch {
-        DstComponent  "u_cbc"
+        DstComponent  "u_gbc"
         DstTerminal   2
       }
       Branch {
-        DstComponent  "L_fc"
+        DstComponent  "L_gc"
         DstTerminal   1
       }
     }
@@ -4265,13 +4265,13 @@ Plecs {
       Type          Wire
       SrcComponent  "e_ga"
       SrcTerminal   2
-      Points        [1090, 60; 1090, 100]
+      Points        [1050, 60; 1050, 100]
       Branch {
         DstComponent  "e_gb"
         DstTerminal   2
       }
       Branch {
-        Points        [1090, 140]
+        Points        [1050, 140]
         DstComponent  "e_gc"
         DstTerminal   2
       }

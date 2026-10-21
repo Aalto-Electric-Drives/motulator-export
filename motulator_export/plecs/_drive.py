@@ -25,7 +25,6 @@ from motulator_export._common import (
     reference,
 )
 from motulator_export.plecs._common import (
-    CONV,
     MACH,
     ControlBlock,
     _add_ctrl_output,
@@ -213,43 +212,11 @@ def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     return variables
 
 
-# Space for the voltmeters of the converter voltages between the converter and the
-# machine (horizontal shift of the machine and the components after it)
-MEAS_DX = 60
-
-
-def _add_phase_lines(sch: _Schematic, x_c: int) -> None:
-    """
-    Add the phase lines from the converter (its AC terminals at the absolute `x_c`)
-    to the machine (added at the current `sch.dx`), with the voltmeters of the
-    line-to-line converter voltages u_ab and u_bc, measured for the control system
-    (used while the gates are blocked). The lines a and c are spread around the line
-    b so that the voltmeters fit between them, as the PCC voltmeters of the grid
-    converters.
-    """
-    dx = sch.dx
-    x_m = MACH[0] - 30  # The terminals of the machine (shifted by sch.dx)
-    y_c = CONV[1]
-    x_1, x_v, x_2 = x_c + 15 - dx, x_c + 45 - dx, x_m - 15  # Shifted by sch.dx
-    sch.component("Voltmeter", "u_cab", (x_v, y_c - 20), direction="up", show=False)
-    sch.component("Voltmeter", "u_cbc", (x_v, y_c + 20), direction="up", show=False)
-    meters = [[("u_cab", 1)], [("u_cab", 2), ("u_cbc", 1)], [("u_cbc", 2)]]
+def _add_phase_lines(sch: _Schematic) -> None:
+    """Add the phase lines from the converter to the machine (added last)."""
     for k in range(3):
-        y_t, y = y_c - 10 + 10 * k, y_c - 40 + 40 * k  # The terminals and the line
-        out = [] if k == 1 else [(x_1, y_t), (x_1, y)]
-        back = [] if k == 1 else [(x_2, y), (x_2, y_t)]
-        dsts = [(m, []) for m in meters[k]]
-        sch.bus(
-            ("Converter", k + 1),
-            "Wire",
-            [(out + [(x_v, y)], dsts), ([], [(("Machine", k + 1), back)])],
-        )
+        sch.wire(("Converter", k + 1), ("Machine", k + 1))
 
-
-# Probes of the line-to-line converter voltages (the input u_c_line)
-CONVERTER_VOLTAGES = _probe("u_cab", ["Measured voltage"]) + _probe(
-    "u_cbc", ["Measured voltage"]
-)
 
 MACHINE_FRAME = "      Frame         [-25, -25; 25, 35]\n"
 MACHINE_TERMINALS = [

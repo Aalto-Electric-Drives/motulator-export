@@ -77,7 +77,7 @@
 
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {22, 4, 1};
+static const int INPUT_WIDTHS[] = {23, 4, 1};
 static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {2, 2, 2, 3};
 #define NUM_INPUTS 3

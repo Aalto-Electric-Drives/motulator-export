@@ -27,36 +27,35 @@ s.scope = { ...
 s.control.name = 'Observer-based VHz control';
 s.control.sfunction = {'sfun_ovhz_get_measurement', 'sfun_ovhz_rate_limiter', 'sfun_ovhz_pwm', 'sfun_ovhz_pwm_realized_voltage', 'sfun_ovhz_flux_observer', 'sfun_ovhz_torque_filter', 'sfun_ovhz_reference_generator', 'sfun_ovhz_standby_output', 'sfun_ovhz_flux_torque_controller', 'sfun_ovhz_modulate', 'sfun_ovhz_monitored_signals'};
 s.control.mask_type = 'VHzControlSystem (motulator)';
-s.control.description = 'Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
+s.control.description = 'Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'VHzControlSystem', 'cfg.T_s'
     };
 s.control.mask_init = '';
-s.control.inputs = {'enable', 'w_M_ref', 'i_s_abc', 'u_dc', 'u_c_line'};
+s.control.inputs = {'enable', 'w_M_ref', 'i_s_abc', 'u_dc'};
 s.control.netlist.blocks = { ...
     'enable', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'w_M_ref', 'Inport', [40.0 93.0 70.0 107.0], {'Port', '2'}
     'i_s_abc', 'Inport', [40.0 148.0 70.0 162.0], {'Port', '3'}
     'u_dc', 'Inport', [40.0 203.0 70.0 217.0], {'Port', '4'}
-    'u_c_line', 'Inport', [40.0 258.0 70.0 272.0], {'Port', '5'}
-    'd_abc', 'Outport', [920.0 351.0 950.0 365.0], {'Port', '1'}
-    'signals', 'Outport', [1560.0 298.0 1590.0 312.0], {'Port', '2'}
-    'get_measurement', 'S-Function', [265.0 150.0 405.0 240.0], {'FunctionName', 'sfun_ovhz_get_measurement', 'Parameters', '1'}
-    'RateLimiter', 'S-Function', [265.0 70.0 405.0 130.0], {'FunctionName', 'sfun_ovhz_rate_limiter', 'Parameters', '1, 1'}
-    'PWM', 'Subsystem', [600.0 225.0 740.0 385.0], {'ContentPreviewEnabled', 'off'}
-    'ObserverBasedVHzController', 'Subsystem', [920.0 40.0 1060.0 240.0], {'ContentPreviewEnabled', 'off'}
-    'Goto w_M', 'Goto', [600.0 48.0 670.0 62.0], {'GotoTag', 'w_M', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto fbk', 'Goto', [1135.0 38.0 1205.0 52.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto ref', 'Goto', [1135.0 203.0 1205.0 217.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'From fbk', 'From', [1135.0 258.0 1205.0 272.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
-    'From ref', 'From', [1135.0 313.0 1205.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'From w_M', 'From', [1135.0 368.0 1205.0 382.0], {'GotoTag', 'w_M', 'ShowName', 'off'}
-    'ref.u_s', 'Selector', [1135.0 150.0 1185.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'S-Function', [1295.0 75.0 1435.0 135.0], {'FunctionName', 'sfun_ovhz_modulate', 'Parameters', '1'}
-    'Monitored signals', 'S-Function', [1295.0 245.0 1435.0 365.0], {'FunctionName', 'sfun_ovhz_monitored_signals', 'Parameters', '1'}
-    'Mux signals', 'Mux', [1508.0 245.0 1513.0 365.0], {'Inputs', '[2 2 3 2]', 'ShowName', 'off'}
-    'From PWM.enable', 'From', [505.0 238.0 575.0 252.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From ObserverBasedVHzController.enable', 'From', [825.0 53.0 895.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'd_abc', 'Outport', [905.0 341.0 935.0 355.0], {'Port', '1'}
+    'signals', 'Outport', [1545.0 298.0 1575.0 312.0], {'Port', '2'}
+    'get_measurement', 'S-Function', [250.0 155.0 390.0 215.0], {'FunctionName', 'sfun_ovhz_get_measurement', 'Parameters', '1'}
+    'RateLimiter', 'S-Function', [250.0 70.0 390.0 130.0], {'FunctionName', 'sfun_ovhz_rate_limiter', 'Parameters', '1, 1'}
+    'PWM', 'Subsystem', [585.0 215.0 725.0 375.0], {'ContentPreviewEnabled', 'off'}
+    'ObserverBasedVHzController', 'Subsystem', [905.0 40.0 1045.0 240.0], {'ContentPreviewEnabled', 'off'}
+    'Goto w_M', 'Goto', [585.0 48.0 655.0 62.0], {'GotoTag', 'w_M', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto fbk', 'Goto', [1120.0 38.0 1190.0 52.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto ref', 'Goto', [1120.0 203.0 1190.0 217.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'From fbk', 'From', [1120.0 258.0 1190.0 272.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
+    'From ref', 'From', [1120.0 313.0 1190.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
+    'From w_M', 'From', [1120.0 368.0 1190.0 382.0], {'GotoTag', 'w_M', 'ShowName', 'off'}
+    'ref.u_s', 'Selector', [1120.0 150.0 1170.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
+    'modulate', 'S-Function', [1280.0 75.0 1420.0 135.0], {'FunctionName', 'sfun_ovhz_modulate', 'Parameters', '1'}
+    'Monitored signals', 'S-Function', [1280.0 245.0 1420.0 365.0], {'FunctionName', 'sfun_ovhz_monitored_signals', 'Parameters', '1'}
+    'Mux signals', 'Mux', [1498.0 245.0 1503.0 365.0], {'Inputs', '[2 2 3 2]', 'ShowName', 'off'}
+    'From PWM.enable', 'From', [490.0 228.0 560.0 242.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'From ObserverBasedVHzController.enable', 'From', [810.0 53.0 880.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'Goto enable', 'Goto', [110.0 43.0 180.0 57.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/enable', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '1'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
@@ -77,7 +76,7 @@ s.control.netlist.blocks = { ...
     'ObserverBasedVHzController/fbk', 'Outport', [1545.0 198.0 1575.0 212.0], {'Port', '1'}
     'ObserverBasedVHzController/ref', 'Outport', [1545.0 123.0 1575.0 137.0], {'Port', '2'}
     'ObserverBasedVHzController/FluxObserver', 'S-Function', [280.0 145.0 420.0 265.0], {'FunctionName', 'sfun_ovhz_flux_observer', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1, 1'}
-    'ObserverBasedVHzController/meas.u_dc', 'Selector', [480.0 40.0 530.0 70.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '5'}
+    'ObserverBasedVHzController/meas.u_dc', 'Selector', [480.0 40.0 530.0 70.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '3'}
     'ObserverBasedVHzController/fbk.tau_M', 'Selector', [480.0 115.0 530.0 145.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'ObserverBasedVHzController/tau_M_lpf', 'S-Function', [575.0 100.0 715.0 160.0], {'FunctionName', 'sfun_ovhz_torque_filter', 'Parameters', '1, 1'}
     'ObserverBasedVHzController/ReferenceGenerator', 'S-Function', [790.0 85.0 930.0 175.0], {'FunctionName', 'sfun_ovhz_reference_generator', 'Parameters', '1, 1, 1, 1, 1, 1, 1, 1, 1, 1'}
@@ -91,6 +90,7 @@ s.control.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedVHzController', 'Outport', 1.0, -45.0
     '', 'modulate', 'Inport', 1.0, 'ObserverBasedVHzController', 'Outport', 1.0, 0.0
     '', 'RateLimiter', 'Outport', 1.0, 'ObserverBasedVHzController', 'Inport', 2.0, 0.0
+    '', 'get_measurement', 'Outport', 1.0, 'ObserverBasedVHzController', 'Inport', 3.0, 45.0
     '', 'Goto w_M', 'Inport', 1.0, 'RateLimiter', 'Outport', 1.0, -45.0
     '', 'PWM', 'Inport', 2.0, 'get_measurement', 'Outport', 1.0, 90.0
     '', 'd_abc', 'Inport', 1.0, 'PWM', 'Outport', 3.0, 0.0
@@ -127,25 +127,24 @@ s.control.netlist.lines = { ...
     '', 'From ObserverBasedVHzController.enable/1', 'ObserverBasedVHzController/1', []
     '', 'w_M_ref/1', 'RateLimiter/1', []
     '', 'RateLimiter/1', 'ObserverBasedVHzController/2', []
-    '', 'RateLimiter/1', 'Goto w_M/1', {'x', 430.0}
-    '', 'i_s_abc/1', 'get_measurement/1', {'x', 200.0}
-    '', 'u_dc/1', 'get_measurement/2', {'x', 215.0}
-    '', 'u_c_line/1', 'get_measurement/3', {'x', 230.0}
-    '', 'get_measurement/1', 'PWM/2', {'x', 445.0}
-    '', 'get_measurement/1', 'ObserverBasedVHzController/3', {'x', 765.0}
-    '', 'PWM/1', 'ObserverBasedVHzController/4', {'x', 780.0}
-    '', 'PWM/2', 'ObserverBasedVHzController/5', {'x', 795.0}
+    '', 'RateLimiter/1', 'Goto w_M/1', {'x', 415.0}
+    '', 'i_s_abc/1', 'get_measurement/1', {'x', 215.0}
+    '', 'u_dc/1', 'get_measurement/2', {'x', 200.0}
+    '', 'get_measurement/1', 'PWM/2', {'x', 430.0}
+    '', 'get_measurement/1', 'ObserverBasedVHzController/3', {'x', 750.0}
+    '', 'PWM/1', 'ObserverBasedVHzController/4', {'x', 765.0}
+    '', 'PWM/2', 'ObserverBasedVHzController/5', {'x', 780.0}
     '', 'PWM/3', 'd_abc/1', []
-    '', 'ObserverBasedVHzController/1', 'Goto fbk/1', {'x', 1085.0}
+    '', 'ObserverBasedVHzController/1', 'Goto fbk/1', {'x', 1070.0}
     '', 'ObserverBasedVHzController/1', 'modulate/1', []
-    '', 'ObserverBasedVHzController/2', 'Goto ref/1', {'x', 1100.0}
-    '', 'ObserverBasedVHzController/2', 'ref.u_s/1', {'x', 1100.0}
-    '', 'ref.u_s/1', 'modulate/2', {'x', 1260.0}
-    '', 'modulate/1', 'PWM/3', {'x', 1475.0, 'y', 440.0, 'x', 460.0}
-    '', 'modulate/2', 'PWM/4', {'x', 1460.0, 'y', 425.0, 'x', 475.0}
+    '', 'ObserverBasedVHzController/2', 'Goto ref/1', {'x', 1085.0}
+    '', 'ObserverBasedVHzController/2', 'ref.u_s/1', {'x', 1085.0}
+    '', 'ref.u_s/1', 'modulate/2', {'x', 1245.0}
+    '', 'modulate/1', 'PWM/3', {'x', 1460.0, 'y', 435.0, 'x', 445.0}
+    '', 'modulate/2', 'PWM/4', {'x', 1445.0, 'y', 420.0, 'x', 460.0}
     '', 'From fbk/1', 'Monitored signals/1', []
-    '', 'From ref/1', 'Monitored signals/2', {'x', 1230.0}
-    '', 'From w_M/1', 'Monitored signals/3', {'x', 1245.0}
+    '', 'From ref/1', 'Monitored signals/2', {'x', 1215.0}
+    '', 'From w_M/1', 'Monitored signals/3', {'x', 1230.0}
     '', 'Monitored signals/1', 'Mux signals/1', []
     '', 'Monitored signals/2', 'Mux signals/2', []
     '', 'Monitored signals/3', 'Mux signals/3', []
@@ -191,7 +190,7 @@ s.control.netlist.masks = { ...
     'disp(''RateLimiter'');', ...
     'port_label(''input'', 1, ''u'');', ...
     'port_label(''output'', 1, ''y'');'}, newline)
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'

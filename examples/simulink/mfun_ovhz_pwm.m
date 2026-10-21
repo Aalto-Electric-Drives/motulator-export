@@ -22,8 +22,7 @@ function s = im_vhz_measurements_unpack(u)
 %IM_VHZ_MEASUREMENTS_UNPACK Struct of the signal vector u.
 s = struct( ...
     'i_c_ab', complex(u(1), u(2)), ...
-    'u_dc', u(3), ...
-    'u_c_ab', complex(u(4), u(5)));
+    'u_dc', u(3));
 end
 
 function u_ab = abc2complex(u)

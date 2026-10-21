@@ -41,7 +41,7 @@ static double T_s; /* Sampling period */
 static GFLFeedbacks out;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {7, 2};
+static const int INPUT_WIDTHS[] = {5, 2};
 static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {13};
 #define NUM_INPUTS 2

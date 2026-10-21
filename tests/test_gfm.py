@@ -49,9 +49,9 @@ void init(const double *c)
 }
 
 void step(const double *i_c_abc, double u_dc, double p_g_ref, double v_c_ref,
-          double enabled, const double *u_c_line, double *out)
+          double enabled, const double *u_g_line, double *out)
 {
-    GFMMeasurements meas = {abc2complex(i_c_abc), u_dc, line2complex(u_c_line)};
+    GFMMeasurements meas = {abc2complex(i_c_abc), u_dc, line2complex(u_g_line)};
     gfm_control_system_compute_output(&ctrl, &meas, p_g_ref, v_c_ref, (int)enabled);
     double o[10] = {ctrl.ref.d_abc[0], ctrl.ref.d_abc[1], ctrl.ref.d_abc[2],
                     ctrl.fbk.theta_c,  ctrl.fbk.p_g,      ctrl.fbk.q_g,
@@ -102,25 +102,23 @@ def test_control_system(dll: ctypes.CDLL, power_limitation: bool) -> None:
     dll.init(arr(c))
 
     # Measurements: a current with a frequency offset and harmonics, and a ripple in
-    # the DC-bus voltage. The PCC voltage is not used by the controller.
+    # the DC-bus voltage. The PCC voltage is used only with blocked gates.
     n = 1000
     t = np.arange(n) * cfg.T_s
     theta = 2 * pi * 51 * t
     i_c_ab = (10 + 5j + 3 * np.exp(1j * 2 * pi * 250 * t)) * np.exp(1j * theta)
     u_dc = 650 + 20 * np.sin(2 * pi * 100 * t)
-    # The gates blocked at the start and during an interval, with the measured
-    # converter voltage
+    # The gates blocked at the start and during an interval
     enabled = (t >= 0.005) & ((t < 0.04) | (t >= 0.05))
-    u_c_ab = base.u * np.exp(1j * 2 * pi * 50 * t) + 20 * np.exp(1j * 2 * pi * 150 * t)
+    u_g_ab = base.u * np.exp(1j * 2 * pi * 50 * t) + 20 * np.exp(1j * 2 * pi * 150 * t)
 
     out = (ctypes.c_double * 10)()
     res_c, res_py = np.zeros((n, 10)), np.zeros((n, 10))
     for k in range(n):
         i_abc = complex2abc(i_c_ab[k])
         p_ref = p_g_ref(ctrl.t)  # Unlimited reference at the current time
-        u_c_line = complex2line(u_c_ab[k])
-        u_c = line2complex(u_c_line) if not enabled[k] else None
-        meas = Measurements(abc2complex(i_abc), base.u, u_dc[k], u_c)
+        u_g_line = complex2line(u_g_ab[k])
+        meas = Measurements(abc2complex(i_abc), line2complex(u_g_line), u_dc[k])
         fbk, ref = control_step(ctrl, meas, bool(enabled[k]))
         res_py[k] = [
             *ref.d_abc,
@@ -132,7 +130,7 @@ def test_control_system(dll: ctypes.CDLL, power_limitation: bool) -> None:
             ref.i_c.real,
             ref.i_c.imag,
         ]
-        u = arr(u_c_line)
+        u = arr(u_g_line)
         dll.step(arr(i_abc), d(u_dc[k]), d(p_ref), d(base.u), d(enabled[k]), u, out)
         res_c[k] = np.array(out)
     names = ["d_a", "d_b", "d_c", "theta_c", "p_g", "q_g", "v_c", "p_g_ref"]

@@ -77,12 +77,11 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
     out->theta_c = self->theta_c;
     out->h = h;
 
-    /* Current and voltage vectors in synchronous coordinates. The voltage averaged
-     * over the previous and ongoing sampling periods is set by the control system
+    /* Current vector in synchronous coordinates. The voltage averaged over the
+     * previous and ongoing sampling periods is set by the control system
      * (DriveControlSystem.get_feedback). */
     out->i_s = cexp(-I * out->theta_c) * i_s_ab;
     out->u_s = 0.0;
-    out->u_s_zoh = cexp(-I * out->theta_c) * u_s_ab;
 
     /* Mechanical and electrical angular speeds of the rotor */
     out->w_M = w_M;
@@ -97,6 +96,21 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
 
     /* Angular speed of the coordinate system equals synchronous angular frequency */
     out->w_c = out->w_s = out->w_m + out->w_r;
+
+    /* Voltage vector in the observer coordinates, or the open-circuit voltage if
+     * unknown (NAN, blocked gates), averaged over a period of the length of the
+     * previous one. The rotor flux decays as in the current model below, so their
+     * predictions match. */
+    if (!isnan(creal(u_s_ab))) {
+        out->u_s_zoh = cexp(-I * out->theta_c) * u_s_ab;
+    } else if (self->T_s_old > 0.0) {
+        double complex Phi =
+            cexp(I * out->w_m * self->T_s_old) * (1.0 - im_alpha(par) * self->T_s_old);
+        out->u_s_zoh = (Phi - 1.0) / self->T_s_old * out->psi_R + par->R_s * out->i_s;
+    } else {
+        out->u_s_zoh =
+            (I * out->w_m - im_alpha(par)) * out->psi_R + par->R_s * out->i_s;
+    }
 
     /* Estimation error, i.e., the difference between the rotor flux predictions of
      * the current model and the voltage model */
@@ -290,16 +304,6 @@ static void im_current_vector_ctrl_compute_output(IMCurrentVectorController *sel
     ref->u_s = complex_pi_compute_output(&self->current_ctrl, ref->i_s, fbk->i_s, 0.0);
 }
 
-static void im_current_vector_ctrl_compute_standby_output(
-    IMCurrentVectorController *self, const IMObserverOutputs *fbk, IMReferences *ref)
-{
-    /* The current controller tracks the measured current and voltage */
-    ref->T_s = self->T_s;
-    ref->tau_M = 0.0;
-    ref->i_s = fbk->i_s;
-    ref->u_s = complex_pi_compute_output(&self->current_ctrl, ref->i_s, fbk->i_s, 0.0);
-}
-
 static void im_current_vector_ctrl_update(IMCurrentVectorController *self,
                                           const IMReferences *ref,
                                           const IMObserverOutputs *fbk)
@@ -323,6 +327,7 @@ static void im_vector_control_system_init(IMVectorControlSystem *self,
     self->speed_ctrl.u_i = 0.0;
     self->speed_ctrl.v = 0.0;
     self->enabled = 1;
+    self->release_step = 0;
 }
 
 static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
@@ -335,11 +340,15 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
 
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. With blocked gates, both are
-     * the measured voltage. */
-    double complex u_c_ab_zoh = meas->u_c_ab;
-    double complex u_c_ab = meas->u_c_ab;
-    if (enabled) {
+     * averaged over the previous and ongoing periods. In standby (with blocked gates,
+     * and at the first sampling instant after the release of a sensorless drive,
+     * VectorControlSystem._standby), the voltage is unknown (NAN), and the observer
+     * runs on its open-circuit model, whose voltage is used for the control laws too.
+     */
+    int standby = !enabled || self->release_step;
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
+    if (!standby) {
         u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
         u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     }
@@ -353,23 +362,24 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
         im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
                                               1.0, fbk);
     }
-    fbk->u_s = cexp(-I * fbk->theta_c) * u_c_ab;
+    fbk->u_s = standby ? fbk->u_s_zoh : cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* Speed controller and vector controller, or with blocked gates, the standby
-     * output of the vector controller */
-    if (enabled) {
-        double tau_M_ref =
-            pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
-        im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
-    } else {
-        im_current_vector_ctrl_compute_standby_output(&self->vector_ctrl, fbk, ref);
+    /* Speed controller and vector controller, or in standby, the vector controller
+     * with zero torque reference and the zero vector of a sensorless drive */
+    double tau_M_ref = 0.0;
+    if (!standby) {
+        tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
     }
+    im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
 
-    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
-     * k_comp*T_s*w_c */
+    /* Duty ratios for the PWM (modulate), the angle of the voltage reference advanced
+     * by k_comp*T_s*w_c, or the zero vector of a sensorless drive in standby */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
+    if (self->vector_ctrl.sensorless && standby) {
+        u_s_ab_ref = 0.0;
+    }
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
                                      fbk->w_c, meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;
@@ -379,9 +389,10 @@ static void im_vector_control_system_update(IMVectorControlSystem *self)
 {
     pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
-    if (self->enabled) {
+    if (self->enabled && !self->release_step) {
         pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
     }
+    self->release_step = self->vector_ctrl.sensorless && !self->enabled;
 }
 
 /* Signal vectors of the modular control system ---------------------------- */
@@ -398,7 +409,6 @@ static void im_measurements_pack(const IMMeasurements *meas, double y[MEAS_WIDTH
     SET_COMPLEX(y, MEAS_i_c_ab, meas->i_c_ab);
     y[MEAS_u_dc] = meas->u_dc;
     y[MEAS_w_M] = meas->w_M;
-    SET_COMPLEX(y, MEAS_u_c_ab, meas->u_c_ab);
 }
 
 static void im_measurements_unpack(const double u[MEAS_WIDTH], IMMeasurements *meas)
@@ -406,7 +416,6 @@ static void im_measurements_unpack(const double u[MEAS_WIDTH], IMMeasurements *m
     meas->i_c_ab = COMPLEX_AT(u, MEAS_i_c_ab);
     meas->u_dc = u[MEAS_u_dc];
     meas->w_M = u[MEAS_w_M];
-    meas->u_c_ab = COMPLEX_AT(u, MEAS_u_c_ab);
 }
 
 static void im_observer_outputs_pack(const IMObserverOutputs *fbk, double y[FBK_WIDTH])

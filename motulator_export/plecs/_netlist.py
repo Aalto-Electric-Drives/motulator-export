@@ -362,8 +362,8 @@ PLECS = Geometry(
         "from": (40, 10),
         "delay": (30, 30),
     },
-    widths={"cblock": 100, "subsystem": 100, "mux": 10},
-    spacing={"cblock": 10, "mux": 10, "subsystem": 20},
+    widths={"cblock": 100, "cscript": 60, "subsystem": 100, "mux": 10},
+    spacing={"cblock": 10, "cscript": 10, "mux": 10, "subsystem": 20},
     pitch={},
     stub=4,
     grid=5,
@@ -384,9 +384,9 @@ SIMULINK = Geometry(
         "from": (70, 14),
         "delay": (35, 30),
     },
-    widths={"cblock": 140, "subsystem": 140, "mux": 5},
+    widths={"cblock": 140, "cscript": 140, "subsystem": 140, "mux": 5},
     spacing={},
-    pitch={"cblock": 30, "subsystem": 40, "mux": 30},
+    pitch={"cblock": 30, "cscript": 30, "subsystem": 40, "mux": 30},
     stub=5,
     grid=5,
     channel=40,
@@ -401,7 +401,10 @@ SIMULINK = Geometry(
 def kind(b: Block) -> str:
     """Kind of a block in the geometry."""
     if isinstance(b, CBlock):
-        return "cblock"
+        # The terminals of a C-Script block of PLECS with one input and one output
+        # are those of its default size, whatever its frame
+        single = len(b.inputs) == 1 and len(b.outputs) == 1
+        return "cscript" if single and b.mask is None else "cblock"
     if isinstance(b, Subsystem):
         return "subsystem"
     if isinstance(b, Selector):

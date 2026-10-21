@@ -80,7 +80,7 @@ static double T_s; /* Sampling period */
 static ObserverOutputs fbk;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {2, 22};
+static const int INPUT_WIDTHS[] = {2, 23};
 static const int FEEDTHROUGH[] = {1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
 #define NUM_INPUTS 2

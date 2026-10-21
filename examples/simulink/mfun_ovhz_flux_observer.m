@@ -21,8 +21,13 @@ u_s_zoh_ab = complex_in(u_s_zoh_ab_in);
 % The rotor speed is the speed reference, without the external speed
 % error signal
 out = im_flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, w_M, 0, p.h);
-% Voltage for the control laws (DriveControlSystem.get_feedback)
-out.u_s = exp(-1i*out.theta_c)*u_s_ab;
+% Voltage for the control laws (DriveControlSystem.get_feedback), or the
+% open-circuit voltage of the observer if unknown
+if isnan(real(u_s_ab))
+    out.u_s = out.u_s_zoh;
+else
+    out.u_s = exp(-1i*out.theta_c)*u_s_ab;
+end
 out_out = im_observer_outputs_pack(out);
 self = im_flux_observer_update(self, p.T_s, out);
 end
@@ -31,8 +36,7 @@ function s = im_vhz_measurements_unpack(u)
 %IM_VHZ_MEASUREMENTS_UNPACK Struct of the signal vector u.
 s = struct( ...
     'i_c_ab', complex(u(1), u(2)), ...
-    'u_dc', u(3), ...
-    'u_c_ab', complex(u(4), u(5)));
+    'u_dc', u(3));
 end
 
 function y = im_observer_outputs_pack(s)
@@ -141,7 +145,6 @@ theta_c = self.theta_c;
 % the previous and ongoing sampling periods is set by the control system
 % (DriveControlSystem.get_feedback).
 i_s = exp(-1i*theta_c)*i_s_ab;
-u_s_zoh = exp(-1i*theta_c)*u_s_ab;
 % Mechanical and electrical angular speeds of the rotor
 w_m = par.n_p*w_M;
 % Rotor flux estimate
@@ -155,6 +158,18 @@ else
 end
 % Angular speed of the coordinate system equals synchronous angular frequency
 w_s = w_m + w_r;
+% Voltage vector in the observer coordinates, or the open-circuit voltage if
+% unknown (NaN, blocked gates), averaged over a period of the length of the
+% previous one. The rotor flux decays as in the current model below, so their
+% predictions match.
+if ~isnan(real(u_s_ab))
+    u_s_zoh = exp(-1i*theta_c)*u_s_ab;
+elseif self.T_s_old > 0
+    Phi = exp(1i*w_m*self.T_s_old)*(1 - im_alpha(par)*self.T_s_old);
+    u_s_zoh = (Phi - 1)/self.T_s_old*psi_R + par.R_s*i_s;
+else
+    u_s_zoh = (1i*w_m - im_alpha(par))*psi_R + par.R_s*i_s;
+end
 % Estimation error, i.e., the difference between the rotor flux predictions of the
 % current model and the voltage model
 if self.T_s_old > 0

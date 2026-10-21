@@ -153,6 +153,6 @@ In the comparisons of the examples, the PLECS models agree with *motulator* to a
 
 ## Good to know
 
-- The first input of the control system is the gate enable (`ctrl.set_enable`). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*.
+- The first input of the control system is the gate enable (`ctrl.set_enable`). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*; after the release, a sensorless drive catches the rotating machine with a flying start.
 - The model refers to the C sources of the installed package by a path relative to the model file. If you move the model or update the package, write the model again.
 - `plecs.simulate` closes the model in PLECS before loading it, discarding unsaved changes, since PLECS does not reload an open model from the file.

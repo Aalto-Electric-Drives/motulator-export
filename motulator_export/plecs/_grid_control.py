@@ -37,13 +37,13 @@ from motulator_export.plecs._control import (
     complex_out,
     compute_standby_output,
     control_block,
-    converter_voltage_input,
     current_limiter,
     get_measurement,
     grid_converter_control_system,
     init_header,
     mask_params,
     monitor,
+    pcc_voltage_input,
     pwm_init,
 )
 from motulator_export.plecs._netlist import (
@@ -90,7 +90,6 @@ GFL_INPUTS = [
     Port("i_c_abc", 3),
     Port("u_g_line", 2),
     Port("u_dc", 1),
-    Port("u_c_line", 2),
 ]
 GFL_OUTPUTS = {
     "Power (p_g_ref, p_g, q_g_ref, q_g)": ["p_g_ref", "p_g", "q_g_ref", "q_g"],
@@ -108,8 +107,8 @@ GFM_INPUTS = [
     Port("p_g_ref", 1),
     Port("v_c_ref", 1),
     Port("i_c_abc", 3),
+    Port("u_g_line", 2),
     Port("u_dc", 1),
-    Port("u_c_line", 2),
 ]
 GFM_OUTPUTS = {
     "Power (p_g_ref, p_g, q_g)": ["p_g_ref", "p_g", "q_g"],
@@ -436,11 +435,8 @@ def gfl_control_system() -> Subsystem:
             ("i_c_ab", "abc2complex(i_c_abc)"),
             ("u_g_ab", "line2complex(u_g_line)"),
             ("u_dc", "fmax(InputSignal(2, 0), U_DC_MIN)"),
-            ("u_c_ab", "line2complex(u_c_line)"),
         ],
-        abc_input("i_c_abc", 0) + "/* Line-to-line PCC voltages u_ab and u_bc */\n"
-        "double u_g_line[2] = {InputSignal(1, 0), InputSignal(1, 1)};\n"
-        + converter_voltage_input(3),
+        abc_input("i_c_abc", 0) + pcc_voltage_input(1),
     )
     signals = monitor(GFL_SIGNALS, GFL_OUTPUTS, GFL_MONITORED, [])
     return grid_converter_control_system(
@@ -863,10 +859,10 @@ def gfm_control_system() -> Subsystem:
         GFM_INPUTS[3:],
         [
             ("i_c_ab", "abc2complex(i_c_abc)"),
-            ("u_dc", "fmax(InputSignal(1, 0), U_DC_MIN)"),
-            ("u_c_ab", "line2complex(u_c_line)"),
+            ("u_dc", "fmax(InputSignal(2, 0), U_DC_MIN)"),
+            ("u_g_ab", "line2complex(u_g_line)"),
         ],
-        abc_input("i_c_abc", 0) + converter_voltage_input(2),
+        abc_input("i_c_abc", 0) + pcc_voltage_input(1),
     )
     signals = monitor(
         GFM_SIGNALS,

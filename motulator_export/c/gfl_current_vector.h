@@ -40,7 +40,6 @@ typedef struct {
     double complex i_c_ab; /* Converter current (A) */
     double complex u_g_ab; /* PCC voltage (V) */
     double u_dc;           /* DC-bus voltage (V) */
-    double complex u_c_ab; /* Converter voltage (V), used only with blocked gates */
 } GridMeasurements;
 
 /* Feedback signals (PLLOutputs) */
@@ -99,8 +98,9 @@ static void gfl_power_references(double complex i_c_ref, double u_g, double *p_g
                                  double *q_g_ref);
 
 /* Control system (GridConverterControlSystem with CurrentVectorController). While
- * the gates are blocked, the feedback voltage is the measured converter voltage,
- * and the controller computes its standby output. */
+ * the gates are blocked, the feedback voltage is the measured PCC voltage, which the
+ * converter voltage equals once the current has decayed, and the controller
+ * computes its standby output. */
 typedef struct {
     GFLControllerCfg cfg;
     ComplexPIController current_ctrl;
@@ -125,8 +125,7 @@ static void gfl_control_system_update(GFLControlSystem *self);
 #define MEAS_i_c_ab 0
 #define MEAS_u_g_ab 2
 #define MEAS_u_dc 4
-#define MEAS_u_c_ab 5
-#define MEAS_WIDTH 7
+#define MEAS_WIDTH 5
 
 #define FBK_i_c 0
 #define FBK_u_c 2

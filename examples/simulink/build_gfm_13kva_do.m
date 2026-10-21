@@ -30,19 +30,19 @@ s.scope = { ...
 s.control.name = 'Grid-forming control';
 s.control.sfunction = {'sfun_gfm_get_measurement', 'sfun_gfm_pwm', 'sfun_gfm_pwm_realized_voltage', 'sfun_gfm_observer', 'sfun_gfm_power_reference_limiter', 'sfun_gfm_current_reference', 'sfun_gfm_current_limiter', 'sfun_gfm_standby_output', 'sfun_gfm_voltage_reference', 'sfun_gfm_modulate', 'sfun_gfm_monitored_signals'};
 s.control.mask_type = 'GridConverterControlSystem (motulator)';
-s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
+s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'GridConverterControlSystem', 'cfg.T_s'
     };
 s.control.mask_init = '';
-s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_dc', 'u_c_line'};
+s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_g_line', 'u_dc'};
 s.control.netlist.blocks = { ...
     'enable', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'p_g_ref', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'v_c_ref', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'i_c_abc', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
-    'u_dc', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
-    'u_c_line', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
+    'u_g_line', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
+    'u_dc', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
     'd_abc', 'Outport', [905.0 381.0 935.0 395.0], {'Port', '1'}
     'signals', 'Outport', [1530.0 298.0 1560.0 312.0], {'Port', '2'}
     'get_measurement', 'S-Function', [250.0 180.0 390.0 270.0], {'FunctionName', 'sfun_gfm_get_measurement', 'Parameters', '1'}
@@ -138,8 +138,8 @@ s.control.netlist.lines = { ...
     '', 'p_g_ref/1', 'ObserverBasedGridFormingController/2', {'x', 735.0}
     '', 'v_c_ref/1', 'ObserverBasedGridFormingController/3', []
     '', 'i_c_abc/1', 'get_measurement/1', []
-    '', 'u_dc/1', 'get_measurement/2', {'x', 200.0}
-    '', 'u_c_line/1', 'get_measurement/3', {'x', 215.0}
+    '', 'u_g_line/1', 'get_measurement/2', {'x', 200.0}
+    '', 'u_dc/1', 'get_measurement/3', {'x', 215.0}
     '', 'get_measurement/1', 'PWM/2', {'x', 415.0}
     '', 'get_measurement/1', 'ObserverBasedGridFormingController/4', {'x', 750.0}
     '', 'PWM/1', 'ObserverBasedGridFormingController/5', {'x', 765.0}
@@ -199,7 +199,7 @@ s.control.netlist.lines = { ...
     'ObserverBasedGridFormingController', 'enable/1', 'Goto enable/1', []
     };
 s.control.netlist.masks = { ...
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured PCC voltage, as in get_feedback of the control system.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'

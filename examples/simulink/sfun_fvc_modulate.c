@@ -76,14 +76,15 @@
     } while (0)
 
 static double T_s; /* Sampling period */
+static int sensorless;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {22, 2};
-static const int FEEDTHROUGH[] = {1, 1};
+static const int INPUT_WIDTHS[] = {23, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {2, 1};
-#define NUM_INPUTS 2
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 2
-#define NUM_PARAMS 1
+#define NUM_PARAMS 2
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -137,6 +138,7 @@ static void mdlInitializeSampleTimes(SimStruct *S)
 static void mdlStart(SimStruct *S)
 {
     T_s = P(0, 0);
+    sensorless = (int)P(1, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
@@ -152,6 +154,10 @@ static void mdlOutputs(SimStruct *S, int_T tid)
      * k_comp*T_s*w_c (k_comp = 1.5 of the controller) */
     double complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));
     u_c_ref_ab *= cexp(I * 1.5 * T_s * fbk.w_c);
+    /* The zero vector of a sensorless drive in standby */
+    if (sensorless && InputSignal(2, 0) != 0.0) {
+        u_c_ref_ab = 0.0;
+    }
     OutputSignal(0, 0) = creal(u_c_ref_ab);
     OutputSignal(0, 1) = cimag(u_c_ref_ab);
     OutputSignal(1, 0) = fbk.w_c;

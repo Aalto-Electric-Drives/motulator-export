@@ -24,13 +24,13 @@ end
 pending = true;
 meas = gfm_measurements_unpack(meas_in);
 % Average of the previous and the ongoing periods, and of the ongoing
-% period, or while the gates are blocked, the measured voltage
+% period, or while the gates are blocked, the measured PCC voltage
 if enable > 0
     u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);
     u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, false);
 else
-    u_c_ab = meas.u_c_ab;
-    u_c_zoh_ab = meas.u_c_ab;
+    u_c_ab = meas.u_g_ab;
+    u_c_zoh_ab = meas.u_g_ab;
 end
 u_c_ab_out = complex_out(u_c_ab);
 u_c_zoh_ab_out = complex_out(u_c_zoh_ab);
@@ -41,7 +41,7 @@ function s = gfm_measurements_unpack(u)
 s = struct( ...
     'i_c_ab', complex(u(1), u(2)), ...
     'u_dc', u(3), ...
-    'u_c_ab', complex(u(4), u(5)));
+    'u_g_ab', complex(u(4), u(5)));
 end
 
 function u_ab = abc2complex(u)

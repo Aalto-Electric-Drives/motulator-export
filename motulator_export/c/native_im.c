@@ -127,11 +127,11 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
     double complex i_c_ab = drive_meas_current(drive, x);
     double u_dc = model_dc_voltage(mdl, x);
     if (self->vhz) {
-        IMVHzMeasurements meas = {i_c_ab, u_dc, 0.0};
+        IMVHzMeasurements meas = {i_c_ab, u_dc};
         im_vhz_control_system_compute_output(&self->vhz_ctrl, &meas, w_M_ref, 1);
     } else {
         /* The measured speed is used only in the sensored mode */
-        IMMeasurements meas = {i_c_ab, u_dc, drive_meas_speed(drive, x), 0.0};
+        IMMeasurements meas = {i_c_ab, u_dc, drive_meas_speed(drive, x)};
         im_vector_control_system_compute_output(&self->cvc, &meas, w_M_ref, 1);
     }
     int status = im_save(self);

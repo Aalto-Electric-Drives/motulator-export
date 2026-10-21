@@ -30,19 +30,19 @@ s.scope = { ...
 s.control.name = 'Grid-forming control';
 s.control.sfunction = [];
 s.control.mask_type = 'GridConverterControlSystem (motulator)';
-s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output, the feedback voltage being the measured converter voltage u_c_line, as in motulator.';
+s.control.description = 'Disturbance-observer-based grid-forming control in the power-control mode, with the transparent current limitation (GridConverterControlSystem with ObserverBasedGridFormingController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'GridConverterControlSystem', 'cfg.T_s'
     };
 s.control.mask_init = '';
-s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_dc', 'u_c_line'};
+s.control.inputs = {'enable', 'p_g_ref', 'v_c_ref', 'i_c_abc', 'u_g_line', 'u_dc'};
 s.control.netlist.blocks = { ...
     'enable', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'p_g_ref', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'v_c_ref', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'i_c_abc', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
-    'u_dc', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
-    'u_c_line', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
+    'u_g_line', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
+    'u_dc', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
     'd_abc', 'Outport', [905.0 381.0 935.0 395.0], {'Port', '1'}
     'signals', 'Outport', [1530.0 298.0 1560.0 312.0], {'Port', '2'}
     'get_measurement', 'MATLAB Function', [250.0 180.0 390.0 270.0], {'mfun_gfm_get_measurement', 'p.T_s', [5.0]}
@@ -101,11 +101,11 @@ s.control.netlist.blocks = { ...
     'ObserverBasedGridFormingController/Goto enable', 'Goto', [110.0 508.0 180.0 522.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/u_c', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/i_c', 'Inport', [40.0 128.0 70.0 142.0], {'Port', '3'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref_lim', 'Outport', [410.0 78.0 440.0 92.0], {'Port', '1'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/mfun_gfm_power_reference_limiter', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_gfm_power_reference_limiter', 'p.T_s', [1.0]}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/i_c', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref_lim', 'Outport', [490.0 78.0 520.0 92.0], {'Port', '1'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/mfun_gfm_power_reference_limiter', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_gfm_power_reference_limiter', 'p.T_s', [1.0]}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay u_c', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'p.T_s'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay i_c', 'UnitDelay', [133.0 120.0 168.0 150.0], {'SampleTime', 'p.T_s'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay i_c', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'p.T_s'}
     };
 s.control.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedGridFormingController', 'Outport', 1.0, -45.0
@@ -152,7 +152,7 @@ s.control.netlist.aligns = { ...
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'p_g_ref_lim', 'Inport', 1.0, 'mfun_gfm_power_reference_limiter', 'Outport', 1.0, 0.0
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'p_g_ref', 'Outport', 1.0, 'mfun_gfm_power_reference_limiter', 'Inport', 1.0, 0.0
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay u_c', 'Outport', 1.0, 'mfun_gfm_power_reference_limiter', 'Inport', 2.0, 0.0
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'i_c', 'Outport', 1.0, 'Delay i_c', 'Inport', 1.0, 0.0
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay i_c', 'Outport', 1.0, 'mfun_gfm_power_reference_limiter', 'Inport', 3.0, 0.0
     };
 s.control.netlist.lines = { ...
     '', 'From PWM.enable/1', 'PWM/1', []
@@ -160,8 +160,8 @@ s.control.netlist.lines = { ...
     '', 'p_g_ref/1', 'ObserverBasedGridFormingController/2', {'x', 735.0}
     '', 'v_c_ref/1', 'ObserverBasedGridFormingController/3', []
     '', 'i_c_abc/1', 'get_measurement/1', []
-    '', 'u_dc/1', 'get_measurement/2', {'x', 200.0}
-    '', 'u_c_line/1', 'get_measurement/3', {'x', 215.0}
+    '', 'u_g_line/1', 'get_measurement/2', {'x', 200.0}
+    '', 'u_dc/1', 'get_measurement/3', {'x', 215.0}
     '', 'get_measurement/1', 'PWM/2', {'x', 415.0}
     '', 'get_measurement/1', 'ObserverBasedGridFormingController/4', {'x', 750.0}
     '', 'PWM/1', 'ObserverBasedGridFormingController/5', {'x', 765.0}
@@ -228,8 +228,8 @@ s.control.netlist.lines = { ...
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'p_g_ref/1', 'mfun_gfm_power_reference_limiter/1', []
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'u_c/1', 'Delay u_c/1', {'x', 95.0}
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay u_c/1', 'mfun_gfm_power_reference_limiter/2', []
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'i_c/1', 'Delay i_c/1', []
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay i_c/1', 'mfun_gfm_power_reference_limiter/3', {'x', 190.0}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'i_c/1', 'Delay i_c/1', {'x', 190.0}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay i_c/1', 'mfun_gfm_power_reference_limiter/3', []
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'mfun_gfm_power_reference_limiter/1', 'p_g_ref_lim/1', []
     };
 s.control.netlist.masks = { ...
@@ -246,7 +246,7 @@ s.control.netlist.masks = { ...
     'end'}, newline), { ...
     'T_s', 'T_s: T_s', 'T_s'
     }, 'disp(''mfun_gfm_get_measurement'');'
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured converter voltage meas.u_c_ab, as in DriveControlSystem.get_feedback.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured PCC voltage, as in get_feedback of the control system.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'
