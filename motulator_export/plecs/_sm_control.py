@@ -192,11 +192,12 @@ def _flux_observer() -> CBlock:
         "fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods "
         "(DriveControlSystem.get_feedback). While the gates are blocked, the voltages "
         "are unknown (NaN), and the observer runs on its open-circuit model. At the "
-        "flying start after the release (the input step), the estimates are "
-        "initialized from the current response to the zero-voltage period "
-        "(SpeedFluxObserver.catch), and the output init = [flag w_M] initializes the "
-        "SpeedObserver. In the sensored mode (h = 1), the position error signal is "
-        "computed from the measured rotor angle (compute_feedback)." + PAR_DESCRIPTION,
+        "flying start after the release (the input step of FlyingStart), the "
+        "estimates are initialized from the current response to the zero-voltage "
+        "period (SpeedFluxObserver.catch), and the output init = [flag w_M] "
+        "initializes the SpeedObserver. In the sensored mode (h = "
+        "1), the position error signal is computed from the measured rotor angle "
+        "(compute_feedback)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param("k_theta", "k_theta: Rotor angle estimation gain (rad/s)", "k_theta"),
@@ -243,10 +244,10 @@ def _flux_observer() -> CBlock:
         f"double complex u_s_zoh_ab = {complex_in(3)};\n"
         "double w_M = InputSignal(4, 0);\n"
         "/* Flying start: the current at the start of the zero-voltage period (step\n"
-        " * 3), and the estimates initialized from the current response at its end\n"
+        " * 2), and the estimates initialized from the current response at its end\n"
         " * (the next step), see SpeedFluxObserver.catch */\n"
         "double init = 0.0;\n"
-        "if (InputSignal(0, 0) == 3.0) {\n"
+        "if (InputSignal(0, 0) == 2.0) {\n"
         "    i_s_ab_start = meas.i_c_ab;\n"
         "    catching = 1;\n"
         "} else if (catching) {\n"
@@ -286,10 +287,10 @@ def _flux_observer() -> CBlock:
         "self.catching = false;\n",
         output="% Flying start: the current at the start of the zero-voltage period "
         "(step\n"
-        "% 3), and the estimates initialized from the current response at its end\n"
+        "% 2), and the estimates initialized from the current response at its end\n"
         "% (the next step), see SpeedFluxObserver.catch\n"
         "init = [0; w_M];\n"
-        "if step == 3\n"
+        "if step == 2\n"
         "    self.i_s_ab_start = meas.i_c_ab;\n"
         "    self.catching = true;\n"
         "elseif self.catching\n"

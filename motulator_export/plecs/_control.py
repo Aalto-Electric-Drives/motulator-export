@@ -283,9 +283,11 @@ def speed_controller(sig: Signals) -> CBlock:
         "SpeedController (motulator)",
         "2DOF PI speed controller (SpeedController). The inputs are the gate enable, "
         "the speed estimate fbk.w_M, the limited torque reference ref.tau_M "
-        "(anti-windup), and the speed reference w_M_ref, and the output is the "
-        "torque reference. While the gates are blocked, the controller is not "
-        "updated, as in VectorControlSystem.",
+        "(anti-windup), the speed reference w_M_ref, and the step of the flying "
+        "start, and the output is the torque reference. While the gates are blocked, "
+        "and at the first sampling instant after the release of a sensorless drive "
+        "(the step nonzero), the controller is not updated, as in "
+        "VectorControlSystem.",
         [
             Param("J", "J: Total inertia (kgm²)", "speed_ctrl.J"),
             Param(
@@ -317,14 +319,15 @@ def speed_controller(sig: Signals) -> CBlock:
     )
     output = (
         "/* Torque reference */\n"
-        "OutputSignal(0, 0) = pi_compute_output(&self, InputSignal(3, 0), "
-        "InputSignal(1, 0), 0.0);\n"
+        "OutputSignal(0, 0) = pi_compute_output(&self, InputSignal(4, 0), "
+        "InputSignal(2, 0), 0.0);\n"
     )
     update = (
         "/* The limited torque reference ref.tau_M (anti-windup), not updated while\n"
-        " * the gates are blocked */\n"
-        "if (InputSignal(0, 0) > 0.0) {\n"
-        "    pi_update(&self, T_s, InputSignal(2, 0));\n"
+        " * the gates are blocked nor at the first step after the release (the step\n"
+        " * of the flying start nonzero) */\n"
+        "if (InputSignal(0, 0) > 0.0 && InputSignal(1, 0) == 0.0) {\n"
+        "    pi_update(&self, T_s, InputSignal(3, 0));\n"
         "}\n"
     )
     mcode = MCode(
@@ -338,20 +341,27 @@ def speed_controller(sig: Signals) -> CBlock:
         "[self, tau_M_ref] = pi_compute_output(self, w_M_ref, w_M, 0);\n",
         update="% The limited torque reference ref.tau_M (anti-windup), not updated "
         "while\n"
-        "% the gates are blocked\n"
-        "if enable > 0\n"
+        "% the gates are blocked nor at the first step after the release (the step of\n"
+        "% the flying start nonzero)\n"
+        "if enable > 0 && step == 0\n"
         "    self = pi_update(self, p.T_s, tau_M);\n"
         "end\n",
         checks=required("J", "alpha_s", "T_s"),
     )
     return CBlock(
         "SpeedController",
-        [Port(ENABLE, 1), Port("w_M", 1), Port("tau_M", 1), Port("w_M_ref", 1)],
+        [
+            Port(ENABLE, 1),
+            Port("step", 1),
+            Port("w_M", 1),
+            Port("tau_M", 1),
+            Port("w_M_ref", 1),
+        ],
         [Port("tau_M_ref", 1)],
         sig.class_code("PIController", start, output, update, SAMPLING),
         params,
         sig.sfunction("speed_controller"),
-        feedthrough=[0, 1, 0, 1],
+        feedthrough=[0, 0, 1, 0, 1],
         mask=mask,
         mcode=mcode,
     )
@@ -367,7 +377,9 @@ def pwm(
     While the gates are blocked, the realized voltage is `standby` (its C and MATLAB
     expressions): NAN by default, i.e., unknown, or the measured PCC voltage of the
     grid converters. With `flying_start`, the block has the input `step` of the
-    flying start, and the duty ratios are those of the zero vector at step 2.
+    flying start (FlyingStart): while it is nonzero (with blocked gates and at the
+    first sampling instant after the release), the duty ratios are those of the zero
+    vector and the realized voltage is unknown.
 
     """
     mask = Mask(
@@ -385,8 +397,9 @@ def pwm(
         )
         + ", as in get_feedback of the control system."
         + (
-            " At the flying start after the release (the input step is 2), the duty "
-            "ratios are those of the zero vector."
+            " While the step of the flying start of a sensorless drive is nonzero "
+            "(FlyingStart), the duty ratios are those of the zero vector and the "
+            "realized voltage is unknown."
             if flying_start
             else ""
         ),
@@ -452,8 +465,8 @@ def pwm(
     m_checks = required(*params)
     meas = sig.port("meas")
     zero_vector = (
-        "/* The zero vector at the flying start (step 2) */\n"
-        "if (InputSignal(3, 0) == 2.0) {\n"
+        "/* The zero vector of the flying start (step nonzero) */\n"
+        "if (InputSignal(3, 0) != 0.0) {\n"
         "    u_c_ref_ab = 0.0;\n"
         "}\n"
         if flying_start
@@ -468,8 +481,8 @@ def pwm(
         "                   meas.i_c_ab, d_abc);\n" + _write(0, "3", "d_abc")
     )
     m_zero_vector = (
-        "% The zero vector at the flying start (step 2)\n"
-        "if step == 2\n"
+        "% The zero vector of the flying start (step nonzero)\n"
+        "if step ~= 0\n"
         "    u_c_ref_ab = complex(0);\n"
         "end\n"
         if flying_start
@@ -499,32 +512,36 @@ def pwm(
         f" * period, or while the gates are blocked, {comment} */\n"
         f"double complex u_c_ab = {standby[0]};\n"
         f"double complex u_c_zoh_ab = {standby[0]};\n"
-        "if (InputSignal(0, 0) > 0.0) {\n"
-        "    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n"
+        + (
+            "if (InputSignal(0, 0) > 0.0 && InputSignal(2, 0) == 0.0) {\n"
+            if flying_start
+            else "if (InputSignal(0, 0) > 0.0) {\n"
+        )
+        + "    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n"
         "    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n"
         "}\n" + complex_out(0, "u_c_ab") + complex_out(1, "u_c_zoh_ab")
     )
     update = (
         "/* The duty ratios of the next period */\n"
-        + _read(2, "3", "d_abc")
+        + _read(3 if flying_start else 2, "3", "d_abc")
         + "pwm_update(&self, T_s, d_abc);\n"
     )
     realized = CBlock(
         "get_realized_voltage",
-        [Port(ENABLE, 1), meas, Port("d_abc", 3)],
+        [Port(ENABLE, 1), meas, *step, Port("d_abc", 3)],
         [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2)],
         sig.class_code("PWM", start, output, update, SAMPLING),
         params,
         sig.sfunction("pwm_realized_voltage"),
-        feedthrough=[1, 1, 0],
+        feedthrough=[1, 1, *([1] if flying_start else []), 0],
         mcode=MCode(
             start=m_start,
             output="% Average of the previous and the ongoing periods, and of the "
             "ongoing\n"
             f"% period, or while the gates are blocked, {comment.replace('NAN', 'NaN')}"
             "\n"
-            "if enable > 0\n"
-            "    u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);\n"
+            + ("if enable > 0 && step == 0\n" if flying_start else "if enable > 0\n")
+            + "    u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);\n"
             "    u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, "
             "false);\n"
             "else\n"
@@ -549,7 +566,11 @@ def pwm(
             ("meas", "get_realized_voltage:meas"),
             ("u_c_ref_ab", "compute_output:u_c_ref_ab"),
             ("w", "compute_output:w"),
-            *([("step", "compute_output:step")] if flying_start else []),
+            *(
+                [("step", "compute_output:step"), ("step", "get_realized_voltage:step")]
+                if flying_start
+                else []
+            ),
             ("compute_output:d_abc", "d_abc"),
             ("compute_output:d_abc", "get_realized_voltage:d_abc"),
             ("get_realized_voltage:u_c_ab", "u_c_ab"),
@@ -567,7 +588,7 @@ def pwm(
             "u_c_ab": "get_realized_voltage:u_c_ab",
             "d_abc": "compute_output:d_abc",
         },
-        tags=[ENABLE],
+        tags=[ENABLE, *(p.name for p in step)],
         mask=mask,
     )
 
@@ -651,26 +672,26 @@ def speed_observer(sig: Signals, init: bool = False) -> CBlock:
 
 def flying_start(sig: Signals) -> CBlock:
     """
-    Flying start after the release of the gates (VectorControlSystem.get_feedback).
+    Flying start after the release of the gates (FlyingStart).
 
     The output `step` is the step of the flying start of a sensorless drive: 1 while
-    the gates are blocked, 2 at the first sampling instant after the release, when
-    the zero vector is computed (applied in the next sampling period), 3 at the next
-    instant, when the zero-voltage period starts, and 0 otherwise, also in the
-    sensored mode. The output `zero_torque` flags the zero torque reference, while
-    the gates are blocked and at step 2.
+    the gates are blocked, 2 at the first sampling instant after the release, and 0
+    otherwise, also in the sensored mode. While it is nonzero, the control system is
+    in standby: the duty ratios are those of the zero vector and the speed controller
+    is not updated. The output `zero_torque` flags the zero torque reference of the
+    standby, while the gates are blocked (also in the sensored mode) and at step 2.
 
     """
     mask = Mask(
         "FlyingStart (motulator)",
         "Flying start of a sensorless drive after the release of the gates "
-        "(VectorControlSystem.get_feedback): the first output after the release is "
-        "the zero vector, applied in the next sampling period, and the estimates are "
-        "initialized from the current response at the end of that period. The output "
-        "step is 1 while the gates are blocked, 2 when the zero vector is computed, 3 "
-        "when the zero-voltage period starts, and 0 otherwise. The output "
-        "zero_torque flags the zero torque reference, while the gates are blocked "
-        "and at step 2.",
+        "(FlyingStart): the control system stays in standby (the zero vector and zero "
+        "torque) at the first sampling instant after the release, and the estimates "
+        "are initialized from the current response to that zero-voltage period. The "
+        "output step is 1 while the gates are blocked, 2 at the first sampling "
+        "instant after the release, and 0 otherwise (also in the sensored mode). The "
+        "output zero_torque flags the zero torque reference of the standby, while "
+        "the gates are blocked and at step 2.",
         [
             Param(
                 "sensorless",
@@ -693,8 +714,6 @@ def flying_start(sig: Signals) -> CBlock:
         "        next = 1;\n"
         "    } else if (self == 1) {\n"
         "        next = 2;\n"
-        "    } else if (self == 2) {\n"
-        "        next = 3;\n"
         "    }\n"
         "}\n"
         "OutputSignal(0, 0) = (enable <= 0.0 || next == 2) ? 1.0 : 0.0;\n"
@@ -709,8 +728,6 @@ def flying_start(sig: Signals) -> CBlock:
         "        next = 1;\n"
         "    elseif self.step == 1\n"
         "        next = 2;\n"
-        "    elseif self.step == 2\n"
-        "        next = 3;\n"
         "    end\n"
         "end\n"
         "step = next;\n"
@@ -1092,16 +1109,16 @@ def vector_control_system(
 
     The vector controller has the inputs `enable`, `tau_M_ref`, `meas`, `u_c_ab`,
     and optionally `u_c_zoh_ab`, and the outputs `fbk`, `ref`, and `step` (of the
-    flying start, to the PWM). The inputs of the monitored signals are `enable`,
-    `fbk`, `ref`, and `w_M_ref`.
+    flying start, to the PWM and the speed controller). The inputs of the monitored
+    signals are `enable`, `fbk`, `ref`, and `w_M_ref`.
 
     """
     vc = vector_ctrl.name
     zoh = "u_c_zoh_ab" in [p.name for p in vector_ctrl.inputs]
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals and the references to the speed controller and to the
-    # monitored signals, and the step of the flying start to the PWM, by tags, the
-    # others by wires
+    # monitored signals, and the step of the flying start to the PWM and the speed
+    # controller, by tags, the others by wires
     tags = [
         Tag("Goto fbk", "fbk", fbk, goto=True),
         Tag("Goto ref", "ref", ref, goto=True),
@@ -1109,6 +1126,7 @@ def vector_control_system(
         Tag("From fbk", "fbk", fbk, goto=False),
         Tag("From ref", "ref", ref, goto=False),
         Tag("From step", "step", 1, goto=False),
+        Tag("From step 2", "step", 1, goto=False),
         Tag("From fbk 2", "fbk", fbk, goto=False),
         Tag("From ref 2", "ref", ref, goto=False),
     ]
@@ -1135,6 +1153,7 @@ def vector_control_system(
             (ENABLE, f"{vc}:enable"),
             (f"{vc}:step", "Goto step"),
             ("From step", "PWM:step"),
+            ("From step 2", "SpeedController:step"),
             ("w_M_ref", "SpeedController:w_M_ref"),
             ("w_M_ref", f"{MONITOR}:w_M_ref"),
             *meas,
@@ -1160,7 +1179,7 @@ def vector_control_system(
         ],
         columns=[
             [p.name for p in inputs],
-            ["From fbk", "From ref", "get_measurement"],
+            ["From step 2", "From fbk", "From ref", "get_measurement"],
             ["fbk.w_M", "ref.tau_M"],
             ["SpeedController", "PWM"],
             [vc, "d_abc"],

@@ -163,8 +163,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
             next = 1;
         } else if (self == 1) {
             next = 2;
-        } else if (self == 2) {
-            next = 3;
         }
     }
     OutputSignal(0, 0) = (enable <= 0.0 || next == 2) ? 1.0 : 0.0;

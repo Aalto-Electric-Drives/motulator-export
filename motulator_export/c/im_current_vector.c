@@ -338,29 +338,31 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
     self->enabled = enabled;
 
     /* Flying start of a sensorless drive after the release of the gates
-     * (VectorControlSystem.get_feedback): the first output after the release is
-     * the zero vector. The estimates are not initialized from its current
-     * response, since the rotor flux has decayed (catch of the controller). */
+     * (VectorControlSystem.get_feedback): the zero vector of the standby output is
+     * applied in the first sampling period after the release, and the output of the
+     * first step is computed as in standby. The estimates are not initialized from
+     * the current response, since the rotor flux has decayed (catch of the
+     * controller). */
     if (self->vector_ctrl.sensorless) {
         if (!enabled) {
             self->catch_step = 1;
         } else if (self->catch_step == 1) {
-            self->catch_step = 2; /* The zero vector is computed at this step */
+            self->catch_step = 2; /* The zero-voltage period starts */
         } else if (self->catch_step == 2) {
-            self->catch_step = 3; /* The zero-voltage period starts */
-        } else if (self->catch_step == 3) {
             self->catch_step = 0;
         }
     }
 
     /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
      * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. With blocked gates, the
-     * voltage is unknown (NAN), and the observer runs on its open-circuit model,
-     * whose voltage is used for the control laws too. */
+     * averaged over the previous and ongoing periods. In standby (with blocked gates
+     * and at the first step after the release), the voltage is unknown (NAN), and
+     * the observer runs on its open-circuit model, whose voltage is used for the
+     * control laws too. */
+    int standby = !enabled || self->catch_step != 0;
     double complex u_c_ab_zoh = NAN;
     double complex u_c_ab = NAN;
-    if (enabled) {
+    if (!standby) {
         u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
         u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
     }
@@ -374,27 +376,24 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
         im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
                                               1.0, fbk);
     }
-    fbk->u_s = enabled ? cexp(-I * fbk->theta_c) * u_c_ab : fbk->u_s_zoh;
+    fbk->u_s = standby ? fbk->u_s_zoh : cexp(-I * fbk->theta_c) * u_c_ab;
     fbk->u_dc = meas->u_dc;
 
-    /* Speed controller and vector controller, or with blocked gates and at the
-     * flying start, the vector controller with zero torque reference */
+    /* Speed controller and vector controller, or in standby, the vector controller
+     * with zero torque reference and the zero vector of a sensorless drive */
     double tau_M_ref = 0.0;
-    if (enabled) {
+    if (!standby) {
         tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
     }
-    if (self->catch_step == 2) {
-        tau_M_ref = 0.0;
-    }
     im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
-    if (self->catch_step == 2) {
-        ref->u_s = 0.0; /* The zero vector */
-    }
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
-     * k_comp*T_s*w_c */
+     * k_comp*T_s*w_c, or the zero vector of the flying start */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
+    if (self->catch_step != 0) {
+        u_s_ab_ref = 0.0;
+    }
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
                                      fbk->w_c, meas->i_c_ab, ref->d_abc);
     ref->w_M = w_M_ref;
@@ -404,7 +403,7 @@ static void im_vector_control_system_update(IMVectorControlSystem *self)
 {
     pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
-    if (self->enabled) {
+    if (self->enabled && self->catch_step == 0) {
         pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
     }
 }

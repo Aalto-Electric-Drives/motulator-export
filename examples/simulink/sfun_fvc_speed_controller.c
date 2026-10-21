@@ -79,10 +79,10 @@ static PIController self;
 static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 1, 1};
-static const int FEEDTHROUGH[] = {0, 1, 0, 1};
+static const int INPUT_WIDTHS[] = {1, 1, 1, 1, 1};
+static const int FEEDTHROUGH[] = {0, 0, 1, 0, 1};
 static const int OUTPUT_WIDTHS[] = {1};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 5
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 5
 
@@ -158,7 +158,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
     /* Torque reference */
-    OutputSignal(0, 0) = pi_compute_output(&self, InputSignal(3, 0), InputSignal(1, 0), 0.0);
+    OutputSignal(0, 0) = pi_compute_output(&self, InputSignal(4, 0), InputSignal(2, 0), 0.0);
 }
 
 #define MDL_UPDATE
@@ -166,9 +166,10 @@ static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
     /* The limited torque reference ref.tau_M (anti-windup), not updated while
-     * the gates are blocked */
-    if (InputSignal(0, 0) > 0.0) {
-        pi_update(&self, T_s, InputSignal(2, 0));
+     * the gates are blocked nor at the first step after the release (the step
+     * of the flying start nonzero) */
+    if (InputSignal(0, 0) > 0.0 && InputSignal(1, 0) == 0.0) {
+        pi_update(&self, T_s, InputSignal(3, 0));
     }
 }
 

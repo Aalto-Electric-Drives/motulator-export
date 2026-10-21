@@ -203,10 +203,10 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     double complex u_s_zoh_ab = complex_from(InputSignal(3, 0), InputSignal(3, 1));
     double w_M = InputSignal(4, 0);
     /* Flying start: the current at the start of the zero-voltage period (step
-     * 3), and the estimates initialized from the current response at its end
+     * 2), and the estimates initialized from the current response at its end
      * (the next step), see SpeedFluxObserver.catch */
     double init = 0.0;
-    if (InputSignal(0, 0) == 3.0) {
+    if (InputSignal(0, 0) == 2.0) {
         i_s_ab_start = meas.i_c_ab;
         catching = 1;
     } else if (catching) {

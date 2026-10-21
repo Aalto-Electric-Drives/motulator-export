@@ -16,8 +16,6 @@ if p.sensorless > 0
         next = 1;
     elseif self.step == 1
         next = 2;
-    elseif self.step == 2
-        next = 3;
     end
 end
 step = next;

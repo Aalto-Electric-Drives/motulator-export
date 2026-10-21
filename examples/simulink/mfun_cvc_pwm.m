@@ -15,8 +15,8 @@ if isempty(self)
 end
 meas = im_measurements_unpack(meas_in);
 u_c_ref_ab = complex_in(u_c_ref_ab_in);
-% The zero vector at the flying start (step 2)
-if step == 2
+% The zero vector of the flying start (step nonzero)
+if step ~= 0
     u_c_ref_ab = complex(0);
 end
 [~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, meas.u_dc, w, meas.i_c_ab);

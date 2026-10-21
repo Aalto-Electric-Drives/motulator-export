@@ -40,10 +40,10 @@ static PWM self;
 static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 4, 3};
-static const int FEEDTHROUGH[] = {1, 1, 0};
+static const int INPUT_WIDTHS[] = {1, 4, 1, 3};
+static const int FEEDTHROUGH[] = {1, 1, 1, 0};
 static const int OUTPUT_WIDTHS[] = {2, 2};
-#define NUM_INPUTS 3
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 2
 #define NUM_PARAMS 8
 
@@ -151,7 +151,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
      * period, or while the gates are blocked, unknown (NAN) */
     double complex u_c_ab = NAN;
     double complex u_c_zoh_ab = NAN;
-    if (InputSignal(0, 0) > 0.0) {
+    if (InputSignal(0, 0) > 0.0 && InputSignal(2, 0) == 0.0) {
         u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);
         u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);
     }
@@ -168,7 +168,7 @@ static void mdlUpdate(SimStruct *S, int_T tid)
     /* The duty ratios of the next period */
     double d_abc[3];
     for (int k = 0; k < 3; k++) {
-        d_abc[k] = InputSignal(2, k);
+        d_abc[k] = InputSignal(3, k);
     }
     pwm_update(&self, T_s, d_abc);
 }

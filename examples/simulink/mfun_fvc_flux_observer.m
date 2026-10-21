@@ -25,10 +25,10 @@ meas = measurements_unpack(meas_in);
 u_s_ab = complex_in(u_s_ab_in);
 u_s_zoh_ab = complex_in(u_s_zoh_ab_in);
 % Flying start: the current at the start of the zero-voltage period (step
-% 3), and the estimates initialized from the current response at its end
+% 2), and the estimates initialized from the current response at its end
 % (the next step), see SpeedFluxObserver.catch
 init = [0; w_M];
-if step == 3
+if step == 2
     self.i_s_ab_start = meas.i_c_ab;
     self.catching = true;
 elseif self.catching
@@ -351,14 +351,15 @@ function [caught, w_M, theta_m, psi_s] = flux_observer_catch(par, delta_i_s_ab, 
     i_s_ab, T_s, w_M)
 %FLUX_OBSERVER_CATCH Estimates initialized from the current response delta_i_s_ab to
 %   a zero-voltage period of length T_s, i_s_ab being the current at its end
-%   (SpeedFluxObserver.catch): with zero voltage, the back-EMF drives the current
-%   along the negative q axis of the rotor, so the current response gives the rotor
-%   angle and the speed magnitude. The direction of rotation is taken from the speed
-%   estimate w_M, which is updated with the angle and flux estimates. At standstill
-%   (no response), caught is false and the estimates are not valid.
+%   (SpeedFluxObserver.catch): the back-EMF drives the current along the negative q
+%   axis of the rotor, which gives the rotor angle and the speed magnitude, the
+%   direction of rotation being taken from the speed estimate w_M, which is updated
+%   with the angle and flux estimates. If the back-EMF is below the resistive
+%   voltage drop (standstill) or the machine has no magnets, caught is false and the
+%   estimates are not valid.
 L = incr_ind_mat(par, complex(0));
 e_s_ab = -L.L_qq*delta_i_s_ab/T_s; % Back-EMF
-caught = e_s_ab ~= 0;
+caught = abs(e_s_ab) > par.R_s*abs(i_s_ab) && par.psi_f ~= 0;
 theta_m = 0;
 psi_s = complex(0);
 if ~caught
@@ -369,7 +370,10 @@ if w_M >= 0
 else
     sign_w = -1;
 end
-theta_m = wrap(angle(e_s_ab) - sign_w*pi/2);
-w_M = sign_w*abs(e_s_ab)/(par.psi_f*par.n_p);
+w_m = sign_w*abs(e_s_ab)/par.psi_f;
+% The response lags the rotor angle at the end of the period, since the back-EMF
+% rotates during the period
+theta_m = wrap(angle(e_s_ab) - sign_w*pi/2 + w_m*T_s*L.L_qq/(2*L.L_dd));
+w_M = w_m/par.n_p;
 psi_s = complex(psi_s_dq(par, exp(-1i*theta_m)*i_s_ab));
 end

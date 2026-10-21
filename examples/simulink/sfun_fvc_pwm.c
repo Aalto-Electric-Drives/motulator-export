@@ -187,8 +187,8 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     Measurements meas;
     measurements_unpack(meas_u, &meas);
     double complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));
-    /* The zero vector at the flying start (step 2) */
-    if (InputSignal(3, 0) == 2.0) {
+    /* The zero vector of the flying start (step nonzero) */
+    if (InputSignal(3, 0) != 0.0) {
         u_c_ref_ab = 0.0;
     }
     double d_abc[3];

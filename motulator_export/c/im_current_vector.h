@@ -145,7 +145,7 @@ typedef struct {
     IMObserverOutputs fbk;
     IMReferences ref;
     /* Flying start after the release (VectorControlSystem.get_feedback) */
-    int catch_step; /* Step of the flying start, 0 if none */
+    int catch_step; /* 1 with blocked gates, 2 at the first step after */
 } IMVectorControlSystem;
 
 static IMCurrentVectorControllerCfg im_current_vector_controller_cfg(double psi_s_nom,

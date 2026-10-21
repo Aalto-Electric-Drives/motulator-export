@@ -133,7 +133,7 @@ typedef struct {
     ObserverOutputs fbk;
     References ref;
     /* Flying start after the release (VectorControlSystem.get_feedback) */
-    int catch_step;              /* Step of the flying start, 0 if none */
+    int catch_step;              /* 1 with blocked gates, 2 at the first step after */
     double complex i_c_ab_catch; /* Current at the start of the zero-voltage period */
     double T_s_catch;            /* Length of the zero-voltage period */
 } VectorControlSystem;
