@@ -97,18 +97,19 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
     /* Angular speed of the coordinate system equals synchronous angular frequency */
     out->w_c = out->w_s = out->w_m + out->w_r;
 
-    /* Voltage vector in the observer coordinates, or the open-circuit voltage of
-     * the model if the voltage is unknown (NAN, blocked gates): the back-EMF of the
-     * flux estimate at the rotor speed, averaged over the sampling period (that of
-     * the previous period), and the resistive voltage drop */
+    /* Voltage vector in the observer coordinates, or the open-circuit voltage if
+     * unknown (NAN, blocked gates), averaged over a period of the length of the
+     * previous one. The rotor flux decays as in the current model below, so their
+     * predictions match. */
     if (!isnan(creal(u_s_ab))) {
         out->u_s_zoh = cexp(-I * out->theta_c) * u_s_ab;
     } else if (self->T_s_old > 0.0) {
-        double complex emf =
-            (cexp(I * out->w_m * self->T_s_old) - 1.0) / self->T_s_old * out->psi_s;
-        out->u_s_zoh = emf + par->R_s * out->i_s;
+        double complex Phi =
+            cexp(I * out->w_m * self->T_s_old) * (1.0 - im_alpha(par) * self->T_s_old);
+        out->u_s_zoh = (Phi - 1.0) / self->T_s_old * out->psi_R + par->R_s * out->i_s;
     } else {
-        out->u_s_zoh = I * out->w_m * out->psi_s + par->R_s * out->i_s;
+        out->u_s_zoh =
+            (I * out->w_m - im_alpha(par)) * out->psi_R + par->R_s * out->i_s;
     }
 
     /* Estimation error, i.e., the difference between the rotor flux predictions of

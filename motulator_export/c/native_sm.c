@@ -27,7 +27,7 @@
     "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c ref.w_M "           \
     "ref.d_abc:3 ref.enabled:b fbk.u_dc fbk.i_s:c fbk.u_s:c fbk.u_s_zoh:c "            \
     "fbk.psi_s:c fbk.e_o:c fbk.eps fbk.eps_f fbk.psi_a:c fbk.tau_M fbk.tau_L fbk.w_c " \
-    "fbk.w_m fbk.w_M fbk.theta_c fbk.theta_m fbk.psi_f fbk.h"
+    "fbk.w_m fbk.w_M fbk.theta_c fbk.theta_m fbk.psi_f fbk.h fbk.caught:b"
 
 /* Vector control system with the speed reference */
 typedef struct {
@@ -80,6 +80,7 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, fbk->theta_m);
     log_put(&p, fbk->psi_f);
     log_put(&p, fbk->h);
+    log_put(&p, 0.0); /* Flying start, not used with the gates enabled */
     return SIM_OK;
 }
 
