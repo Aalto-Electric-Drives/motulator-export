@@ -27,11 +27,10 @@ function build_drive(s)
 %   The control system is a masked subsystem, in which each class of motulator is a
 %   block with a mask of its arguments. The system model is built from basic Simulink blocks:
 %   the carrier comparison, the ideal converter with a stiff DC bus, the machine,
-%   and the mechanics. The ideal converter does not block its gates, so the input
-%   of the converter voltages u_ab and u_bc of the control system (used only while
-%   the gates are blocked) is zero. The root-level output ports 'mdl' and 'ctrl' give the
-%   machine signals [i_a i_b i_c w_M theta_M tau_M] and the monitored signals of the
-%   control system for the comparison with motulator.
+%   and the mechanics. The ideal converter does not block its gates. The root-level
+%   output ports 'mdl' and 'ctrl' give the machine signals
+%   [i_a i_b i_c w_M theta_M tau_M] and the monitored signals of the control system
+%   for the comparison with motulator.
 %
 %   The blocks are aligned with the ports they connect to, so that the lines are
 %   straight, and the feedback lines are drawn through given corners.
