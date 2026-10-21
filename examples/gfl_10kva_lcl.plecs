@@ -1724,7 +1724,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 290, 100]
+        Location      [0, 0; 250, 100]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1752,7 +1752,7 @@ Plecs {
       Type          Output
       Name          "i_lim"
       Show          on
-      Position      [240, 45]
+      Position      [200, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1771,11 +1771,11 @@ Plecs {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [145, 45]
+      Position      [125, 45]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -15; 50, 15]
+      Frame         [-30, -15; 30, 15]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""

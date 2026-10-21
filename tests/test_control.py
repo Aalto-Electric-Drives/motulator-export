@@ -42,7 +42,7 @@ from motulator_export.plecs import (
     _sm_control,
 )
 from motulator_export.plecs._common import ControlBlock
-from motulator_export.plecs._control import VALUES
+from motulator_export.plecs._control import mask_values
 from motulator_export.plecs._netlist import PLECS, SIMULINK, Subsystem, layout, problems
 from tests import monolithic
 from tests.c_port import arr
@@ -164,8 +164,9 @@ def check(
     net, ref = compiled(key)
     block, mono = SYSTEMS[key]
     init = init_script(key, values, flux_map)
-    params = block_params(net.top, init, VALUES)
-    np.testing.assert_equal(block_params(net.top, init, VALUES, plecs=True), params)
+    values_top = mask_values(block)
+    params = block_params(net.top, init, values_top)
+    np.testing.assert_equal(block_params(net.top, init, values_top, plecs=True), params)
 
     def restart() -> None:
         assert net.start(params, start) is None
@@ -212,8 +213,8 @@ def test_flux_vector_control(
 
 
 def test_interrupted_flying_start(compiled: Compiled) -> None:
-    """A new blocking of the gates right after the release should cancel the pending
-    catch of the flying start in the netlist as in the monolithic control system."""
+    """A new blocking of the gates right after the release should postpone the catch
+    of the flying start in the netlist as in the monolithic control system."""
     build, _ = sm_system(True, 0.0, True)
     values, _ = _sm.export_values(build()[1])
     enabled = [0, 1, 0, 0, 1, 1, 1, 1]
@@ -338,7 +339,8 @@ def test_parameter_errors(compiled: Compiled) -> None:
         ("L_d", None, "L_d, L_q, and psi_f needed without a flux map."),
     ]:
         init = init_script("fvc", values | {name: value})
-        err = net.start(block_params(net.top, init, VALUES), start)
+        values_top = mask_values(_sm_control.FVC_BLOCK)
+        err = net.start(block_params(net.top, init, values_top), start)
         assert err is not None and err.endswith(message), err
     net.sfun_terminate()
 
@@ -355,7 +357,9 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     ctrl = VectorControlSystem(fvc, sm_control.SpeedController(**SM_SPEED))
     values, _ = _sm.export_values(ctrl)
     params = block_params(
-        _sm_control.FVC_BLOCK.netlist(), init_script("fvc", values), VALUES
+        _sm_control.FVC_BLOCK.netlist(),
+        init_script("fvc", values),
+        mask_values(_sm_control.FVC_BLOCK),
     )
     obs = fvc.observer
     path = "FluxVectorController/SpeedFluxObserver/"
@@ -376,7 +380,9 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     ctrl = VectorControlSystem(cvc, im_control.SpeedController(**IM_SPEED))
     values = _im.export_values(ctrl)
     params = block_params(
-        _im_control.CVC_BLOCK.netlist(), init_script("cvc", values), VALUES
+        _im_control.CVC_BLOCK.netlist(),
+        init_script("cvc", values),
+        mask_values(_im_control.CVC_BLOCK),
     )
     obs = cvc.observer
     k = params["CurrentVectorController/SpeedFluxObserver/SpeedObserver"][:2]
@@ -429,7 +435,9 @@ def test_gfm_configuration(k_v: float | None) -> None:
         k_v,
     )
     params = block_params(
-        _grid_control.GFM_BLOCK.netlist(), init_script("gfm", values), VALUES
+        _grid_control.GFM_BLOCK.netlist(),
+        init_script("gfm", values),
+        mask_values(_grid_control.GFM_BLOCK),
     )
     path = "ObserverBasedGridFormingController/Observer"
     u_nom, w_nom, L, alpha, T_s, R = params[path]

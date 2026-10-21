@@ -132,9 +132,9 @@ typedef struct {
     double w_M; /* Mechanical rotor speed, used only in the sensored mode */
 } IMMeasurements;
 
-/* Vector control system (VectorControlSystem), with the gate enable as in
- * sm_flux_vector.h. The flying start applies the zero vector, but the estimates
- * are not initialized, since the rotor flux has decayed. */
+/* Vector control system (VectorControlSystem), with the gate enable and the standby
+ * as in sm_flux_vector.h. The observer does not catch the machine, since the rotor
+ * flux has decayed. */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
@@ -144,8 +144,7 @@ typedef struct {
     int enabled; /* Gate enable */
     IMObserverOutputs fbk;
     IMReferences ref;
-    /* Flying start after the release (VectorControlSystem.get_feedback) */
-    int catch_step; /* 1 with blocked gates, 2 at the first step after */
+    int release_step; /* First sampling instant after the release */
 } IMVectorControlSystem;
 
 static IMCurrentVectorControllerCfg im_current_vector_controller_cfg(double psi_s_nom,

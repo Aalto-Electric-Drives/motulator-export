@@ -281,12 +281,11 @@ def speed_controller(sig: Signals) -> CBlock:
     """Speed controller (SpeedController)."""
     mask = Mask(
         "SpeedController (motulator)",
-        "2DOF PI speed controller (SpeedController). The inputs are the gate enable, "
-        "the speed estimate fbk.w_M, the limited torque reference ref.tau_M "
-        "(anti-windup), the speed reference w_M_ref, and the step of the flying "
-        "start, and the output is the torque reference. While the gates are blocked, "
-        "and at the first sampling instant after the release of a sensorless drive "
-        "(the step nonzero), the controller is not updated, as in "
+        "2DOF PI speed controller (SpeedController). The inputs are the standby of "
+        "the control system, the speed estimate fbk.w_M, the limited torque "
+        "reference ref.tau_M (anti-windup), and the speed reference w_M_ref, and the "
+        "output is the torque reference. In standby (the input standby nonzero), the "
+        "torque reference is zero and the controller is not updated, as in "
         "VectorControlSystem.",
         [
             Param("J", "J: Total inertia (kgm²)", "speed_ctrl.J"),
@@ -318,16 +317,15 @@ def speed_controller(sig: Signals) -> CBlock:
         " : INFINITY);\n"
     )
     output = (
-        "/* Torque reference */\n"
-        "OutputSignal(0, 0) = pi_compute_output(&self, InputSignal(4, 0), "
-        "InputSignal(2, 0), 0.0);\n"
+        "/* Torque reference, zero in standby */\n"
+        "OutputSignal(0, 0) = (InputSignal(0, 0) != 0.0) ? 0.0\n"
+        "    : pi_compute_output(&self, InputSignal(3, 0), InputSignal(1, 0), 0.0);\n"
     )
     update = (
-        "/* The limited torque reference ref.tau_M (anti-windup), not updated while\n"
-        " * the gates are blocked nor at the first step after the release (the step\n"
-        " * of the flying start nonzero) */\n"
-        "if (InputSignal(0, 0) > 0.0 && InputSignal(1, 0) == 0.0) {\n"
-        "    pi_update(&self, T_s, InputSignal(3, 0));\n"
+        "/* The limited torque reference ref.tau_M (anti-windup), not updated in\n"
+        " * standby */\n"
+        "if (InputSignal(0, 0) == 0.0) {\n"
+        "    pi_update(&self, T_s, InputSignal(2, 0));\n"
         "}\n"
     )
     mcode = MCode(
@@ -336,32 +334,31 @@ def speed_controller(sig: Signals) -> CBlock:
         "if isnan(tau_M_max)\n"
         "    tau_M_max = Inf;\n"
         "end\n"
-        "self = speed_controller(p.J, p.alpha_s, p.alpha_i, tau_M_max);\n",
-        output="% Torque reference\n"
-        "[self, tau_M_ref] = pi_compute_output(self, w_M_ref, w_M, 0);\n",
-        update="% The limited torque reference ref.tau_M (anti-windup), not updated "
-        "while\n"
-        "% the gates are blocked nor at the first step after the release (the step of\n"
-        "% the flying start nonzero)\n"
-        "if enable > 0 && step == 0\n"
+        "self = speed_controller(p.J, p.alpha_s, p.alpha_i, tau_M_max);\n"
+        "% Standby of the sampling period, for its update done at the next call\n"
+        "self.standby = 0;\n",
+        output="% Torque reference, zero in standby\n"
+        "if standby ~= 0\n"
+        "    tau_M_ref = 0;\n"
+        "else\n"
+        "    [self, tau_M_ref] = pi_compute_output(self, w_M_ref, w_M, 0);\n"
+        "end\n"
+        "self.standby = standby;\n",
+        update="% The limited torque reference ref.tau_M (anti-windup), not updated in "
+        "standby\n"
+        "if self.standby == 0\n"
         "    self = pi_update(self, p.T_s, tau_M);\n"
         "end\n",
         checks=required("J", "alpha_s", "T_s"),
     )
     return CBlock(
         "SpeedController",
-        [
-            Port(ENABLE, 1),
-            Port("step", 1),
-            Port("w_M", 1),
-            Port("tau_M", 1),
-            Port("w_M_ref", 1),
-        ],
+        [Port("standby", 1), Port("w_M", 1), Port("tau_M", 1), Port("w_M_ref", 1)],
         [Port("tau_M_ref", 1)],
         sig.class_code("PIController", start, output, update, SAMPLING),
         params,
         sig.sfunction("speed_controller"),
-        feedthrough=[0, 0, 1, 0, 1],
+        feedthrough=[1, 1, 0, 1],
         mask=mask,
         mcode=mcode,
     )
@@ -369,40 +366,38 @@ def speed_controller(sig: Signals) -> CBlock:
 
 def pwm(
     sig: Signals, standby: tuple[str, str] = ("NAN", "complex(NaN, NaN)"),
-    flying_start: bool = False
+    standby_input: bool = False
 ) -> Subsystem:  # fmt: skip
     """
     PWM: the duty ratios (compute_output) and the realized voltage.
 
-    While the gates are blocked, the realized voltage is `standby` (its C and MATLAB
-    expressions): NAN by default, i.e., unknown, or the measured PCC voltage of the
-    grid converters. With `flying_start`, the block has the input `step` of the
-    flying start (FlyingStart): while it is nonzero (with blocked gates and at the
-    first sampling instant after the release), the duty ratios are those of the zero
-    vector and the realized voltage is unknown.
+    While the gates are blocked (the input `enable` zero), the realized voltage is
+    `standby` (its C and MATLAB expressions): NAN by default, i.e., unknown, or the
+    measured PCC voltage of the grid converters. With `standby_input`, the input is
+    the standby of a vector control system instead (`standby` nonzero, also at the
+    first sampling instant after the release of a sensorless drive).
 
     """
+    ctrl = "standby" if standby_input else ENABLE
     mask = Mask(
         "PWM (motulator)",
         "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-"
         "error (MME) overmodulation (PWM), with the duty-ratio error model d_err = "
         "InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum "
         "pulses, and the single update. The blocks inside are its methods "
-        "compute_output and get_realized_voltage. While the gates are blocked (the "
-        "input enable is zero), the realized voltage is "
+        "compute_output and get_realized_voltage. "
+        + (
+            "In standby of the control system (the input standby nonzero)"
+            if standby_input
+            else "While the gates are blocked (the input enable is zero)"
+        )
+        + ", the realized voltage is "
         + (
             "unknown (NaN), so the observers run on their open-circuit model"
             if standby[0] == "NAN"
             else "the measured PCC voltage"
         )
-        + ", as in get_feedback of the control system."
-        + (
-            " While the step of the flying start of a sensorless drive is nonzero "
-            "(FlyingStart), the duty ratios are those of the zero vector and the "
-            "realized voltage is unknown."
-            if flying_start
-            else ""
-        ),
+        + ", as in get_feedback of the control system.",
         [
             T_S,
             Param(
@@ -464,57 +459,39 @@ def pwm(
     )
     m_checks = required(*params)
     meas = sig.port("meas")
-    zero_vector = (
-        "/* The zero vector of the flying start (step nonzero) */\n"
-        "if (InputSignal(3, 0) != 0.0) {\n"
-        "    u_c_ref_ab = 0.0;\n"
-        "}\n"
-        if flying_start
-        else ""
-    )
     output = (
         sig.read(0, "meas")
         + f"double complex u_c_ref_ab = {complex_in(1)};\n"
-        + zero_vector
         + "double d_abc[3];\n"
         "pwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n"
         "                   meas.i_c_ab, d_abc);\n" + _write(0, "3", "d_abc")
     )
-    m_zero_vector = (
-        "% The zero vector of the flying start (step nonzero)\n"
-        "if step ~= 0\n"
-        "    u_c_ref_ab = complex(0);\n"
-        "end\n"
-        if flying_start
-        else ""
-    )
-    step = [Port("step", 1)] if flying_start else []
     compute = CBlock(
         "compute_output",
-        [meas, Port("u_c_ref_ab", 2), Port("w", 1), *step],
+        [meas, Port("u_c_ref_ab", 2), Port("w", 1)],
         [Port("d_abc", 3)],
         sig.class_code("PWM", start, output, "", SAMPLING),
         params,
         sig.sfunction("pwm"),
         mcode=MCode(
             start=m_start,
-            output=m_zero_vector
-            + "[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, "
+            output="[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, "
             "meas.u_dc, w, meas.i_c_ab);\n",
             inputs={"meas": sig.vector("meas"), "u_c_ref_ab": COMPLEX},
             checks=m_checks,
         ),
     )
     comment = "unknown (NAN)" if standby[0] == "NAN" else "the measured PCC voltage"
+    when = "in standby" if standby_input else "while the gates are blocked"
     output = (
         sig.read(1, "meas")
         + "/* Average of the previous and the ongoing periods, and of the ongoing\n"
-        f" * period, or while the gates are blocked, {comment} */\n"
+        f" * period, or {when}, {comment} */\n"
         f"double complex u_c_ab = {standby[0]};\n"
         f"double complex u_c_zoh_ab = {standby[0]};\n"
         + (
-            "if (InputSignal(0, 0) > 0.0 && InputSignal(2, 0) == 0.0) {\n"
-            if flying_start
+            "if (InputSignal(0, 0) == 0.0) {\n"
+            if standby_input
             else "if (InputSignal(0, 0) > 0.0) {\n"
         )
         + "    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n"
@@ -523,24 +500,23 @@ def pwm(
     )
     update = (
         "/* The duty ratios of the next period */\n"
-        + _read(3 if flying_start else 2, "3", "d_abc")
+        + _read(2, "3", "d_abc")
         + "pwm_update(&self, T_s, d_abc);\n"
     )
     realized = CBlock(
         "get_realized_voltage",
-        [Port(ENABLE, 1), meas, *step, Port("d_abc", 3)],
+        [Port(ctrl, 1), meas, Port("d_abc", 3)],
         [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2)],
         sig.class_code("PWM", start, output, update, SAMPLING),
         params,
         sig.sfunction("pwm_realized_voltage"),
-        feedthrough=[1, 1, *([1] if flying_start else []), 0],
+        feedthrough=[1, 1, 0],
         mcode=MCode(
             start=m_start,
             output="% Average of the previous and the ongoing periods, and of the "
             "ongoing\n"
-            f"% period, or while the gates are blocked, {comment.replace('NAN', 'NaN')}"
-            "\n"
-            + ("if enable > 0 && step == 0\n" if flying_start else "if enable > 0\n")
+            f"% period, or {when}, {comment.replace('NAN', 'NaN')}\n"
+            + ("if standby == 0\n" if standby_input else "if enable > 0\n")
             + "    u_c_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, true);\n"
             "    u_c_zoh_ab = pwm_realized_voltage(self, meas.i_c_ab, meas.u_dc, "
             "false);\n"
@@ -557,27 +533,28 @@ def pwm(
     )
     return Subsystem(
         "PWM",
-        [Port(ENABLE, 1), meas, Port("u_c_ref_ab", 2), Port("w", 1), *step],
+        # The standby below the measurements, which the vector control systems
+        # feed from above
+        [meas, Port(ctrl, 1), Port("u_c_ref_ab", 2), Port("w", 1)]
+        if standby_input
+        else [Port(ctrl, 1), meas, Port("u_c_ref_ab", 2), Port("w", 1)],
         [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2), Port("d_abc", 3)],
         [compute, realized],
         [
-            (ENABLE, "get_realized_voltage:enable"),
+            (ctrl, f"get_realized_voltage:{ctrl}"),
             ("meas", "compute_output:meas"),
             ("meas", "get_realized_voltage:meas"),
             ("u_c_ref_ab", "compute_output:u_c_ref_ab"),
             ("w", "compute_output:w"),
-            *(
-                [("step", "compute_output:step"), ("step", "get_realized_voltage:step")]
-                if flying_start
-                else []
-            ),
             ("compute_output:d_abc", "d_abc"),
             ("compute_output:d_abc", "get_realized_voltage:d_abc"),
             ("get_realized_voltage:u_c_ab", "u_c_ab"),
             ("get_realized_voltage:u_c_zoh_ab", "u_c_zoh_ab"),
         ],
         columns=[
-            ["meas", "u_c_ref_ab", "w", *(p.name for p in step), ENABLE],
+            ["meas", ctrl, "u_c_ref_ab", "w"]
+            if standby_input
+            else ["meas", "u_c_ref_ab", "w", ctrl],
             ["compute_output"],
             ["get_realized_voltage"],
             ["u_c_ab", "u_c_zoh_ab", "d_abc"],
@@ -588,7 +565,7 @@ def pwm(
             "u_c_ab": "get_realized_voltage:u_c_ab",
             "d_abc": "compute_output:d_abc",
         },
-        tags=[ENABLE, *(p.name for p in step)],
+        tags=[ctrl],
         mask=mask,
     )
 
@@ -670,85 +647,40 @@ def speed_observer(sig: Signals, init: bool = False) -> CBlock:
     )
 
 
-def flying_start(sig: Signals) -> CBlock:
+def standby(sig: Signals) -> CBlock:
     """
-    Flying start after the release of the gates (FlyingStart).
-
-    The output `step` is the step of the flying start of a sensorless drive: 1 while
-    the gates are blocked, 2 at the first sampling instant after the release, and 0
-    otherwise, also in the sensored mode. While it is nonzero, the control system is
-    in standby: the duty ratios are those of the zero vector and the speed controller
-    is not updated. The output `zero_torque` flags the zero torque reference of the
-    standby, while the gates are blocked (also in the sensored mode) and at step 2.
-
+    Standby of a vector control system (VectorControlSystem._standby): while the
+    gates are blocked, and at the first sampling instant after the release in the
+    sensorless mode (the state self), so that the first two sampling periods after
+    the release are zero-voltage periods for the flying start of the observer.
     """
-    mask = Mask(
-        "FlyingStart (motulator)",
-        "Flying start of a sensorless drive after the release of the gates "
-        "(FlyingStart): the control system stays in standby (the zero vector and zero "
-        "torque) at the first sampling instant after the release, and the estimates "
-        "are initialized from the current response to that zero-voltage period. The "
-        "output step is 1 while the gates are blocked, 2 at the first sampling "
-        "instant after the release, and 0 otherwise (also in the sensored mode). The "
-        "output zero_torque flags the zero torque reference of the standby, while "
-        "the gates are blocked and at step 2.",
-        [
-            Param(
-                "sensorless",
-                "sensorless: Sensorless mode (1) or sensored mode (0)",
-                "cfg.sensorless",
-            ),
-            Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
-        ],
-    )
     start = checks(["sensorless", "T_s"], ["sensorless", "T_s"]) + (
         "sensorless = (int)P(0, 0);\nself = 0;\nT_s = P(1, 0);\n"
     )
     output = (
-        "/* The step of the flying start of a sensorless drive (the state self),\n"
-        " * advanced in the update function */\n"
-        "double enable = InputSignal(0, 0);\n"
-        "next = 0;\n"
-        "if (sensorless) {\n"
-        "    if (enable <= 0.0) {\n"
-        "        next = 1;\n"
-        "    } else if (self == 1) {\n"
-        "        next = 2;\n"
-        "    }\n"
-        "}\n"
-        "OutputSignal(0, 0) = (enable <= 0.0 || next == 2) ? 1.0 : 0.0;\n"
-        "OutputSignal(1, 0) = next;\n"
+        "/* Standby while the gates are blocked and at the first sampling instant\n"
+        " * after the release of a sensorless drive (the state self) */\n"
+        "OutputSignal(0, 0) = (InputSignal(0, 0) <= 0.0 || self) ? 1.0 : 0.0;\n"
     )
+    update = "self = sensorless && InputSignal(0, 0) <= 0.0;\n"
     mcode = MCode(
-        start="self = struct('step', 0);\n",
-        output="% The step of the flying start of a sensorless drive\n"
-        "next = 0;\n"
-        "if p.sensorless > 0\n"
-        "    if enable <= 0\n"
-        "        next = 1;\n"
-        "    elseif self.step == 1\n"
-        "        next = 2;\n"
-        "    end\n"
-        "end\n"
-        "step = next;\n"
-        "zero_torque = double(enable <= 0 || next == 2);\n",
-        update="self.step = next;\n",
+        start="self = struct('release_step', false);\n",
+        output="% Standby while the gates are blocked and at the first sampling "
+        "instant\n"
+        "% after the release of a sensorless drive\n"
+        "standby = double(enable <= 0 || self.release_step);\n",
+        update="self.release_step = p.sensorless > 0 && enable <= 0;\n",
         checks=required("sensorless", "T_s"),
     )
     return CBlock(
-        "FlyingStart",
+        "standby",
         [Port(ENABLE, 1)],
-        [Port("zero_torque", 1), Port("step", 1)],
+        [Port("standby", 1)],
         sig.class_code(
-            "int",
-            start,
-            output,
-            "self = next;\n",
-            SAMPLING + "static int sensorless, next;\n",
+            "int", start, output, update, SAMPLING + "static int sensorless;\n"
         ),
         ["sensorless", "T_s"],
-        sig.sfunction("flying_start"),
-        mask=mask,
+        sig.sfunction("standby"),
         mcode=mcode,
     )
 
@@ -1019,37 +951,60 @@ def pcc_voltage_input(port: int) -> str:
 K_COMP = 1.5
 
 
-def modulate(sig: Signals, u: str) -> CBlock:
+def modulate(sig: Signals, u: str, standby: bool = False) -> CBlock:
     """
     Voltage reference for the PWM (modulate): the voltage reference `u` (e.g.,
     ref.u_s) in stationary coordinates, its angle advanced by `k_comp*T_s*w_c`, and
-    the angular speed of the coordinates.
+    the angular speed of the coordinates. With `standby`, the block has the input
+    `standby` of a vector control system, in which the voltage reference of a
+    sensorless drive is the zero vector (VectorControlSystem.modulate).
     """
+    zero_vector = (
+        "/* The zero vector of a sensorless drive in standby */\n"
+        "if (sensorless && InputSignal(2, 0) != 0.0) {\n"
+        "    u_c_ref_ab = 0.0;\n"
+        "}\n"
+        if standby
+        else ""
+    )
     output = (
         sig.read(0, "fbk")
         + "/* Voltage reference in stationary coordinates, its angle advanced by\n"
         f" * k_comp*T_s*w_c (k_comp = {K_COMP} of the controller) */\n"
         + f"double complex u_c_ref_ab = cexp(I * fbk.theta_c) * {complex_in(1)};\n"
         + f"u_c_ref_ab *= cexp(I * {K_COMP} * T_s * fbk.w_c);\n"
+        + zero_vector
         + complex_out(0, "u_c_ref_ab")
         + "OutputSignal(1, 0) = fbk.w_c;\n"
     )
+    m_zero_vector = (
+        "% The zero vector of a sensorless drive in standby\n"
+        "if p.sensorless > 0 && standby ~= 0\n"
+        "    u_c_ref_ab = complex(0);\n"
+        "end\n"
+        if standby
+        else ""
+    )
+    params = ["T_s", "sensorless"] if standby else ["T_s"]
     mcode = MCode(
         output="% Voltage reference in stationary coordinates, its angle advanced by\n"
         f"% k_comp*T_s*w_c (k_comp = {K_COMP} of the controller)\n"
         f"u_c_ref_ab = exp(1i*fbk.theta_c)*{u};\n"
         f"u_c_ref_ab = u_c_ref_ab*exp(1i*{K_COMP}*p.T_s*fbk.w_c);\n"
-        "w = fbk.w_c;\n",
+        + m_zero_vector
+        + "w = fbk.w_c;\n",
         inputs={"fbk": sig.vector("fbk"), u: COMPLEX},
         outputs={"u_c_ref_ab": COMPLEX},
-        checks=required("T_s"),
+        checks=required(*params),
     )
+    start = "T_s = P(0, 0);\n" + ("sensorless = (int)P(1, 0);\n" if standby else "")
+    workspace = SAMPLING + ("static int sensorless;\n" if standby else "")
     return CBlock(
         "modulate",
-        [sig.port("fbk"), Port(u, 2)],
+        [sig.port("fbk"), Port(u, 2), *([Port("standby", 1)] if standby else [])],
         [Port("u_c_ref_ab", 2), Port("w", 1)],
-        sig.function_code(output, "T_s = P(0, 0);\n", SAMPLING),
-        ["T_s"],
+        sig.function_code(output, start, workspace),
+        params,
         sig.sfunction("modulate"),
         mcode=mcode,
     )
@@ -1105,28 +1060,30 @@ def vector_control_system(
 ) -> Subsystem:
     """
     Vector control system of a drive (VectorControlSystem): the contents of the
-    masked subsystem of the control system, whose mask has the sampling period T_s.
+    masked subsystem of the control system, whose mask has the sampling period T_s
+    and the sensorless mode of the vector controller.
 
-    The vector controller has the inputs `enable`, `tau_M_ref`, `meas`, `u_c_ab`,
-    and optionally `u_c_zoh_ab`, and the outputs `fbk`, `ref`, and `step` (of the
-    flying start, to the PWM and the speed controller). The inputs of the monitored
-    signals are `enable`, `fbk`, `ref`, and `w_M_ref`.
+    The block `standby` gives the standby of the control system to the speed
+    controller, the PWM, and `modulate`. The vector controller has the inputs
+    `tau_M_ref`, `meas`, `u_c_ab`, and optionally `u_c_zoh_ab`, and the outputs
+    `fbk` and `ref`. The inputs of the monitored signals are `fbk`, `ref`, and
+    `w_M_ref`.
 
     """
     vc = vector_ctrl.name
     zoh = "u_c_zoh_ab" in [p.name for p in vector_ctrl.inputs]
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals and the references to the speed controller and to the
-    # monitored signals, and the step of the flying start to the PWM and the speed
-    # controller, by tags, the others by wires
+    # monitored signals, and the standby to the PWM and modulate, by tags, the
+    # others by wires
     tags = [
         Tag("Goto fbk", "fbk", fbk, goto=True),
         Tag("Goto ref", "ref", ref, goto=True),
-        Tag("Goto step", "step", 1, goto=True),
+        Tag("Goto standby", "standby", 1, goto=True),
         Tag("From fbk", "fbk", fbk, goto=False),
         Tag("From ref", "ref", ref, goto=False),
-        Tag("From step", "step", 1, goto=False),
-        Tag("From step 2", "step", 1, goto=False),
+        Tag("From standby", "standby", 1, goto=False),
+        Tag("From standby 2", "standby", 1, goto=False),
         Tag("From fbk 2", "fbk", fbk, goto=False),
         Tag("From ref 2", "ref", ref, goto=False),
     ]
@@ -1138,22 +1095,22 @@ def vector_control_system(
         [
             measurement,
             *tags,
+            standby(sig),
             sig.selector("fbk", "w_M"),
             sig.selector("ref", "tau_M"),
             speed_controller(sig),
-            pwm(sig, flying_start=True),
+            pwm(sig, standby_input=True),
             vector_ctrl,
             sig.selector("ref", "u_s", complex_=True),
-            modulate(sig, "u_s"),
+            modulate(sig, "u_s", standby=True),
             signals,
         ],
         [
-            (ENABLE, "SpeedController:enable"),
-            (ENABLE, "PWM:enable"),
-            (ENABLE, f"{vc}:enable"),
-            (f"{vc}:step", "Goto step"),
-            ("From step", "PWM:step"),
-            ("From step 2", "SpeedController:step"),
+            (ENABLE, "standby:enable"),
+            ("standby:standby", "SpeedController:standby"),
+            ("standby:standby", "Goto standby"),
+            ("From standby", "PWM:standby"),
+            ("From standby 2", "modulate:standby"),
             ("w_M_ref", "SpeedController:w_M_ref"),
             ("w_M_ref", f"{MONITOR}:w_M_ref"),
             *meas,
@@ -1179,27 +1136,29 @@ def vector_control_system(
         ],
         columns=[
             [p.name for p in inputs],
-            ["From step 2", "From fbk", "From ref", "get_measurement"],
-            ["fbk.w_M", "ref.tau_M"],
+            ["standby", "From fbk", "From ref", "get_measurement"],
+            ["Goto standby", "fbk.w_M", "ref.tau_M", "From standby"],
             ["SpeedController", "PWM"],
             [vc, "d_abc"],
             [
                 "Goto fbk",
                 "ref.u_s",
                 "Goto ref",
-                "Goto step",
+                "From standby 2",
                 "From fbk 2",
                 "From ref 2",
-                "From step",
             ],
             ["modulate", MONITOR],
         ],
         align={
+            "standby:enable": ENABLE,
+            "Goto standby": "standby:standby+1",
             "fbk.w_M:u": "From fbk",
             "ref.tau_M:u": "From ref",
             "SpeedController:w_M": "fbk.w_M:y",
             "get_measurement:meas": "SpeedController:tau_M_ref+1",
             "PWM:meas": "get_measurement:meas+2",
+            "From standby": "PWM:standby",
             f"{vc}:meas": "get_measurement:meas",
             "d_abc": "PWM:d_abc",
             "modulate:fbk": f"{vc}:fbk",
@@ -1208,8 +1167,8 @@ def vector_control_system(
             "Goto ref": "ref.u_s:u+1",
             f"{MONITOR}:fbk": "From fbk 2",
         },
-        lanes={"PWM:u_c_ref_ab": "below:2", "PWM:w": "below:1", "PWM:step": "below:0"},
-        tags=[ENABLE, "w_M_ref"],
+        lanes={"PWM:u_c_ref_ab": "below:1", "PWM:w": "below:0"},
+        tags=["w_M_ref"],
     )
 
 
@@ -1407,6 +1366,18 @@ def control_block(
 ) -> ControlBlock:
     """Control-system block of a control system of the class `cls` (e.g.,
     VectorControlSystem), whose contents are `netlist`."""
+    params = [MaskParam("T_s", "T_s: Sampling period (s)", cls, "", True)]
+    vector = cls == "VectorControlSystem"
+    if vector:  # vector_ctrl.sensorless
+        params.append(
+            MaskParam(
+                "sensorless",
+                "sensorless: Sensorless mode (1) or sensored mode (0)",
+                cls,
+                "",
+                True,
+            )
+        )
     return ControlBlock(
         name=name,
         mask_type=f"{cls} (motulator)",
@@ -1414,8 +1385,10 @@ def control_block(
         + " Each class of motulator is a block with a mask of its arguments. The "
         "top-level blocks refer to the variables of the model initialization, and the "
         "blocks inside them get their parameters as in the constructors of motulator. "
-        "T_s is the sampling period of the measurements." + ENABLE_DESCRIPTION,
-        mask_params=[MaskParam("T_s", "T_s: Sampling period (s)", cls, "", True)],
+        "T_s is the sampling period of the measurements"
+        + (", and sensorless the mode of the vector controller." if vector else ".")
+        + ENABLE_DESCRIPTION,
+        mask_params=params,
         inputs=[p.name for p in inputs],
         input_widths=[p.width for p in inputs],
         outputs=outputs,
@@ -1423,8 +1396,14 @@ def control_block(
     )
 
 
-# Mask values of the control systems: the sampling period of the configuration
-VALUES = {"T_s": "cfg.T_s"}
+# Mask values of the control systems: the sampling period and the sensorless mode
+# (of the vector control systems) of the configuration
+VALUES = {"T_s": "cfg.T_s", "sensorless": "cfg.sensorless"}
+
+
+def mask_values(block: ControlBlock) -> dict[str, str]:
+    """Mask values of a control-system block, those of VALUES that it has."""
+    return {m.variable: VALUES[m.variable] for m in block.mask_params}
 
 
 # %%

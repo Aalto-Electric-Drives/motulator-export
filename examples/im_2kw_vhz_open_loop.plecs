@@ -450,7 +450,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 290, 100]
+        Location      [0, 0; 250, 100]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -478,7 +478,7 @@ Plecs {
       Type          Output
       Name          "y"
       Show          on
-      Position      [240, 45]
+      Position      [200, 45]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -497,11 +497,11 @@ Plecs {
       Type          CScript
       Name          "C-Script"
       Show          on
-      Position      [145, 45]
+      Position      [125, 45]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -15; 50, 15]
+      Frame         [-30, -15; 30, 15]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -1292,7 +1292,7 @@ Plecs {
         Direction     right
       }
       Schematic {
-        Location      [0, 0; 1155, 320]
+        Location      [0, 0; 1115, 320]
         ZoomFactor    1
         SliderPosition [0, 0]
         ShowBrowser   off
@@ -1396,7 +1396,7 @@ Plecs {
       Type          Output
       Name          "fbk"
       Show          on
-      Position      [1105, 130]
+      Position      [1065, 130]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1415,7 +1415,7 @@ Plecs {
       Type          Output
       Name          "ref"
       Show          on
-      Position      [1105, 85]
+      Position      [1065, 85]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -1812,11 +1812,11 @@ Plecs {
       Type          CScript
       Name          "tau_M_lpf"
       Show          on
-      Position      [450, 85]
+      Position      [430, 85]
       Direction     up
       Flipped       off
       LabelPosition south
-      Frame         [-50, -15; 50, 15]
+      Frame         [-30, -15; 30, 15]
       Parameter {
         Variable      "DialogGeometry"
         Value         ""
@@ -1922,7 +1922,7 @@ Plecs {
       Type          Subsystem
       Name          "ReferenceGenerator"
       Show          on
-      Position      [600, 85]
+      Position      [560, 85]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2239,7 +2239,7 @@ Plecs {
       Type          CScript
       Name          "compute_standby_output"
       Show          on
-      Position      [800, 85]
+      Position      [760, 85]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2349,7 +2349,7 @@ Plecs {
       Type          Subsystem
       Name          "FluxTorqueController"
       Show          on
-      Position      [955, 90]
+      Position      [915, 90]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -2607,7 +2607,7 @@ Plecs {
       Type          SignalMux
       Name          "Mux ref"
       Show          off
-      Position      [1055, 85]
+      Position      [1015, 85]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2621,7 +2621,7 @@ Plecs {
       Type          From
       Name          "From compute_standby_output.enable"
       Show          off
-      Position      [711, 75]
+      Position      [671, 75]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -2712,23 +2712,23 @@ Plecs {
         DstTerminal   1
       }
       Branch {
-        Points        [515, 130]
+        Points        [475, 130]
         Branch {
-          Points        [515, 95]
+          Points        [475, 95]
           DstComponent  "ReferenceGenerator"
           DstTerminal   3
         }
         Branch {
-          Points        [670, 130]
+          Points        [630, 130]
           Branch {
-            Points        [670, 95]
+            Points        [630, 95]
             DstComponent  "compute_standby_output"
             DstTerminal   3
           }
           Branch {
-            Points        [870, 130]
+            Points        [830, 130]
             Branch {
-              Points        [870, 95]
+              Points        [830, 95]
               DstComponent  "FluxTorqueController"
               DstTerminal   2
             }
@@ -2751,7 +2751,7 @@ Plecs {
       Type          Signal
       SrcComponent  "meas.u_dc"
       SrcTerminal   2
-      Points        [525, 40; 525, 75]
+      Points        [485, 40; 485, 75]
       DstComponent  "ReferenceGenerator"
       DstTerminal   1
     }
@@ -2773,13 +2773,13 @@ Plecs {
       Type          Signal
       SrcComponent  "compute_standby_output"
       SrcTerminal   4
-      Points        [880, 85]
+      Points        [840, 85]
       Branch {
         DstComponent  "FluxTorqueController"
         DstTerminal   1
       }
       Branch {
-        Points        [880, 45; 1025, 45; 1025, 80]
+        Points        [840, 45; 985, 45; 985, 80]
         DstComponent  "Mux ref"
         DstTerminal   2
       }

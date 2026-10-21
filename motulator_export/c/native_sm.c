@@ -80,7 +80,7 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, fbk->theta_m);
     log_put(&p, fbk->psi_f);
     log_put(&p, fbk->h);
-    log_put(&p, 0.0); /* Flying start, not used with the gates enabled */
+    log_put(&p, fbk->caught);
     return SIM_OK;
 }
 

@@ -78,10 +78,10 @@
 static ReferenceGenerator self;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 1, 1};
-static const int FEEDTHROUGH[] = {1, 1, 1, 1};
+static const int INPUT_WIDTHS[] = {1, 1, 1};
+static const int FEEDTHROUGH[] = {1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {2};
-#define NUM_INPUTS 4
+#define NUM_INPUTS 3
 #define NUM_OUTPUTS 1
 #define NUM_PARAMS 22
 
@@ -191,13 +191,10 @@ static void mdlStart(SimStruct *S)
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    /* Flux and limited torque references (ref.psi_s, ref.tau_M), the torque
-     * reference being zero while the gates are blocked and at the flying
-     * start */
-    double tau_M_ref_in = (InputSignal(0, 0) > 0.0) ? 0.0 : InputSignal(1, 0);
+    /* Flux and limited torque references (ref.psi_s, ref.tau_M) */
     double psi_s_ref, tau_M_ref;
-    reference_gen_compute_flux_and_torque_refs(&self, tau_M_ref_in,
-        InputSignal(3, 0), InputSignal(2, 0), &psi_s_ref, &tau_M_ref);
+    reference_gen_compute_flux_and_torque_refs(&self, InputSignal(0, 0),
+        InputSignal(2, 0), InputSignal(1, 0), &psi_s_ref, &tau_M_ref);
     OutputSignal(0, 0) = psi_s_ref;
     OutputSignal(0, 1) = tau_M_ref;
 }

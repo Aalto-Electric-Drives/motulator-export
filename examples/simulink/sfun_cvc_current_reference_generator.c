@@ -40,10 +40,10 @@ static IMCurrentReferenceGenerator self;
 static double T_s; /* Sampling period */
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {1, 1, 2, 1, 2};
-static const int FEEDTHROUGH[] = {1, 1, 0, 0, 1};
+static const int INPUT_WIDTHS[] = {1, 2, 1, 2};
+static const int FEEDTHROUGH[] = {1, 0, 0, 1};
 static const int OUTPUT_WIDTHS[] = {1, 2};
-#define NUM_INPUTS 5
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 2
 #define NUM_PARAMS 11
 
@@ -149,13 +149,10 @@ static void mdlStart(SimStruct *S)
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    double complex psi_R = complex_from(InputSignal(4, 0), InputSignal(4, 1));
-    /* The torque reference is zero while the gates are blocked and at the
-     * flying start */
-    double tau_M_ref_in = (InputSignal(0, 0) > 0.0) ? 0.0 : InputSignal(1, 0);
+    double complex psi_R = complex_from(InputSignal(3, 0), InputSignal(3, 1));
     double tau_M_ref;
     double complex i_s_ref;
-    im_reference_gen_compute_output(&self, tau_M_ref_in, cabs(psi_R),
+    im_reference_gen_compute_output(&self, InputSignal(0, 0), cabs(psi_R),
                                     &i_s_ref, &tau_M_ref);
     /* Transform the reference to the same coordinates as the feedback */
     i_s_ref = cexp(I * carg(psi_R)) * i_s_ref;
@@ -169,8 +166,8 @@ static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
     /* Field weakening based on the unlimited voltage reference */
-    im_reference_gen_update(&self, T_s, complex_from(InputSignal(2, 0), InputSignal(2, 1)),
-                            InputSignal(3, 0));
+    im_reference_gen_update(&self, T_s, complex_from(InputSignal(1, 0), InputSignal(1, 1)),
+                            InputSignal(2, 0));
 }
 
 static void mdlTerminate(SimStruct *S)

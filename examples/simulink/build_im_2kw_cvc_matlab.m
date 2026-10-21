@@ -27,100 +27,83 @@ s.scope = { ...
 s.control.name = 'Current-vector control';
 s.control.sfunction = [];
 s.control.mask_type = 'VectorControlSystem (motulator)';
-s.control.description = 'Speed control of an induction machine drive with current-vector control (VectorControlSystem with CurrentVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
+s.control.description = 'Speed control of an induction machine drive with current-vector control (VectorControlSystem with CurrentVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements, and sensorless the mode of the vector controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
 s.control.mask = { ...
     'T_s', 'T_s: Sampling period (s)', 'VectorControlSystem', 'cfg.T_s'
+    'sensorless', 'sensorless: Sensorless mode (1) or sensored mode (0)', 'VectorControlSystem', 'cfg.sensorless'
     };
 s.control.mask_init = '';
 s.control.inputs = {'enable', 'w_M_ref', 'i_s_abc', 'u_dc', 'w_M'};
 s.control.netlist.blocks = { ...
-    'enable', 'Inport', [40.0 53.0 70.0 67.0], {'Port', '1'}
-    'w_M_ref', 'Inport', [40.0 108.0 70.0 122.0], {'Port', '2'}
-    'i_s_abc', 'Inport', [40.0 163.0 70.0 177.0], {'Port', '3'}
-    'u_dc', 'Inport', [40.0 218.0 70.0 232.0], {'Port', '4'}
-    'w_M', 'Inport', [40.0 273.0 70.0 287.0], {'Port', '5'}
-    'd_abc', 'Outport', [1045.0 435.0 1075.0 449.0], {'Port', '1'}
-    'signals', 'Outport', [1790.0 443.0 1820.0 457.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [265.0 200.0 405.0 290.0], {'mfun_cvc_get_measurement', 'p.T_s', [4.0]}
-    'Goto fbk', 'Goto', [1275.0 126.0 1345.0 140.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto ref', 'Goto', [1275.0 291.0 1345.0 305.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto step', 'Goto', [1275.0 348.0 1345.0 362.0], {'GotoTag', 'step', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'From fbk', 'From', [265.0 108.0 335.0 122.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
-    'From ref', 'From', [265.0 163.0 335.0 177.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'From step', 'From', [1275.0 513.0 1345.0 527.0], {'GotoTag', 'step', 'ShowName', 'off'}
-    'From step 2', 'From', [265.0 53.0 335.0 67.0], {'GotoTag', 'step', 'ShowName', 'off'}
-    'From fbk 2', 'From', [1275.0 403.0 1345.0 417.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
-    'From ref 2', 'From', [1275.0 458.0 1345.0 472.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'fbk.w_M', 'Selector', [450.0 100.0 500.0 130.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[16]', 'InputPortWidth', '21'}
-    'ref.tau_M', 'Selector', [450.0 155.0 500.0 185.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1]', 'InputPortWidth', '5'}
-    'SpeedController', 'Subsystem', [725.0 40.0 865.0 190.0], {'ContentPreviewEnabled', 'off'}
-    'PWM', 'Subsystem', [725.0 275.0 865.0 475.0], {'ContentPreviewEnabled', 'off'}
-    'CurrentVectorController', 'Subsystem', [1045.0 145.0 1185.0 345.0], {'ContentPreviewEnabled', 'off'}
-    'ref.u_s', 'Selector', [1275.0 238.0 1325.0 268.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[4 5]', 'InputPortWidth', '5'}
-    'modulate', 'MATLAB Function', [1525.0 163.0 1665.0 223.0], {'mfun_cvc_modulate', 'p.T_s', [2.0 1.0]}
-    'Monitored signals', 'MATLAB Function', [1525.0 390.0 1665.0 510.0], {'mfun_cvc_monitored_signals', 'p.T_s', [2.0 2.0 2.0 4.0]}
-    'Mux signals', 'Mux', [1738.0 390.0 1743.0 510.0], {'Inputs', '[2 2 2 4]', 'ShowName', 'off'}
-    'From SpeedController.enable', 'From', [630.0 48.0 700.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From PWM.enable', 'From', [630.0 288.0 700.0 302.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From CurrentVectorController.enable', 'From', [950.0 158.0 1020.0 172.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'From SpeedController.w_M_ref', 'From', [630.0 168.0 700.0 182.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
-    'From Monitored signals.w_M_ref', 'From', [1430.0 483.0 1500.0 497.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
-    'Goto enable', 'Goto', [110.0 53.0 180.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'Goto w_M_ref', 'Goto', [110.0 108.0 180.0 122.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'SpeedController/enable', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
-    'SpeedController/step', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
-    'SpeedController/w_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
-    'SpeedController/tau_M', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
-    'SpeedController/w_M_ref', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '5'}
-    'SpeedController/tau_M_ref', 'Outport', [520.0 108.0 550.0 122.0], {'Port', '1'}
-    'SpeedController/mfun_cvc_speed_controller', 'MATLAB Function', [335.0 40.0 475.0 190.0], {'mfun_cvc_speed_controller', 'p.T_s', [1.0]}
-    'SpeedController/Delay enable', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'p.T_s'}
-    'SpeedController/Delay step', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'p.T_s'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 130.0 168.0 160.0], {'SampleTime', 'p.T_s'}
-    'PWM/enable', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '1'}
-    'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
-    'PWM/u_c_ref_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
-    'PWM/w', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
-    'PWM/step', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
-    'PWM/u_c_ab', 'Outport', [845.0 63.0 875.0 77.0], {'Port', '1'}
-    'PWM/u_c_zoh_ab', 'Outport', [845.0 118.0 875.0 132.0], {'Port', '2'}
-    'PWM/d_abc', 'Outport', [845.0 183.0 875.0 197.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [355.0 130.0 495.0 250.0], {'mfun_cvc_pwm', 'p.T_s', [3.0]}
-    'PWM/get_realized_voltage', 'Subsystem', [645.0 40.0 785.0 160.0], {'ContentPreviewEnabled', 'off'}
-    'PWM/From get_realized_voltage.enable', 'From', [550.0 48.0 620.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'PWM/From compute_output.step', 'From', [260.0 228.0 330.0 242.0], {'GotoTag', 'step', 'ShowName', 'off'}
-    'PWM/From get_realized_voltage.step', 'From', [550.0 108.0 620.0 122.0], {'GotoTag', 'step', 'ShowName', 'off'}
-    'PWM/Goto enable', 'Goto', [110.0 298.0 180.0 312.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'PWM/Goto step', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'step', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'PWM/get_realized_voltage/enable', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
+    'enable', 'Inport', [40.0 63.0 70.0 77.0], {'Port', '1'}
+    'w_M_ref', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '2'}
+    'i_s_abc', 'Inport', [40.0 173.0 70.0 187.0], {'Port', '3'}
+    'u_dc', 'Inport', [40.0 228.0 70.0 242.0], {'Port', '4'}
+    'w_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
+    'd_abc', 'Outport', [1005.0 476.0 1035.0 490.0], {'Port', '1'}
+    'signals', 'Outport', [1735.0 523.0 1765.0 537.0], {'Port', '2'}
+    'get_measurement', 'MATLAB Function', [265.0 235.0 405.0 325.0], {'mfun_cvc_get_measurement', 'p.T_s', [4.0]}
+    'Goto fbk', 'Goto', [1220.0 208.0 1290.0 222.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto ref', 'Goto', [1220.0 373.0 1290.0 387.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto standby', 'Goto', [495.0 108.0 565.0 122.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'From fbk', 'From', [265.0 143.0 335.0 157.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
+    'From ref', 'From', [265.0 198.0 335.0 212.0], {'GotoTag', 'ref', 'ShowName', 'off'}
+    'From standby', 'From', [495.0 403.0 565.0 417.0], {'GotoTag', 'standby', 'ShowName', 'off'}
+    'From standby 2', 'From', [1220.0 428.0 1290.0 442.0], {'GotoTag', 'standby', 'ShowName', 'off'}
+    'From fbk 2', 'From', [1220.0 483.0 1290.0 497.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
+    'From ref 2', 'From', [1220.0 538.0 1290.0 552.0], {'GotoTag', 'ref', 'ShowName', 'off'}
+    'standby', 'MATLAB Function', [265.0 40.0 405.0 100.0], {'mfun_cvc_standby', 'p.T_s', [1.0]}
+    'fbk.w_M', 'Selector', [495.0 145.0 545.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[16]', 'InputPortWidth', '21'}
+    'ref.tau_M', 'Selector', [495.0 200.0 545.0 230.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1]', 'InputPortWidth', '5'}
+    'SpeedController', 'Subsystem', [775.0 115.0 915.0 235.0], {'ContentPreviewEnabled', 'off'}
+    'PWM', 'Subsystem', [775.0 350.0 915.0 510.0], {'ContentPreviewEnabled', 'off'}
+    'CurrentVectorController', 'Subsystem', [1005.0 220.0 1145.0 380.0], {'ContentPreviewEnabled', 'off'}
+    'ref.u_s', 'Selector', [1220.0 320.0 1270.0 350.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[4 5]', 'InputPortWidth', '5'}
+    'modulate', 'MATLAB Function', [1470.0 245.0 1610.0 335.0], {'mfun_cvc_modulate', 'p.T_s', [2.0 1.0]}
+    'Monitored signals', 'MATLAB Function', [1470.0 470.0 1610.0 590.0], {'mfun_cvc_monitored_signals', 'p.T_s', [2.0 2.0 2.0 4.0]}
+    'Mux signals', 'Mux', [1688.0 470.0 1693.0 590.0], {'Inputs', '[2 2 2 4]', 'ShowName', 'off'}
+    'From SpeedController.w_M_ref', 'From', [680.0 213.0 750.0 227.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
+    'From Monitored signals.w_M_ref', 'From', [1375.0 563.0 1445.0 577.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
+    'Goto w_M_ref', 'Goto', [110.0 118.0 180.0 132.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'SpeedController/standby', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
+    'SpeedController/w_M', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'SpeedController/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'SpeedController/w_M_ref', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
+    'SpeedController/tau_M_ref', 'Outport', [425.0 93.0 455.0 107.0], {'Port', '1'}
+    'SpeedController/mfun_cvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_cvc_speed_controller', 'p.T_s', [1.0]}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'p.T_s'}
+    'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
+    'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
+    'PWM/u_c_ref_ab', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '3'}
+    'PWM/w', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '4'}
+    'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
+    'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
+    'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_cvc_pwm', 'p.T_s', [3.0]}
+    'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
+    'PWM/From get_realized_voltage.standby', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'standby', 'ShowName', 'off'}
+    'PWM/Goto standby', 'Goto', [110.0 133.0 180.0 147.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'PWM/get_realized_voltage/standby', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'PWM/get_realized_voltage/meas', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
-    'PWM/get_realized_voltage/step', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
-    'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
-    'PWM/get_realized_voltage/u_c_ab', 'Outport', [425.0 63.0 455.0 77.0], {'Port', '1'}
-    'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [425.0 123.0 455.0 137.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_cvc_pwm_realized_voltage', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_cvc_pwm_realized_voltage', 'p.T_s', [2.0 2.0]}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 130.0 168.0 160.0], {'SampleTime', 'p.T_s'}
-    'CurrentVectorController/enable', 'Inport', [40.0 428.0 70.0 442.0], {'Port', '1'}
-    'CurrentVectorController/tau_M_ref', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
-    'CurrentVectorController/meas', 'Inport', [40.0 263.0 70.0 277.0], {'Port', '3'}
-    'CurrentVectorController/u_c_ab', 'Inport', [40.0 318.0 70.0 332.0], {'Port', '4'}
-    'CurrentVectorController/u_c_zoh_ab', 'Inport', [40.0 373.0 70.0 387.0], {'Port', '5'}
-    'CurrentVectorController/fbk', 'Outport', [1475.0 303.0 1505.0 317.0], {'Port', '1'}
-    'CurrentVectorController/ref', 'Outport', [1475.0 130.0 1505.0 144.0], {'Port', '2'}
-    'CurrentVectorController/step', 'Outport', [1475.0 358.0 1505.0 372.0], {'Port', '3'}
-    'CurrentVectorController/FlyingStart', 'MATLAB Function', [325.0 405.0 465.0 465.0], {'mfun_cvc_flying_start', 'p.T_s', [1.0 1.0]}
-    'CurrentVectorController/Goto zero_torque', 'Goto', [540.0 413.0 610.0 427.0], {'GotoTag', 'zero_torque', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [540.0 250.0 680.0 370.0], {'ContentPreviewEnabled', 'off'}
-    'CurrentVectorController/From u_s', 'From', [740.0 108.0 810.0 122.0], {'GotoTag', 'u_s', 'ShowName', 'off'}
-    'CurrentVectorController/meas.u_dc', 'Selector', [740.0 175.0 790.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
-    'CurrentVectorController/fbk.psi_R', 'Selector', [740.0 250.0 790.0 280.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[9 10]', 'InputPortWidth', '21'}
-    'CurrentVectorController/From zero_torque', 'From', [740.0 48.0 810.0 62.0], {'GotoTag', 'zero_torque', 'ShowName', 'off'}
-    'CurrentVectorController/CurrentReferenceGenerator', 'Subsystem', [885.0 40.0 1025.0 190.0], {'ContentPreviewEnabled', 'off'}
-    'CurrentVectorController/CurrentController', 'MATLAB Function', [1115.0 137.0 1255.0 197.0], {'mfun_cvc_current_controller', 'p.T_s', [2.0]}
-    'CurrentVectorController/Mux ref', 'Mux', [1348.0 92.0 1353.0 182.0], {'Inputs', '[1 2 2]', 'ShowName', 'off'}
-    'CurrentVectorController/Goto u_s', 'Goto', [1345.0 223.0 1415.0 237.0], {'GotoTag', 'u_s', 'ShowName', 'off', 'TagVisibility', 'local'}
-    'CurrentVectorController/From FlyingStart.enable', 'From', [230.0 428.0 300.0 442.0], {'GotoTag', 'enable', 'ShowName', 'off'}
-    'CurrentVectorController/Goto enable', 'Goto', [110.0 428.0 180.0 442.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
+    'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
+    'PWM/get_realized_voltage/mfun_cvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_cvc_pwm_realized_voltage', 'p.T_s', [2.0 2.0]}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'p.T_s'}
+    'CurrentVectorController/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
+    'CurrentVectorController/meas', 'Inport', [40.0 233.0 70.0 247.0], {'Port', '2'}
+    'CurrentVectorController/u_c_ab', 'Inport', [40.0 288.0 70.0 302.0], {'Port', '3'}
+    'CurrentVectorController/u_c_zoh_ab', 'Inport', [40.0 343.0 70.0 357.0], {'Port', '4'}
+    'CurrentVectorController/fbk', 'Outport', [1080.0 273.0 1110.0 287.0], {'Port', '1'}
+    'CurrentVectorController/ref', 'Outport', [1080.0 108.0 1110.0 122.0], {'Port', '2'}
+    'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [160.0 220.0 300.0 340.0], {'ContentPreviewEnabled', 'off'}
+    'CurrentVectorController/From u_s', 'From', [360.0 78.0 430.0 92.0], {'GotoTag', 'u_s', 'ShowName', 'off'}
+    'CurrentVectorController/meas.u_dc', 'Selector', [360.0 145.0 410.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
+    'CurrentVectorController/fbk.psi_R', 'Selector', [360.0 220.0 410.0 250.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[9 10]', 'InputPortWidth', '21'}
+    'CurrentVectorController/CurrentReferenceGenerator', 'Subsystem', [505.0 40.0 645.0 160.0], {'ContentPreviewEnabled', 'off'}
+    'CurrentVectorController/CurrentController', 'MATLAB Function', [735.0 115.0 875.0 175.0], {'mfun_cvc_current_controller', 'p.T_s', [2.0]}
+    'CurrentVectorController/Mux ref', 'Mux', [968.0 70.0 973.0 160.0], {'Inputs', '[1 2 2]', 'ShowName', 'off'}
+    'CurrentVectorController/Goto u_s', 'Goto', [965.0 203.0 1035.0 217.0], {'GotoTag', 'u_s', 'ShowName', 'off', 'TagVisibility', 'local'}
     'CurrentVectorController/SpeedFluxObserver/meas', 'Inport', [40.0 43.0 70.0 57.0], {'Port', '1'}
     'CurrentVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
@@ -136,71 +119,57 @@ s.control.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_cvc_speed_observer', 'p.T_s', [1.0 1.0]}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'p.T_s'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'p.T_s'}
-    'CurrentVectorController/CurrentReferenceGenerator/zero_torque', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
-    'CurrentVectorController/CurrentReferenceGenerator/tau_M_ref', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
-    'CurrentVectorController/CurrentReferenceGenerator/u_s', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
-    'CurrentVectorController/CurrentReferenceGenerator/u_dc', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
-    'CurrentVectorController/CurrentReferenceGenerator/psi_R', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '5'}
-    'CurrentVectorController/CurrentReferenceGenerator/tau_M', 'Outport', [520.0 71.0 550.0 85.0], {'Port', '1'}
-    'CurrentVectorController/CurrentReferenceGenerator/i_s', 'Outport', [520.0 145.0 550.0 159.0], {'Port', '2'}
-    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [335.0 40.0 475.0 190.0], {'mfun_cvc_current_reference_generator', 'p.T_s', [1.0 2.0]}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'p.T_s'}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'p.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
+    'CurrentVectorController/CurrentReferenceGenerator/u_s', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'CurrentVectorController/CurrentReferenceGenerator/u_dc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'CurrentVectorController/CurrentReferenceGenerator/psi_R', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
+    'CurrentVectorController/CurrentReferenceGenerator/tau_M', 'Outport', [505.0 63.0 535.0 77.0], {'Port', '1'}
+    'CurrentVectorController/CurrentReferenceGenerator/i_s', 'Outport', [505.0 123.0 535.0 137.0], {'Port', '2'}
+    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_reference_generator', 'p.T_s', [1.0 2.0]}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'p.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'p.T_s'}
     };
 s.control.netlist.aligns = { ...
-    '', 'fbk.w_M', 'Inport', 1.0, 'From fbk', 'Outport', 1.0, 0.0
-    '', 'ref.tau_M', 'Inport', 1.0, 'From ref', 'Outport', 1.0, 0.0
-    '', 'SpeedController', 'Inport', 3.0, 'fbk.w_M', 'Outport', 1.0, 0.0
-    '', 'PWM', 'Inport', 2.0, 'get_measurement', 'Outport', 1.0, 90.0
-    '', 'CurrentVectorController', 'Inport', 3.0, 'get_measurement', 'Outport', 1.0, 0.0
+    '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
+    '', 'Goto standby', 'Inport', 1.0, 'standby', 'Outport', 1.0, 45.0
+    '', 'SpeedController', 'Inport', 2.0, 'fbk.w_M', 'Outport', 1.0, 0.0
+    '', 'PWM', 'Inport', 1.0, 'get_measurement', 'Outport', 1.0, 90.0
+    '', 'CurrentVectorController', 'Inport', 2.0, 'get_measurement', 'Outport', 1.0, 0.0
     '', 'd_abc', 'Inport', 1.0, 'PWM', 'Outport', 3.0, 0.0
     '', 'Goto fbk', 'Inport', 1.0, 'CurrentVectorController', 'Outport', 1.0, -45.0
     '', 'modulate', 'Inport', 1.0, 'CurrentVectorController', 'Outport', 1.0, 0.0
+    '', 'From standby', 'Outport', 1.0, 'PWM', 'Inport', 2.0, 0.0
     '', 'ref.u_s', 'Outport', 1.0, 'modulate', 'Inport', 2.0, 45.0
     '', 'Goto ref', 'Inport', 1.0, 'ref.u_s', 'Inport', 1.0, 45.0
     '', 'Monitored signals', 'Inport', 1.0, 'From fbk 2', 'Outport', 1.0, 0.0
     '', 'Mux signals', 'Inport', 1.0, 'Monitored signals', 'Outport', 1.0, 0.0
     '', 'signals', 'Inport', 1.0, 'Mux signals', 'Outport', 1.0, 0.0
-    '', 'From SpeedController.enable', 'Outport', 1.0, 'SpeedController', 'Inport', 1.0, 0.0
-    '', 'From PWM.enable', 'Outport', 1.0, 'PWM', 'Inport', 1.0, 0.0
-    '', 'From CurrentVectorController.enable', 'Outport', 1.0, 'CurrentVectorController', 'Inport', 1.0, 0.0
-    '', 'From SpeedController.w_M_ref', 'Outport', 1.0, 'SpeedController', 'Inport', 5.0, 0.0
+    '', 'From SpeedController.w_M_ref', 'Outport', 1.0, 'SpeedController', 'Inport', 4.0, 0.0
     '', 'From Monitored signals.w_M_ref', 'Outport', 1.0, 'Monitored signals', 'Inport', 3.0, 0.0
-    '', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
     '', 'Goto w_M_ref', 'Inport', 1.0, 'w_M_ref', 'Outport', 1.0, 0.0
     'SpeedController', 'tau_M_ref', 'Inport', 1.0, 'mfun_cvc_speed_controller', 'Outport', 1.0, 0.0
-    'SpeedController', 'Delay enable', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 1.0, 0.0
-    'SpeedController', 'Delay tau_M', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 4.0, 0.0
-    'SpeedController', 'Delay step', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 2.0, 0.0
-    'SpeedController', 'enable', 'Outport', 1.0, 'Delay enable', 'Inport', 1.0, 0.0
-    'PWM', 'get_realized_voltage', 'Inport', 4.0, 'compute_output', 'Outport', 1.0, -45.0
+    'SpeedController', 'standby', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 1.0, 0.0
+    'SpeedController', 'Delay tau_M', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 3.0, 0.0
+    'PWM', 'get_realized_voltage', 'Inport', 3.0, 'compute_output', 'Outport', 1.0, -45.0
     'PWM', 'u_c_ab', 'Inport', 1.0, 'get_realized_voltage', 'Outport', 1.0, 0.0
     'PWM', 'd_abc', 'Inport', 1.0, 'compute_output', 'Outport', 1.0, 0.0
     'PWM', 'meas', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 2.0, 0.0
-    'PWM', 'From get_realized_voltage.enable', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 1.0, 0.0
-    'PWM', 'From compute_output.step', 'Outport', 1.0, 'compute_output', 'Inport', 4.0, 0.0
-    'PWM', 'From get_realized_voltage.step', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 3.0, 0.0
-    'PWM', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
-    'PWM', 'Goto step', 'Inport', 1.0, 'step', 'Outport', 1.0, 0.0
+    'PWM', 'From get_realized_voltage.standby', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 1.0, 0.0
+    'PWM', 'Goto standby', 'Inport', 1.0, 'standby', 'Outport', 1.0, 0.0
     'PWM/get_realized_voltage', 'u_c_ab', 'Inport', 1.0, 'mfun_cvc_pwm_realized_voltage', 'Outport', 1.0, 0.0
     'PWM/get_realized_voltage', 'u_c_zoh_ab', 'Inport', 1.0, 'mfun_cvc_pwm_realized_voltage', 'Outport', 2.0, 0.0
-    'PWM/get_realized_voltage', 'enable', 'Outport', 1.0, 'mfun_cvc_pwm_realized_voltage', 'Inport', 1.0, 0.0
-    'PWM/get_realized_voltage', 'Delay d_abc', 'Outport', 1.0, 'mfun_cvc_pwm_realized_voltage', 'Inport', 4.0, 0.0
+    'PWM/get_realized_voltage', 'standby', 'Outport', 1.0, 'mfun_cvc_pwm_realized_voltage', 'Inport', 1.0, 0.0
+    'PWM/get_realized_voltage', 'Delay d_abc', 'Outport', 1.0, 'mfun_cvc_pwm_realized_voltage', 'Inport', 3.0, 0.0
     'CurrentVectorController', 'CurrentController', 'Inport', 1.0, 'CurrentReferenceGenerator', 'Outport', 2.0, 0.0
     'CurrentVectorController', 'Mux ref', 'Inport', 3.0, 'CurrentController', 'Outport', 1.0, 0.0
     'CurrentVectorController', 'ref', 'Inport', 1.0, 'Mux ref', 'Outport', 1.0, 0.0
-    'CurrentVectorController', 'tau_M_ref', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 2.0, 0.0
-    'CurrentVectorController', 'From zero_torque', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 1.0, 0.0
-    'CurrentVectorController', 'From u_s', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 3.0, 0.0
-    'CurrentVectorController', 'meas.u_dc', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 4.0, 45.0
-    'CurrentVectorController', 'fbk.psi_R', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 5.0, 90.0
+    'CurrentVectorController', 'tau_M_ref', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 1.0, 0.0
+    'CurrentVectorController', 'From u_s', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 2.0, 0.0
+    'CurrentVectorController', 'meas.u_dc', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 3.0, 45.0
+    'CurrentVectorController', 'fbk.psi_R', 'Outport', 1.0, 'CurrentReferenceGenerator', 'Inport', 4.0, 90.0
     'CurrentVectorController', 'SpeedFluxObserver', 'Outport', 1.0, 'fbk.psi_R', 'Inport', 1.0, 45.0
     'CurrentVectorController', 'fbk', 'Inport', 1.0, 'SpeedFluxObserver', 'Outport', 1.0, 0.0
     'CurrentVectorController', 'meas', 'Outport', 1.0, 'SpeedFluxObserver', 'Inport', 1.0, 0.0
-    'CurrentVectorController', 'FlyingStart', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
-    'CurrentVectorController', 'Goto zero_torque', 'Inport', 1.0, 'FlyingStart', 'Outport', 1.0, 0.0
-    'CurrentVectorController', 'From FlyingStart.enable', 'Outport', 1.0, 'FlyingStart', 'Inport', 1.0, 0.0
-    'CurrentVectorController', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
     'CurrentVectorController/SpeedFluxObserver', 'fbk.eps', 'Outport', 1.0, 'FluxObserver', 'Inport', 4.0, 45.0
     'CurrentVectorController/SpeedFluxObserver', 'SpeedObserver', 'Inport', 1.0, 'fbk.eps', 'Outport', 1.0, 0.0
     'CurrentVectorController/SpeedFluxObserver', 'out', 'Inport', 1.0, 'FluxObserver', 'Outport', 1.0, 0.0
@@ -211,99 +180,85 @@ s.control.netlist.aligns = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'eps', 'Outport', 1.0, 'Delay eps', 'Inport', 1.0, 0.0
     'CurrentVectorController/CurrentReferenceGenerator', 'tau_M', 'Inport', 1.0, 'mfun_cvc_current_reference_generator', 'Outport', 1.0, 0.0
     'CurrentVectorController/CurrentReferenceGenerator', 'i_s', 'Inport', 1.0, 'mfun_cvc_current_reference_generator', 'Outport', 2.0, 0.0
-    'CurrentVectorController/CurrentReferenceGenerator', 'zero_torque', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 1.0, 0.0
-    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_s', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 3.0, 0.0
-    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 4.0, 0.0
+    'CurrentVectorController/CurrentReferenceGenerator', 'tau_M_ref', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 1.0, 0.0
+    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_s', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 2.0, 0.0
+    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 3.0, 0.0
     };
 s.control.netlist.lines = { ...
-    '', 'From SpeedController.enable/1', 'SpeedController/1', []
-    '', 'From PWM.enable/1', 'PWM/1', []
-    '', 'From CurrentVectorController.enable/1', 'CurrentVectorController/1', []
-    '', 'CurrentVectorController/3', 'Goto step/1', {'x', 1210.0}
-    '', 'From step/1', 'PWM/5', {'x', 1385.0, 'y', 565.0, 'x', 600.0}
-    '', 'From step 2/1', 'SpeedController/2', {'x', 525.0}
-    '', 'From SpeedController.w_M_ref/1', 'SpeedController/5', []
+    '', 'enable/1', 'standby/1', []
+    '', 'standby/1', 'SpeedController/1', {'x', 605.0}
+    '', 'standby/1', 'Goto standby/1', {'x', 460.0}
+    '', 'From standby/1', 'PWM/2', []
+    '', 'From standby 2/1', 'modulate/3', {'x', 1345.0}
+    '', 'From SpeedController.w_M_ref/1', 'SpeedController/4', []
     '', 'From Monitored signals.w_M_ref/1', 'Monitored signals/3', []
     '', 'i_s_abc/1', 'get_measurement/1', {'x', 230.0}
     '', 'u_dc/1', 'get_measurement/2', {'x', 215.0}
     '', 'w_M/1', 'get_measurement/3', {'x', 200.0}
-    '', 'get_measurement/1', 'PWM/2', {'x', 555.0}
-    '', 'get_measurement/1', 'CurrentVectorController/3', []
-    '', 'From fbk/1', 'fbk.w_M/1', []
-    '', 'From ref/1', 'ref.tau_M/1', []
-    '', 'fbk.w_M/1', 'SpeedController/3', []
-    '', 'ref.tau_M/1', 'SpeedController/4', {'x', 540.0}
-    '', 'SpeedController/1', 'CurrentVectorController/2', {'x', 920.0}
-    '', 'PWM/1', 'CurrentVectorController/4', {'x', 890.0}
-    '', 'PWM/2', 'CurrentVectorController/5', {'x', 905.0}
+    '', 'get_measurement/1', 'PWM/1', {'x', 620.0}
+    '', 'get_measurement/1', 'CurrentVectorController/2', []
+    '', 'From fbk/1', 'fbk.w_M/1', {'x', 430.0}
+    '', 'From ref/1', 'ref.tau_M/1', {'x', 445.0}
+    '', 'fbk.w_M/1', 'SpeedController/2', []
+    '', 'ref.tau_M/1', 'SpeedController/3', {'x', 590.0}
+    '', 'SpeedController/1', 'CurrentVectorController/1', {'x', 955.0}
+    '', 'PWM/1', 'CurrentVectorController/3', {'x', 940.0}
+    '', 'PWM/2', 'CurrentVectorController/4', {'x', 970.0}
     '', 'PWM/3', 'd_abc/1', []
-    '', 'CurrentVectorController/1', 'Goto fbk/1', {'x', 1225.0}
+    '', 'CurrentVectorController/1', 'Goto fbk/1', {'x', 1170.0}
     '', 'CurrentVectorController/1', 'modulate/1', []
-    '', 'CurrentVectorController/2', 'Goto ref/1', {'x', 1240.0}
-    '', 'CurrentVectorController/2', 'ref.u_s/1', {'x', 1240.0}
-    '', 'ref.u_s/1', 'modulate/2', {'x', 1400.0}
-    '', 'modulate/1', 'PWM/3', {'x', 1705.0, 'y', 595.0, 'x', 570.0}
-    '', 'modulate/2', 'PWM/4', {'x', 1690.0, 'y', 580.0, 'x', 585.0}
+    '', 'CurrentVectorController/2', 'Goto ref/1', {'x', 1185.0}
+    '', 'CurrentVectorController/2', 'ref.u_s/1', {'x', 1185.0}
+    '', 'ref.u_s/1', 'modulate/2', {'x', 1330.0}
+    '', 'modulate/1', 'PWM/3', {'x', 1650.0, 'y', 645.0, 'x', 635.0}
+    '', 'modulate/2', 'PWM/4', {'x', 1635.0, 'y', 630.0, 'x', 650.0}
     '', 'From fbk 2/1', 'Monitored signals/1', []
-    '', 'From ref 2/1', 'Monitored signals/2', {'x', 1370.0}
+    '', 'From ref 2/1', 'Monitored signals/2', {'x', 1315.0}
     '', 'Monitored signals/1', 'Mux signals/1', []
     '', 'Monitored signals/2', 'Mux signals/2', []
     '', 'Monitored signals/3', 'Mux signals/3', []
     '', 'Monitored signals/4', 'Mux signals/4', []
     '', 'Mux signals/1', 'signals/1', []
-    '', 'enable/1', 'Goto enable/1', []
     '', 'w_M_ref/1', 'Goto w_M_ref/1', []
-    'SpeedController', 'enable/1', 'Delay enable/1', []
-    'SpeedController', 'Delay enable/1', 'mfun_cvc_speed_controller/1', []
-    'SpeedController', 'step/1', 'Delay step/1', {'x', 190.0}
-    'SpeedController', 'Delay step/1', 'mfun_cvc_speed_controller/2', []
-    'SpeedController', 'w_M/1', 'mfun_cvc_speed_controller/3', {'x', 285.0}
+    'SpeedController', 'standby/1', 'mfun_cvc_speed_controller/1', []
+    'SpeedController', 'w_M/1', 'mfun_cvc_speed_controller/2', {'x', 190.0}
     'SpeedController', 'tau_M/1', 'Delay tau_M/1', {'x', 95.0}
-    'SpeedController', 'Delay tau_M/1', 'mfun_cvc_speed_controller/4', []
-    'SpeedController', 'w_M_ref/1', 'mfun_cvc_speed_controller/5', {'x', 300.0}
+    'SpeedController', 'Delay tau_M/1', 'mfun_cvc_speed_controller/3', []
+    'SpeedController', 'w_M_ref/1', 'mfun_cvc_speed_controller/4', {'x', 205.0}
     'SpeedController', 'mfun_cvc_speed_controller/1', 'tau_M_ref/1', []
-    'PWM', 'From get_realized_voltage.enable/1', 'get_realized_voltage/1', []
-    'PWM', 'meas/1', 'compute_output/1', {'x', 230.0}
+    'PWM', 'From get_realized_voltage.standby/1', 'get_realized_voltage/1', []
+    'PWM', 'meas/1', 'compute_output/1', {'x', 215.0}
     'PWM', 'meas/1', 'get_realized_voltage/2', []
-    'PWM', 'u_c_ref_ab/1', 'compute_output/2', {'x', 215.0}
-    'PWM', 'w/1', 'compute_output/3', {'x', 200.0}
-    'PWM', 'From compute_output.step/1', 'compute_output/4', []
-    'PWM', 'From get_realized_voltage.step/1', 'get_realized_voltage/3', []
+    'PWM', 'u_c_ref_ab/1', 'compute_output/2', {'x', 200.0}
+    'PWM', 'w/1', 'compute_output/3', {'x', 230.0}
     'PWM', 'compute_output/1', 'd_abc/1', []
-    'PWM', 'compute_output/1', 'get_realized_voltage/4', {'x', 520.0}
+    'PWM', 'compute_output/1', 'get_realized_voltage/3', {'x', 430.0}
     'PWM', 'get_realized_voltage/1', 'u_c_ab/1', []
-    'PWM', 'get_realized_voltage/2', 'u_c_zoh_ab/1', {'x', 810.0}
-    'PWM', 'enable/1', 'Goto enable/1', []
-    'PWM', 'step/1', 'Goto step/1', []
-    'PWM/get_realized_voltage', 'enable/1', 'mfun_cvc_pwm_realized_voltage/1', []
+    'PWM', 'get_realized_voltage/2', 'u_c_zoh_ab/1', {'x', 720.0}
+    'PWM', 'standby/1', 'Goto standby/1', []
+    'PWM/get_realized_voltage', 'standby/1', 'mfun_cvc_pwm_realized_voltage/1', []
     'PWM/get_realized_voltage', 'meas/1', 'mfun_cvc_pwm_realized_voltage/2', {'x', 190.0}
-    'PWM/get_realized_voltage', 'step/1', 'mfun_cvc_pwm_realized_voltage/3', {'x', 205.0}
     'PWM/get_realized_voltage', 'd_abc/1', 'Delay d_abc/1', {'x', 95.0}
-    'PWM/get_realized_voltage', 'Delay d_abc/1', 'mfun_cvc_pwm_realized_voltage/4', []
+    'PWM/get_realized_voltage', 'Delay d_abc/1', 'mfun_cvc_pwm_realized_voltage/3', []
     'PWM/get_realized_voltage', 'mfun_cvc_pwm_realized_voltage/1', 'u_c_ab/1', []
     'PWM/get_realized_voltage', 'mfun_cvc_pwm_realized_voltage/2', 'u_c_zoh_ab/1', []
-    'CurrentVectorController', 'From FlyingStart.enable/1', 'FlyingStart/1', []
-    'CurrentVectorController', 'FlyingStart/2', 'step/1', {'x', 1440.0}
-    'CurrentVectorController', 'FlyingStart/1', 'Goto zero_torque/1', []
-    'CurrentVectorController', 'From zero_torque/1', 'CurrentReferenceGenerator/1', []
     'CurrentVectorController', 'meas/1', 'SpeedFluxObserver/1', []
-    'CurrentVectorController', 'u_c_ab/1', 'SpeedFluxObserver/2', {'x', 490.0}
-    'CurrentVectorController', 'u_c_zoh_ab/1', 'SpeedFluxObserver/3', {'x', 505.0}
-    'CurrentVectorController', 'meas/1', 'meas.u_dc/1', {'x', 200.0}
-    'CurrentVectorController', 'SpeedFluxObserver/1', 'fbk.psi_R/1', {'x', 705.0}
-    'CurrentVectorController', 'SpeedFluxObserver/1', 'CurrentController/2', {'x', 1080.0}
+    'CurrentVectorController', 'u_c_ab/1', 'SpeedFluxObserver/2', {'x', 95.0}
+    'CurrentVectorController', 'u_c_zoh_ab/1', 'SpeedFluxObserver/3', {'x', 110.0}
+    'CurrentVectorController', 'meas/1', 'meas.u_dc/1', {'x', 125.0}
+    'CurrentVectorController', 'SpeedFluxObserver/1', 'fbk.psi_R/1', {'x', 325.0}
+    'CurrentVectorController', 'SpeedFluxObserver/1', 'CurrentController/2', {'x', 700.0}
     'CurrentVectorController', 'SpeedFluxObserver/1', 'fbk/1', []
-    'CurrentVectorController', 'tau_M_ref/1', 'CurrentReferenceGenerator/2', []
-    'CurrentVectorController', 'fbk.psi_R/1', 'CurrentReferenceGenerator/5', {'x', 850.0}
-    'CurrentVectorController', 'From u_s/1', 'CurrentReferenceGenerator/3', []
-    'CurrentVectorController', 'meas.u_dc/1', 'CurrentReferenceGenerator/4', {'x', 835.0}
+    'CurrentVectorController', 'tau_M_ref/1', 'CurrentReferenceGenerator/1', []
+    'CurrentVectorController', 'fbk.psi_R/1', 'CurrentReferenceGenerator/4', {'x', 470.0}
+    'CurrentVectorController', 'From u_s/1', 'CurrentReferenceGenerator/2', []
+    'CurrentVectorController', 'meas.u_dc/1', 'CurrentReferenceGenerator/3', {'x', 455.0}
     'CurrentVectorController', 'CurrentReferenceGenerator/2', 'CurrentController/1', []
-    'CurrentVectorController', 'CurrentReferenceGenerator/1', 'Mux ref/1', {'x', 1050.0, 'y', 80.0, 'x', 1295.0}
-    'CurrentVectorController', 'CurrentReferenceGenerator/2', 'Mux ref/2', {'x', 1065.0, 'y', 95.0, 'x', 1280.0}
+    'CurrentVectorController', 'CurrentReferenceGenerator/1', 'Mux ref/1', {'x', 670.0, 'y', 60.0, 'x', 915.0}
+    'CurrentVectorController', 'CurrentReferenceGenerator/2', 'Mux ref/2', {'x', 685.0, 'y', 75.0, 'x', 900.0}
     'CurrentVectorController', 'CurrentController/1', 'Mux ref/3', []
-    'CurrentVectorController', 'CurrentController/1', 'Goto u_s/1', {'x', 1310.0}
+    'CurrentVectorController', 'CurrentController/1', 'Goto u_s/1', {'x', 930.0}
     'CurrentVectorController', 'Mux ref/1', 'ref/1', []
-    'CurrentVectorController', 'enable/1', 'Goto enable/1', []
     'CurrentVectorController/SpeedFluxObserver', 'meas/1', 'FluxObserver/1', {'x', 95.0}
     'CurrentVectorController/SpeedFluxObserver', 'u_s_ab/1', 'FluxObserver/2', []
     'CurrentVectorController/SpeedFluxObserver', 'u_s_zoh_ab/1', 'FluxObserver/3', {'x', 110.0}
@@ -319,13 +274,12 @@ s.control.netlist.lines = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M/1', 'mfun_cvc_speed_observer/2', []
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_cvc_speed_observer/1', 'w_M/1', []
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_cvc_speed_observer/2', 'tau_L/1', {'x', 455.0}
-    'CurrentVectorController/CurrentReferenceGenerator', 'zero_torque/1', 'mfun_cvc_current_reference_generator/1', []
-    'CurrentVectorController/CurrentReferenceGenerator', 'tau_M_ref/1', 'mfun_cvc_current_reference_generator/2', {'x', 285.0}
+    'CurrentVectorController/CurrentReferenceGenerator', 'tau_M_ref/1', 'mfun_cvc_current_reference_generator/1', []
     'CurrentVectorController/CurrentReferenceGenerator', 'u_s/1', 'Delay u_s/1', {'x', 95.0}
-    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_s/1', 'mfun_cvc_current_reference_generator/3', []
+    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_s/1', 'mfun_cvc_current_reference_generator/2', []
     'CurrentVectorController/CurrentReferenceGenerator', 'u_dc/1', 'Delay u_dc/1', {'x', 190.0}
-    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc/1', 'mfun_cvc_current_reference_generator/4', []
-    'CurrentVectorController/CurrentReferenceGenerator', 'psi_R/1', 'mfun_cvc_current_reference_generator/5', {'x', 300.0}
+    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc/1', 'mfun_cvc_current_reference_generator/3', []
+    'CurrentVectorController/CurrentReferenceGenerator', 'psi_R/1', 'mfun_cvc_current_reference_generator/4', {'x', 285.0}
     'CurrentVectorController/CurrentReferenceGenerator', 'mfun_cvc_current_reference_generator/1', 'tau_M/1', []
     'CurrentVectorController/CurrentReferenceGenerator', 'mfun_cvc_current_reference_generator/2', 'i_s/1', []
     };
@@ -343,7 +297,28 @@ s.control.netlist.masks = { ...
     'end'}, newline), { ...
     'T_s', 'T_s: T_s', 'T_s'
     }, 'disp(''mfun_cvc_get_measurement'');'
-    'SpeedController', 'SpeedController (motulator)', '2DOF PI speed controller (SpeedController). The inputs are the gate enable, the speed estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), the speed reference w_M_ref, and the step of the flying start, and the output is the torque reference. While the gates are blocked, and at the first sampling instant after the release of a sensorless drive (the step nonzero), the controller is not updated, as in VectorControlSystem.', strjoin({ ...
+    'standby', 'Parameters (motulator_export)', 'Parameters of the block standby, collected into the struct p of its MATLAB function.', strjoin({ ...
+    '% Parameters of the MATLAB function: the struct p, [] (None) as NaN', ...
+    'p = struct();', ...
+    'p.sensorless = sensorless;', ...
+    'p.T_s = T_s;', ...
+    'for f_ = fieldnames(p)''', ...
+    '  if isempty(p.(f_{1}))', ...
+    '    p.(f_{1}) = NaN;', ...
+    '  else', ...
+    '    p.(f_{1}) = double(p.(f_{1}));', ...
+    '  end', ...
+    'end', ...
+    'if ~isscalar(p.sensorless) || isnan(p.sensorless)', ...
+    '  error(''sensorless must be a scalar.'');', ...
+    'end', ...
+    'if ~isscalar(p.T_s) || isnan(p.T_s)', ...
+    '  error(''T_s must be a scalar.'');', ...
+    'end'}, newline), { ...
+    'sensorless', 'sensorless: sensorless', 'sensorless'
+    'T_s', 'T_s: T_s', 'T_s'
+    }, 'disp(''mfun_cvc_standby'');'
+    'SpeedController', 'SpeedController (motulator)', '2DOF PI speed controller (SpeedController). The inputs are the standby of the control system, the speed estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), and the speed reference w_M_ref, and the output is the torque reference. In standby (the input standby nonzero), the torque reference is zero and the controller is not updated, as in VectorControlSystem.', strjoin({ ...
     '% Parameters of the MATLAB function: the struct p, [] (None) as NaN', ...
     'p = struct();', ...
     'p.J = J;', ...
@@ -374,13 +349,12 @@ s.control.netlist.masks = { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'
     }, strjoin({ ...
     'disp(''SpeedController'');', ...
-    'port_label(''input'', 1, ''enable'');', ...
-    'port_label(''input'', 2, ''step'');', ...
-    'port_label(''input'', 3, ''w_M'');', ...
-    'port_label(''input'', 4, ''tau_M'');', ...
-    'port_label(''input'', 5, ''w_M_ref'');', ...
+    'port_label(''input'', 1, ''standby'');', ...
+    'port_label(''input'', 2, ''w_M'');', ...
+    'port_label(''input'', 3, ''tau_M'');', ...
+    'port_label(''input'', 4, ''w_M_ref'');', ...
     'port_label(''output'', 1, ''tau_M_ref'');'}, newline)
-    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system. While the step of the flying start of a sensorless drive is nonzero (FlyingStart), the duty ratios are those of the zero vector and the realized voltage is unknown.', strjoin({ ...
+    'PWM', 'PWM (motulator)', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.', strjoin({ ...
     '% MME overmodulation, or MPE', ...
     'mme = strcmp(overmodulation, ''MME'');'}, newline), { ...
     'T_s', 'T_s: Sampling period (s)', 'T_s'
@@ -393,11 +367,10 @@ s.control.netlist.masks = { ...
     'overmodulation', 'overmodulation: Overmodulation, ''MPE'' or ''MME''', 'pwm.overmodulation'
     }, strjoin({ ...
     'disp(''PWM'');', ...
-    'port_label(''input'', 1, ''enable'');', ...
-    'port_label(''input'', 2, ''meas'');', ...
+    'port_label(''input'', 1, ''meas'');', ...
+    'port_label(''input'', 2, ''standby'');', ...
     'port_label(''input'', 3, ''u_c_ref_ab'');', ...
     'port_label(''input'', 4, ''w'');', ...
-    'port_label(''input'', 5, ''step'');', ...
     'port_label(''output'', 1, ''u_c_ab'');', ...
     'port_label(''output'', 2, ''u_c_zoh_ab'');', ...
     'port_label(''output'', 3, ''d_abc'');'}, newline)
@@ -411,18 +384,17 @@ s.control.netlist.masks = { ...
     'cfg', 'cfg: Configuration (CurrentVectorControllerCfg) as a struct', 'cfg'
     }, strjoin({ ...
     'disp(''CurrentVectorController'');', ...
-    'port_label(''input'', 1, ''enable'');', ...
-    'port_label(''input'', 2, ''tau_M_ref'');', ...
-    'port_label(''input'', 3, ''meas'');', ...
-    'port_label(''input'', 4, ''u_c_ab'');', ...
-    'port_label(''input'', 5, ''u_c_zoh_ab'');', ...
+    'port_label(''input'', 1, ''tau_M_ref'');', ...
+    'port_label(''input'', 2, ''meas'');', ...
+    'port_label(''input'', 3, ''u_c_ab'');', ...
+    'port_label(''input'', 4, ''u_c_zoh_ab'');', ...
     'port_label(''output'', 1, ''fbk'');', ...
-    'port_label(''output'', 2, ''ref'');', ...
-    'port_label(''output'', 3, ''step'');'}, newline)
+    'port_label(''output'', 2, ''ref'');'}, newline)
     'modulate', 'Parameters (motulator_export)', 'Parameters of the block modulate, collected into the struct p of its MATLAB function.', strjoin({ ...
     '% Parameters of the MATLAB function: the struct p, [] (None) as NaN', ...
     'p = struct();', ...
     'p.T_s = T_s;', ...
+    'p.sensorless = sensorless;', ...
     'for f_ = fieldnames(p)''', ...
     '  if isempty(p.(f_{1}))', ...
     '    p.(f_{1}) = NaN;', ...
@@ -432,8 +404,12 @@ s.control.netlist.masks = { ...
     'end', ...
     'if ~isscalar(p.T_s) || isnan(p.T_s)', ...
     '  error(''T_s must be a scalar.'');', ...
+    'end', ...
+    'if ~isscalar(p.sensorless) || isnan(p.sensorless)', ...
+    '  error(''sensorless must be a scalar.'');', ...
     'end'}, newline), { ...
     'T_s', 'T_s: T_s', 'T_s'
+    'sensorless', 'sensorless: sensorless', 'sensorless'
     }, 'disp(''mfun_cvc_modulate'');'
     'Monitored signals', 'Parameters (motulator_export)', 'Parameters of the block Monitored signals, collected into the struct p of its MATLAB function.', strjoin({ ...
     '% Parameters of the MATLAB function: the struct p, [] (None) as NaN', ...
@@ -550,31 +526,6 @@ s.control.netlist.masks = { ...
     'single_update', 'single_update: single_update', 'single_update'
     'mme', 'mme: mme', 'mme'
     }, 'disp(''mfun_cvc_pwm_realized_voltage'');'
-    'CurrentVectorController/FlyingStart', 'FlyingStart (motulator)', 'Flying start of a sensorless drive after the release of the gates (FlyingStart): the control system stays in standby (the zero vector and zero torque) at the first sampling instant after the release, and the estimates are initialized from the current response to that zero-voltage period. The output step is 1 while the gates are blocked, 2 at the first sampling instant after the release, and 0 otherwise (also in the sensored mode). The output zero_torque flags the zero torque reference of the standby, while the gates are blocked and at step 2.', strjoin({ ...
-    '% Parameters of the MATLAB function: the struct p, [] (None) as NaN', ...
-    'p = struct();', ...
-    'p.sensorless = sensorless;', ...
-    'p.T_s = T_s;', ...
-    'for f_ = fieldnames(p)''', ...
-    '  if isempty(p.(f_{1}))', ...
-    '    p.(f_{1}) = NaN;', ...
-    '  else', ...
-    '    p.(f_{1}) = double(p.(f_{1}));', ...
-    '  end', ...
-    'end', ...
-    'if ~isscalar(p.sensorless) || isnan(p.sensorless)', ...
-    '  error(''sensorless must be a scalar.'');', ...
-    'end', ...
-    'if ~isscalar(p.T_s) || isnan(p.T_s)', ...
-    '  error(''T_s must be a scalar.'');', ...
-    'end'}, newline), { ...
-    'sensorless', 'sensorless: Sensorless mode (1) or sensored mode (0)', 'cfg.sensorless'
-    'T_s', 'T_s: Sampling period (s)', 'cfg.T_s'
-    }, strjoin({ ...
-    'disp(''FlyingStart'');', ...
-    'port_label(''input'', 1, ''enable'');', ...
-    'port_label(''output'', 1, ''zero_torque'');', ...
-    'port_label(''output'', 2, ''step'');'}, newline)
     'CurrentVectorController/SpeedFluxObserver', 'SpeedFluxObserver (motulator)', 'Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
     '% Default speed estimation poles of create_speed_flux_observer. With J, the', ...
     '% double pole at alpha_o/2 keeps the speed gain about the same.', ...
@@ -614,7 +565,7 @@ s.control.netlist.masks = { ...
     'port_label(''input'', 2, ''u_s_ab'');', ...
     'port_label(''input'', 3, ''u_s_zoh_ab'');', ...
     'port_label(''output'', 1, ''out'');'}, newline)
-    'CurrentVectorController/CurrentReferenceGenerator', 'CurrentReferenceGenerator (motulator)', 'Current reference generator with field weakening (CurrentReferenceGenerator). The inputs are the torque reference, the unlimited voltage reference ref.u_s and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux estimate fbk.psi_R. The outputs are the limited torque reference and the current reference, transformed to the coordinates of the feedback signals (CurrentVectorController.compute_output). The torque reference is zero if the input zero_torque is set (while the gates are blocked and at the flying start). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
+    'CurrentVectorController/CurrentReferenceGenerator', 'CurrentReferenceGenerator (motulator)', 'Current reference generator with field weakening (CurrentReferenceGenerator). The inputs are the torque reference, the unlimited voltage reference ref.u_s and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux estimate fbk.psi_R. The outputs are the limited torque reference and the current reference, transformed to the coordinates of the feedback signals (CurrentVectorController.compute_output). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...
     '% Fields of the machine model par (InductionMachineInvGammaPars) for the', ...
     '% C-Script', ...
     'par_n_p = par.n_p;', ...
@@ -682,11 +633,10 @@ s.control.netlist.masks = { ...
     'T_s', 'T_s: Sampling period (s)', 'cfg.T_s'
     }, strjoin({ ...
     'disp(''CurrentReferenceGenerator'');', ...
-    'port_label(''input'', 1, ''zero_torque'');', ...
-    'port_label(''input'', 2, ''tau_M_ref'');', ...
-    'port_label(''input'', 3, ''u_s'');', ...
-    'port_label(''input'', 4, ''u_dc'');', ...
-    'port_label(''input'', 5, ''psi_R'');', ...
+    'port_label(''input'', 1, ''tau_M_ref'');', ...
+    'port_label(''input'', 2, ''u_s'');', ...
+    'port_label(''input'', 3, ''u_dc'');', ...
+    'port_label(''input'', 4, ''psi_R'');', ...
     'port_label(''output'', 1, ''tau_M'');', ...
     'port_label(''output'', 2, ''i_s'');'}, newline)
     'CurrentVectorController/CurrentController', 'CurrentController (motulator)', '2DOF PI current controller (CurrentController). The inputs are the current reference and the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the integral state), and the output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.', strjoin({ ...

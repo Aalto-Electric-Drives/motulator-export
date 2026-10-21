@@ -39,7 +39,7 @@ from motulator_export.plecs import (
     _sm_control,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
-from motulator_export.plecs._control import VALUES
+from motulator_export.plecs._control import VALUES, mask_values
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
 from motulator_export.simulink._common import write_script
 from motulator_export.simulink._mfunction import (
@@ -384,7 +384,7 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     net, _ = compiled(key)
     block, _ = SYSTEMS[key]
     init = init_script(key, values, flux_map)
-    params = block_params(net.top, init, VALUES)
+    params = block_params(net.top, init, mask_values(block))
     assert net.start(params, start) is None
     closed_loop = run(net)
     n_out = 3 + len(block.signals)

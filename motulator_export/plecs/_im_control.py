@@ -34,7 +34,6 @@ from motulator_export.plecs._control import (
     complex_in,
     complex_out,
     control_block,
-    flying_start,
     get_measurement,
     init_header,
     mask_params,
@@ -341,9 +340,7 @@ def _current_reference_generator() -> CBlock:
         "and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux "
         "estimate fbk.psi_R. The outputs are the limited torque reference and "
         "the current reference, transformed to the coordinates of the feedback signals "
-        "(CurrentVectorController.compute_output). The torque reference is zero if "
-        "the input zero_torque is set (while the gates are blocked and at the flying "
-        "start)." + PAR_DESCRIPTION,
+        "(CurrentVectorController.compute_output)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -379,13 +376,10 @@ def _current_reference_generator() -> CBlock:
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
-        f"double complex psi_R = {complex_in(4)};\n"
-        "/* The torque reference is zero while the gates are blocked and at the\n"
-        " * flying start */\n"
-        "double tau_M_ref_in = (InputSignal(0, 0) > 0.0) ? 0.0 : InputSignal(1, 0);\n"
+        f"double complex psi_R = {complex_in(3)};\n"
         "double tau_M_ref;\n"
         "double complex i_s_ref;\n"
-        "im_reference_gen_compute_output(&self, tau_M_ref_in, cabs(psi_R),\n"
+        "im_reference_gen_compute_output(&self, InputSignal(0, 0), cabs(psi_R),\n"
         "                                &i_s_ref, &tau_M_ref);\n"
         "/* Transform the reference to the same coordinates as the feedback */\n"
         "i_s_ref = cexp(I * carg(psi_R)) * i_s_ref;\n"
@@ -393,36 +387,24 @@ def _current_reference_generator() -> CBlock:
     )
     update = (
         "/* Field weakening based on the unlimited voltage reference */\n"
-        f"im_reference_gen_update(&self, T_s, {complex_in(2)},\n"
-        "                        InputSignal(3, 0));\n"
+        f"im_reference_gen_update(&self, T_s, {complex_in(1)},\n"
+        "                        InputSignal(2, 0));\n"
     )
     return CBlock(
         "CurrentReferenceGenerator",
-        [
-            Port("zero_torque", 1),
-            Port("tau_M_ref", 1),
-            Port("u_s", 2),
-            Port("u_dc", 1),
-            Port("psi_R", 2),
-        ],
+        [Port("tau_M_ref", 1), Port("u_s", 2), Port("u_dc", 1), Port("psi_R", 2)],
         [Port("tau_M", 1), Port("i_s", 2)],
         SIGNALS.class_code(
             "IMCurrentReferenceGenerator", start, output, update, SAMPLING
         ),
         params,
         SIGNALS.sfunction("current_reference_generator"),
-        feedthrough=[1, 1, 0, 0, 1],
+        feedthrough=[1, 0, 0, 1],
         mask=mask,
         mcode=MCode(
             start=M_PAR + "self = im_reference_gen_init(par, p.psi_s_nom, p.i_s_max, "
             "p.w_s_nom, p.k_u, p.k_fw);\n",
-            output="% The torque reference is zero while the gates are blocked and at "
-            "the\n"
-            "% flying start\n"
-            "if zero_torque > 0\n"
-            "    tau_M_ref = 0;\n"
-            "end\n"
-            "[i_s_ref, tau_M] = im_reference_gen_compute_output(self, "
+            output="[i_s_ref, tau_M] = im_reference_gen_compute_output(self, "
             "tau_M_ref, abs(psi_R));\n"
             "% Transform the reference to the same coordinates as the feedback\n"
             "i_s = exp(1i*angle(psi_R))*i_s_ref;\n",
@@ -535,31 +517,23 @@ def _current_vector_controller() -> Subsystem:
     return Subsystem(
         "CurrentVectorController",
         [
-            Port(ENABLE, 1),
             Port("tau_M_ref", 1),
             SIGNALS.port("meas"),
             Port("u_c_ab", 2),
             Port("u_c_zoh_ab", 2),
         ],
-        [SIGNALS.port("fbk"), SIGNALS.port("ref"), Port("step", 1)],
+        [SIGNALS.port("fbk"), SIGNALS.port("ref")],
         [
-            flying_start(SIGNALS),
-            Tag("Goto zero_torque", "zero_torque", 1, goto=True),
             _speed_flux_observer(),
             Tag("From u_s", "u_s", 2, goto=False),
             SIGNALS.selector("meas", "u_dc"),
             SIGNALS.selector("fbk", "psi_R", complex_=True),
-            Tag("From zero_torque", "zero_torque", 1, goto=False),
             _current_reference_generator(),
             _current_controller(),
             Mux("Mux ref", [Port("tau_M", 1), Port("i_s", 2), Port("u_s", 2)]),
             Tag("Goto u_s", "u_s", 2, goto=True),
         ],
         [
-            (ENABLE, "FlyingStart:enable"),
-            ("FlyingStart:step", "step"),
-            ("FlyingStart:zero_torque", "Goto zero_torque"),
-            ("From zero_torque", f"{crg}:zero_torque"),
             ("meas", "SpeedFluxObserver:meas"),
             ("u_c_ab", "SpeedFluxObserver:u_s_ab"),
             ("u_c_zoh_ab", "SpeedFluxObserver:u_s_zoh_ab"),
@@ -579,19 +553,15 @@ def _current_vector_controller() -> Subsystem:
             ("Mux ref:y", "ref"),
         ],
         columns=[
-            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab", ENABLE],
-            ["FlyingStart"],
-            ["SpeedFluxObserver", "Goto zero_torque"],
-            ["From zero_torque", "From u_s", "meas.u_dc", "fbk.psi_R"],
+            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab"],
+            ["SpeedFluxObserver"],
+            ["From u_s", "meas.u_dc", "fbk.psi_R"],
             [crg],
             ["CurrentController"],
             ["Mux ref", "Goto u_s"],
-            ["ref", "fbk", "step"],
+            ["ref", "fbk"],
         ],
         align={
-            "FlyingStart:enable": ENABLE,
-            "From zero_torque": f"{crg}:zero_torque",
-            "Goto zero_torque": "FlyingStart:zero_torque",
             "tau_M_ref": f"{crg}:tau_M_ref",
             "From u_s": f"{crg}:u_s",
             "meas.u_dc:y": f"{crg}:u_dc+1",
@@ -608,7 +578,6 @@ def _current_vector_controller() -> Subsystem:
             "Mux ref:i_s": "over:CurrentController:0",
             "meas.u_dc:u": "early",
         },
-        tags=[ENABLE],
         mask=mask,
     )
 

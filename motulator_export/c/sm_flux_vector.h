@@ -15,9 +15,9 @@
  *
  * The machine model parameters correspond to SynchronousMachinePars, i.e., a
  * machine without magnetic saturation. The control loop follows motulator: the
- * output function is free of side effects (apart from workspace variables) and
- * all states are updated in the update function, in the same order as in
- * motulator.
+ * output function is free of side effects (apart from workspace variables and the
+ * flying start of the observer) and all states are updated in the update
+ * function, in the same order as in motulator.
  */
 
 #ifndef MOTULATOR_SM_FLUX_VECTOR_H
@@ -47,6 +47,7 @@ typedef struct {
     double theta_m;        /* Electrical rotor angle estimate */
     double psi_f;          /* PM-flux linkage estimate */
     double h;              /* Weight of the external position error signal */
+    int caught;            /* Estimates initialized by a flying start */
 } ObserverOutputs;
 
 /* Flux observer in estimated rotor coordinates */
@@ -64,6 +65,9 @@ typedef struct {
 typedef struct {
     SpeedObserver speed_observer;
     FluxObserver flux_observer;
+    /* Current at the start of the latest sampling period with an unknown voltage,
+     * NAN if the voltage is known (see flux_observer_flying_start) */
+    double complex i_s_ab;
 } SpeedFluxObserver;
 
 /* Flux and torque reference generator based on precomputed lookup tables */
@@ -117,12 +121,12 @@ typedef struct {
 } Measurements;
 
 /* Vector control system (VectorControlSystem). While the gates are blocked (the gate
- * enable is zero, see ControlSystem.set_enable), the converter voltage is unknown:
- * the observer runs on its open-circuit model, the controller computes its output
- * for zero torque, and the speed controller is not updated. After the release, a
- * sensorless drive catches the rotating machine with a flying start: the first
- * output is the zero vector, and the estimates are initialized from its current
- * response (speed_flux_observer_catch). */
+ * enable is zero, see ControlSystem.set_enable), the control system is in standby:
+ * the converter voltage is unknown, so the observer runs on its open-circuit model,
+ * the controller computes its output for zero torque, and the speed controller is
+ * not updated. A sensorless drive stays in standby with the zero vector also at the
+ * first sampling instant after the release, and the observer catches the rotating
+ * machine from the current response (flux_observer_flying_start). */
 typedef struct {
     PWM pwm;
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
@@ -132,10 +136,7 @@ typedef struct {
     int enabled; /* Gate enable */
     ObserverOutputs fbk;
     References ref;
-    /* Flying start after the release (VectorControlSystem.get_feedback) */
-    int catch_step;              /* 1 with blocked gates, 2 at the first step after */
-    double complex i_c_ab_catch; /* Current at the start of the zero-voltage period */
-    double T_s_catch;            /* Length of the zero-voltage period */
+    int release_step; /* First sampling instant after the release */
 } VectorControlSystem;
 
 /* Flux-vector controller configuration (FluxVectorControllerCfg). As in motulator,
@@ -199,7 +200,8 @@ static void vector_control_system_update(VectorControlSystem *self);
 #define FBK_theta_m 19
 #define FBK_psi_f 20
 #define FBK_h 21
-#define FBK_WIDTH 22
+#define FBK_caught 22
+#define FBK_WIDTH 23
 
 #define REF_psi_s 0
 #define REF_tau_M 1

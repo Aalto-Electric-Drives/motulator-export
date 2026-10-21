@@ -47,10 +47,8 @@ eps_f = -(1 - h)*real(ratio);
 % Rotor speed and the angular speed of the coordinate system
 w_m = par.n_p*w_M;
 w_c = w_m + self.k_theta*par.n_p*eps;
-% Voltage vector in the observer coordinates, or the open-circuit voltage of the
-% model if the voltage is unknown (NaN, blocked gates): the back-EMF of the flux
-% estimate at the rotor speed, averaged over the sampling period (that of the
-% previous period), and the resistive voltage drop
+% Voltage vector in the observer coordinates, or the open-circuit voltage if unknown
+% (NaN, blocked gates), averaged over a period of the length of the previous one
 if ~isnan(real(u_s_ab))
     u_s_zoh = exp(-1i*theta_c)*u_s_ab;
 elseif self.T_s_prev > 0
@@ -64,7 +62,7 @@ tau_M = 1.5*par.n_p*imag(i_s*conj(self.psi_s));
 out = struct('i_s', i_s, 'u_s', complex(0), 'u_s_zoh', u_s_zoh, ...
     'psi_s', self.psi_s, 'e_o', e_o, 'eps', eps, 'eps_f', eps_f, 'psi_a', psi_a, ...
     'tau_M', tau_M, 'w_c', w_c, 'w_m', w_m, 'w_M', w_M, 'theta_c', theta_c, ...
-    'theta_m', self.theta_m, 'psi_f', par.psi_f, 'h', h);
+    'theta_m', self.theta_m, 'psi_f', par.psi_f, 'h', h, 'caught', false);
 end
 
 function self = flux_observer_update(self, T_s, out)
@@ -121,6 +119,31 @@ w_m = sign_w*abs(e_s_ab)/par.psi_f;
 theta_m = wrap(angle(e_s_ab) - sign_w*pi/2 + w_m*T_s*L.L_qq/(2*L.L_dd));
 w_M = w_m/par.n_p;
 psi_s = complex(psi_s_dq(par, exp(-1i*theta_m)*i_s_ab));
+end
+
+function [self, i_s_ab_prev, caught, w_M] = flux_observer_flying_start(self, ...
+    i_s_ab_prev, u_s_ab, i_s_ab, h, w_M)
+%FLUX_OBSERVER_FLYING_START Flying start (SpeedFluxObserver.compute_output): the
+%   current is stored in i_s_ab_prev while the voltage u_s_ab is unknown (NaN), and
+%   at the first sampling instant with a known voltage, the estimates are
+%   initialized from the current response to the last period with an unknown
+%   voltage, in which the control system applies the zero vector after the release
+%   of the gates (flux_observer_catch), unless h = 1.
+caught = false;
+if isnan(real(u_s_ab))
+    i_s_ab_prev = i_s_ab;
+elseif ~isnan(real(i_s_ab_prev))
+    if h < 1
+        [caught, w_M_init, theta_m, psi_s] = flux_observer_catch(self.par, ...
+            i_s_ab - i_s_ab_prev, i_s_ab, self.T_s_prev, w_M);
+        if caught
+            w_M = w_M_init;
+            self.theta_m = theta_m;
+            self.psi_s = psi_s;
+        end
+    end
+    i_s_ab_prev = complex(NaN);
+end
 end
 
 function self = reference_gen_init(par, psi_s_min, psi_s_max, k_u, k_mtpv, luts)
