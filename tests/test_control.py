@@ -25,6 +25,7 @@ import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
 import numpy as np
 import pytest
+from motulator.common.utils import complex2abc
 from motulator.drive import model
 from motulator.drive.control._base import VectorControlSystem
 from motulator.grid import control as grid_control
@@ -208,6 +209,23 @@ def test_flux_vector_control(
         return compare(build, model.Simulation, sfun, signals, 0.3)
 
     check(compiled, "fvc", values, run, SM_INPUTS)
+
+
+def test_interrupted_flying_start(compiled: Compiled) -> None:
+    """A new blocking of the gates right after the release should cancel the pending
+    catch of the flying start in the netlist as in the monolithic control system."""
+    build, _ = sm_system(True, 0.0, True)
+    values, _ = _sm.export_values(build()[1])
+    enabled = [0, 1, 0, 0, 1, 1, 1, 1]
+    i_s_ab = [0j, 0j, -1j, 0j, 0j, -1j, -2j, -2j]
+
+    def run(net: Netlist) -> list[list[float]]:
+        return [
+            [e, 100.0, *complex2abc(i), 540.0, 0.0]
+            for e, i in zip(enabled, i_s_ab, strict=True)
+        ]
+
+    check(compiled, "fvc", values, run, None)
 
 
 def test_gradnet_flux_vector_control(compiled: Compiled) -> None:

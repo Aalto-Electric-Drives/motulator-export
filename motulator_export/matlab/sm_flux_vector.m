@@ -95,12 +95,16 @@ function [caught, w_M, theta_m, psi_s] = flux_observer_catch(par, delta_i_s_ab, 
 %   (SpeedFluxObserver.catch): the back-EMF drives the current along the negative q
 %   axis of the rotor, which gives the rotor angle and the speed magnitude, the
 %   direction of rotation being taken from the speed estimate w_M, which is updated
-%   with the angle and flux estimates. If the back-EMF is below the resistive
-%   voltage drop (standstill) or the machine has no magnets, caught is false and the
-%   estimates are not valid.
+%   with the angle and flux estimates. If the back-EMF estimate does not exceed the
+%   resistive voltage drop of the current (standstill, or a current that has not
+%   decayed) or the machine has no magnets, caught is false and the estimates are
+%   not valid.
 L = incr_ind_mat(par, complex(0));
 e_s_ab = -L.L_qq*delta_i_s_ab/T_s; % Back-EMF
-caught = abs(e_s_ab) > par.R_s*abs(i_s_ab) && par.psi_f ~= 0;
+% The resistive decay of a residual current (the d-axis current through L_d) must
+% not be taken for the back-EMF
+i_max = max(abs(i_s_ab), abs(i_s_ab - delta_i_s_ab));
+caught = abs(e_s_ab) > par.R_s*i_max*max(L.L_qq/L.L_dd, 1) && par.psi_f ~= 0;
 theta_m = 0;
 psi_s = complex(0);
 if ~caught

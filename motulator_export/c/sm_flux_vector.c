@@ -180,9 +180,9 @@ static void speed_flux_observer_update(SpeedFluxObserver *self, double T_s,
  * the back-EMF drives the current along the negative q axis of the rotor, which
  * gives the rotor angle and the speed magnitude, the direction of rotation being
  * taken from the speed estimate w_M, which is updated with the angle and flux
- * estimates. Returns 0 if the back-EMF is below the resistive voltage drop
- * (standstill) or the machine has no magnets, when the estimates are left
- * unchanged. */
+ * estimates. Returns 0 if the back-EMF estimate does not exceed the resistive
+ * voltage drop of the current (standstill, or a current that has not decayed) or
+ * the machine has no magnets, when the estimates are left unchanged. */
 static int flux_observer_catch(const SynchronousMachinePars *par,
                                double complex delta_i_s_ab, double complex i_s_ab,
                                double T_s, double *w_M, double *theta_m,
@@ -190,7 +190,11 @@ static int flux_observer_catch(const SynchronousMachinePars *par,
 {
     IncrIndMat L = incr_ind_mat(par, 0.0);
     double complex e_s_ab = -L.L_qq * delta_i_s_ab / T_s; /* Back-EMF */
-    if (cabs(e_s_ab) <= par->R_s * cabs(i_s_ab) || par->psi_f == 0.0) {
+    /* The resistive decay of a residual current (the d-axis current through L_d)
+     * must not be taken for the back-EMF */
+    double i_max = fmax(cabs(i_s_ab), cabs(i_s_ab - delta_i_s_ab));
+    if (cabs(e_s_ab) <= par->R_s * i_max * fmax(L.L_qq / L.L_dd, 1.0)
+        || par->psi_f == 0.0) {
         return 0;
     }
     double sign = (*w_M >= 0.0) ? 1.0 : -1.0;

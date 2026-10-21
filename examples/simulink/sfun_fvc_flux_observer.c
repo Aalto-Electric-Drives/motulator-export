@@ -210,10 +210,12 @@ static void mdlOutputs(SimStruct *S, int_T tid)
         i_s_ab_start = meas.i_c_ab;
         catching = 1;
     } else if (catching) {
-        catching = 0;
-        init = flux_observer_catch(&self.par, meas.i_c_ab - i_s_ab_start,
-                                   meas.i_c_ab, T_s, &w_M, &self.theta_m,
-                                   &self.psi_s);
+        catching = 0; /* Cancelled if the gates are blocked again */
+        if (InputSignal(0, 0) == 0.0) {
+            init = flux_observer_catch(&self.par, meas.i_c_ab - i_s_ab_start,
+                                       meas.i_c_ab, T_s, &w_M, &self.theta_m,
+                                       &self.psi_s);
+        }
     }
     OutputSignal(0, 0) = init;
     OutputSignal(0, 1) = w_M;
