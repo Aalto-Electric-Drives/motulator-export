@@ -68,15 +68,15 @@ s.control.netlist.blocks = { ...
     'Goto enable', 'Goto', [110.0 53.0 180.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto w_M_ref', 'Goto', [110.0 108.0 180.0 122.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'SpeedController/enable', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
-    'SpeedController/step', 'Inport', [40.0 98.0 70.0 112.0], {'Port', '2'}
-    'SpeedController/w_M', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
-    'SpeedController/tau_M', 'Inport', [40.0 168.0 70.0 182.0], {'Port', '4'}
-    'SpeedController/w_M_ref', 'Inport', [40.0 203.0 70.0 217.0], {'Port', '5'}
-    'SpeedController/tau_M_ref', 'Outport', [455.0 108.0 485.0 122.0], {'Port', '1'}
-    'SpeedController/mfun_cvc_speed_controller', 'MATLAB Function', [270.0 40.0 410.0 190.0], {'mfun_cvc_speed_controller', 'p.T_s', [1.0]}
+    'SpeedController/step', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'SpeedController/w_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'SpeedController/tau_M', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
+    'SpeedController/w_M_ref', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '5'}
+    'SpeedController/tau_M_ref', 'Outport', [520.0 108.0 550.0 122.0], {'Port', '1'}
+    'SpeedController/mfun_cvc_speed_controller', 'MATLAB Function', [335.0 40.0 475.0 190.0], {'mfun_cvc_speed_controller', 'p.T_s', [1.0]}
     'SpeedController/Delay enable', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'p.T_s'}
-    'SpeedController/Delay step', 'UnitDelay', [133.0 90.0 168.0 120.0], {'SampleTime', 'p.T_s'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 140.0 168.0 170.0], {'SampleTime', 'p.T_s'}
+    'SpeedController/Delay step', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'p.T_s'}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 130.0 168.0 160.0], {'SampleTime', 'p.T_s'}
     'PWM/enable', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '1'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
@@ -130,22 +130,22 @@ s.control.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [360.0 245.0 410.0 275.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Subsystem', [470.0 175.0 610.0 235.0], {'ContentPreviewEnabled', 'off'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/eps', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 98.0 70.0 112.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [410.0 48.0 440.0 62.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [410.0 83.0 440.0 97.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [210.0 40.0 350.0 100.0], {'mfun_cvc_speed_observer', 'p.T_s', [1.0 1.0]}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 48.0 520.0 62.0], {'Port', '1'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 83.0 520.0 97.0], {'Port', '2'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_cvc_speed_observer', 'p.T_s', [1.0 1.0]}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'p.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [113.0 90.0 148.0 120.0], {'SampleTime', 'p.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'p.T_s'}
     'CurrentVectorController/CurrentReferenceGenerator/zero_torque', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentReferenceGenerator/tau_M_ref', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentReferenceGenerator/u_s', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
-    'CurrentVectorController/CurrentReferenceGenerator/u_dc', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '4'}
-    'CurrentVectorController/CurrentReferenceGenerator/psi_R', 'Inport', [40.0 193.0 70.0 207.0], {'Port', '5'}
-    'CurrentVectorController/CurrentReferenceGenerator/tau_M', 'Outport', [440.0 71.0 470.0 85.0], {'Port', '1'}
-    'CurrentVectorController/CurrentReferenceGenerator/i_s', 'Outport', [440.0 145.0 470.0 159.0], {'Port', '2'}
-    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [255.0 40.0 395.0 190.0], {'mfun_cvc_current_reference_generator', 'p.T_s', [1.0 2.0]}
+    'CurrentVectorController/CurrentReferenceGenerator/u_dc', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
+    'CurrentVectorController/CurrentReferenceGenerator/psi_R', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '5'}
+    'CurrentVectorController/CurrentReferenceGenerator/tau_M', 'Outport', [520.0 71.0 550.0 85.0], {'Port', '1'}
+    'CurrentVectorController/CurrentReferenceGenerator/i_s', 'Outport', [520.0 145.0 550.0 159.0], {'Port', '2'}
+    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [335.0 40.0 475.0 190.0], {'mfun_cvc_current_reference_generator', 'p.T_s', [1.0 2.0]}
     'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'p.T_s'}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [133.0 150.0 168.0 180.0], {'SampleTime', 'p.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'p.T_s'}
     };
 s.control.netlist.aligns = { ...
     '', 'fbk.w_M', 'Inport', 1.0, 'From fbk', 'Outport', 1.0, 0.0
@@ -170,8 +170,9 @@ s.control.netlist.aligns = { ...
     '', 'Goto w_M_ref', 'Inport', 1.0, 'w_M_ref', 'Outport', 1.0, 0.0
     'SpeedController', 'tau_M_ref', 'Inport', 1.0, 'mfun_cvc_speed_controller', 'Outport', 1.0, 0.0
     'SpeedController', 'Delay enable', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 1.0, 0.0
+    'SpeedController', 'Delay tau_M', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 4.0, 0.0
+    'SpeedController', 'Delay step', 'Outport', 1.0, 'mfun_cvc_speed_controller', 'Inport', 2.0, 0.0
     'SpeedController', 'enable', 'Outport', 1.0, 'Delay enable', 'Inport', 1.0, 0.0
-    'SpeedController', 'step', 'Outport', 1.0, 'Delay step', 'Inport', 1.0, 0.0
     'PWM', 'get_realized_voltage', 'Inport', 4.0, 'compute_output', 'Outport', 1.0, -45.0
     'PWM', 'u_c_ab', 'Inport', 1.0, 'get_realized_voltage', 'Outport', 1.0, 0.0
     'PWM', 'd_abc', 'Inport', 1.0, 'compute_output', 'Outport', 1.0, 0.0
@@ -206,13 +207,13 @@ s.control.netlist.aligns = { ...
     'CurrentVectorController/SpeedFluxObserver', 'u_s_ab', 'Outport', 1.0, 'FluxObserver', 'Inport', 2.0, 0.0
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'w_M', 'Inport', 1.0, 'mfun_cvc_speed_observer', 'Outport', 1.0, 0.0
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Delay eps', 'Outport', 1.0, 'mfun_cvc_speed_observer', 'Inport', 1.0, 0.0
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M', 'Outport', 1.0, 'mfun_cvc_speed_observer', 'Inport', 2.0, 0.0
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'eps', 'Outport', 1.0, 'Delay eps', 'Inport', 1.0, 0.0
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'tau_M', 'Outport', 1.0, 'Delay tau_M', 'Inport', 1.0, 0.0
     'CurrentVectorController/CurrentReferenceGenerator', 'tau_M', 'Inport', 1.0, 'mfun_cvc_current_reference_generator', 'Outport', 1.0, 0.0
     'CurrentVectorController/CurrentReferenceGenerator', 'i_s', 'Inport', 1.0, 'mfun_cvc_current_reference_generator', 'Outport', 2.0, 0.0
     'CurrentVectorController/CurrentReferenceGenerator', 'zero_torque', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 1.0, 0.0
     'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_s', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 3.0, 0.0
-    'CurrentVectorController/CurrentReferenceGenerator', 'u_dc', 'Outport', 1.0, 'Delay u_dc', 'Inport', 1.0, 0.0
+    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc', 'Outport', 1.0, 'mfun_cvc_current_reference_generator', 'Inport', 4.0, 0.0
     };
 s.control.netlist.lines = { ...
     '', 'From SpeedController.enable/1', 'SpeedController/1', []
@@ -254,12 +255,12 @@ s.control.netlist.lines = { ...
     '', 'w_M_ref/1', 'Goto w_M_ref/1', []
     'SpeedController', 'enable/1', 'Delay enable/1', []
     'SpeedController', 'Delay enable/1', 'mfun_cvc_speed_controller/1', []
-    'SpeedController', 'step/1', 'Delay step/1', []
-    'SpeedController', 'Delay step/1', 'mfun_cvc_speed_controller/2', {'x', 205.0}
-    'SpeedController', 'w_M/1', 'mfun_cvc_speed_controller/3', {'x', 220.0}
+    'SpeedController', 'step/1', 'Delay step/1', {'x', 190.0}
+    'SpeedController', 'Delay step/1', 'mfun_cvc_speed_controller/2', []
+    'SpeedController', 'w_M/1', 'mfun_cvc_speed_controller/3', {'x', 285.0}
     'SpeedController', 'tau_M/1', 'Delay tau_M/1', {'x', 95.0}
-    'SpeedController', 'Delay tau_M/1', 'mfun_cvc_speed_controller/4', {'x', 190.0}
-    'SpeedController', 'w_M_ref/1', 'mfun_cvc_speed_controller/5', {'x', 235.0}
+    'SpeedController', 'Delay tau_M/1', 'mfun_cvc_speed_controller/4', []
+    'SpeedController', 'w_M_ref/1', 'mfun_cvc_speed_controller/5', {'x', 300.0}
     'SpeedController', 'mfun_cvc_speed_controller/1', 'tau_M_ref/1', []
     'PWM', 'From get_realized_voltage.enable/1', 'get_realized_voltage/1', []
     'PWM', 'meas/1', 'compute_output/1', {'x', 230.0}
@@ -314,17 +315,17 @@ s.control.netlist.lines = { ...
     'CurrentVectorController/SpeedFluxObserver', 'fbk.tau_M/1', 'SpeedObserver/2', {'x', 435.0}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'eps/1', 'Delay eps/1', []
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Delay eps/1', 'mfun_cvc_speed_observer/1', []
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'tau_M/1', 'Delay tau_M/1', []
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M/1', 'mfun_cvc_speed_observer/2', {'x', 175.0}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'tau_M/1', 'Delay tau_M/1', {'x', 175.0}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M/1', 'mfun_cvc_speed_observer/2', []
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_cvc_speed_observer/1', 'w_M/1', []
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_cvc_speed_observer/2', 'tau_L/1', {'x', 375.0}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_cvc_speed_observer/2', 'tau_L/1', {'x', 455.0}
     'CurrentVectorController/CurrentReferenceGenerator', 'zero_torque/1', 'mfun_cvc_current_reference_generator/1', []
-    'CurrentVectorController/CurrentReferenceGenerator', 'tau_M_ref/1', 'mfun_cvc_current_reference_generator/2', {'x', 190.0}
+    'CurrentVectorController/CurrentReferenceGenerator', 'tau_M_ref/1', 'mfun_cvc_current_reference_generator/2', {'x', 285.0}
     'CurrentVectorController/CurrentReferenceGenerator', 'u_s/1', 'Delay u_s/1', {'x', 95.0}
     'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_s/1', 'mfun_cvc_current_reference_generator/3', []
-    'CurrentVectorController/CurrentReferenceGenerator', 'u_dc/1', 'Delay u_dc/1', []
-    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc/1', 'mfun_cvc_current_reference_generator/4', {'x', 205.0}
-    'CurrentVectorController/CurrentReferenceGenerator', 'psi_R/1', 'mfun_cvc_current_reference_generator/5', {'x', 220.0}
+    'CurrentVectorController/CurrentReferenceGenerator', 'u_dc/1', 'Delay u_dc/1', {'x', 190.0}
+    'CurrentVectorController/CurrentReferenceGenerator', 'Delay u_dc/1', 'mfun_cvc_current_reference_generator/4', []
+    'CurrentVectorController/CurrentReferenceGenerator', 'psi_R/1', 'mfun_cvc_current_reference_generator/5', {'x', 300.0}
     'CurrentVectorController/CurrentReferenceGenerator', 'mfun_cvc_current_reference_generator/1', 'tau_M/1', []
     'CurrentVectorController/CurrentReferenceGenerator', 'mfun_cvc_current_reference_generator/2', 'i_s/1', []
     };

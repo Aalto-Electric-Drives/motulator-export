@@ -101,11 +101,11 @@ s.control.netlist.blocks = { ...
     'ObserverBasedGridFormingController/Goto enable', 'Goto', [110.0 508.0 180.0 522.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/u_c', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/i_c', 'Inport', [40.0 128.0 70.0 142.0], {'Port', '3'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref_lim', 'Outport', [410.0 78.0 440.0 92.0], {'Port', '1'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/mfun_gfm_power_reference_limiter', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_gfm_power_reference_limiter', 'p.T_s', [1.0]}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/i_c', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref_lim', 'Outport', [490.0 78.0 520.0 92.0], {'Port', '1'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/mfun_gfm_power_reference_limiter', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_gfm_power_reference_limiter', 'p.T_s', [1.0]}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay u_c', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'p.T_s'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay i_c', 'UnitDelay', [133.0 120.0 168.0 150.0], {'SampleTime', 'p.T_s'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay i_c', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'p.T_s'}
     };
 s.control.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedGridFormingController', 'Outport', 1.0, -45.0
@@ -152,7 +152,7 @@ s.control.netlist.aligns = { ...
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'p_g_ref_lim', 'Inport', 1.0, 'mfun_gfm_power_reference_limiter', 'Outport', 1.0, 0.0
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'p_g_ref', 'Outport', 1.0, 'mfun_gfm_power_reference_limiter', 'Inport', 1.0, 0.0
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay u_c', 'Outport', 1.0, 'mfun_gfm_power_reference_limiter', 'Inport', 2.0, 0.0
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'i_c', 'Outport', 1.0, 'Delay i_c', 'Inport', 1.0, 0.0
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay i_c', 'Outport', 1.0, 'mfun_gfm_power_reference_limiter', 'Inport', 3.0, 0.0
     };
 s.control.netlist.lines = { ...
     '', 'From PWM.enable/1', 'PWM/1', []
@@ -228,8 +228,8 @@ s.control.netlist.lines = { ...
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'p_g_ref/1', 'mfun_gfm_power_reference_limiter/1', []
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'u_c/1', 'Delay u_c/1', {'x', 95.0}
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay u_c/1', 'mfun_gfm_power_reference_limiter/2', []
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'i_c/1', 'Delay i_c/1', []
-    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay i_c/1', 'mfun_gfm_power_reference_limiter/3', {'x', 190.0}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'i_c/1', 'Delay i_c/1', {'x', 190.0}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Delay i_c/1', 'mfun_gfm_power_reference_limiter/3', []
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'mfun_gfm_power_reference_limiter/1', 'p_g_ref_lim/1', []
     };
 s.control.netlist.masks = { ...

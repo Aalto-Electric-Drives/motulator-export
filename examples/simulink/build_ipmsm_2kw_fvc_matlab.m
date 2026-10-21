@@ -68,15 +68,15 @@ s.control.netlist.blocks = { ...
     'Goto enable', 'Goto', [110.0 53.0 180.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto w_M_ref', 'Goto', [110.0 108.0 180.0 122.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'SpeedController/enable', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
-    'SpeedController/step', 'Inport', [40.0 98.0 70.0 112.0], {'Port', '2'}
-    'SpeedController/w_M', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
-    'SpeedController/tau_M', 'Inport', [40.0 168.0 70.0 182.0], {'Port', '4'}
-    'SpeedController/w_M_ref', 'Inport', [40.0 203.0 70.0 217.0], {'Port', '5'}
-    'SpeedController/tau_M_ref', 'Outport', [455.0 108.0 485.0 122.0], {'Port', '1'}
-    'SpeedController/mfun_fvc_speed_controller', 'MATLAB Function', [270.0 40.0 410.0 190.0], {'mfun_fvc_speed_controller', 'p.T_s', [1.0]}
+    'SpeedController/step', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'SpeedController/w_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'SpeedController/tau_M', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
+    'SpeedController/w_M_ref', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '5'}
+    'SpeedController/tau_M_ref', 'Outport', [520.0 108.0 550.0 122.0], {'Port', '1'}
+    'SpeedController/mfun_fvc_speed_controller', 'MATLAB Function', [335.0 40.0 475.0 190.0], {'mfun_fvc_speed_controller', 'p.T_s', [1.0]}
     'SpeedController/Delay enable', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'p.T_s'}
-    'SpeedController/Delay step', 'UnitDelay', [133.0 90.0 168.0 120.0], {'SampleTime', 'p.T_s'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 140.0 168.0 170.0], {'SampleTime', 'p.T_s'}
+    'SpeedController/Delay step', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'p.T_s'}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 130.0 168.0 160.0], {'SampleTime', 'p.T_s'}
     'PWM/enable', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '1'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
@@ -133,14 +133,14 @@ s.control.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [375.0 315.0 425.0 345.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[15]', 'InputPortWidth', '22'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Subsystem', [520.0 205.0 660.0 295.0], {'ContentPreviewEnabled', 'off'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/eps', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/init', 'Inport', [40.0 98.0 70.0 112.0], {'Port', '2'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 148.0 70.0 162.0], {'Port', '3'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_fvc_speed_observer', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_fvc_speed_observer', 'p.T_s', [1.0 1.0]}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'p.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [113.0 90.0 148.0 120.0], {'SampleTime', 'p.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [113.0 140.0 148.0 170.0], {'SampleTime', 'p.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/init', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 55.0 520.0 69.0], {'Port', '1'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 101.0 520.0 115.0], {'Port', '2'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_fvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_fvc_speed_observer', 'p.T_s', [1.0 1.0]}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'p.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'p.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'p.T_s'}
     };
 s.control.netlist.aligns = { ...
     '', 'fbk.w_M', 'Inport', 1.0, 'From fbk', 'Outport', 1.0, 0.0
@@ -165,8 +165,9 @@ s.control.netlist.aligns = { ...
     '', 'Goto w_M_ref', 'Inport', 1.0, 'w_M_ref', 'Outport', 1.0, 0.0
     'SpeedController', 'tau_M_ref', 'Inport', 1.0, 'mfun_fvc_speed_controller', 'Outport', 1.0, 0.0
     'SpeedController', 'Delay enable', 'Outport', 1.0, 'mfun_fvc_speed_controller', 'Inport', 1.0, 0.0
+    'SpeedController', 'Delay tau_M', 'Outport', 1.0, 'mfun_fvc_speed_controller', 'Inport', 4.0, 0.0
+    'SpeedController', 'Delay step', 'Outport', 1.0, 'mfun_fvc_speed_controller', 'Inport', 2.0, 0.0
     'SpeedController', 'enable', 'Outport', 1.0, 'Delay enable', 'Inport', 1.0, 0.0
-    'SpeedController', 'step', 'Outport', 1.0, 'Delay step', 'Inport', 1.0, 0.0
     'PWM', 'get_realized_voltage', 'Inport', 4.0, 'compute_output', 'Outport', 1.0, -45.0
     'PWM', 'u_c_ab', 'Inport', 1.0, 'get_realized_voltage', 'Outport', 1.0, 0.0
     'PWM', 'd_abc', 'Inport', 1.0, 'compute_output', 'Outport', 1.0, 0.0
@@ -202,9 +203,9 @@ s.control.netlist.aligns = { ...
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'w_M', 'Inport', 1.0, 'mfun_fvc_speed_observer', 'Outport', 1.0, 0.0
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'tau_L', 'Inport', 1.0, 'mfun_fvc_speed_observer', 'Outport', 2.0, 0.0
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay eps', 'Outport', 1.0, 'mfun_fvc_speed_observer', 'Inport', 1.0, 0.0
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M', 'Outport', 1.0, 'mfun_fvc_speed_observer', 'Inport', 3.0, 0.0
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay init', 'Outport', 1.0, 'mfun_fvc_speed_observer', 'Inport', 2.0, 0.0
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'eps', 'Outport', 1.0, 'Delay eps', 'Inport', 1.0, 0.0
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'init', 'Outport', 1.0, 'Delay init', 'Inport', 1.0, 0.0
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'tau_M', 'Outport', 1.0, 'Delay tau_M', 'Inport', 1.0, 0.0
     };
 s.control.netlist.lines = { ...
     '', 'From SpeedController.enable/1', 'SpeedController/1', []
@@ -246,12 +247,12 @@ s.control.netlist.lines = { ...
     '', 'w_M_ref/1', 'Goto w_M_ref/1', []
     'SpeedController', 'enable/1', 'Delay enable/1', []
     'SpeedController', 'Delay enable/1', 'mfun_fvc_speed_controller/1', []
-    'SpeedController', 'step/1', 'Delay step/1', []
-    'SpeedController', 'Delay step/1', 'mfun_fvc_speed_controller/2', {'x', 205.0}
-    'SpeedController', 'w_M/1', 'mfun_fvc_speed_controller/3', {'x', 220.0}
+    'SpeedController', 'step/1', 'Delay step/1', {'x', 190.0}
+    'SpeedController', 'Delay step/1', 'mfun_fvc_speed_controller/2', []
+    'SpeedController', 'w_M/1', 'mfun_fvc_speed_controller/3', {'x', 285.0}
     'SpeedController', 'tau_M/1', 'Delay tau_M/1', {'x', 95.0}
-    'SpeedController', 'Delay tau_M/1', 'mfun_fvc_speed_controller/4', {'x', 190.0}
-    'SpeedController', 'w_M_ref/1', 'mfun_fvc_speed_controller/5', {'x', 235.0}
+    'SpeedController', 'Delay tau_M/1', 'mfun_fvc_speed_controller/4', []
+    'SpeedController', 'w_M_ref/1', 'mfun_fvc_speed_controller/5', {'x', 300.0}
     'SpeedController', 'mfun_fvc_speed_controller/1', 'tau_M_ref/1', []
     'PWM', 'From get_realized_voltage.enable/1', 'get_realized_voltage/1', []
     'PWM', 'meas/1', 'compute_output/1', {'x', 230.0}
@@ -308,10 +309,10 @@ s.control.netlist.lines = { ...
     'FluxVectorController/SpeedFluxObserver', 'fbk.tau_M/1', 'SpeedObserver/3', {'x', 485.0}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'eps/1', 'Delay eps/1', []
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay eps/1', 'mfun_fvc_speed_observer/1', []
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'init/1', 'Delay init/1', []
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay init/1', 'mfun_fvc_speed_observer/2', {'x', 175.0}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'tau_M/1', 'Delay tau_M/1', []
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M/1', 'mfun_fvc_speed_observer/3', {'x', 190.0}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'init/1', 'Delay init/1', {'x', 190.0}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay init/1', 'mfun_fvc_speed_observer/2', []
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'tau_M/1', 'Delay tau_M/1', {'x', 95.0}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Delay tau_M/1', 'mfun_fvc_speed_observer/3', []
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_fvc_speed_observer/1', 'w_M/1', []
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'mfun_fvc_speed_observer/2', 'tau_L/1', []
     };
