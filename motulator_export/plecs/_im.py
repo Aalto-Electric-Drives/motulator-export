@@ -70,7 +70,7 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _write_model,
 )
-from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
+from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
 from motulator_export.plecs._drive import (
     MACHINE_FRAME,
     MACHINE_PROBES,
@@ -266,7 +266,7 @@ def write_model(
         values = export_values(ctrl)
         init = init_script(variables, values, INIT_COMMENT)
     w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
-    T_s = VALUES["T_s"]  # The model refers to cfg.T_s
+    T_s = T_S_EXPR
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
         (ENABLE, gate_enable(ctrl, values["T_s"])),
@@ -276,7 +276,7 @@ def write_model(
     ]
     if block is CVC_BLOCK:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
-    y_sources = _add_control_system(sch, block, sources, VALUES, init)
+    y_sources = _add_control_system(sch, block, sources, VALUES)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d

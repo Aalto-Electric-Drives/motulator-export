@@ -38,6 +38,9 @@ cfg.k_mtpv = 0.85;
 cfg.J = [];
 cfg.sensorless = 1;
 cfg.T_s = 0.000125;
+% Flux-vector controller (FluxVectorController)
+vector_ctrl.par = par;
+vector_ctrl.cfg = cfg;
 % Speed controller (SpeedController)
 speed_ctrl.J = 0.015;
 speed_ctrl.alpha_s = 25;

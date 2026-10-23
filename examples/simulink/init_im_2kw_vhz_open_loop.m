@@ -32,6 +32,9 @@ cfg.alpha_f = 0;
 cfg.k_u = 0.9;
 cfg.k_b = 0.9;
 cfg.T_s = 0.00025;
+% V/Hz controller (ObserverBasedVHzController)
+vhz_ctrl.par = par;
+vhz_ctrl.cfg = cfg;
 % Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2
 slew_rate = 2*pi*60;
 % PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,

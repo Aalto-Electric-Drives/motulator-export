@@ -3,12 +3,12 @@ Blocks of the control systems shared by the control methods.
 
 In the control systems, each class of motulator is a block with a mask of its
 arguments, in the hierarchy of motulator. The masks of the composite classes
-pass the parameters to the blocks inside them as the constructors of motulator do,
-and the masks of the top-level classes refer to the variables of the model
-initialization (`init_script` of the modules of the control methods), which
-correspond to the motulator API. The blocks of the classes are C-Script blocks
-(S-functions in Simulink), which initialize their states from their own parameters
-with the C port of the control method (`Signals`).
+pass the parameters to the blocks inside them as the constructors of motulator do.
+The mask of the top-level class (e.g., VectorControlSystem) has the arguments of its
+class as structs (`TOP_ARGS`), which the model initialization (`init_script` of the
+modules of the control methods) defines as in the motulator API. The blocks of the
+classes are C-Script blocks (S-functions in Simulink), which initialize their states
+from their own parameters with the C port of the control method (`Signals`).
 
 The measurements, the feedback signals, and the references are signal vectors
 (meas, fbk, and ref, defined in the C header of the control method), whose fields
@@ -1356,49 +1356,88 @@ def vhz_control_system(
     )
 
 
+# Arguments of the top-level classes of the control systems, the mask parameters of
+# the control-system blocks: the variable and the prompt ({} the class of the inner
+# controller), and the mask initialization computing the sampling period (and the
+# mode of a vector controller) from the configuration of the inner controller
+TOP_ARGS = {
+    "VectorControlSystem": (
+        [
+            (
+                "vector_ctrl",
+                "vector_ctrl: Vector controller ({}) as a struct: par, cfg",
+            ),
+            (
+                "speed_ctrl",
+                "speed_ctrl: Speed controller (SpeedController) as a struct",
+            ),
+            ("pwm", "pwm: PWM as a struct"),
+        ],
+        "T_s = vector_ctrl.cfg.T_s;\nsensorless = vector_ctrl.cfg.sensorless;\n",
+    ),
+    "VHzControlSystem": (
+        [
+            ("vhz_ctrl", "vhz_ctrl: V/Hz controller ({}) as a struct: par, cfg"),
+            (
+                "slew_rate",
+                "slew_rate: Slew rate of the speed reference (mechanical rad/s²)",
+            ),
+            ("pwm", "pwm: PWM as a struct"),
+        ],
+        "T_s = vhz_ctrl.cfg.T_s;\n",
+    ),
+    "GridConverterControlSystem": (
+        [
+            ("inner_ctrl", "inner_ctrl: Inner controller ({}) as a struct: cfg"),
+            ("pwm", "pwm: PWM as a struct"),
+        ],
+        "T_s = inner_ctrl.cfg.T_s;\n",
+    ),
+}
+
+
 def control_block(
     name: str,
     description: str,
     inputs: list[Port],
     outputs: dict[str, list[str]],
     netlist: Callable[[], Subsystem],
+    inner: str,
     cls: str = "VectorControlSystem",
 ) -> ControlBlock:
-    """Control-system block of a control system of the class `cls` (e.g.,
-    VectorControlSystem), whose contents are `netlist`."""
-    params = [MaskParam("T_s", "T_s: Sampling period (s)", cls, "", True)]
-    vector = cls == "VectorControlSystem"
-    if vector:  # vector_ctrl.sensorless
-        params.append(
-            MaskParam(
-                "sensorless",
-                "sensorless: Sensorless mode (1) or sensored mode (0)",
-                cls,
-                "",
-                True,
-            )
-        )
+    """
+    Control-system block of a control system of the class `cls` (e.g.,
+    VectorControlSystem) with the inner controller of the class `inner` (e.g.,
+    FluxVectorController), whose contents are `netlist`. The mask has the arguments
+    of `cls` (`TOP_ARGS`).
+    """
+    args, init = TOP_ARGS[cls]
+    params = [MaskParam(v, p.format(inner), cls, "", True) for v, p in args]
     return ControlBlock(
         name=name,
         mask_type=f"{cls} (motulator)",
         description=description
-        + " Each class of motulator is a block with a mask of its arguments. The "
-        "top-level blocks refer to the variables of the model initialization, and the "
-        "blocks inside them get their parameters as in the constructors of motulator. "
-        "T_s is the sampling period of the measurements"
-        + (", and sensorless the mode of the vector controller." if vector else ".")
-        + ENABLE_DESCRIPTION,
+        + " Each class of motulator is a block with a mask of its arguments, nested as "
+        f"in motulator: the arguments of {cls} are structs of the arguments of its "
+        "parts, from which the blocks inside get their parameters as in the "
+        "constructors of motulator. The sampling period is cfg.T_s of the inner "
+        "controller." + ENABLE_DESCRIPTION,
         mask_params=params,
         inputs=[p.name for p in inputs],
         input_widths=[p.width for p in inputs],
         outputs=outputs,
         netlist=netlist,
+        mask_init=init,
     )
 
 
-# Mask values of the control systems: the sampling period and the sensorless mode
-# (of the vector control systems) of the configuration
-VALUES = {"T_s": "cfg.T_s", "sensorless": "cfg.sensorless"}
+# Mask values of the control systems: the structs of the arguments of the top-level
+# classes in the model initialization, named as the arguments
+VALUES = {v: v for args, _ in TOP_ARGS.values() for v, _ in args}
+
+# Sampling period in the model initialization (the configuration of the inner
+# controller)
+T_S_EXPR = "cfg.T_s"
 
 
 def mask_values(block: ControlBlock) -> dict[str, str]:
@@ -1429,6 +1468,19 @@ def init_header(variables: list[tuple[str, Any]], comment: str) -> str:
         "%% System model\n" + "".join(assign(n, v) for n, v in variables) + "\n"
         "%% Control system ([] = None, the default)\n"
     )
+
+
+# Arguments of the inner controllers of the drives (the machine model and the
+# configuration)
+PAR_CFG = ["par", "cfg"]
+
+
+def inner_ctrl_init(name: str, cls: str, title: str, fields: list[str]) -> str:
+    """
+    The struct `name` of the inner controller of the class `cls` in the model
+    initialization, composed of the structs `fields` above it (e.g., par and cfg).
+    """
+    return f"% {title} ({cls})\n" + "".join(f"{name}.{f} = {f};\n" for f in fields)
 
 
 def speed_ctrl_init(values: dict[str, Any]) -> str:

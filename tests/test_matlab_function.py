@@ -39,7 +39,7 @@ from motulator_export.plecs import (
     _sm_control,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
-from motulator_export.plecs._control import VALUES, mask_values
+from motulator_export.plecs._control import T_S_EXPR, VALUES
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
 from motulator_export.simulink._common import write_script
 from motulator_export.simulink._mfunction import (
@@ -275,7 +275,7 @@ class Harnesses:
                 ("input_widths", block.input_widths),
             ]
             script = write_script(
-                path, block, VALUES, fields, "build_harness", VALUES["T_s"], 1.0,
+                path, block, VALUES, fields, "build_harness", T_S_EXPR, 1.0,
                 code="matlab",
             )  # fmt: skip
             self.eng.run(str(script), nargout=0)
@@ -391,7 +391,7 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     net, _ = compiled(key)
     block, _ = SYSTEMS[key]
     init = init_script(key, values, flux_map)
-    params = block_params(net.top, init, mask_values(block))
+    params = block_params(net.top, init, block)
     assert net.start(params, start) is None
     closed_loop = run(net)
     n_out = 3 + len(block.signals)

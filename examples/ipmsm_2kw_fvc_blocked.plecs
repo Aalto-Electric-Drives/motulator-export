@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Flux-vector controller (FluxVectorController)\nvector_ctrl.par = par;\nvector_ctrl.cfg = cfg;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
     Location      [0, 0; 1000, 520]
     ZoomFactor    1
@@ -167,31 +167,23 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "VectorControlSystem (motulator)"
-      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements, and sensorless the mode of the vector controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VectorControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "T_s = vector_ctrl.cfg.T_s;\nsensorless = vector_ctrl.cfg.sensorless;\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
-        Variable      "par"
-        Prompt        "par: Machine model of the control system (struct)"
+        Variable      "vector_ctrl"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg"
         Type          FreeText
-        Value         "par"
-        Show          off
-        Tunable       on
-        TabName       "VectorControlSystem"
-      }
-      Parameter {
-        Variable      "cfg"
-        Prompt        "cfg: Configuration of the controller (struct)"
-        Type          FreeText
-        Value         "cfg"
+        Value         "vector_ctrl"
         Show          off
         Tunable       on
         TabName       "VectorControlSystem"
       }
       Parameter {
         Variable      "speed_ctrl"
-        Prompt        "speed_ctrl: Arguments of SpeedController (struct)"
+        Prompt        "speed_ctrl: Speed controller (SpeedController) as a struct"
         Type          FreeText
         Value         "speed_ctrl"
         Show          off
@@ -200,27 +192,9 @@ Plecs {
       }
       Parameter {
         Variable      "pwm"
-        Prompt        "pwm: Arguments of the PWM (struct)"
+        Prompt        "pwm: PWM as a struct"
         Type          FreeText
         Value         "pwm"
-        Show          off
-        Tunable       on
-        TabName       "VectorControlSystem"
-      }
-      Parameter {
-        Variable      "T_s"
-        Prompt        "T_s: Sampling period (s)"
-        Type          FreeText
-        Value         "cfg.T_s"
-        Show          off
-        Tunable       on
-        TabName       "VectorControlSystem"
-      }
-      Parameter {
-        Variable      "sensorless"
-        Prompt        "sensorless: Sensorless mode (1) or sensored mode (0)"
-        Type          FreeText
-        Value         "cfg.sensorless"
         Show          off
         Tunable       on
         TabName       "VectorControlSystem"
@@ -1765,7 +1739,7 @@ Plecs {
         Variable      "par"
         Prompt        "par: Machine model (SynchronousMachinePars, or SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn) as a struct"
         Type          FreeText
-        Value         "par"
+        Value         "vector_ctrl.par"
         Show          off
         Tunable       on
         TabName       ""
@@ -1774,7 +1748,7 @@ Plecs {
         Variable      "cfg"
         Prompt        "cfg: Configuration (FluxVectorControllerCfg) as a struct"
         Type          FreeText
-        Value         "cfg"
+        Value         "vector_ctrl.cfg"
         Show          off
         Tunable       on
         TabName       ""

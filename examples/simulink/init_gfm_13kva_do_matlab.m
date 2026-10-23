@@ -27,6 +27,8 @@ cfg.w_nom = 2*pi*50;
 cfg.i_d_max = [];
 cfg.alpha_l = 2*pi*50;
 cfg.T_s = 0.000125;
+% Inner controller (ObserverBasedGridFormingController)
+inner_ctrl.cfg = cfg;
 % PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,
 % sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if
 % t_d = u_th = 0), its compensation, the minimum duty ratio of a switching

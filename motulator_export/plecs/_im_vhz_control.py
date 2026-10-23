@@ -18,11 +18,12 @@ Pure open-loop V/Hz control is the special case ``L_M = inf`` of the machine mod
 motulator): the mask initialization of the ObserverBasedVHzController then sets the
 unit observer gain, the weight h = 1 of the external speed error (which disables the
 model-based correction), the initial stator flux estimate psi_s_nom, and k_u = inf,
-as `ObserverBasedVHzController.__init__` does. The masks of the top-level classes
-refer to the variables of the model initialization (`init_script`): the machine model
-`par`, the configuration `cfg`, the slew rate `slew_rate` of the speed reference, and
-the PWM `pwm`. The signal vectors are defined in `im_flux_vector.h` (the
-measurements and the references) and `im_current_vector.h` (the feedback signals).
+as `ObserverBasedVHzController.__init__` does. The mask of the VHzControlSystem has
+its arguments from the model initialization (`init_script`): the V/Hz controller
+`vhz_ctrl` (the machine model `par` and the configuration `cfg`), the slew rate
+`slew_rate` of the speed reference, and the PWM `pwm`. The signal vectors are
+defined in `im_flux_vector.h` (the measurements and the references) and
+`im_current_vector.h` (the feedback signals).
 
 """
 
@@ -30,6 +31,7 @@ from typing import Any
 
 from motulator_export.plecs._common import ENABLE
 from motulator_export.plecs._control import (
+    PAR_CFG,
     SAMPLING,
     Signals,
     abc_input,
@@ -41,6 +43,7 @@ from motulator_export.plecs._control import (
     control_block,
     get_measurement,
     init_header,
+    inner_ctrl_init,
     mask_params,
     monitor,
     pwm_init,
@@ -399,11 +402,11 @@ def _vhz_controller() -> Subsystem:
         "ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of "
         "the torque estimate, whose output is the torque reference." + PAR_DESCRIPTION,
         [
-            Param("par", PAR_PROMPT, "par"),
+            Param("par", PAR_PROMPT, "vhz_ctrl.par"),
             Param(
                 "cfg",
                 "cfg: Configuration (ObserverBasedVHzControllerCfg) as a struct",
-                "cfg",
+                "vhz_ctrl.cfg",
             ),
         ],
         init=VHZ_INIT,
@@ -529,6 +532,7 @@ VHZ_BLOCK = control_block(
     CTRL_INPUTS,
     CTRL_OUTPUTS,
     control_system,
+    "ObserverBasedVHzController",
     cls="VHzControlSystem",
 )
 
@@ -546,8 +550,8 @@ def init_script(
 ) -> str:
     """
     Model initialization: the variables of the system model, and the variables of
-    the control system (par, cfg, slew_rate, and pwm) from the parameter values of
-    the control system (`_im.export_vhz_values`).
+    the control system (par, cfg, vhz_ctrl, slew_rate, and pwm) from the parameter
+    values of the control system (`_im.export_vhz_values`).
     """
     open_loop = values["L_M"] == float("inf")
     return (
@@ -557,6 +561,9 @@ def init_script(
         + "".join(assign(f"par.{n}", values[n]) for n in PAR_FIELDS)
         + "% Observer-based V/Hz control (ObserverBasedVHzControllerCfg)\n"
         + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS)
+        + inner_ctrl_init(
+            "vhz_ctrl", "ObserverBasedVHzController", "V/Hz controller", PAR_CFG
+        )
         + "% Slew rate of the speed reference (VHzControlSystem), mechanical rad/s^2\n"
         + assign("slew_rate", values["slew_rate"])
         + pwm_init(values)

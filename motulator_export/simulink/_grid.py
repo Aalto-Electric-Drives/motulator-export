@@ -26,7 +26,7 @@ from motulator.grid.model import GridConverterSystem, LCLFilter
 
 from motulator_export._common import StepSignal
 from motulator_export.plecs import _grid, _grid_control
-from motulator_export.plecs._control import VALUES
+from motulator_export.plecs._control import T_S_EXPR, VALUES
 from motulator_export.simulink._common import (
     _m_source,
     check_supported_model,
@@ -90,7 +90,7 @@ def write_model(
         ("scope", scope_indices(scope, _grid.mdl_outputs(mdl), block.signals)),
     ]
     return write_script(
-        path, block, VALUES, fields, "build_grid", VALUES["T_s"], t_stop, code=code
+        path, block, VALUES, fields, "build_grid", T_S_EXPR, t_stop, code=code
     )
 
 

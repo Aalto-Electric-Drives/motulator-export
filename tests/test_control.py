@@ -42,7 +42,6 @@ from motulator_export.plecs import (
     _sm_control,
 )
 from motulator_export.plecs._common import ControlBlock
-from motulator_export.plecs._control import mask_values
 from motulator_export.plecs._netlist import PLECS, SIMULINK, Subsystem, layout, problems
 from tests import monolithic
 from tests.c_port import arr
@@ -165,9 +164,8 @@ def check(
     net, ref = compiled(key)
     block, mono = SYSTEMS[key]
     init = init_script(key, values, flux_map)
-    values_top = mask_values(block)
-    params = block_params(net.top, init, values_top)
-    np.testing.assert_equal(block_params(net.top, init, values_top, plecs=True), params)
+    params = block_params(net.top, init, block)
+    np.testing.assert_equal(block_params(net.top, init, block, plecs=True), params)
 
     def restart() -> None:
         assert net.start(params, start) is None
@@ -340,8 +338,7 @@ def test_parameter_errors(compiled: Compiled) -> None:
         ("L_d", None, "L_d, L_q, and psi_f needed without a flux map."),
     ]:
         init = init_script("fvc", values | {name: value})
-        values_top = mask_values(_sm_control.FVC_BLOCK)
-        err = net.start(block_params(net.top, init, values_top), start)
+        err = net.start(block_params(net.top, init, _sm_control.FVC_BLOCK), start)
         assert err is not None and err.endswith(message), err
     net.sfun_terminate()
 
@@ -360,7 +357,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     params = block_params(
         _sm_control.FVC_BLOCK.netlist(),
         init_script("fvc", values),
-        mask_values(_sm_control.FVC_BLOCK),
+        _sm_control.FVC_BLOCK,
     )
     obs = fvc.observer
     path = "FluxVectorController/SpeedFluxObserver/"
@@ -383,7 +380,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     params = block_params(
         _im_control.CVC_BLOCK.netlist(),
         init_script("cvc", values),
-        mask_values(_im_control.CVC_BLOCK),
+        _im_control.CVC_BLOCK,
     )
     obs = cvc.observer
     k = params["CurrentVectorController/SpeedFluxObserver/SpeedObserver"][:2]
@@ -438,7 +435,7 @@ def test_gfm_configuration(k_v: float | None) -> None:
     params = block_params(
         _grid_control.GFM_BLOCK.netlist(),
         init_script("gfm", values),
-        mask_values(_grid_control.GFM_BLOCK),
+        _grid_control.GFM_BLOCK,
     )
     path = "ObserverBasedGridFormingController/Observer"
     u_nom, w_nom, L, alpha, T_s, R = params[path]

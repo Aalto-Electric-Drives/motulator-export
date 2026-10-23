@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nconverter.u_dc = 650;\nac_filter.L_fc = 0.003700874424440534;\nac_filter.L_fg = 0.003700874424440534;\nac_filter.C_f = 8.593839157387184e-06;\nac_filter.u_f0_abc = [326.5986323710904 -163.2993161855452 -163.2993161855452];\nac_source.e_g = 326.5986323710904;\nac_source.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Grid-following control (CurrentVectorControllerCfg)\ncfg.i_max = 30.75914498161482;\ncfg.L = 0.003700874424440534;\ncfg.alpha_c = 2*pi*400;\ncfg.alpha_i = [];\ncfg.u_nom = 326.5986323710904;\ncfg.w_nom = 2*pi*50;\ncfg.alpha_pll = 2*pi*20;\ncfg.T_s = 0.0001;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nconverter.u_dc = 650;\nac_filter.L_fc = 0.003700874424440534;\nac_filter.L_fg = 0.003700874424440534;\nac_filter.C_f = 8.593839157387184e-06;\nac_filter.u_f0_abc = [326.5986323710904 -163.2993161855452 -163.2993161855452];\nac_source.e_g = 326.5986323710904;\nac_source.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Grid-following control (CurrentVectorControllerCfg)\ncfg.i_max = 30.75914498161482;\ncfg.L = 0.003700874424440534;\ncfg.alpha_c = 2*pi*400;\ncfg.alpha_i = [];\ncfg.u_nom = 326.5986323710904;\ncfg.w_nom = 2*pi*50;\ncfg.alpha_pll = 2*pi*20;\ncfg.T_s = 0.0001;\n% Inner controller (CurrentVectorController)\ninner_ctrl.cfg = cfg;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
     Location      [0, 0; 1320, 440]
     ZoomFactor    1
@@ -177,33 +177,25 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "GridConverterControlSystem (motulator)"
-      MaskDescription "Current-vector grid-following control with a PLL in the power-control mode (GridConverterControlSystem with CurrentVectorController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskDescription "Current-vector grid-following control with a PLL in the power-control mode (GridConverterControlSystem with CurrentVectorController). Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of GridConverterControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "T_s = inner_ctrl.cfg.T_s;\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
-        Variable      "cfg"
-        Prompt        "cfg: Configuration of the controller (struct)"
+        Variable      "inner_ctrl"
+        Prompt        "inner_ctrl: Inner controller (CurrentVectorController) as a struct: cfg"
         Type          FreeText
-        Value         "cfg"
+        Value         "inner_ctrl"
         Show          off
         Tunable       on
         TabName       "GridConverterControlSystem"
       }
       Parameter {
         Variable      "pwm"
-        Prompt        "pwm: Arguments of the PWM (struct)"
+        Prompt        "pwm: PWM as a struct"
         Type          FreeText
         Value         "pwm"
-        Show          off
-        Tunable       on
-        TabName       "GridConverterControlSystem"
-      }
-      Parameter {
-        Variable      "T_s"
-        Prompt        "T_s: Sampling period (s)"
-        Type          FreeText
-        Value         "cfg.T_s"
         Show          off
         Tunable       on
         TabName       "GridConverterControlSystem"
@@ -1113,7 +1105,7 @@ Plecs {
         Variable      "cfg"
         Prompt        "cfg: Configuration (CurrentVectorControllerCfg) as a struct"
         Type          FreeText
-        Value         "cfg"
+        Value         "inner_ctrl.cfg"
         Show          off
         Tunable       on
         TabName       ""

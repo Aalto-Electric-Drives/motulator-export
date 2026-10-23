@@ -8,7 +8,6 @@ RPC interface is in `_rpc`.
 """
 
 import os
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import isinf, pi
@@ -575,40 +574,7 @@ def _mask_parameter(m: MaskParam, value: Any) -> str:
     return _mask_param(m.variable, m.prompt, _fmt_mask(value), m.tab)
 
 
-# Prompts of the variables of the model initialization in the mask of the control
-# system
-WORKSPACE_PROMPTS = {
-    "par": "Machine model of the control system (struct)",
-    "cfg": "Configuration of the controller (struct)",
-    "speed_ctrl": "Arguments of SpeedController (struct)",
-    "slew_rate": "Slew rate of the speed reference (mechanical rad/s²)",
-    "pwm": "Arguments of the PWM (struct)",
-}
-
-
-def workspace_variables(init: str) -> list[str]:
-    """
-    Variables of the control system in the model initialization (after the heading
-    "%% Control system"), which the mask of the control system passes to the blocks
-    inside it, since the components inside a masked subsystem of PLECS see only the
-    variables of its mask.
-    """
-    control = init.split("%% Control system", 1)[1]
-    return list(dict.fromkeys(re.findall(r"^(\w+)", control, re.M)))
-
-
-def _workspace_params(init: str, tab: str) -> str:
-    """Mask parameters of the variables of the control system (see
-    `workspace_variables`)."""
-    return "".join(
-        _mask_param(n, f"{n}: {WORKSPACE_PROMPTS[n]}", n, tab)
-        for n in workspace_variables(init)
-    )
-
-
-def _control_subsystem(
-    block: ControlBlock, values: dict[str, Any], init: str
-) -> tuple[str, str]:
+def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str, str]:
     """Mask and contents of the control-system subsystem."""
     n_in = len(block.inputs)
     h = max(30, 5 * n_in)  # Half of the height, the inputs inside the frame
@@ -623,7 +589,6 @@ def _control_subsystem(
         + "      MaskIconFrame on\n"
         "      MaskIconOpaque off\n"
         "      MaskIconRotates on\n"
-        + _workspace_params(init, block.mask_params[0].tab)
         + "".join(_mask_parameter(m, values[m.variable]) for m in block.mask_params)
     )
     # The duty ratios are the only output; the monitored signals are mask probes
@@ -656,7 +621,6 @@ def _add_control_system(
     block: ControlBlock,
     sources: list[tuple[str, StepSignal | float | str]],
     values: dict[str, Any],
-    init: str,
 ) -> int:
     """
     Add the control system and its inputs (references and measurements).
@@ -664,9 +628,8 @@ def _add_control_system(
     Each source is a `(name, signal)` pair in the order of the block inputs, the
     signal being a `StepSignal`, a constant, or a probe definition (`_probe`). The
     steps of a `StepSignal` with several steps are summed by a Gain block. The mask
-    of the control system passes the variables of the control system in the model
-    initialization `init` to the blocks inside it. Returns the y-coordinate of the
-    last source.
+    values `values` are the structs of the model initialization. Returns the
+    y-coordinate of the last source.
 
     """
     n_in = len(sources)
@@ -694,7 +657,7 @@ def _add_control_system(
             sch.component("Goto", "Goto enable", (x_b + 40, y_tag), TAG, show=False)
             sch.trunk(out, "Signal", [(x_b, y_src[k])])
             sch.signal(out, ("Goto enable", 1), [(x_b, y_tag)])
-    header, trailer = _control_subsystem(block, values, init)
+    header, trailer = _control_subsystem(block, values)
     sch.component(
         "Subsystem", block.name, CS, direction="up", extra=header, trailer=trailer
     )

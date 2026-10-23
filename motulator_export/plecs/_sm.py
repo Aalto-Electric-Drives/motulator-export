@@ -9,8 +9,8 @@ are C-Script blocks, which include the C port of the motulator control algorithm
 the `c` directory. The derived quantities (e.g., the gains and the lookup tables of
 the reference generator) are computed by the C code at the start of the simulation,
 as in motulator. The parameters are defined in the initialization commands of the
-PLECS model: the system model, and the structs par, cfg, speed_ctrl, and pwm of the
-control system, as in the motulator API.
+PLECS model: the system model, and the structs of the control system (vector_ctrl
+with par and cfg, speed_ctrl, and pwm), as in the motulator API.
 
 Currently supported:
 
@@ -87,7 +87,7 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _write_model,
 )
-from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
+from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
 from motulator_export.plecs._drive import (
     MACHINE_FRAME,
     MACHINE_PROBES,
@@ -531,7 +531,7 @@ def write_model(
     if flux_map is not None:
         variables += [(f"est_flux_map.{f}", flux_map[f]) for f in GRADNET_FIELDS]
     init = init_script(variables, values, INIT_COMMENT)
-    block, T_s = FVC_BLOCK, VALUES["T_s"]  # The model refers to cfg.T_s
+    block, T_s = FVC_BLOCK, T_S_EXPR
     sch = _Schematic()
     gradnet_plant = has_gradnet_plant(mdl)
     sources: list[tuple[str, StepSignal | float | str]] = [
@@ -541,7 +541,7 @@ def write_model(
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
         ("theta_M", _probe("Machine", MACHINE_PROBES[2:3])),
     ]
-    y_sources = _add_control_system(sch, block, sources, VALUES, init)
+    y_sources = _add_control_system(sch, block, sources, VALUES)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d

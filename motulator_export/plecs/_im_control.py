@@ -14,10 +14,10 @@ with a mask of the arguments of its class (see `_control`):
 The mask initialization of the CurrentVectorController resolves the defaults of
 `CurrentController`, and that of the SpeedFluxObserver resolves the defaults of
 `create_speed_flux_observer` and computes the gains of `SpeedFluxObserver.__init__`.
-The masks of the top-level classes refer to the variables of the model
-initialization (`init_script`): the machine model `par`, the configuration `cfg`,
-the speed controller `speed_ctrl`, and the PWM `pwm`. The signal vectors are defined
-in `im_current_vector.h`.
+The mask of the VectorControlSystem has its arguments, structs of the model
+initialization (`init_script`): the vector controller `vector_ctrl` (the machine
+model `par` and the configuration `cfg`), the speed controller `speed_ctrl`, and the
+PWM `pwm`. The signal vectors are defined in `im_current_vector.h`.
 
 """
 
@@ -25,6 +25,7 @@ from typing import Any
 
 from motulator_export.plecs._common import ENABLE
 from motulator_export.plecs._control import (
+    PAR_CFG,
     SAMPLING,
     T_S,
     Signals,
@@ -36,6 +37,7 @@ from motulator_export.plecs._control import (
     control_block,
     get_measurement,
     init_header,
+    inner_ctrl_init,
     mask_params,
     monitor,
     pwm_init,
@@ -504,11 +506,11 @@ def _current_vector_controller() -> Subsystem:
         "the parameters to the blocks inside it, as CurrentVectorController."
         + PAR_DESCRIPTION,
         [
-            Param("par", PAR_PROMPT, "par"),
+            Param("par", PAR_PROMPT, "vector_ctrl.par"),
             Param(
                 "cfg",
                 "cfg: Configuration (CurrentVectorControllerCfg) as a struct",
-                "cfg",
+                "vector_ctrl.cfg",
             ),
         ],
         init=CVC_INIT,
@@ -629,6 +631,7 @@ CVC_BLOCK = control_block(
     CTRL_INPUTS,
     CTRL_OUTPUTS,
     control_system,
+    "CurrentVectorController",
 )
 
 
@@ -638,7 +641,8 @@ def init_script(
 ) -> str:
     """
     Model initialization: the variables of the system model, and the structs of the
-    control system (par, cfg, speed_ctrl, and pwm) from the parameter values of the
+    control system (par, cfg, vector_ctrl, speed_ctrl, and pwm) from the parameter
+    values of the
     control system (`_im.export_values`).
     """
     return (
@@ -647,6 +651,12 @@ def init_script(
         + "".join(assign(f"par.{n}", values[n]) for n in PAR_FIELDS)
         + "% Current-vector control (CurrentVectorControllerCfg)\n"
         + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS)
+        + inner_ctrl_init(
+            "vector_ctrl",
+            "CurrentVectorController",
+            "Current-vector controller",
+            PAR_CFG,
+        )
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

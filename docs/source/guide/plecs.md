@@ -42,7 +42,7 @@ class: only-dark
 
 *Inside the flux-vector control system (`VectorControlSystem`): the measurements, the `SpeedController`, the `FluxVectorController`, and the `PWM`.*
 
-The mask of each block shows the arguments of its class. The masks of the blocks at this level refer to the parameters of the model, see below.
+The mask of each block shows the arguments of its class. The mask of the control system itself has the arguments of its class, e.g., `vector_ctrl`, `speed_ctrl`, and `pwm` of `VectorControlSystem`, as structs from the parameters of the model (see below), and passes them to the blocks inside it, as the constructors of *motulator* do.
 
 ```{image} ../images/plecs_mask.png
 ---
@@ -80,9 +80,13 @@ cfg.i_s_max = 6.5;
 cfg.alpha_tau = 2*pi*100;
 cfg.alpha_psi = [];
 ...
+% Flux-vector controller (FluxVectorController)
+vector_ctrl.par = par;
+vector_ctrl.cfg = cfg;
 % Speed controller (SpeedController)
 speed_ctrl.J = 0.015;
 speed_ctrl.alpha_s = 25;
+...
 ```
 
 Changing a parameter needs no Python: edit the initialization commands and run the simulation.

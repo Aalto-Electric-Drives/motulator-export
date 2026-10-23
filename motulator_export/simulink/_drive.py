@@ -12,7 +12,7 @@ from motulator.drive.model import Drive
 
 from motulator_export._common import StepSignal
 from motulator_export.plecs._common import ControlBlock
-from motulator_export.plecs._control import VALUES
+from motulator_export.plecs._control import T_S_EXPR, VALUES
 from motulator_export.plecs._drive import MDL_OUTPUTS
 from motulator_export.simulink._common import (
     _m_source,
@@ -115,15 +115,7 @@ def write_drive_model(
     if functions and isinstance(functions[0], SFunction):
         fields.append(("machine_params", functions[0].params))
     return write_script(
-        path,
-        block,
-        VALUES,
-        fields,
-        "build_drive",
-        VALUES["T_s"],
-        t_stop,
-        functions,
-        code,
+        path, block, VALUES, fields, "build_drive", T_S_EXPR, t_stop, functions, code
     )
 
 

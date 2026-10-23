@@ -24,6 +24,8 @@ cfg.u_nom = 326.5986323710904;
 cfg.w_nom = 2*pi*50;
 cfg.alpha_pll = 2*pi*20;
 cfg.T_s = 0.0001;
+% Inner controller (CurrentVectorController)
+inner_ctrl.cfg = cfg;
 % PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,
 % sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if
 % t_d = u_th = 0), its compensation, the minimum duty ratio of a switching

@@ -20,7 +20,8 @@ from typing import Any
 
 import numpy as np
 
-from motulator_export.plecs._common import workspace_variables
+from motulator_export.plecs._common import ControlBlock
+from motulator_export.plecs._control import mask_values
 from motulator_export.plecs._netlist import CBlock, Subsystem
 
 
@@ -305,26 +306,23 @@ def _assign(lhs: str, value: Any, ws: MutableMapping) -> None:
 
 # %%
 def block_params(
-    top: Subsystem, init: str, values: dict[str, str], plecs: bool = False
+    top: Subsystem, init: str, block: ControlBlock, plecs: bool = False
 ) -> dict[str, list[Any]]:
     """
     Parameters of the C blocks of a control system, by their paths, as the masks of
     the model compute them: the model initialization `init` is run, the values of
-    the mask of the control-system block (`values`) are evaluated, and so on to the
-    blocks, the mask initializations defining the variables of the masks.
+    the mask of the control-system block `block` (the contents `top`) are evaluated
+    and its initialization run, and so on to the blocks, the mask initializations
+    defining the variables of the masks.
 
     In Simulink, a mask sees the variables of the masks around it and of the model
-    initialization. In PLECS (`plecs`), it sees only its own variables, the mask of
-    the control-system block also passing the variables of the control system in
-    the model initialization (`workspace_variables`).
+    initialization. In PLECS (`plecs`), it sees only its own variables.
     """
     base: dict[str, Any] = {}
     run(init, base)
-    top_vars = {n: evaluate(v, base) for n, v in values.items()}
-    if plecs:
-        ws = ChainMap(top_vars | {n: base[n] for n in workspace_variables(init)})
-    else:
-        ws = ChainMap(top_vars, base)
+    top_vars = {n: evaluate(v, base) for n, v in mask_values(block).items()}
+    ws = ChainMap(top_vars) if plecs else ChainMap(top_vars, base)
+    run(block.mask_init, ws)
     out: dict[str, list[Any]] = {}
 
     def visit(sub: Subsystem, ws: ChainMap, path: str) -> None:
