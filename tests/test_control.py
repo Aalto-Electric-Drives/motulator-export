@@ -71,6 +71,7 @@ from tests.systems import (
     SM_SPEED,
     VHZ_CASES,
     VHZ_IDS,
+    VHZ_RTOL,
     gfl_system,
     gfm_system,
     gradnet_control_system,
@@ -288,7 +289,7 @@ def test_vhz_control(
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, _im_vhz_control.VHZ_BLOCK)
-        return compare(build, model.Simulation, sfun, signals, 1.0)
+        return compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
 
     check(compiled, "vhz", values, run, VHZ_INPUTS)
 

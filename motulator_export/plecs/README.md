@@ -51,7 +51,7 @@ The example scripts are in [examples/](../../examples/README.md).
 
 ## Agreement with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the example scripts, with *motulator* 0.17.0 and PLECS 5.0 (2026-10-21).
+Maximum differences (PLECS − *motulator*) printed by the example scripts, with *motulator* 0.17.1 and PLECS 5.0 (2026-10-24).
 *motulator* uses the tolerances of 1e-9, and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 

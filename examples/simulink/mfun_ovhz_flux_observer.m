@@ -147,7 +147,11 @@ theta_c = self.theta_c;
 i_s = exp(-1i*theta_c)*i_s_ab;
 % Mechanical and electrical angular speeds of the rotor
 w_m = par.n_p*w_M;
-% Rotor flux estimate
+% Rotor flux estimate. If the voltage is unknown (NaN), the flux estimate follows the
+% current model alone, so the estimation error is zero.
+if isnan(real(u_s_ab)) && self.T_s_old > 0
+    psi_s = self.psi_R_pred + par.L_sgm*i_s;
+end
 psi_R = psi_s - par.L_sgm*i_s;
 % Slip angular frequency
 prod = psi_s*conj(psi_R);

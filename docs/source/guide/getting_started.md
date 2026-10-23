@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.12 or later. The package installs *motulator* 0.17.0 or a later 0.17 release.
+- Python 3.12 or later. The package installs *motulator* 0.17.1 or a later 0.17 release.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (Preferences > General > RPC interface, port 1080).
 - **Simulink**: MATLAB with Simulink, and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks need no compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 - **Native simulation**: a C compiler, by default gcc (or the one given by the environment variable `CC`).

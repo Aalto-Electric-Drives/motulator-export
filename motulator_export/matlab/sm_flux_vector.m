@@ -30,9 +30,14 @@ theta_c = self.theta_m;
 % previous and ongoing sampling periods is set by the control system
 % (DriveControlSystem.get_feedback).
 i_s = exp(-1i*theta_c)*i_s_ab;
-% Flux estimation error
+% Flux estimation error. If the voltage is unknown (NaN), the flux estimate follows
+% the current model alone, so the error is zero.
 psi_s_model = psi_s_dq(par, i_s);
-e_o = psi_s_model - self.psi_s;
+psi_s = self.psi_s;
+if isnan(real(u_s_ab))
+    psi_s = psi_s_model;
+end
+e_o = psi_s_model - psi_s;
 % Auxiliary flux
 L = incr_ind_mat(par, i_s);
 psi_a = aux_flux(L, i_s, psi_s_model);
@@ -52,15 +57,15 @@ w_c = w_m + self.k_theta*par.n_p*eps;
 if ~isnan(real(u_s_ab))
     u_s_zoh = exp(-1i*theta_c)*u_s_ab;
 elseif self.T_s_prev > 0
-    emf = (exp(1i*w_m*self.T_s_prev) - 1)/self.T_s_prev*self.psi_s;
+    emf = (exp(1i*w_m*self.T_s_prev) - 1)/self.T_s_prev*psi_s;
     u_s_zoh = emf + par.R_s*i_s;
 else
-    u_s_zoh = 1i*w_m*self.psi_s + par.R_s*i_s;
+    u_s_zoh = 1i*w_m*psi_s + par.R_s*i_s;
 end
 % Torque estimate
-tau_M = 1.5*par.n_p*imag(i_s*conj(self.psi_s));
+tau_M = 1.5*par.n_p*imag(i_s*conj(psi_s));
 out = struct('i_s', i_s, 'u_s', complex(0), 'u_s_zoh', u_s_zoh, ...
-    'psi_s', self.psi_s, 'e_o', e_o, 'eps', eps, 'eps_f', eps_f, 'psi_a', psi_a, ...
+    'psi_s', psi_s, 'e_o', e_o, 'eps', eps, 'eps_f', eps_f, 'psi_a', psi_a, ...
     'tau_M', tau_M, 'w_c', w_c, 'w_m', w_m, 'w_M', w_M, 'theta_c', theta_c, ...
     'theta_m', self.theta_m, 'psi_f', par.psi_f, 'h', h, 'caught', false);
 end

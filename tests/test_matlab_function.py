@@ -68,6 +68,7 @@ from tests.sfunctions import (
 from tests.systems import (
     VHZ_CASES,
     VHZ_IDS,
+    VHZ_RTOL,
     gfl_system,
     gfm_system,
     gradnet_control_system,
@@ -131,12 +132,18 @@ def test_port_used() -> None:
 Case = tuple[str, dict[str, Any], Any, Run, list[float]]
 
 
-def drive_run(build: Any, signals: Any, block: ControlBlock, t_stop: float) -> Run:
+def drive_run(
+    build: Any,
+    signals: Any,
+    block: ControlBlock,
+    t_stop: float,
+    rtol: dict[str, float] | None = None,
+) -> Run:
     """Closed-loop simulation of a drive."""
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, block)
-        return compare(build, model.Simulation, sfun, signals, t_stop)
+        return compare(build, model.Simulation, sfun, signals, t_stop, rtol)
 
     return run
 
@@ -194,7 +201,7 @@ def case(name: str) -> Case:
         vhz_args = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
         build, signals = vhz_system(*vhz_args)
         values = _im.export_vhz_values(build()[1])
-        run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0)
+        run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0, VHZ_RTOL)
         return "vhz", values, None, run, VHZ_INPUTS
     if name.startswith("gfl"):
         build, signals = gfl_system(name == "gfl_blocked")

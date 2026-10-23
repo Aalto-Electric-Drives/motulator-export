@@ -51,6 +51,7 @@ from tests.systems import (
     SM_PAR,
     VHZ_CASES,
     VHZ_IDS,
+    VHZ_RTOL,
     gfl_system,
     gfm_system,
     gradnet_control_system,
@@ -184,7 +185,8 @@ def test_vhz_control(
     values = _im.export_vhz_values(build()[1])
     params = sfunction_params(monolithic.VHZ, values)
     assert start(vhz, params) is None
-    compare(build, model.Simulation, drive_sfun(vhz, monolithic.VHZ), signals, 1.0)
+    sfun = drive_sfun(vhz, monolithic.VHZ)
+    compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
     check_dc_bus_limit(vhz, monolithic.VHZ, VHZ_INPUTS, restarter(vhz, params))
     vhz.sfun_terminate()
 

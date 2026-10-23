@@ -50,6 +50,15 @@ else
 end
 end
 
+function y = py_max(a, b)
+%PY_MAX Maximum as the built-in max of Python, see py_min.
+if b > a
+    y = b;
+else
+    y = a;
+end
+end
+
 function self = im_flux_reference_gen_init(par, psi_s_nom, i_s_max, tau_M_max, k_u, ...
     k_b)
 %IM_FLUX_REFERENCE_GEN_INIT Reference generator with field weakening and torque
@@ -79,12 +88,16 @@ if par.L_sgm > 0 % L_sgm = 0 in open-loop V/Hz control
     % Breakdown torque limit
     k = self.k_b*par.L_M/(par.L_M + par.L_sgm);
     tau_b = 0.75*par.n_p*k*(psi*psi)/par.L_sgm;
-    % Current limit
-    i_m = psi_R/par.L_M;
+    % Current limit: the stator flux on the circle psi stays within the circle
+    % L_sgm*i_s_max around the rotor flux, which gives the maximum q-component of
+    % the stator flux in rotor flux coordinates
     tau_M_cl = 0;
-    if psi_R < par.L_M*self.i_s_max
-        i_q_max = sqrt(self.i_s_max*self.i_s_max - i_m*i_m);
-        tau_M_cl = 1.5*par.n_p*psi_R*i_q_max;
+    if psi_R > 0
+        psi_cl = par.L_sgm*self.i_s_max;
+        psi_sd = (psi*psi + psi_R*psi_R - psi_cl*psi_cl)/(2*psi_R);
+        psi_sd = py_max(psi_sd, 0);
+        psi_sq = sqrt(py_max(psi*psi - psi_sd*psi_sd, 0));
+        tau_M_cl = 1.5*par.n_p*psi_R*psi_sq/par.L_sgm;
     end
     % Limited torque reference
     tau = py_min(py_min(py_min(abs(tau_M_ref), self.tau_M_max), tau_b), tau_M_cl);

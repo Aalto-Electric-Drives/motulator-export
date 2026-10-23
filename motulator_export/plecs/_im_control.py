@@ -140,10 +140,10 @@ def _flux_observer() -> CBlock:
         "observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the "
         "output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing "
         "periods (DriveControlSystem.get_feedback). While the gates are blocked, the "
-        "voltages are unknown (NaN), and the observer runs on its open-circuit model. "
-        "In the sensored mode (h = 1), the "
-        "speed error signal is computed from the measured rotor speed "
-        "(compute_feedback)." + PAR_DESCRIPTION,
+        "voltages are unknown (NaN), and the flux estimate follows the current model "
+        "alone, with the open-circuit voltage of the model as the voltage. In the "
+        "sensored mode (h = 1), the speed error signal is computed from the measured "
+        "rotor speed (compute_feedback)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(

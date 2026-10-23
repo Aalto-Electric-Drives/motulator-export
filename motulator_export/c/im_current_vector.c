@@ -87,7 +87,11 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
     out->w_M = w_M;
     out->w_m = par->n_p * w_M;
 
-    /* Rotor flux estimate */
+    /* Rotor flux estimate. If the voltage is unknown (NAN), the flux estimate follows
+     * the current model alone, so the estimation error is zero. */
+    if (isnan(creal(u_s_ab)) && self->T_s_old > 0.0) {
+        out->psi_s = self->psi_R_pred + par->L_sgm * out->i_s;
+    }
     out->psi_R = out->psi_s - par->L_sgm * out->i_s;
 
     /* Slip angular frequency */

@@ -138,12 +138,14 @@ def compare(
     sfun: Callable[[Any], SFunctionControlSystem],
     signals: dict[str, Callable[[Any, Any], Any]],
     t_stop: float,
+    rtol: dict[str, float] | None = None,
 ) -> list[list[float]]:
     """
     Simulate with the control systems of motulator and of the S-function.
 
     The system is built twice by `build`, and `sfun` creates the control system of
-    the S-function from the control system of motulator (for its references).
+    the S-function from the control system of motulator (for its references). The
+    signals agree to 1e-8 relative to their magnitudes (at least 1), or to `rtol`.
     Returns the inputs of the S-function at each step.
 
     """
@@ -164,7 +166,7 @@ def compare(
         err = np.max(np.abs(getattr(res_sl.ctrl.out, name) - value))
         scale = np.max(np.abs(value))
         print(f"  {name}: max error {err:.3g} (max value {scale:.3g})")
-        assert err <= 1e-8 * max(scale, 1.0), name
+        assert err <= (rtol or {}).get(name, 1e-8) * max(scale, 1.0), name
     return sl.recorded
 
 

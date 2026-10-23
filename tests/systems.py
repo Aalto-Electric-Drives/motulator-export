@@ -276,6 +276,10 @@ VHZ_IDS = [
     "open_loop_dead_time_min_pulse",
     "ovhz_blocked",
 ]
+# Tolerances of V/Hz control relative to the signal magnitudes (see `compare`): with
+# the flux reference at its current limit (e.g., after the release of the gates), the
+# current limit of the torque reference is the square root of a rounding error
+VHZ_RTOL = {"tau_M_ref": 1e-6}
 
 
 MODEL_DIR = Path(__file__).parents[1] / "examples" / "trained_models"

@@ -12,6 +12,12 @@ static double py_min(double a, double b)
     return (b < a) ? b : a;
 }
 
+/* Maximum as the built-in max of Python, see py_min */
+static double py_max(double a, double b)
+{
+    return (b > a) ? b : a;
+}
+
 /* Configuration ------------------------------------------------------------ */
 
 static IMVHzControllerCfg im_vhz_controller_cfg(double psi_s_nom, double i_s_max)
@@ -102,12 +108,17 @@ static void im_reference_gen_flux_and_torque(const IMReferenceGenerator *self,
         /* Breakdown torque limit */
         double k = self->k_b * par->L_M / (par->L_M + par->L_sgm);
         double tau_b = 0.75 * par->n_p * k * (psi * psi) / par->L_sgm;
-        /* Current limit */
-        double i_m = psi_R / par->L_M;
+        /* Current limit: the stator flux on the circle psi stays within the circle
+         * L_sgm*i_s_max around the rotor flux, which gives the maximum q-component
+         * of the stator flux in rotor flux coordinates */
         double tau_M_cl = 0.0;
-        if (psi_R < par->L_M * self->i_s_max) {
-            double i_q_max = sqrt(self->i_s_max * self->i_s_max - i_m * i_m);
-            tau_M_cl = 1.5 * par->n_p * psi_R * i_q_max;
+        if (psi_R > 0.0) {
+            double psi_cl = par->L_sgm * self->i_s_max;
+            double psi_sd =
+                (psi * psi + psi_R * psi_R - psi_cl * psi_cl) / (2.0 * psi_R);
+            psi_sd = py_max(psi_sd, 0.0);
+            double psi_sq = sqrt(py_max(psi * psi - psi_sd * psi_sd, 0.0));
+            tau_M_cl = 1.5 * par->n_p * psi_R * psi_sq / par->L_sgm;
         }
         /* Limited torque reference */
         double tau =

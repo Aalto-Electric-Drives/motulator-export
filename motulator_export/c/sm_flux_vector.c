@@ -76,8 +76,12 @@ static void flux_observer_compute_output(const FluxObserver *self,
     out->i_s = cexp(-I * out->theta_c) * i_s_ab;
     out->u_s = 0.0;
 
-    /* Flux estimation error */
+    /* Flux estimation error. If the voltage is unknown (NAN), the flux estimate
+     * follows the current model alone, so the error is zero. */
     double complex psi_s_model = psi_s_dq(par, out->i_s);
+    if (isnan(creal(u_s_ab))) {
+        out->psi_s = psi_s_model;
+    }
     out->e_o = psi_s_model - out->psi_s;
 
     /* Auxiliary flux */
