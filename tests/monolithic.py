@@ -323,6 +323,7 @@ SM_CVC_MASK_PARAMS = [
     MaskParam("J", "J", TAB, "cfg.J"),
     MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
     MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    MaskParam("discrete", "discrete", TAB, "cfg.discrete"),
     *SPEED_MASK_PARAMS,
     *PWM_MASK_PARAMS,
 ]
@@ -472,6 +473,7 @@ IM_MASK_PARAMS = [
     MaskParam("J", "J", TAB, "cfg.J"),
     MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
     MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    MaskParam("discrete", "discrete", TAB, "cfg.discrete"),
     *SPEED_MASK_PARAMS,
     *PWM_MASK_PARAMS,
 ]

@@ -3,8 +3,7 @@ classdef CurrentVectorControllerCfg < motulator.internal.Object
     %   CFG = CURRENTVECTORCONTROLLERCFG(i_s_max=..., ...) as in motulator, []
     %   meaning None (the default). The observer gain k_o is [k0 k1], k_o(w_m) = k0 +
     %   k1*abs(w_m), or [] for the default. The offline reference generation
-    %   (online_ref = false), k_f = [], and the continuous-time current controller
-    %   (discrete = false) only.
+    %   (online_ref = false) and k_f = [] only.
 
     properties
         i_s_max                % Maximum stator current (A)
@@ -22,15 +21,15 @@ classdef CurrentVectorControllerCfg < motulator.internal.Object
         sensorless = true      % Sensorless mode (or sensored)
         online_ref = false     % Online reference generation, only false
         T_s = 125e-6           % Sampling period (s)
-        discrete = false       % Discrete-time current controller, only false
+        discrete = false       % Direct discrete-time current controller
     end
 
     methods
         function obj = CurrentVectorControllerCfg(varargin)
             obj.set_args(varargin, {'i_s_max'}, {'i_s_max'});
-            if ~isempty(obj.k_f) || obj.online_ref || obj.discrete
-                error('motulator:unsupported', ['Only k_f = [], online_ref = ' ...
-                    'false, and discrete = false supported.']);
+            if ~isempty(obj.k_f) || obj.online_ref
+                error('motulator:unsupported', ...
+                    'Only k_f = [] and online_ref = false supported.');
             end
         end
     end

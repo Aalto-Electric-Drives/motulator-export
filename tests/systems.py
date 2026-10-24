@@ -85,12 +85,23 @@ def sm_system(
     return build, signals
 
 
+# Minimum duty ratio of the tests of current-vector control of synchronous machines,
+# above the smallest duty ratios at the speed reference
+SM_CVC_D_MIN = 0.2
+
+
 def sm_cvc_system(
-    sensorless: bool, t_d: float, blocked: bool = False
+    sensorless: bool,
+    t_d: float,
+    blocked: bool = False,
+    discrete: bool = False,
+    d_min: float = 0.0,
 ) -> tuple[Build, Signals]:
     """
     Synchronous machine drive of `sm_system` with current-vector control, optionally
-    with the gates blocked at the start and during the operation (`blocked`).
+    with the gates blocked at the start and during the operation (`blocked`), with
+    the direct discrete-time current controller (`discrete`), and with the minimum
+    duty ratio `d_min`.
     """
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
@@ -101,14 +112,16 @@ def sm_cvc_system(
             model.VoltageSourceConverter(u_dc=540, t_d=t_d),
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 10.0)
-        cfg = sm_control.CurrentVectorControllerCfg(i_s_max=6.5, sensorless=sensorless)
+        cfg = sm_control.CurrentVectorControllerCfg(
+            i_s_max=6.5, sensorless=sensorless, discrete=discrete
+        )
         d_err = None
         if t_d > 0:
             d_err = sm_control.InverterNonlinearity(t_d, sign=smooth_sign)
         ctrl = VectorControlSystem(
             sm_control.CurrentVectorController(par, cfg),
             sm_control.SpeedController(**SM_SPEED),
-            sm_control.PWM(d_err=d_err),
+            sm_control.PWM(d_err=d_err, d_min=d_min),
         )
         ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
         if blocked:
@@ -132,8 +145,14 @@ def im_system(
     u_th: float = 0.0,
     single_update: bool = False,
     blocked: bool = False,
+    discrete: bool = False,
+    d_min: float = 0.0,
 ) -> tuple[Build, Signals]:
-    """Induction machine drive with current-vector control, see `sm_system`."""
+    """
+    Induction machine drive with current-vector control, see `sm_system`, optionally
+    with the direct discrete-time current controller (`discrete`) and the minimum
+    duty ratio `d_min`.
+    """
     par = model.InductionMachineInvGammaPars(**IM_PAR)
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
@@ -146,7 +165,7 @@ def im_system(
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 14.6)
         cfg = im_control.CurrentVectorControllerCfg(
-            psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless
+            psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless, discrete=discrete
         )
         sign = np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
         d_err = None
@@ -155,7 +174,7 @@ def im_system(
         ctrl = VectorControlSystem(
             im_control.CurrentVectorController(par, cfg),
             im_control.SpeedController(**IM_SPEED),
-            im_control.PWM(d_err=d_err, single_update=single_update),
+            im_control.PWM(d_err=d_err, d_min=d_min, single_update=single_update),
         )
         ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
         if blocked:
@@ -408,6 +427,7 @@ EXAMPLE_SYSTEMS = [
     "ipmsm_2kw_fvc",
     "ipmsm_2kw_vhz",
     "ipmsm_2kw_cvc",
+    "ipmsm_2kw_cvc_discrete",
     "pmsyrm_6kw_gn_fvc",
     "im_2kw_cvc",
     "im_2kw_vhz",
@@ -421,11 +441,12 @@ def example_system(name: str) -> tuple[Any, Any, float]:
     """
     The system of an example with its references (as the script sets them), and its
     stop time. The folder `EXAMPLES` must be on the path, since the scripts import
-    their helpers.
+    their helpers. The suffix _open_loop or _discrete of the name selects the option
+    of the script (e.g., --open-loop), the argument of its `build_system`.
     """
-    open_loop = name.endswith("_open_loop")
-    ex = importlib.import_module(name.removesuffix("_open_loop"))
-    mdl, ctrl = ex.build_system(True) if open_loop else ex.build_system()
+    suffix = next((s for s in ("_open_loop", "_discrete") if name.endswith(s)), "")
+    ex = importlib.import_module(name.removesuffix(suffix))
+    mdl, ctrl = ex.build_system(True) if suffix else ex.build_system()
     if hasattr(ex, "W_M_REF"):
         ctrl.set_speed_ref(ex.W_M_REF)
         mdl.mechanics.set_external_load_torque(ex.TAU_L)

@@ -361,15 +361,9 @@ def enable_signal(ctrl: Any) -> StepSignal | float | Callable[[float], float]:
 def check_supported_control(ctrl: Any, d_err: bool) -> None:
     """
     Raise an error if the PWM of the control system is not supported (the duty-ratio
-    error model only if `d_err`, and then without the minimum pulses if compensated)
-    or the gate enable is not supported (see `gate_enable`).
+    error model only if `d_err`) or the gate enable is not supported (see
+    `gate_enable`).
     """
     check_supported_pwm(ctrl, d_err=d_err, enable=False)
-    pwm = ctrl.pwm
-    pwm_values(pwm)  # Raises if the duty-ratio error model is not supported
-    if pwm.d_err is not None and pwm.feedforward and pwm.d_min > 0:
-        raise NotImplementedError(
-            "Minimum pulses (d_min) with the compensation of the duty-ratio error not "
-            "supported"
-        )
+    pwm_values(ctrl.pwm)  # Raises if the duty-ratio error model is not supported
     enable_signal(ctrl)  # Raises if not supported

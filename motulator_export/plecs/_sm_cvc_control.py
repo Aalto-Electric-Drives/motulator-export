@@ -25,7 +25,12 @@ are defined in `sm_current_vector.h`.
 
 from typing import Any
 
+from motulator_export.plecs._common import ENABLE
 from motulator_export.plecs._control import (
+    CURRENT_CTRL_UPDATE,
+    M_CURRENT_CTRL_OUTPUT,
+    M_CURRENT_CTRL_START,
+    M_CURRENT_CTRL_UPDATE,
     PAR_CFG,
     SAMPLING,
     Signals,
@@ -201,16 +206,24 @@ def _reference_generator() -> CBlock:
 
 
 def _current_controller() -> CBlock:
-    """Current controller (CurrentController)."""
+    """
+    Current controller (CurrentController, or DiscreteCurrentController with the
+    parameter `discrete`).
+    """
     mask = Mask(
         "CurrentController (motulator)",
-        "Flux-linkage-based 2DOF PI current controller (CurrentController): the "
-        "currents are mapped to the flux linkages by the machine model. The inputs "
-        "are the current reference and the feedback signals fbk (the current fbk.i_s, "
-        "and the realized voltage fbk.u_s and the angular speed fbk.w_c of the "
-        "coordinates for the integral state), and the output is the voltage "
-        "reference. When the observer catches the machine (fbk.caught), the integral "
-        "state is preset to the back-EMF of the caught speed." + PAR_DESCRIPTION,
+        "Flux-linkage-based current controller: the 2DOF PI controller "
+        "(CurrentController) or, if discrete = 1, the direct discrete-time controller "
+        "(DiscreteCurrentController), the currents mapped to the flux linkages by the "
+        "machine model. The inputs are the current reference, the feedback signals "
+        "fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular "
+        "speed fbk.w_c of the coordinates for the update), and for the update of the "
+        "discrete-time controller, the limited voltage reference u_c_lim_ab of the "
+        "PWM in stationary coordinates, used while the gates are enabled (the input "
+        "enable nonzero), as in CurrentVectorController.update. The output is the "
+        "voltage reference. When the observer catches the machine (fbk.caught), the "
+        "integral state is preset to the back-EMF of the caught speed."
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -220,8 +233,14 @@ def _current_controller() -> CBlock:
             ),
             Param(
                 "alpha_i",
-                "alpha_i: Integral-action bandwidth (rad/s), [] = alpha_c",
+                "alpha_i: Integral-action bandwidth (rad/s), [] = alpha_c, not used "
+                "if discrete",
                 "cfg.alpha_i",
+            ),
+            Param(
+                "discrete",
+                "discrete: Direct discrete-time current controller (1) or not (0)",
+                "cfg.discrete",
             ),
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
         ],
@@ -230,10 +249,11 @@ def _current_controller() -> CBlock:
     params = mask_params(mask, PAR)
     i = {p: k for k, p in enumerate(params)}
     start = (
-        checks(params, ["alpha_c", "T_s"])
+        checks(params, ["alpha_c", "discrete", "T_s"])
         + _par_code(i["par_n_p"])
         + f"sm_current_ctrl_init(&self, par, P({i['alpha_c']}, 0), "
-        f"PARAM({i['alpha_i']}));\n"
+        f"PARAM({i['alpha_i']}),\n"
+        f"                     (int)P({i['discrete']}, 0), P({i['T_s']}, 0));\n"
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
@@ -241,7 +261,7 @@ def _current_controller() -> CBlock:
         + "/* Preset at the back-EMF of the caught speed\n"
         " * (CurrentVectorController.get_feedback) */\n"
         "if (fbk.caught) {\n"
-        "    sm_current_ctrl_preset(&self, I * fbk.w_m * fbk.psi_f);\n"
+        "    sm_current_ctrl_preset(&self, I * fbk.w_m * fbk.psi_f, fbk.w_c);\n"
         "}\n"
         "double complex u_s_ref =\n"
         f"    sm_current_ctrl_compute_output(&self, {complex_in(0)}, fbk.i_s);\n"
@@ -249,31 +269,46 @@ def _current_controller() -> CBlock:
     )
     return CBlock(
         "CurrentController",
-        [Port("i_s_ref", 2), SIGNALS.port("fbk")],
+        [
+            Port("i_s_ref", 2),
+            SIGNALS.port("fbk"),
+            Port("u_c_lim_ab", 2),
+            Port(ENABLE, 1),
+        ],
         [Port("u_s", 2)],
         SIGNALS.class_code(
             "SMCurrentController",
             start,
             output,
-            "sm_current_ctrl_update(&self, T_s, fbk.u_s, fbk.w_c);\n",
+            CURRENT_CTRL_UPDATE + "sm_current_ctrl_update(&self, T_s, u, fbk.w_c);\n",
             workspace=SAMPLING + "static ObserverOutputs fbk;\n",
         ),
         params,
         SIGNALS.sfunction("current_controller"),
+        feedthrough=[1, 1, 0, 0],
         mask=mask,
         mcode=MCode(
-            start=M_PAR + "self = sm_current_ctrl_init(par, p.alpha_c, p.alpha_i);\n",
+            start=M_PAR
+            + "self = sm_current_ctrl_init(par, p.alpha_c, p.alpha_i, p.discrete, "
+            "p.T_s);\n" + M_CURRENT_CTRL_START,
             output="% Preset at the back-EMF of the caught speed\n"
             "% (CurrentVectorController.get_feedback)\n"
             "if fbk.caught\n"
-            "    self = sm_current_ctrl_preset(self, 1i*fbk.w_m*fbk.psi_f);\n"
+            "    self = sm_current_ctrl_preset(self, 1i*fbk.w_m*fbk.psi_f, "
+            "fbk.w_c);\n"
             "end\n"
-            "[self, u_s] = sm_current_ctrl_compute_output(self, i_s_ref, fbk.i_s);\n",
-            update="self = sm_current_ctrl_update(self, p.T_s, fbk.u_s, fbk.w_c);\n",
-            inputs={"i_s_ref": COMPLEX, "fbk": SIGNALS.vector("fbk")},
+            "[self, u_s] = sm_current_ctrl_compute_output(self, i_s_ref, fbk.i_s);\n"
+            + M_CURRENT_CTRL_OUTPUT,
+            update=M_CURRENT_CTRL_UPDATE
+            + "self = sm_current_ctrl_update(self, p.T_s, u, self.fbk_w_c);\n",
+            inputs={
+                "i_s_ref": COMPLEX,
+                "fbk": SIGNALS.vector("fbk"),
+                "u_c_lim_ab": COMPLEX,
+            },
             outputs={"u_s": COMPLEX},
             functions=M_PAR_FUNCTION,
-            checks=(*required("alpha_c", "T_s"), *M_PAR_CHECKS),
+            checks=(*required("alpha_c", "discrete", "T_s"), *M_PAR_CHECKS),
         ),
     )
 
@@ -287,10 +322,12 @@ def _current_vector_controller() -> Subsystem:
         "CurrentVectorController (motulator)",
         "Current-vector controller (CurrentVectorController). The configuration cfg is "
         "a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the "
-        "default; the offline reference generation, k_f = [], and the "
-        "continuous-time current controller only). The parameters are passed to the "
-        "blocks inside it, as CurrentVectorController, and the SpeedFluxObserver "
-        "resolves the defaults of create_speed_flux_observer." + PAR_DESCRIPTION,
+        "default; the offline reference generation and k_f = [] only). The "
+        "parameters are passed to the blocks inside it, as CurrentVectorController, "
+        "and the SpeedFluxObserver resolves the defaults of "
+        "create_speed_flux_observer. The inputs u_c_lim_ab (the limited voltage "
+        "reference of the PWM) and enable (the gate enable) are used by the direct "
+        "discrete-time current controller." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "vector_ctrl.par"),
             Param(
@@ -307,6 +344,8 @@ def _current_vector_controller() -> Subsystem:
             SIGNALS.port("meas"),
             Port("u_c_ab", 2),
             Port("u_c_zoh_ab", 2),
+            Port("u_c_lim_ab", 2),
+            Port(ENABLE, 1),
         ],
         [SIGNALS.port("fbk"), SIGNALS.port("ref")],
         [
@@ -327,13 +366,15 @@ def _current_vector_controller() -> Subsystem:
             ("tau_M_ref", "ReferenceGenerator:tau_M_ref"),
             ("meas.u_dc:y", "ReferenceGenerator:u_dc"),
             ("ReferenceGenerator:i_s", "CurrentController:i_s_ref"),
+            ("u_c_lim_ab", "CurrentController:u_c_lim_ab"),
+            (ENABLE, f"CurrentController:{ENABLE}"),
             ("ReferenceGenerator:ref", "Mux ref:ref"),
             ("ReferenceGenerator:i_s", "Mux ref:i_s"),
             ("CurrentController:u_s", "Mux ref:u_s"),
             ("Mux ref:y", "ref"),
         ],
         columns=[
-            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab"],
+            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab", "u_c_lim_ab", ENABLE],
             ["SpeedFluxObserver"],
             ["meas.u_dc"],
             ["ReferenceGenerator"],
@@ -355,7 +396,9 @@ def _current_vector_controller() -> Subsystem:
             "Mux ref:ref": "over:CurrentController:1",
             "Mux ref:i_s": "over:CurrentController:0",
             "meas.u_dc:u": "early",
+            "fbk": "under:CurrentController:0",
         },
+        tags=["u_c_lim_ab", ENABLE],
         mask=mask,
     )
 
@@ -409,6 +452,7 @@ CVC_BLOCK = control_block(
 # without k_f), in the order of the model initialization and of the native library
 CFG_FIELDS = ["i_s_max", "alpha_c", "alpha_i", "alpha_o", "alpha_ref", "k_o"]
 CFG_FIELDS += ["psi_s_min", "psi_s_max", "k_u", "k_mtpv", "J", "sensorless", "T_s"]
+CFG_FIELDS += ["discrete"]
 
 
 def init_script(

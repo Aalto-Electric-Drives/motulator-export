@@ -10,12 +10,14 @@ compares the results.
 
 Run from the repository root:
 
-    python examples/ipmsm_2kw_cvc.py [--blocked]
+    python examples/ipmsm_2kw_cvc.py [--blocked] [--discrete]
 
 With --blocked, the gates of the converter are blocked before the start and during
 the operation, as in the example (ipmsm_2kw_cvc_blocked.plecs): while the gates are
 blocked, the control system runs in standby, and when they are released at 0.8 s,
-it catches the rotating machine with a flying start.
+it catches the rotating machine with a flying start. With --discrete, the current
+controller is the direct discrete-time one (discrete=True,
+ipmsm_2kw_cvc_discrete.plecs).
 
 """
 
@@ -49,8 +51,13 @@ ENABLE = StepSignal(time=[0.05, 0.6, 0.8], after=[1.0, 0.0, 1.0], before=0.0)
 
 
 # %%
-def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
-    """Build the drive system of the motulator example."""
+def build_system(
+    discrete: bool = False,
+) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Build the drive system of the motulator example, optionally with the direct
+    discrete-time current controller (`discrete`).
+    """
     par = model.SynchronousMachinePars(
         n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
     )
@@ -61,7 +68,7 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
         pwm=True,
     )
     mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
-    cfg = control.CurrentVectorControllerCfg(i_s_max=1.5 * base.i)
+    cfg = control.CurrentVectorControllerCfg(i_s_max=1.5 * base.i, discrete=discrete)
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(par, cfg),
         control.SpeedController(J=0.015, alpha_s=2 * pi * 4),
@@ -72,14 +79,15 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
 # %%
 if __name__ == "__main__":
     blocked = "--blocked" in sys.argv  # Gates blocked at the start and later
-    mdl, ctrl = build_system()
+    discrete = "--discrete" in sys.argv  # Direct discrete-time current control
+    mdl, ctrl = build_system(discrete)
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    suffix = ""
+    suffix = "_discrete" if discrete else ""
     if blocked:
         # The gate enable of the control system, exported as its input enable
         ctrl.set_enable(ENABLE)
-        suffix = "_blocked"
+        suffix += "_blocked"
     path = Path(__file__).with_name(f"ipmsm_2kw_cvc{suffix}.plecs")
     tmp = write_plecs_model(path, mdl, ctrl, T_STOP)
 

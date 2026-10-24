@@ -69,6 +69,7 @@ from tests.systems import (
     BASE,
     IM_PAR,
     IM_SPEED,
+    SM_CVC_D_MIN,
     SM_PAR,
     SM_SPEED,
     SM_VHZ_CASES,
@@ -254,15 +255,25 @@ def test_gradnet_flux_vector_control(compiled: Compiled) -> None:
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked"),
+    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked", "discrete"),
     [
-        (True, 0.0, 0.0, 0.0, False, False),
-        (False, 0.0, 0.0, 0.0, False, False),
-        (True, 2e-6, 0.5, 0.0, False, False),
-        (True, 2e-6, 0.5, 1.0, True, False),
-        (True, 0.0, 0.5, 1.0, False, True),
+        (True, 0.0, 0.0, 0.0, False, False, False),
+        (False, 0.0, 0.0, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 1.0, True, False, False),
+        (True, 0.0, 0.5, 1.0, False, True, False),
+        (True, 2e-6, 0.5, 0.0, False, False, True),
+        (True, 0.0, 0.5, 1.0, False, True, True),
     ],
-    ids=["sensorless", "sensored", "dead_time_tanh", "u_th_single", "u_th_blocked"],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time_tanh",
+        "u_th_single",
+        "u_th_blocked",
+        "discrete_dead_time",
+        "discrete_blocked",
+    ],
 )
 def test_current_vector_control(
     compiled: Compiled,
@@ -272,11 +283,14 @@ def test_current_vector_control(
     u_th: float,
     single_update: bool,
     blocked: bool,
+    discrete: bool,
 ) -> None:
     """Current-vector control should agree with motulator, and exactly with the
-    monolithic control system, also with the threshold voltage, single update, and
-    the gates blocked."""
-    build, signals = im_system(sensorless, t_d, i_0, u_th, single_update, blocked)
+    monolithic control system, also with the threshold voltage, single update, the
+    gates blocked, and the direct discrete-time current controller."""
+    build, signals = im_system(
+        sensorless, t_d, i_0, u_th, single_update, blocked, discrete
+    )
     values = _im.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
@@ -305,15 +319,37 @@ def test_vhz_control(
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "blocked"),
-    [(True, 0.0, False), (False, 0.0, False), (True, 2e-6, False), (True, 0.0, True)],
-    ids=["sensorless", "sensored", "dead_time", "blocked"],
+    ("sensorless", "t_d", "blocked", "discrete", "d_min"),
+    [
+        (True, 0.0, False, False, 0.0),
+        (False, 0.0, False, False, 0.0),
+        (True, 2e-6, False, False, 0.0),
+        (True, 0.0, True, False, 0.0),
+        (True, 2e-6, False, True, 0.0),
+        (True, 0.0, False, True, SM_CVC_D_MIN),
+        (True, 0.0, True, True, 0.0),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time",
+        "blocked",
+        "discrete_dead_time",
+        "discrete_min_pulse",
+        "discrete_blocked",
+    ],
 )
 def test_sm_current_vector_control(
-    compiled: Compiled, sensorless: bool, t_d: float, blocked: bool
+    compiled: Compiled,
+    sensorless: bool,
+    t_d: float,
+    blocked: bool,
+    discrete: bool,
+    d_min: float,
 ) -> None:
-    """Current-vector control of a synchronous machine drive."""
-    build, signals = sm_cvc_system(sensorless, t_d, blocked)
+    """Current-vector control of a synchronous machine drive, also with the direct
+    discrete-time current controller."""
+    build, signals = sm_cvc_system(sensorless, t_d, blocked, discrete, d_min)
     values, _ = _sm.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:

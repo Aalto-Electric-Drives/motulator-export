@@ -82,6 +82,7 @@ from tests.sfunctions import (
 from tests.systems import (
     EXAMPLE_SYSTEMS,
     EXAMPLES,
+    SM_CVC_D_MIN,
     SM_PAR,
     SM_VHZ_CASES,
     SM_VHZ_IDS,
@@ -235,24 +236,29 @@ def case(name: str) -> Case:  # noqa: PLR0911
         # overmodulation, unless the current direction s is exactly +-1, as np.sign
         # gives (i_0 = 0)
         args = {
-            "cvc_sensorless": (True, 0.0, 0.0, 0.0, False, False),
-            "cvc_sensored": (False, 0.0, 0.0, 0.0, False, False),
-            "cvc_dead_time_tanh": (True, 2e-6, 0.5, 0.0, False, False),
-            "cvc_u_th_single": (True, 2e-6, 0.0, 1.0, True, False),
-            "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True),
+            "cvc_sensorless": (True, 0.0, 0.0, 0.0, False, False, False),
+            "cvc_sensored": (False, 0.0, 0.0, 0.0, False, False, False),
+            "cvc_dead_time_tanh": (True, 2e-6, 0.5, 0.0, False, False, False),
+            "cvc_u_th_single": (True, 2e-6, 0.0, 1.0, True, False, False),
+            "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True, False),
+            "cvc_discrete_dead_time": (True, 2e-6, 0.5, 0.0, False, False, True),
+            "cvc_discrete_blocked": (True, 0.0, 0.5, 1.0, False, True, True),
         }[name]
         build, signals = im_system(*args)
         values = _im.export_values(build()[1])
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
     if name.startswith("smcvc"):
-        sensorless, t_d, blocked = {
-            "smcvc_sensorless": (True, 0.0, False),
-            "smcvc_sensored": (False, 0.0, False),
-            "smcvc_dead_time": (True, 2e-6, False),
-            "smcvc_blocked": (True, 0.0, True),
+        sm_cvc_args = {
+            "smcvc_sensorless": (True, 0.0, False, False, 0.0),
+            "smcvc_sensored": (False, 0.0, False, False, 0.0),
+            "smcvc_dead_time": (True, 2e-6, False, False, 0.0),
+            "smcvc_blocked": (True, 0.0, True, False, 0.0),
+            "smcvc_discrete_dead_time": (True, 2e-6, False, True, 0.0),
+            "smcvc_discrete_min_pulse": (True, 0.0, False, True, SM_CVC_D_MIN),
+            "smcvc_discrete_blocked": (True, 0.0, True, True, 0.0),
         }[name]
-        build, signals = sm_cvc_system(sensorless, t_d, blocked)
+        build, signals = sm_cvc_system(*sm_cvc_args)
         values, _ = _sm.export_values(build()[1])
         run = drive_run(build, signals, _sm_cvc_control.CVC_BLOCK, 0.3)
         return "smcvc", values, None, run, SM_INPUTS
@@ -290,11 +296,16 @@ CASES = [
     "smcvc_sensored",
     "smcvc_dead_time",
     "smcvc_blocked",
+    "smcvc_discrete_dead_time",
+    "smcvc_discrete_min_pulse",
+    "smcvc_discrete_blocked",
     "cvc_sensorless",
     "cvc_sensored",
     "cvc_dead_time_tanh",
     "cvc_u_th_single",
     "cvc_u_th_blocked",
+    "cvc_discrete_dead_time",
+    "cvc_discrete_blocked",
     *(f"vhz_{v}" for v in VHZ_IDS),
     *SM_VHZ_IDS,
     "gfl",

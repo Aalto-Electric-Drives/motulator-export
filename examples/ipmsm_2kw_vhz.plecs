@@ -948,7 +948,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc, NULL);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
         Show          off
       }
       Parameter {

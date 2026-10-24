@@ -276,6 +276,41 @@ class Signals:
 T_S = Param("T_s", "T_s: Sampling period (s)", "T_s")
 SAMPLING = "static double T_s; /* Sampling period */\n"
 
+# Update of the current controllers of current-vector control
+# (CurrentVectorController.update), with the inputs i_s_ref, fbk, u_c_lim_ab (the
+# limited voltage reference of the PWM in stationary coordinates), and enable (the
+# gate enable): the voltage of the update. In the MATLAB code, the update is done at
+# the next call (u_c_lim_ab and enable come through unit delays), so the feedback
+# signals are stored in the state.
+CURRENT_CTRL_UPDATE = (
+    "/* The discrete-time controller takes its limited output, except with blocked\n"
+    " * gates, when the open-circuit voltage of the observer is the realized one */\n"
+    "double complex u = fbk.u_s;\n"
+    "if (self.discrete && InputSignal(3, 0) > 0.0) {\n"
+    "    u = cexp(-I * fbk.theta_c) * complex_from(InputSignal(2, 0), "
+    "InputSignal(2, 1));\n"
+    "}\n"
+)
+M_CURRENT_CTRL_START = (
+    "% Feedback signals of the sampling period, for its update done at the next call\n"
+    "self.fbk_u_s = complex(0);\n"
+    "self.fbk_w_c = 0;\n"
+    "self.fbk_theta_c = 0;\n"
+)
+M_CURRENT_CTRL_OUTPUT = (
+    "self.fbk_u_s = fbk.u_s;\n"
+    "self.fbk_w_c = fbk.w_c;\n"
+    "self.fbk_theta_c = fbk.theta_c;\n"
+)
+M_CURRENT_CTRL_UPDATE = (
+    "% The discrete-time controller takes its limited output, except with blocked\n"
+    "% gates, when the open-circuit voltage of the observer is the realized one\n"
+    "u = self.fbk_u_s;\n"
+    "if self.discrete && enable > 0\n"
+    "    u = exp(-1i*self.fbk_theta_c)*u_c_lim_ab;\n"
+    "end\n"
+)
+
 
 def speed_controller(sig: Signals) -> CBlock:
     """Speed controller (SpeedController)."""
@@ -366,7 +401,7 @@ def speed_controller(sig: Signals) -> CBlock:
 
 def pwm(
     sig: Signals, standby: tuple[str, str] = ("NAN", "complex(NaN, NaN)"),
-    standby_input: bool = False
+    standby_input: bool = False, limited: bool = False
 ) -> Subsystem:  # fmt: skip
     """
     PWM: the duty ratios (compute_output) and the realized voltage.
@@ -375,7 +410,11 @@ def pwm(
     `standby` (its C and MATLAB expressions): NAN by default, i.e., unknown, or the
     measured PCC voltage of the grid converters. With `standby_input`, the input is
     the standby of a vector control system instead (`standby` nonzero, also at the
-    first sampling instant after the release of a sensorless drive).
+    first sampling instant after the release of a sensorless drive). With `limited`,
+    the output `u_c_lim_ab` is the limited voltage reference excluding the
+    compensation of the duty-ratio error (limited_voltage), for the direct
+    discrete-time current controllers, and the duty ratios come to the realized
+    voltage by tags, so that the wires do not cross.
 
     """
     ctrl = "standby" if standby_input else ENABLE
@@ -459,25 +498,30 @@ def pwm(
     )
     m_checks = required(*params)
     meas = sig.port("meas")
+    lim = ("u_c_lim_ab", "&u_c_lim_ab") if limited else ("~", "NULL")
     output = (
         sig.read(0, "meas")
         + f"double complex u_c_ref_ab = {complex_in(1)};\n"
         + "double d_abc[3];\n"
-        "pwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n"
-        "                   meas.i_c_ab, d_abc);\n" + _write(0, "3", "d_abc")
+        + ("double complex u_c_lim_ab;\n" if limited else "")
+        + "pwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n"
+        f"                   meas.i_c_ab, d_abc, {lim[1]});\n"
+        + (complex_out(0, "u_c_lim_ab") if limited else "")
+        + _write(int(limited), "3", "d_abc")
     )
     compute = CBlock(
         "compute_output",
         [meas, Port("u_c_ref_ab", 2), Port("w", 1)],
-        [Port("d_abc", 3)],
+        [*([Port("u_c_lim_ab", 2)] if limited else []), Port("d_abc", 3)],
         sig.class_code("PWM", start, output, "", SAMPLING),
         params,
         sig.sfunction("pwm"),
         mcode=MCode(
             start=m_start,
-            output="[~, d_abc] = pwm_compute_output(self, p.T_s, u_c_ref_ab, "
-            "meas.u_dc, w, meas.i_c_ab);\n",
+            output=f"[~, d_abc, {lim[0]}] = pwm_compute_output(self, p.T_s, "
+            "u_c_ref_ab, ...\n    meas.u_dc, w, meas.i_c_ab);\n",
             inputs={"meas": sig.vector("meas"), "u_c_ref_ab": COMPLEX},
+            outputs={"u_c_lim_ab": COMPLEX} if limited else {},
             checks=m_checks,
         ),
     )
@@ -531,6 +575,21 @@ def pwm(
             checks=m_checks,
         ),
     )
+    # The duty ratios to the realized voltage by a wire, or by tags below the limited
+    # voltage
+    d_abc_tags = [
+        Tag("Goto d_abc", "d_abc", 3, goto=True),
+        Tag("From d_abc", "d_abc", 3, goto=False),
+    ]
+    d_abc_to_realized = (
+        [
+            ("compute_output:d_abc", "Goto d_abc"),
+            ("From d_abc", "get_realized_voltage:d_abc"),
+            ("compute_output:u_c_lim_ab", "u_c_lim_ab"),
+        ]
+        if limited
+        else [("compute_output:d_abc", "get_realized_voltage:d_abc")]
+    )
     return Subsystem(
         "PWM",
         # The standby below the measurements, which the vector control systems
@@ -538,8 +597,13 @@ def pwm(
         [meas, Port(ctrl, 1), Port("u_c_ref_ab", 2), Port("w", 1)]
         if standby_input
         else [Port(ctrl, 1), meas, Port("u_c_ref_ab", 2), Port("w", 1)],
-        [Port("u_c_ab", 2), Port("u_c_zoh_ab", 2), Port("d_abc", 3)],
-        [compute, realized],
+        [
+            Port("u_c_ab", 2),
+            Port("u_c_zoh_ab", 2),
+            *([Port("u_c_lim_ab", 2)] if limited else []),
+            Port("d_abc", 3),
+        ],
+        [compute, realized, *(d_abc_tags if limited else [])],
         [
             (ctrl, f"get_realized_voltage:{ctrl}"),
             ("meas", "compute_output:meas"),
@@ -547,7 +611,7 @@ def pwm(
             ("u_c_ref_ab", "compute_output:u_c_ref_ab"),
             ("w", "compute_output:w"),
             ("compute_output:d_abc", "d_abc"),
-            ("compute_output:d_abc", "get_realized_voltage:d_abc"),
+            *d_abc_to_realized,
             ("get_realized_voltage:u_c_ab", "u_c_ab"),
             ("get_realized_voltage:u_c_zoh_ab", "u_c_zoh_ab"),
         ],
@@ -555,12 +619,23 @@ def pwm(
             ["meas", ctrl, "u_c_ref_ab", "w"]
             if standby_input
             else ["meas", "u_c_ref_ab", "w", ctrl],
-            ["compute_output"],
-            ["get_realized_voltage"],
-            ["u_c_ab", "u_c_zoh_ab", "d_abc"],
+            ["From d_abc", "compute_output"] if limited else ["compute_output"],
+            ["get_realized_voltage", "Goto d_abc"]
+            if limited
+            else ["get_realized_voltage"],
+            ["u_c_ab", "u_c_zoh_ab", *(["u_c_lim_ab"] if limited else []), "d_abc"],
         ],
-        align={
-            "get_realized_voltage:d_abc": "compute_output:d_abc-1",
+        align=(
+            {
+                "From d_abc": "get_realized_voltage:d_abc",
+                "compute_output:meas": "get_realized_voltage:d_abc+2",
+                "Goto d_abc": "compute_output:d_abc+1",
+                "u_c_lim_ab": "compute_output:u_c_lim_ab",
+            }
+            if limited
+            else {"get_realized_voltage:d_abc": "compute_output:d_abc-1"}
+        )
+        | {
             "meas": "get_realized_voltage:meas",
             "u_c_ab": "get_realized_voltage:u_c_ab",
             "d_abc": "compute_output:d_abc",
@@ -984,14 +1059,21 @@ def pcc_voltage_input(port: int) -> str:
 K_COMP = 1.5
 
 
-def modulate(sig: Signals, u: str, standby: bool = False) -> CBlock:
+def modulate(
+    sig: Signals, u: str, standby: bool = False, k_comp: bool = False
+) -> CBlock:
     """
     Voltage reference for the PWM (modulate): the voltage reference `u` (e.g.,
     ref.u_s) in stationary coordinates, its angle advanced by `k_comp*T_s*w_c`, and
     the angular speed of the coordinates. With `standby`, the block has the input
     `standby` of a vector control system, in which the voltage reference of a
-    sensorless drive is the zero vector (VectorControlSystem.modulate).
+    sensorless drive is the zero vector (VectorControlSystem.modulate). With
+    `k_comp`, the angle-advance factor is the parameter k_comp (of the vector
+    controller, zero with the direct discrete-time current controllers), else
+    `K_COMP`.
     """
+    factor = "k_comp" if k_comp else str(K_COMP)
+    comment = "of the vector controller" if k_comp else f"= {K_COMP} of the controller"
     zero_vector = (
         "/* The zero vector of a sensorless drive in standby */\n"
         "if (sensorless && InputSignal(2, 0) != 0.0) {\n"
@@ -1003,9 +1085,9 @@ def modulate(sig: Signals, u: str, standby: bool = False) -> CBlock:
     output = (
         sig.read(0, "fbk")
         + "/* Voltage reference in stationary coordinates, its angle advanced by\n"
-        f" * k_comp*T_s*w_c (k_comp = {K_COMP} of the controller) */\n"
+        f" * k_comp*T_s*w_c (k_comp {comment}) */\n"
         + f"double complex u_c_ref_ab = cexp(I * fbk.theta_c) * {complex_in(1)};\n"
-        + f"u_c_ref_ab *= cexp(I * {K_COMP} * T_s * fbk.w_c);\n"
+        + f"u_c_ref_ab *= cexp(I * {factor} * T_s * fbk.w_c);\n"
         + zero_vector
         + complex_out(0, "u_c_ref_ab")
         + "OutputSignal(1, 0) = fbk.w_c;\n"
@@ -1019,19 +1101,22 @@ def modulate(sig: Signals, u: str, standby: bool = False) -> CBlock:
         else ""
     )
     params = ["T_s", "sensorless"] if standby else ["T_s"]
+    params += ["k_comp"] if k_comp else []
     mcode = MCode(
         output="% Voltage reference in stationary coordinates, its angle advanced by\n"
-        f"% k_comp*T_s*w_c (k_comp = {K_COMP} of the controller)\n"
+        f"% k_comp*T_s*w_c (k_comp {comment})\n"
         f"u_c_ref_ab = exp(1i*fbk.theta_c)*{u};\n"
-        f"u_c_ref_ab = u_c_ref_ab*exp(1i*{K_COMP}*p.T_s*fbk.w_c);\n"
-        + m_zero_vector
-        + "w = fbk.w_c;\n",
+        f"u_c_ref_ab = u_c_ref_ab*exp(1i*{'p.k_comp' if k_comp else K_COMP}"
+        "*p.T_s*fbk.w_c);\n" + m_zero_vector + "w = fbk.w_c;\n",
         inputs={"fbk": sig.vector("fbk"), u: COMPLEX},
         outputs={"u_c_ref_ab": COMPLEX},
         checks=required(*params),
     )
+    i = {p: k for k, p in enumerate(params)}
     start = "T_s = P(0, 0);\n" + ("sensorless = (int)P(1, 0);\n" if standby else "")
+    start += f"k_comp = P({i['k_comp']}, 0);\n" if k_comp else ""
     workspace = SAMPLING + ("static int sensorless;\n" if standby else "")
+    workspace += "static double k_comp; /* Angle-advance factor */\n" if k_comp else ""
     return CBlock(
         "modulate",
         [sig.port("fbk"), Port(u, 2), *([Port("standby", 1)] if standby else [])],
@@ -1099,12 +1184,15 @@ def vector_control_system(
     The block `standby` gives the standby of the control system to the speed
     controller, the PWM, and `modulate`. The vector controller has the inputs
     `tau_M_ref`, `meas`, `u_c_ab`, and optionally `u_c_zoh_ab`, and the outputs
-    `fbk` and `ref`. The inputs of the monitored signals are `fbk`, `ref`, and
-    `w_M_ref`.
+    `fbk` and `ref`. A vector controller with the direct discrete-time current
+    controller also has the inputs `u_c_lim_ab` (the limited voltage reference of the
+    PWM) and `enable` (the gate enable, by tags). The inputs of the monitored signals
+    are `fbk`, `ref`, and `w_M_ref`.
 
     """
     vc = vector_ctrl.name
     zoh = "u_c_zoh_ab" in [p.name for p in vector_ctrl.inputs]
+    lim = "u_c_lim_ab" in [p.name for p in vector_ctrl.inputs]
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals and the references to the speed controller and to the
     # monitored signals, and the standby to the PWM and modulate, by tags, the
@@ -1132,10 +1220,10 @@ def vector_control_system(
             sig.selector("fbk", "w_M"),
             sig.selector("ref", "tau_M"),
             speed_controller(sig),
-            pwm(sig, standby_input=True),
+            pwm(sig, standby_input=True, limited=lim),
             vector_ctrl,
             sig.selector("ref", "u_s", complex_=True),
-            modulate(sig, "u_s", standby=True),
+            modulate(sig, "u_s", standby=True, k_comp=True),
             signals,
         ],
         [
@@ -1156,6 +1244,11 @@ def vector_control_system(
             ("SpeedController:tau_M_ref", f"{vc}:tau_M_ref"),
             ("PWM:u_c_ab", f"{vc}:u_c_ab"),
             *([("PWM:u_c_zoh_ab", f"{vc}:u_c_zoh_ab")] if zoh else []),
+            *(
+                [("PWM:u_c_lim_ab", f"{vc}:u_c_lim_ab"), (ENABLE, f"{vc}:enable")]
+                if lim
+                else []
+            ),
             ("PWM:d_abc", "d_abc"),
             (f"{vc}:fbk", "Goto fbk"),
             (f"{vc}:fbk", "modulate:fbk"),
@@ -1201,7 +1294,7 @@ def vector_control_system(
             f"{MONITOR}:fbk": "From fbk 2",
         },
         lanes={"PWM:u_c_ref_ab": "below:1", "PWM:w": "below:0"},
-        tags=["w_M_ref"],
+        tags=["w_M_ref", *([ENABLE] if lim else [])],
     )
 
 
@@ -1406,7 +1499,13 @@ TOP_ARGS = {
             ),
             ("pwm", "pwm: PWM as a struct"),
         ],
-        "T_s = vector_ctrl.cfg.T_s;\nsensorless = vector_ctrl.cfg.sensorless;\n",
+        "T_s = vector_ctrl.cfg.T_s;\nsensorless = vector_ctrl.cfg.sensorless;\n"
+        "% Angle-advance factor (k_comp of the vector controller), zero with the\n"
+        "% direct discrete-time current controller\n"
+        "k_comp = 1.5;\n"
+        "if isfield(vector_ctrl.cfg, 'discrete') && vector_ctrl.cfg.discrete\n"
+        "  k_comp = 0;\n"
+        "end\n",
     ),
     "VHzControlSystem": (
         [

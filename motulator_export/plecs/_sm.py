@@ -270,16 +270,13 @@ def check_supported_fvc(fvc: Any) -> None:
 def check_supported_cvc(cvc: Any) -> None:
     """
     Raise an error if the current-vector controller is not supported: the
-    continuous-time current controller, and the references, `k_f`, `k_o`, and the
-    machine models of `check_supported_fvc`.
+    references, `k_f`, `k_o`, and the machine models of `check_supported_fvc`.
     """
     if not isinstance(cvc, CurrentVectorController):
         raise NotImplementedError("Only CurrentVectorController supported")
     cfg = cvc.cfg
     if cfg.online_ref or cfg.k_f is not None:
         raise NotImplementedError("Only offline references and k_f=None supported")
-    if cfg.discrete:
-        raise NotImplementedError("Direct discrete-time current control not supported")
     if cfg.k_o is not None:
         fit_speed_dependent_gain(cfg.k_o, "k_o")  # Raises if not supported
     _check_supported_par(cvc.par)
@@ -384,6 +381,7 @@ def cvc_values(
         None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
     )
     values["sensorless"] = int(cfg.sensorless)
+    values["discrete"] = int(cfg.discrete)
     return values, flux_map
 
 

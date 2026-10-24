@@ -51,23 +51,15 @@ static int fvc_save(FluxVectorControlSystem *self)
 {
     const References *ref;
     const ObserverOutputs *fbk;
-    const PWM *pwm;
-    double k_comp;
     if (self->vhz) {
         ref = &self->vhz_ctrl.ref;
         fbk = &self->vhz_ctrl.fbk;
-        pwm = &self->vhz_ctrl.pwm;
-        k_comp = self->vhz_ctrl.k_comp;
     } else if (self->cvc) {
         ref = &self->cvc_ctrl.ref;
         fbk = &self->cvc_ctrl.fbk;
-        pwm = &self->cvc_ctrl.pwm;
-        k_comp = self->cvc_ctrl.k_comp;
     } else {
         ref = &self->ctrl.ref;
         fbk = &self->ctrl.fbk;
-        pwm = &self->ctrl.pwm;
-        k_comp = self->ctrl.k_comp;
     }
     double *p = log_append(&self->base.log);
     if (p == NULL) {
@@ -79,9 +71,7 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, ref->psi_s);
     log_put_complex(&p, ref->i_s); /* Zero except in current-vector control */
     log_put_complex(&p, ref->u_s);
-    double complex u_s_lim = native_limited_voltage(
-        pwm, ref->u_c_ab, ref->u_s, fbk->theta_c, k_comp, ref->T_s, fbk->w_c, fbk->u_dc);
-    log_put_complex(&p, cexp(-I * fbk->theta_c) * u_s_lim);
+    log_put_complex(&p, ref->u_s_lim);
     log_put(&p, ref->w_M);
     for (int k = 0; k < 3; k++) {
         log_put(&p, ref->d_abc[k]);
@@ -271,7 +261,8 @@ void set_current_vector_controller(System *self, double i_s_max, double alpha_c,
                                    double alpha_i, double alpha_o, double alpha_ref,
                                    double k_o0, double k_o1, double psi_s_min,
                                    double psi_s_max, double k_u, double k_mtpv,
-                                   double J, int sensorless, double T_s)
+                                   double J, int sensorless, double T_s,
+                                   int discrete)
 {
     SMCurrentVectorControllerCfg *cfg = &self->cvc_cfg;
     *cfg = sm_current_vector_controller_cfg(i_s_max);
@@ -288,6 +279,7 @@ void set_current_vector_controller(System *self, double i_s_max, double alpha_c,
     cfg->J = J;
     cfg->T_s = T_s;
     cfg->sensorless = sensorless;
+    cfg->discrete = discrete;
     self->ctrl.vhz = 0;
     self->ctrl.cvc = 1;
 }

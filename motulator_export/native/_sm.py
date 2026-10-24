@@ -10,8 +10,8 @@ models of `motulator_export.native._drive` with a synchronous machine, and
 - observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
 
 with the features of the C port (see `motulator_export.plecs._sm`) and the
-duty-ratio error model of the PWM (without the minimum pulses, if compensated), also
-with the gates blocked (`ControlSystem.set_enable`, a constant or a `StepSignal`).
+duty-ratio error model of the PWM, also with the gates blocked
+(`ControlSystem.set_enable`, a constant or a `StepSignal`).
 
 """
 
@@ -63,7 +63,7 @@ API: Signatures = {
     ),
     "set_current_vector_controller": (
         None,
-        [c_void_p] + [c_double] * 12 + [c_int, c_double],
+        [c_void_p] + [c_double] * 12 + [c_int, c_double, c_int],
     ),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 13),

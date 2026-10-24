@@ -7,7 +7,8 @@
 %   motulator/drive/utils/_parameters.py        InductionMachineInvGammaPars
 %   motulator/drive/control/_im_observers.py    FluxObserver
 %   motulator/drive/control/_im_current_vector.py  CurrentReferenceGenerator,
-%                                               CurrentController
+%                                               CurrentController,
+%                                               DiscreteCurrentController
 %
 % The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M
 % (InductionMachineInvGammaPars).
@@ -183,11 +184,35 @@ self.i_sd_ref = self.i_sd_ref + T_s*self.k_fw*(u_s_max - abs(u_s_ref));
 self.i_sd_ref = clip(self.i_sd_ref, -self.i_s_max, self.i_sd_nom);
 end
 
-function ctrl = im_current_controller(par, alpha_c, alpha_i)
-%IM_CURRENT_CONTROLLER Current controller (CurrentController), a 2DOF PI controller
-%   with the gains from the bandwidths and the leakage inductance.
+function self = im_current_ctrl_init(par, alpha_c, alpha_i, discrete, T_s)
+%IM_CURRENT_CTRL_INIT Current controller: a 2DOF PI controller with the gains from
+%   the bandwidths and the leakage inductance (CurrentController) or, if discrete is
+%   true, the direct discrete-time controller of the leakage flux linkages L_sgm*i
+%   (DiscreteCurrentController).
 k_t = alpha_c*par.L_sgm;
 k_i = alpha_c*alpha_i*par.L_sgm;
 k_p = (alpha_c + alpha_i)*par.L_sgm;
-ctrl = complex_pi_init(k_p, k_i, k_t);
+self = struct('L_sgm', par.L_sgm, 'discrete', logical(discrete), ...
+    'pi', complex_pi_init(k_p, k_i, k_t), 'dc', discrete_complex_init(alpha_c, T_s));
+end
+
+function [self, u] = im_current_ctrl_compute_output(self, i_ref, i)
+%IM_CURRENT_CTRL_COMPUTE_OUTPUT Voltage reference.
+if self.discrete
+    % The currents mapped to the leakage flux linkages
+    [self.dc, u] = discrete_complex_compute_output(self.dc, self.L_sgm*i_ref, ...
+        self.L_sgm*i);
+else
+    [self.pi, u] = complex_pi_compute_output(self.pi, i_ref, i, 0);
+end
+end
+
+function self = im_current_ctrl_update(self, T_s, u, w_c)
+%IM_CURRENT_CTRL_UPDATE Update the states with the realized voltage u, or with the
+%   limited voltage reference of the discrete-time controller.
+if self.discrete
+    self.dc = discrete_complex_update(self.dc, T_s, u, w_c);
+else
+    self.pi = complex_pi_update(self.pi, T_s, u, w_c);
+end
 end

@@ -463,8 +463,8 @@ def test_unsupported_grid_dc_bus(tmp_path: Path) -> None:
 
 
 def test_unsupported_k_comp(tmp_path: Path) -> None:
-    """Only the angle advance k_comp = 1.5 of the continuous-time controller designs
-    is supported."""
+    """Only the angle advance k_comp of the controller is supported (1.5 of the
+    continuous-time designs, or 0 of the direct discrete-time current controller)."""
     mdl, ctrl = _grid(gfl=False)
     ctrl.k_comp = 0.0
     for tool, path in TOOLS:

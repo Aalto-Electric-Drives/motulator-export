@@ -33,6 +33,7 @@ static IMCurrentVectorControllerCfg im_current_vector_controller_cfg(double psi_
     cfg.J = NAN;
     cfg.sensorless = 1;
     cfg.T_s = 125e-6;
+    cfg.discrete = 0;
     return cfg;
 }
 
@@ -257,19 +258,45 @@ static void im_reference_gen_update(IMCurrentReferenceGenerator *self, double T_
     self->i_sd_ref = clip(self->i_sd_ref, -self->i_s_max, self->i_sd_nom);
 }
 
-/* CurrentController and IMCurrentVectorController ------------------------- */
+/* CurrentController and DiscreteCurrentController -------------------------- */
 
-static ComplexPIController
-im_current_controller(const InductionMachineInvGammaPars *par, double alpha_c,
-                      double alpha_i)
+static void im_current_ctrl_init(IMCurrentController *self,
+                                 const InductionMachineInvGammaPars *par,
+                                 double alpha_c, double alpha_i, int discrete,
+                                 double T_s)
 {
-    ComplexPIController ctrl;
+    self->L_sgm = par->L_sgm;
+    self->discrete = discrete;
     double k_t = alpha_c * par->L_sgm;
     double k_i = alpha_c * alpha_i * par->L_sgm;
     double k_p = (alpha_c + alpha_i) * par->L_sgm;
-    complex_pi_init(&ctrl, k_p, k_i, k_t);
-    return ctrl;
+    complex_pi_init(&self->pi, k_p, k_i, k_t);
+    discrete_complex_init(&self->dc, alpha_c, T_s);
 }
+
+static double complex im_current_ctrl_compute_output(IMCurrentController *self,
+                                                     double complex i_ref,
+                                                     double complex i)
+{
+    if (self->discrete) {
+        /* The currents mapped to the leakage flux linkages */
+        return discrete_complex_compute_output(&self->dc, self->L_sgm * i_ref,
+                                               self->L_sgm * i);
+    }
+    return complex_pi_compute_output(&self->pi, i_ref, i, 0.0);
+}
+
+static void im_current_ctrl_update(IMCurrentController *self, double T_s,
+                                   double complex u, double w_c)
+{
+    if (self->discrete) {
+        discrete_complex_update(&self->dc, T_s, u, w_c);
+    } else {
+        complex_pi_update(&self->pi, T_s, u, w_c);
+    }
+}
+
+/* IMCurrentVectorController ------------------------------------------------ */
 
 static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
                                         InductionMachineInvGammaPars par,
@@ -290,7 +317,8 @@ static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
     self->sensorless = cfg->sensorless;
     im_reference_gen_init(&self->reference_gen, par, cfg->psi_s_nom, cfg->i_s_max,
                           cfg->w_s_nom, cfg->k_u, cfg->k_fw);
-    self->current_ctrl = im_current_controller(&par, cfg->alpha_c, alpha_i);
+    im_current_ctrl_init(&self->current_ctrl, &par, cfg->alpha_c, alpha_i,
+                         cfg->discrete, cfg->T_s);
     im_speed_flux_observer_init(&self->observer, par, alpha_o, cfg->T_s,
                                 cfg->sensorless, J);
 }
@@ -305,7 +333,7 @@ static void im_current_vector_ctrl_compute_output(IMCurrentVectorController *sel
                                     cabs(fbk->psi_R), &ref->i_s, &ref->tau_M);
     /* Transform the reference to the same coordinates as the feedback */
     ref->i_s = cexp(I * carg(fbk->psi_R)) * ref->i_s;
-    ref->u_s = complex_pi_compute_output(&self->current_ctrl, ref->i_s, fbk->i_s, 0.0);
+    ref->u_s = im_current_ctrl_compute_output(&self->current_ctrl, ref->i_s, fbk->i_s);
 }
 
 static void im_current_vector_ctrl_update(IMCurrentVectorController *self,
@@ -314,7 +342,11 @@ static void im_current_vector_ctrl_update(IMCurrentVectorController *self,
 {
     im_speed_flux_observer_update(&self->observer, ref->T_s, fbk);
     im_reference_gen_update(&self->reference_gen, ref->T_s, ref->u_s, fbk->u_dc);
-    complex_pi_update(&self->current_ctrl, ref->T_s, fbk->u_s, fbk->w_c);
+    /* The discrete-time controller takes its limited output, except with blocked
+     * gates, when the open-circuit voltage of the observer is the realized one */
+    double complex u_s =
+        (self->current_ctrl.discrete && ref->enabled) ? ref->u_s_lim : fbk->u_s;
+    im_current_ctrl_update(&self->current_ctrl, ref->T_s, u_s, fbk->w_c);
 }
 
 /* IMVectorControlSystem ---------------------------------------------------- */
@@ -325,7 +357,9 @@ static void im_vector_control_system_init(IMVectorControlSystem *self,
                                           PIController speed_ctrl)
 {
     pwm_init(&self->pwm, 1.5);
-    self->k_comp = 1.5; /* k_comp of CurrentVectorController (continuous time) */
+    /* k_comp of CurrentVectorController: the discrete-time current controller
+     * compensates for the delays itself */
+    self->k_comp = cfg->discrete ? 0.0 : 1.5;
     im_current_vector_ctrl_init(&self->vector_ctrl, par, cfg);
     self->speed_ctrl = speed_ctrl;
     self->speed_ctrl.u_i = 0.0;
@@ -384,9 +418,12 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
     if (self->vector_ctrl.sensorless && standby) {
         u_s_ab_ref = 0.0;
     }
-    ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
-                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
+    double complex u_lim_ab;
+    pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
+                       meas->i_c_ab, ref->d_abc, &u_lim_ab);
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
     ref->w_M = w_M_ref;
+    ref->enabled = enabled;
 }
 
 static void im_vector_control_system_update(IMVectorControlSystem *self)

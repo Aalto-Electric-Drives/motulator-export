@@ -5,19 +5,22 @@
 This script builds the drive system of `ipmsm_2kw_cvc.py` in motulator and writes a
 MATLAB script (simulink/build_ipmsm_2kw_cvc.m) that builds the Simulink model. If
 the MATLAB Engine API for Python is installed, it runs the script, simulates the
-model and motulator, and compares the results. With --matlab, the blocks of the
-control system are MATLAB Function blocks instead of S-functions
-(simulink/build_ipmsm_2kw_cvc_matlab.m).
+model and motulator, and compares the results. With --discrete, the current
+controller is the direct discrete-time one (simulink/build_ipmsm_2kw_cvc_discrete.m),
+see `ipmsm_2kw_cvc.py`. With --matlab, the blocks of the control system are MATLAB
+Function blocks instead of S-functions (simulink/build_ipmsm_2kw_cvc_matlab.m).
 
 Run from the repository root:
 
-    python examples/ipmsm_2kw_cvc_simulink.py
+    python examples/ipmsm_2kw_cvc_simulink.py [--discrete]
 
 Without the MATLAB Engine API, run the generated build script in MATLAB.
 
 """
 
 # %%
+import sys
+
 from _compare import (
     Comparison,
     drive_signals,
@@ -31,10 +34,12 @@ from motulator_export import simulink
 
 # %%
 if __name__ == "__main__":
-    mdl, ctrl = build_system()
+    discrete = "--discrete" in sys.argv  # Direct discrete-time current control
+    mdl, ctrl = build_system(discrete)
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
-    path = write_simulink_model("ipmsm_2kw_cvc", mdl, ctrl, T_STOP)
+    name = "ipmsm_2kw_cvc_discrete" if discrete else "ipmsm_2kw_cvc"
+    path = write_simulink_model(name, mdl, ctrl, T_STOP)
     require_matlab_engine()
 
     # Simulate in motulator and in Simulink, and compare

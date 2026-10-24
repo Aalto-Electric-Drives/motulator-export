@@ -60,9 +60,7 @@ static int im_save(IMControlSystem *self)
         u_s = ref->u_s;
         w_M = ref->w_M;
         d_abc = ref->d_abc;
-        u_s_lim = native_limited_voltage(&ctrl->pwm, ref->u_c_ab, ref->u_s,
-                                         fbk->theta_c, ctrl->k_comp, ref->T_s,
-                                         fbk->w_c, fbk->u_dc);
+        u_s_lim = ref->u_s_lim;
     } else {
         const IMVectorControlSystem *ctrl = &self->cvc;
         const IMReferences *ref = &ctrl->ref;
@@ -74,9 +72,7 @@ static int im_save(IMControlSystem *self)
         u_s = ref->u_s;
         w_M = ref->w_M;
         d_abc = ref->d_abc;
-        u_s_lim = native_limited_voltage(&ctrl->pwm, ref->u_c_ab, ref->u_s,
-                                         fbk->theta_c, ctrl->k_comp, ref->T_s,
-                                         fbk->w_c, fbk->u_dc);
+        u_s_lim = ref->u_s_lim;
     }
     double *p = log_append(&self->base.log);
     if (p == NULL) {
@@ -88,7 +84,7 @@ static int im_save(IMControlSystem *self)
     log_put(&p, psi_s);
     log_put_complex(&p, i_s);
     log_put_complex(&p, u_s);
-    log_put_complex(&p, cexp(-I * fbk->theta_c) * u_s_lim);
+    log_put_complex(&p, u_s_lim);
     log_put(&p, w_M);
     for (int k = 0; k < 3; k++) {
         log_put(&p, d_abc[k]);
@@ -225,7 +221,7 @@ void set_control_machine(System *self, double n_p, double R_s, double R_R,
 void set_current_vector_controller(System *self, double psi_s_nom, double i_s_max,
                                    double alpha_c, double alpha_i, double alpha_o,
                                    double w_s_nom, double k_u, double k_fw, double J,
-                                   int sensorless, double T_s)
+                                   int sensorless, double T_s, int discrete)
 {
     IMCurrentVectorControllerCfg *cfg = &self->cvc_cfg;
     *cfg = im_current_vector_controller_cfg(psi_s_nom, i_s_max);
@@ -238,6 +234,7 @@ void set_current_vector_controller(System *self, double psi_s_nom, double i_s_ma
     cfg->J = J;
     cfg->T_s = T_s;
     cfg->sensorless = sensorless;
+    cfg->discrete = discrete;
     self->ctrl.vhz = 0;
 }
 

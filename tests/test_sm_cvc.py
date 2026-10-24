@@ -7,8 +7,9 @@ port, and the controller signals are compared at the sampling instants: sensorle
 and sensored, with the dead time and its compensation, with single update, with the
 gates blocked at the start and during the operation (the flying start after the
 release), and the 6.7-kW synchronous reluctance machine drive of plot_7kw_syrm_cvc.py
-(without PMs, the current reference starting from the minimum flux). PLECS is not
-needed.
+(without PMs, the current reference starting from the minimum flux). The direct
+discrete-time current controller is tested also with the dead time, the minimum
+pulses, and the flying start. PLECS is not needed.
 
 Run from the repository root (requires gcc):
 
@@ -59,6 +60,7 @@ void init(const double *p, const double *c, const double *s, const double *pwm)
     cfg.J = c[11];
     cfg.T_s = c[12];
     cfg.sensorless = (int)c[13];
+    cfg.discrete = (int)c[14];
     PIController speed_ctrl = speed_controller(s[0], s[1], s[2], s[3]);
     sm_cvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);
     pwm_set_nonlinearity(&ctrl.pwm, pwm[0], pwm[1], pwm[2], (int)pwm[3]);
@@ -96,6 +98,7 @@ SYRM_PAR = model.SynchronousMachinePars(
 )
 W_M_REF = 0.8 * BASE.w_M  # Speed reference of the 2.2-kW drive
 T_D = 2e-6  # Dead time (s)
+D_MIN = 0.15  # Minimum duty ratio, which limits the pulses at the speed reference
 I_0 = 0.5  # Current scale (A) of sign = tanh(i/i_0) in the dead-time compensation
 
 
@@ -110,10 +113,13 @@ def build_system(
     single_update: bool = False,
     blocked: bool = False,
     syrm: bool = False,
+    discrete: bool = False,
+    d_min: float = 0.0,
 ) -> tuple[model.Drive, control.VectorControlSystem]:
     """
     Build the 2.2-kW drive with current-vector control, or the 6.7-kW SyRM drive of
-    its example (`syrm`).
+    its example (`syrm`), with the direct discrete-time current controller
+    (`discrete`) and the minimum duty ratio `d_min` of the PWM.
     """
     par = SYRM_PAR if syrm else PAR
     mdl = model.Drive(
@@ -131,11 +137,12 @@ def build_system(
             psi_s_max=1.5 * SYRM_BASE.psi,
             alpha_o=2 * pi * 100,
             sensorless=sensorless,
+            discrete=discrete,
         )
     else:
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.3) * 0.5 * NOM.tau)
         cfg = control.CurrentVectorControllerCfg(
-            i_s_max=1.5 * BASE.i, sensorless=sensorless
+            i_s_max=1.5 * BASE.i, sensorless=sensorless, discrete=discrete
         )
     d_err = None
     if t_d > 0:
@@ -143,7 +150,7 @@ def build_system(
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(par, cfg),
         control.SpeedController(J=0.015, alpha_s=2 * pi * 4),
-        control.PWM(d_err=d_err, single_update=single_update),
+        control.PWM(d_err=d_err, d_min=d_min, single_update=single_update),
     )
     if syrm:
         ctrl.set_speed_ref(lambda t: (t > 0.2) * SYRM_BASE.w_M)
@@ -175,7 +182,7 @@ class CControlSystem(control.VectorControlSystem):
         c = [cfg.i_s_max, cfg.alpha_c, none(cfg.alpha_i), none(cfg.alpha_o)]
         c += [cfg.alpha_ref, none(None), none(None), none(cfg.psi_s_min)]
         c += [cfg.psi_s_max, cfg.k_u, cfg.k_mtpv, none(cfg.J), cfg.T_s]
-        c += [float(cfg.sensorless)]
+        c += [float(cfg.sensorless), float(cfg.discrete)]
         speed_ctrl = cast(control.SpeedController, ctrl.speed_ctrl)
         s = [speed_ctrl.J, speed_ctrl.alpha_s, none(None), speed_ctrl.u_max]
         pwm = ctrl.pwm
@@ -204,29 +211,29 @@ class CControlSystem(control.VectorControlSystem):
         return ControlSystem.post_process(self)  # Only the saved C outputs
 
 
-@pytest.mark.parametrize(
-    ("sensorless", "t_d", "single_update", "blocked", "syrm"),
-    [
-        (True, 0.0, False, False, False),
-        (False, 0.0, False, False, False),
-        (True, T_D, False, False, False),
-        (True, 0.0, True, False, False),
-        (True, 0.0, False, True, False),
-        (True, 0.0, False, False, True),
-    ],
-    ids=["sensorless", "sensored", "dead_time", "single_update", "blocked", "syrm"],
-)
-def test_control_system(
-    dll: ctypes.CDLL,
-    sensorless: bool,
-    t_d: float,
-    single_update: bool,
-    blocked: bool,
-    syrm: bool,
-) -> None:
+# Arguments of build_system
+CASES: dict[str, dict[str, Any]] = {
+    "sensorless": {},
+    "sensored": {"sensorless": False},
+    "dead_time": {"t_d": T_D},
+    "single_update": {"single_update": True},
+    "blocked": {"blocked": True},
+    "syrm": {"syrm": True},
+    "discrete": {"discrete": True},
+    "discrete_sensored": {"discrete": True, "sensorless": False},
+    "discrete_dead_time": {"discrete": True, "t_d": T_D},
+    "discrete_min_pulse": {"discrete": True, "d_min": D_MIN},
+    "discrete_blocked": {"discrete": True, "blocked": True},
+    "discrete_syrm": {"discrete": True, "syrm": True},
+}
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_control_system(dll: ctypes.CDLL, case: str) -> None:
     """Closed-loop simulation of the drive with motulator and with the C port."""
-    args = (sensorless, t_d, single_update, blocked, syrm)
-    mdl, ctrl = build_system(*args)
+    args = CASES[case]
+    syrm = args.get("syrm", False)
+    mdl, ctrl = build_system(**args)
     res_py = model.Simulation(mdl, ctrl).simulate(t_stop=1.0)
     fbk, ref = res_py.ctrl.fbk, res_py.ctrl.ref
     py = np.column_stack(
@@ -242,7 +249,7 @@ def test_control_system(
             fbk.theta_m,
         ]
     )
-    mdl, ctrl = build_system(*args)
+    mdl, ctrl = build_system(**args)
     res_c = model.Simulation(mdl, CControlSystem(ctrl, dll)).simulate(t_stop=1.0)
     c = np.column_stack([getattr(res_c.ctrl.out, name) for name in NAMES])
     assert np.allclose(res_py.ctrl.t, res_c.ctrl.t)

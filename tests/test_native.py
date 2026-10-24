@@ -17,6 +17,7 @@ Run from the repository root (requires gcc):
 """
 
 # %%
+from functools import partial
 from math import inf, nan, pi
 from typing import Any, cast
 
@@ -35,6 +36,7 @@ from tests.systems import BASE as GRID_BASE
 from tests.systems import (
     CURRENT_MAP,
     FLUX_MAP,
+    SM_CVC_D_MIN,
     Build,
     blocked_drive,
     gfl_system,
@@ -117,10 +119,13 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
     return mdl, ctrl
 
 
-def gradnet_cvc_drive() -> tuple[model.Drive, control.VectorControlSystem]:
+def gradnet_cvc_drive(
+    discrete: bool = False,
+) -> tuple[model.Drive, control.VectorControlSystem]:
     """
     Drive of `gradnet_drive` with sensored current-vector control, whose machine
-    model is the GradNet flux map.
+    model is the GradNet flux map, optionally with the direct discrete-time current
+    controller (`discrete`).
     """
     mdl, fvc = gradnet_drive()
     flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
@@ -128,7 +133,7 @@ def gradnet_cvc_drive() -> tuple[model.Drive, control.VectorControlSystem]:
         n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
     )
     cfg = control.CurrentVectorControllerCfg(
-        i_s_max=17.6, alpha_o=2 * pi * 8, J=0.05, sensorless=False
+        i_s_max=17.6, alpha_o=2 * pi * 8, J=0.05, sensorless=False, discrete=discrete
     )
     ctrl = control.VectorControlSystem(
         control.CurrentVectorController(par, cfg),
@@ -246,11 +251,26 @@ def test_sm_vhz(build: Build) -> None:
         sm_cvc_system(sensorless=True, t_d=0.0)[0],
         sm_cvc_system(sensorless=False, t_d=0.0)[0],
         gradnet_cvc_drive,
+        sm_cvc_system(sensorless=True, t_d=0.0, discrete=True)[0],
+        sm_cvc_system(sensorless=True, t_d=0.0, discrete=True, d_min=SM_CVC_D_MIN)[0],
+        sm_cvc_system(sensorless=True, t_d=2e-6, discrete=True, d_min=SM_CVC_D_MIN)[0],
+        partial(gradnet_cvc_drive, discrete=True),
     ],
-    ids=["sensorless", "sensored", "gradnet"],
+    ids=[
+        "sensorless",
+        "sensored",
+        "gradnet",
+        "discrete",
+        "discrete_d_min",
+        "discrete_d_err_d_min",
+        "discrete_gradnet",
+    ],
 )
 def test_sm_current_vector_control(build: Build) -> None:
-    """Current-vector control, also with a GradNet flux map."""
+    """Current-vector control, also with a GradNet flux map and with the direct
+    discrete-time current controller, which takes the limited voltage reference of
+    the PWM, also with the minimum pulses and the compensation of the duty-ratio
+    error."""
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
@@ -379,6 +399,9 @@ def test_failed_interval(N_eval: int) -> None:
         im_system(sensorless=True, t_d=0.0, i_0=0.0)[0],
         im_system(sensorless=False, t_d=0.0, i_0=0.0)[0],
         im_system(sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.5, discrete=True)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.5, d_min=0.2)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.5, discrete=True, d_min=0.2)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.1)[0],
@@ -387,13 +410,17 @@ def test_failed_interval(N_eval: int) -> None:
         "cvc_sensorless",
         "cvc_sensored",
         "cvc_u_th_single",
+        "cvc_discrete",
+        "cvc_d_err_d_min",
+        "cvc_discrete_d_err_d_min",
         "vhz",
         "vhz_open_loop",
         "vhz_d_min",
     ],
 )
 def test_induction_machine(build: Build) -> None:
-    """Current-vector control and observer-based V/Hz control."""
+    """Current-vector control and observer-based V/Hz control, also with the minimum
+    pulses and the compensation of the duty-ratio error."""
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
@@ -603,7 +630,9 @@ def test_grid_pwm() -> None:
         (sm_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
         (sm_system(sensorless=False, t_d=0.0, blocked=True)[0], 0.3),
         (sm_cvc_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
+        (sm_cvc_system(True, 0.0, blocked=True, discrete=True)[0], 0.3),
         (im_system(sensorless=True, t_d=0.0, i_0=0.0, blocked=True)[0], 0.3),
+        (im_system(True, 0.0, 0.0, blocked=True, discrete=True)[0], 0.3),
         (vhz_system(open_loop=False, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
         (vhz_system(open_loop=True, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
         (sm_vhz_system(t_d=0.0, d_min=0.0, blocked=True)[0], 0.8),
@@ -614,7 +643,9 @@ def test_grid_pwm() -> None:
         "fvc",
         "fvc_sensored",
         "smcvc",
+        "smcvc_discrete",
         "cvc",
+        "cvc_discrete",
         "vhz",
         "vhz_open_loop",
         "smvhz",

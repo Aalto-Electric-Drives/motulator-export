@@ -552,8 +552,10 @@ static void vector_control_modulate(PWM *pwm, double k_comp, int zero_vector,
     if (zero_vector) {
         u_s_ab_ref = 0.0;
     }
-    ref->u_c_ab = pwm_compute_output(pwm, ref->T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
-                                     meas->i_c_ab, ref->d_abc);
+    double complex u_lim_ab;
+    pwm_compute_output(pwm, ref->T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
+                       ref->d_abc, &u_lim_ab);
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
 }
 
 static void vector_control_system_init(VectorControlSystem *self,
@@ -710,8 +712,10 @@ static void sm_vhz_control_system_compute_output(SMVHzControlSystem *self,
      * k_comp*T_s*w_c */
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
     u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
-    ref->u_c_ab = pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
-                                     meas->i_c_ab, ref->d_abc);
+    double complex u_lim_ab;
+    pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
+                       ref->d_abc, &u_lim_ab);
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
     ref->w_M = w_M_ref;
 }
 

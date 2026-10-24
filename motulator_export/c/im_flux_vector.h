@@ -94,7 +94,8 @@ typedef struct {
     double tau_M; /* Limited torque reference */
     double psi_s; /* Stator flux reference */
     double complex u_s;
-    double complex u_c_ab; /* Limited converter voltage from the PWM */
+    double complex u_s_lim; /* Limited voltage reference, excluding the
+                             * compensation (PWM.limited_voltage) */
 } IMVHzReferences;
 
 /* Measured signals */

@@ -1,8 +1,8 @@
 classdef CurrentVectorControllerCfg < motulator.internal.Object
     %CURRENTVECTORCONTROLLERCFG Configuration of the current-vector controller.
     %   CFG = CURRENTVECTORCONTROLLERCFG(psi_s_nom=..., i_s_max=..., ...) as in
-    %   motulator, [] meaning None (the default). The default observer gain k_o and
-    %   the continuous-time current controller (discrete = false) only.
+    %   motulator, [] meaning None (the default). The default observer gain k_o
+    %   only.
 
     properties
         psi_s_nom             % Nominal stator flux linkage (Vs)
@@ -17,15 +17,14 @@ classdef CurrentVectorControllerCfg < motulator.internal.Object
         J = []                % Inertia (kgm^2) of the speed observer, [] = none
         sensorless = true     % Sensorless mode (or sensored)
         T_s = 125e-6          % Sampling period (s)
-        discrete = false      % Discrete-time current controller, only false
+        discrete = false      % Direct discrete-time current controller
     end
 
     methods
         function obj = CurrentVectorControllerCfg(varargin)
             obj.set_args(varargin, {'psi_s_nom', 'i_s_max'}, {'psi_s_nom', 'i_s_max'});
-            if ~isempty(obj.k_o) || obj.discrete
-                error('motulator:unsupported', ...
-                    'Only k_o = [] and discrete = false supported.');
+            if ~isempty(obj.k_o)
+                error('motulator:unsupported', 'Only k_o = [] supported.');
             end
         end
     end

@@ -42,9 +42,9 @@ static double T_s; /* Sampling period */
 /* Ports and parameters of the C-Script */
 static const int INPUT_WIDTHS[] = {4, 2, 1};
 static const int FEEDTHROUGH[] = {1, 1, 1};
-static const int OUTPUT_WIDTHS[] = {3};
+static const int OUTPUT_WIDTHS[] = {2, 3};
 #define NUM_INPUTS 3
-#define NUM_OUTPUTS 1
+#define NUM_OUTPUTS 2
 #define NUM_PARAMS 8
 
 static void mdlInitializeSizes(SimStruct *S)
@@ -153,10 +153,13 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     im_measurements_unpack(meas_u, &meas);
     double complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));
     double d_abc[3];
+    double complex u_c_lim_ab;
     pwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),
-                       meas.i_c_ab, d_abc);
+                       meas.i_c_ab, d_abc, &u_c_lim_ab);
+    OutputSignal(0, 0) = creal(u_c_lim_ab);
+    OutputSignal(0, 1) = cimag(u_c_lim_ab);
     for (int k = 0; k < 3; k++) {
-        OutputSignal(0, k) = d_abc[k];
+        OutputSignal(1, k) = d_abc[k];
     }
 }
 

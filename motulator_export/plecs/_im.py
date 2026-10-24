@@ -132,8 +132,6 @@ def check_supported_cvc(cvc: Any) -> None:
         raise NotImplementedError("Only CurrentVectorController supported")
     if cvc.cfg.k_o is not None:
         raise NotImplementedError("Only the default observer gain k_o supported")
-    if cvc.cfg.discrete:
-        raise NotImplementedError("Direct discrete-time current control not supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
 
@@ -181,6 +179,7 @@ def cvc_values(cvc: CurrentVectorController) -> dict[str, Any]:
     """
     values = _fields(cvc.reference_gen.par, PAR_FIELDS) | _fields(cvc.cfg, CFG_FIELDS)
     values["sensorless"] = int(cvc.cfg.sensorless)
+    values["discrete"] = int(cvc.cfg.discrete)
     return values
 
 

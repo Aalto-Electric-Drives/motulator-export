@@ -126,7 +126,9 @@ typedef struct {
     double psi_s;
     double complex i_s; /* Current reference of current-vector control */
     double complex u_s;
-    double complex u_c_ab; /* Limited converter voltage from the PWM */
+    double complex u_s_lim; /* Limited voltage reference, excluding the
+                             * compensation (PWM.limited_voltage) */
+    int enabled;            /* Gate enable */
 } References;
 
 /* Measured signals */

@@ -6,6 +6,7 @@
 | Synchronous machine drives: current-vector control                         |  yes   |   yes    |  yes   |
 | Synchronous machine drives: observer-based V/Hz control                    |  yes   |   yes    |  yes   |
 | Induction machine drives: current-vector control                           |  yes   |   yes    |  yes   |
+| Direct discrete-time current control (`discrete=True`)                     |  yes   |   yes    |  yes   |
 | Induction machine drives: observer-based and open-loop V/Hz control        |  yes   |   yes    |  yes   |
 | Grid-following control                                                     |  yes   |   yes    |  yes   |
 | Grid-forming control (disturbance observer)                                |  yes   |   yes    |  yes   |

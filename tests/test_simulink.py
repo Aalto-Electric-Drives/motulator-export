@@ -48,6 +48,7 @@ from tests.sfunctions import (
 )
 from tests.systems import (
     CURRENT_MAP,
+    SM_CVC_D_MIN,
     SM_PAR,
     SM_VHZ_CASES,
     SM_VHZ_IDS,
@@ -145,14 +146,15 @@ def test_flux_vector_control(
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked"),
+    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked", "discrete"),
     [
-        (True, 0.0, 0.0, 0.0, False, False),
-        (False, 0.0, 0.0, 0.0, False, False),
-        (True, 2e-6, 0.0, 0.0, False, False),
-        (True, 2e-6, 0.5, 0.0, False, False),
-        (True, 2e-6, 0.5, 1.0, True, False),
-        (True, 0.0, 0.5, 1.0, False, True),
+        (True, 0.0, 0.0, 0.0, False, False, False),
+        (False, 0.0, 0.0, 0.0, False, False, False),
+        (True, 2e-6, 0.0, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 1.0, True, False, False),
+        (True, 0.0, 0.5, 1.0, False, True, False),
+        (True, 2e-6, 0.5, 0.0, False, False, True),
     ],
     ids=[
         "sensorless",
@@ -161,6 +163,7 @@ def test_flux_vector_control(
         "dead_time_tanh",
         "u_th_single",
         "u_th_blocked",
+        "discrete_dead_time",
     ],
 )
 def test_current_vector_control(
@@ -171,12 +174,14 @@ def test_current_vector_control(
     u_th: float,
     single_update: bool,
     blocked: bool,
+    discrete: bool,
 ) -> None:
     """The S-function of current-vector control should agree with motulator, also
     with the dead time and the threshold voltage of the converter and their
     compensation, with the current-direction function np.sign or tanh(i/i_0), with
-    single update, and with the gates blocked."""
-    args = (sensorless, t_d, i_0, u_th, single_update, blocked)
+    single update, with the gates blocked, and with the direct discrete-time current
+    controller."""
+    args = (sensorless, t_d, i_0, u_th, single_update, blocked, discrete)
     build, signals = im_system(*args)
     values = _im.export_values(build()[1])
     params = sfunction_params(monolithic.CVC, values)
@@ -206,17 +211,37 @@ def test_vhz_control(
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "blocked"),
-    [(True, 0.0, False), (False, 0.0, False), (True, 2e-6, False), (True, 0.0, True)],
-    ids=["sensorless", "sensored", "dead_time", "blocked"],
+    ("sensorless", "t_d", "blocked", "discrete", "d_min"),
+    [
+        (True, 0.0, False, False, 0.0),
+        (False, 0.0, False, False, 0.0),
+        (True, 2e-6, False, False, 0.0),
+        (True, 0.0, True, False, 0.0),
+        (True, 0.0, False, True, SM_CVC_D_MIN),
+        (True, 0.0, True, True, 0.0),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time",
+        "blocked",
+        "discrete_min_pulse",
+        "discrete_blocked",
+    ],
 )
 def test_sm_current_vector_control(
-    sm_cvc: ctypes.CDLL, sensorless: bool, t_d: float, blocked: bool
+    sm_cvc: ctypes.CDLL,
+    sensorless: bool,
+    t_d: float,
+    blocked: bool,
+    discrete: bool,
+    d_min: float,
 ) -> None:
     """The S-function of current-vector control of a synchronous machine should agree
-    with motulator, also with the dead-time compensation and the gates blocked (the
-    flying start)."""
-    build, signals = sm_cvc_system(sensorless, t_d, blocked)
+    with motulator, also with the dead-time compensation, the gates blocked (the
+    flying start), and the direct discrete-time current controller with the minimum
+    pulses."""
+    build, signals = sm_cvc_system(sensorless, t_d, blocked, discrete, d_min)
     values, _ = _sm.export_values(build()[1])
     params = sfunction_params(monolithic.SM_CVC, values)
     assert start(sm_cvc, params) is None

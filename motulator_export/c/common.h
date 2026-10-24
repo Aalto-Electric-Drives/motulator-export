@@ -5,6 +5,7 @@
  *   motulator/common/utils/_utils.py        abc2complex, complex2abc, line2complex,
  *                                           wrap, clip, sign
  *   motulator/common/control/_controllers.py PIController, ComplexPIController,
+ *                                            DiscreteComplexController,
  *                                            RateLimiter
  *   motulator/common/control/_pwm.py         PWM (MPE and MME overmodulation),
  *                                            InverterNonlinearity (with numpy.sign
@@ -95,6 +96,33 @@ static double complex complex_pi_compute_output(ComplexPIController *self,
                                                 double complex u_ff);
 static void complex_pi_update(ComplexPIController *self, double T_s,
                               double complex u, double w_c);
+
+/* Direct discrete-time 2DOF complex-vector controller, whose design includes the
+ * computational delay, so that the angle of the output is not advanced (k_comp = 0
+ * in the control system) */
+typedef struct {
+    double T_s;
+    double beta; /* exp(-alpha_c*T_s) */
+    /* States */
+    double complex u_i;   /* Integral state */
+    double complex u_lim; /* Limited output of the previous sampling period */
+    double w_c;           /* Angular speed of the coordinates */
+    /* Workspace variables */
+    double complex e;
+    double complex u;
+} DiscreteComplexController;
+
+static void discrete_complex_init(DiscreteComplexController *self, double alpha_c,
+                                  double T_s);
+static double complex discrete_complex_compute_output(DiscreteComplexController *self,
+                                                      double complex i_ref,
+                                                      double complex i);
+/* Update with the limited output u, and the angular speed w_c of the coordinates */
+static void discrete_complex_update(DiscreteComplexController *self, double T_s,
+                                    double complex u, double w_c);
+/* Preset the integral state to the steady state of the output u (preset) */
+static void discrete_complex_preset(DiscreteComplexController *self, double complex u,
+                                    double w_c);
 
 /* Limit the magnitude of a current vector to i_max (CurrentLimiter of the grid
  * converter control) */
@@ -216,9 +244,12 @@ static void pwm_set_single_update(PWM *self, int single_update);
  * 1 - d_min or 1, whichever gives the realized duty ratio nearer to the reference
  * d_ref (the leg switches if equally near). The realized duty ratios are corrected
  * for the duty-ratio error at the currents i_abc, the DC-bus voltage u_dc, and the
- * half carrier period T_half, unless i_abc is NULL. */
+ * half carrier period T_half, unless i_abc is NULL. The output d_realized gives the
+ * realized duty ratios: d_ref for the legs not changed, and the realized duty ratios
+ * of the limited legs. */
 static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_ref[3],
-                             const double *i_abc, double u_dc, double T_half);
+                             const double *i_abc, double u_dc, double T_half,
+                             double d_realized[3]);
 /* Realized voltage from the duty ratios and the measured DC-bus voltage, corrected
  * for the duty-ratio error using the measured current and the half carrier period
  * of the previous period (get_realized_voltage): the average of the previous and the
@@ -226,14 +257,16 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
  * period. With a discharged DC bus (u_dc <= 0), the voltage is zero. */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,
                                            double u_dc, int average);
-/* Duty ratios and the limited voltage reference; the measured current i_c_ab,
- * predicted by the angle k_pred*T_s*w, is used in the feedforward compensation of
- * the duty-ratio error. With a discharged DC bus (u_dc <= 0), the duty ratios are
- * 0.5. */
+/* Duty ratios and the limited voltage reference, including the compensation of the
+ * duty-ratio error; the measured current i_c_ab, predicted by the angle k_pred*T_s*w,
+ * is used in the feedforward compensation. Unless u_lim_ab is NULL, it gives the
+ * limited voltage reference excluding the compensation, i.e., the voltage of the
+ * realized duty ratios (limited_voltage). With a discharged DC bus (u_dc <= 0), the
+ * duty ratios are 0.5 and the voltages zero. */
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
                                          double w, double complex i_c_ab,
-                                         double d_abc[3]);
+                                         double d_abc[3], double complex *u_lim_ab);
 /* Store the duty ratios of the next sampling period and the half carrier period of
  * the sampling period T_s */
 static void pwm_update(PWM *self, double T_s, const double d_abc[3]);

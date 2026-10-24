@@ -173,7 +173,7 @@ static void gfm_control_system_compute_output(GFMControlSystem *self,
     double complex u_c_ab_ref = cexp(I * fbk->theta_c) * ref->u_c;
     u_c_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
     ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_c_ab_ref, fbk->u_dc,
-                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
+                                     fbk->w_c, meas->i_c_ab, ref->d_abc, NULL);
 }
 
 static void gfm_control_system_update(GFMControlSystem *self)

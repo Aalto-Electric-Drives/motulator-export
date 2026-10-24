@@ -6,6 +6,7 @@
  *   motulator/drive/control/_im_observers.py      FluxObserver, SpeedFluxObserver,
  *                                                 create_speed_flux_observer
  *   motulator/drive/control/_im_current_vector.py CurrentController,
+ *                                                 DiscreteCurrentController,
  *                                                 CurrentReferenceGenerator,
  *                                                 CurrentVectorController
  *   motulator/drive/control/_base.py              DriveControlSystem,
@@ -98,19 +99,35 @@ typedef struct {
     double J;
     int sensorless;
     double T_s;
+    int discrete;
 } IMCurrentVectorControllerCfg;
 
-/* Current controller (CurrentController), a 2DOF PI controller with the gains from
- * the bandwidths and the leakage inductance */
-static ComplexPIController
-im_current_controller(const InductionMachineInvGammaPars *par, double alpha_c,
-                      double alpha_i);
+/* Current controller: a 2DOF PI controller with the gains from the bandwidths and
+ * the leakage inductance (CurrentController) or, if discrete is nonzero, the direct
+ * discrete-time controller of the leakage flux linkages L_sgm*i
+ * (DiscreteCurrentController) */
+typedef struct {
+    double L_sgm;
+    int discrete;
+    ComplexPIController pi;
+    DiscreteComplexController dc;
+} IMCurrentController;
+
+static void im_current_ctrl_init(IMCurrentController *self,
+                                 const InductionMachineInvGammaPars *par,
+                                 double alpha_c, double alpha_i, int discrete,
+                                 double T_s);
+static double complex im_current_ctrl_compute_output(IMCurrentController *self,
+                                                     double complex i_ref,
+                                                     double complex i);
+static void im_current_ctrl_update(IMCurrentController *self, double T_s,
+                                   double complex u, double w_c);
 
 typedef struct {
     double T_s;
     int sensorless;
     IMCurrentReferenceGenerator reference_gen;
-    ComplexPIController current_ctrl;
+    IMCurrentController current_ctrl;
     IMSpeedFluxObserver observer;
 } IMCurrentVectorController;
 
@@ -122,7 +139,9 @@ typedef struct {
     double tau_M;
     double complex i_s;
     double complex u_s;
-    double complex u_c_ab; /* Limited converter voltage from the PWM */
+    double complex u_s_lim; /* Limited voltage reference, excluding the
+                             * compensation (PWM.limited_voltage) */
+    int enabled;            /* Gate enable */
 } IMReferences;
 
 /* Measured signals */

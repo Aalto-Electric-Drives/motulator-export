@@ -191,8 +191,12 @@ def check_supported_pwm(
     pwm = ctrl.pwm
     if not isinstance(pwm, PWM) or pwm.overmodulation not in ("MPE", "MME"):
         raise NotImplementedError("Only the MPE and MME overmodulation supported")
-    if ctrl.k_comp != 1.5:
-        raise NotImplementedError("Only k_comp = 1.5 of the controller supported")
+    # The angle-advance factor of the controller: zero with the direct discrete-time
+    # current controller, which includes the delays in its design
+    cfg = getattr(getattr(ctrl, "vector_ctrl", None), "cfg", None)
+    k_comp = 0.0 if getattr(cfg, "discrete", False) else 1.5
+    if ctrl.k_comp != k_comp:
+        raise NotImplementedError(f"Only k_comp = {k_comp} of the controller supported")
     if pwm.k_pred != 1.5:
         raise NotImplementedError("Only k_pred = 1.5 supported")
     if pwm.d_err is not None and not d_err:

@@ -7,9 +7,9 @@ function [u_c_ref_ab_out, w] = mfun_fvc_modulate(fbk_in, u_s_in, standby, p)
 fbk = observer_outputs_unpack(fbk_in);
 u_s = complex_in(u_s_in);
 % Voltage reference in stationary coordinates, its angle advanced by
-% k_comp*T_s*w_c (k_comp = 1.5 of the controller)
+% k_comp*T_s*w_c (k_comp of the vector controller)
 u_c_ref_ab = exp(1i*fbk.theta_c)*u_s;
-u_c_ref_ab = u_c_ref_ab*exp(1i*1.5*p.T_s*fbk.w_c);
+u_c_ref_ab = u_c_ref_ab*exp(1i*p.k_comp*p.T_s*fbk.w_c);
 % The zero vector of a sensorless drive in standby
 if p.sensorless > 0 && standby ~= 0
     u_c_ref_ab = complex(0);

@@ -3,16 +3,17 @@
  *
  * Python counterparts:
  *   motulator/drive/control/_sm_current_vector.py  CurrentController,
+ *                                                  DiscreteCurrentController,
  *                                                  CurrentVectorControllerCfg,
  *                                                  CurrentVectorController
  *   motulator/drive/control/_base.py               VectorControlSystem
- *   motulator/common/control/_controllers.py       ComplexPIController
+ *   motulator/common/control/_controllers.py       ComplexPIController,
+ *                                                  DiscreteComplexController
  *
  * The observer (SpeedFluxObserver) and the reference generator (ReferenceGenerator,
  * with the current reference) are those of flux-vector control (sm_flux_vector.h),
  * and so are the feedback signals, the references, and the measurements. Only the
- * continuous-time current controller and the offline reference generation are
- * supported.
+ * offline reference generation is supported.
  */
 
 #ifndef MOTULATOR_SM_CURRENT_VECTOR_H
@@ -20,11 +21,15 @@
 
 #include "sm_flux_vector.h"
 
-/* Current controller (CurrentController): a complex-vector PI controller of the flux
- * linkages, to which the currents are mapped by the machine model */
+/* Current controller: a complex-vector PI controller of the flux linkages
+ * (CurrentController) or, if discrete is nonzero, the direct discrete-time controller
+ * (DiscreteCurrentController), to which the currents are mapped by the machine
+ * model */
 typedef struct {
     SynchronousMachinePars par;
+    int discrete;
     ComplexPIController pi;
+    DiscreteComplexController dc;
 } SMCurrentController;
 
 typedef struct {
@@ -52,6 +57,7 @@ typedef struct {
     double J;
     double T_s;
     int sensorless;
+    int discrete;
 } SMCurrentVectorControllerCfg;
 
 /* Vector control system (VectorControlSystem) with current-vector control, in

@@ -36,17 +36,17 @@
 /* Parameter value, or NAN for an empty parameter (None in motulator) */
 #define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)
 
-static ComplexPIController self;
+static IMCurrentController self;
 static double T_s; /* Sampling period */
 static IMObserverOutputs fbk;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {2, 21};
-static const int FEEDTHROUGH[] = {1, 1};
+static const int INPUT_WIDTHS[] = {2, 21, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 0, 0};
 static const int OUTPUT_WIDTHS[] = {2};
-#define NUM_INPUTS 2
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
-#define NUM_PARAMS 8
+#define NUM_PARAMS 9
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -83,11 +83,11 @@ static void mdlInitializeSizes(SimStruct *S)
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
     if (ssGetSimMode(S) == SS_SIMMODE_SIZES_CALL_ONLY
-        && mxIsEmpty(ssGetSFcnParam(S, 2))) {
+        && mxIsEmpty(ssGetSFcnParam(S, 3))) {
         return; /* Not evaluated yet, e.g., in a library */
     }
-    if (ParamDim(2, 0) * ParamDim(2, 1) != 1
-        || !(ParamRealData(2, 0) > 0.0)) {
+    if (ParamDim(3, 0) * ParamDim(3, 1) != 1
+        || !(ParamRealData(3, 0) > 0.0)) {
         SetErrorMessage("The sampling period must be a positive scalar.");
         return;
     }
@@ -96,7 +96,7 @@ static void mdlInitializeSizes(SimStruct *S)
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, ParamRealData(2, 0));
+    ssSetSampleTime(S, 0, ParamRealData(3, 0));
     ssSetOffsetTime(S, 0, 0.0);
 }
 
@@ -112,34 +112,39 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(2) != 1) {
-        SetErrorMessage("T_s must be a scalar.");
+        SetErrorMessage("discrete must be a scalar.");
         return;
     }
     if (PDIM(3) != 1) {
-        SetErrorMessage("par_n_p must be a scalar.");
+        SetErrorMessage("T_s must be a scalar.");
         return;
     }
     if (PDIM(4) != 1) {
-        SetErrorMessage("par_R_s must be a scalar.");
+        SetErrorMessage("par_n_p must be a scalar.");
         return;
     }
     if (PDIM(5) != 1) {
-        SetErrorMessage("par_R_R must be a scalar.");
+        SetErrorMessage("par_R_s must be a scalar.");
         return;
     }
     if (PDIM(6) != 1) {
-        SetErrorMessage("par_L_sgm must be a scalar.");
+        SetErrorMessage("par_R_R must be a scalar.");
         return;
     }
     if (PDIM(7) != 1) {
+        SetErrorMessage("par_L_sgm must be a scalar.");
+        return;
+    }
+    if (PDIM(8) != 1) {
         SetErrorMessage("par_L_M must be a scalar.");
         return;
     }
     /* Machine model (InductionMachineInvGammaPars) */
-    InductionMachineInvGammaPars par = {P(3, 0), P(4, 0), P(5, 0),
-                                        P(6, 0), P(7, 0)};
-    self = im_current_controller(&par, P(0, 0), P(1, 0));
-    T_s = P(2, 0);
+    InductionMachineInvGammaPars par = {P(4, 0), P(5, 0), P(6, 0),
+                                        P(7, 0), P(8, 0)};
+    im_current_ctrl_init(&self, &par, P(0, 0), P(1, 0),
+                         (int)P(2, 0), P(3, 0));
+    T_s = P(3, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
@@ -151,7 +156,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     }
     im_observer_outputs_unpack(fbk_u, &fbk);
     double complex u_s_ref =
-        complex_pi_compute_output(&self, complex_from(InputSignal(0, 0), InputSignal(0, 1)), fbk.i_s, 0.0);
+        im_current_ctrl_compute_output(&self, complex_from(InputSignal(0, 0), InputSignal(0, 1)), fbk.i_s);
     OutputSignal(0, 0) = creal(u_s_ref);
     OutputSignal(0, 1) = cimag(u_s_ref);
 }
@@ -160,7 +165,13 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    complex_pi_update(&self, T_s, fbk.u_s, fbk.w_c);
+    /* The discrete-time controller takes its limited output, except with blocked
+     * gates, when the open-circuit voltage of the observer is the realized one */
+    double complex u = fbk.u_s;
+    if (self.discrete && InputSignal(3, 0) > 0.0) {
+        u = cexp(-I * fbk.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
+    }
+    im_current_ctrl_update(&self, T_s, u, fbk.w_c);
 }
 
 static void mdlTerminate(SimStruct *S)

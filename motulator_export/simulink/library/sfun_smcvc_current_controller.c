@@ -81,12 +81,12 @@ static double T_s; /* Sampling period */
 static ObserverOutputs fbk;
 
 /* Ports and parameters of the C-Script */
-static const int INPUT_WIDTHS[] = {2, 23};
-static const int FEEDTHROUGH[] = {1, 1};
+static const int INPUT_WIDTHS[] = {2, 23, 2, 1};
+static const int FEEDTHROUGH[] = {1, 1, 0, 0};
 static const int OUTPUT_WIDTHS[] = {2};
-#define NUM_INPUTS 2
+#define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
-#define NUM_PARAMS 19
+#define NUM_PARAMS 20
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -123,11 +123,11 @@ static void mdlInitializeSizes(SimStruct *S)
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
     if (ssGetSimMode(S) == SS_SIMMODE_SIZES_CALL_ONLY
-        && mxIsEmpty(ssGetSFcnParam(S, 2))) {
+        && mxIsEmpty(ssGetSFcnParam(S, 3))) {
         return; /* Not evaluated yet, e.g., in a library */
     }
-    if (ParamDim(2, 0) * ParamDim(2, 1) != 1
-        || !(ParamRealData(2, 0) > 0.0)) {
+    if (ParamDim(3, 0) * ParamDim(3, 1) != 1
+        || !(ParamRealData(3, 0) > 0.0)) {
         SetErrorMessage("The sampling period must be a positive scalar.");
         return;
     }
@@ -136,7 +136,7 @@ static void mdlInitializeSizes(SimStruct *S)
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, ParamRealData(2, 0));
+    ssSetSampleTime(S, 0, ParamRealData(3, 0));
     ssSetOffsetTime(S, 0, 0.0);
 }
 
@@ -148,28 +148,33 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(2) != 1) {
+        SetErrorMessage("discrete must be a scalar.");
+        return;
+    }
+    if (PDIM(3) != 1) {
         SetErrorMessage("T_s must be a scalar.");
         return;
     }
     /* Machine model: SaturatedSynchronousMachinePars with a GradNet flux map,
      * or SynchronousMachinePars with constant inductances */
     SynchronousMachinePars par;
-    if (PDIM(8) > 0) {
+    if (PDIM(9) > 0) {
         GradNet flux_map;
-        CHECK_GRADNET(8);
-        READ_GRADNET(flux_map, 8);
-        par = saturated_synchronous_machine_pars(P(3, 0), P(4, 0),
+        CHECK_GRADNET(9);
+        READ_GRADNET(flux_map, 9);
+        par = saturated_synchronous_machine_pars(P(4, 0), P(5, 0),
                                                  &flux_map);
     } else {
-        if (PDIM(5) != 1 || PDIM(6) != 1 || PDIM(7) != 1) {
+        if (PDIM(6) != 1 || PDIM(7) != 1 || PDIM(8) != 1) {
             SetErrorMessage("L_d, L_q, and psi_f needed without a flux map.");
             return;
         }
-        par = synchronous_machine_pars(P(3, 0), P(4, 0), P(5, 0),
-                                       P(6, 0), P(7, 0));
+        par = synchronous_machine_pars(P(4, 0), P(5, 0), P(6, 0),
+                                       P(7, 0), P(8, 0));
     }
-    sm_current_ctrl_init(&self, par, P(0, 0), PARAM(1));
-    T_s = P(2, 0);
+    sm_current_ctrl_init(&self, par, P(0, 0), PARAM(1),
+                         (int)P(2, 0), P(3, 0));
+    T_s = P(3, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
@@ -183,7 +188,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     /* Preset at the back-EMF of the caught speed
      * (CurrentVectorController.get_feedback) */
     if (fbk.caught) {
-        sm_current_ctrl_preset(&self, I * fbk.w_m * fbk.psi_f);
+        sm_current_ctrl_preset(&self, I * fbk.w_m * fbk.psi_f, fbk.w_c);
     }
     double complex u_s_ref =
         sm_current_ctrl_compute_output(&self, complex_from(InputSignal(0, 0), InputSignal(0, 1)), fbk.i_s);
@@ -195,7 +200,13 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 static void mdlUpdate(SimStruct *S, int_T tid)
 {
     UNUSED_ARG(tid);
-    sm_current_ctrl_update(&self, T_s, fbk.u_s, fbk.w_c);
+    /* The discrete-time controller takes its limited output, except with blocked
+     * gates, when the open-circuit voltage of the observer is the realized one */
+    double complex u = fbk.u_s;
+    if (self.discrete && InputSignal(3, 0) > 0.0) {
+        u = cexp(-I * fbk.theta_c) * complex_from(InputSignal(2, 0), InputSignal(2, 1));
+    }
+    sm_current_ctrl_update(&self, T_s, u, fbk.w_c);
 }
 
 static void mdlTerminate(SimStruct *S)

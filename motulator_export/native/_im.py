@@ -11,8 +11,8 @@ models of `motulator_export.native._drive` with an induction machine, and
   including open-loop V/Hz control (`L_M = inf`),
 
 with the features of the C port (see `motulator_export.plecs._im`) and the duty-ratio
-error model of the PWM (without the minimum pulses, if compensated), also with the
-gates blocked (`ControlSystem.set_enable`, a constant or a `StepSignal`).
+error model of the PWM, also with the gates blocked (`ControlSystem.set_enable`, a
+constant or a `StepSignal`).
 
 """
 
@@ -55,7 +55,7 @@ API: Signatures = {
     "set_control_machine": (None, [c_void_p] + [c_double] * 5),
     "set_current_vector_controller": (
         None,
-        [c_void_p] + [c_double] * 9 + [c_int, c_double],
+        [c_void_p] + [c_double] * 9 + [c_int, c_double, c_int],
     ),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 9),

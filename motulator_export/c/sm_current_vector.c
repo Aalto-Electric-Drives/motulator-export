@@ -23,20 +23,24 @@ static SMCurrentVectorControllerCfg sm_current_vector_controller_cfg(double i_s_
     cfg.J = NAN;
     cfg.T_s = 125e-6;
     cfg.sensorless = 1;
+    cfg.discrete = 0;
     return cfg;
 }
 
-/* CurrentController ---------------------------------------------------------- */
+/* CurrentController and DiscreteCurrentController --------------------------- */
 
 static void sm_current_ctrl_init(SMCurrentController *self, SynchronousMachinePars par,
-                                 double alpha_c, double alpha_i)
+                                 double alpha_c, double alpha_i, int discrete,
+                                 double T_s)
 {
     self->par = par;
+    self->discrete = discrete;
     alpha_i = isnan(alpha_i) ? alpha_c : alpha_i;
     double k_t = alpha_c;
     double k_i = alpha_c * alpha_i;
     double k_p = alpha_c + alpha_i;
     complex_pi_init(&self->pi, k_p, k_i, k_t);
+    discrete_complex_init(&self->dc, alpha_c, T_s);
 }
 
 /* The currents mapped to the flux linkages, which takes the saliency and the
@@ -47,19 +51,31 @@ static double complex sm_current_ctrl_compute_output(SMCurrentController *self,
 {
     double complex psi_ref = psi_s_dq(&self->par, i_ref) - self->par.psi_f;
     double complex psi = psi_s_dq(&self->par, i) - self->par.psi_f;
+    if (self->discrete) {
+        return discrete_complex_compute_output(&self->dc, psi_ref, psi);
+    }
     return complex_pi_compute_output(&self->pi, psi_ref, psi, 0.0);
 }
 
 static void sm_current_ctrl_update(SMCurrentController *self, double T_s,
                                    double complex u, double w_c)
 {
-    complex_pi_update(&self->pi, T_s, u, w_c);
+    if (self->discrete) {
+        discrete_complex_update(&self->dc, T_s, u, w_c);
+    } else {
+        complex_pi_update(&self->pi, T_s, u, w_c);
+    }
 }
 
 /* Preset the integral state to the steady-state output u (preset) */
-static void sm_current_ctrl_preset(SMCurrentController *self, double complex u)
+static void sm_current_ctrl_preset(SMCurrentController *self, double complex u,
+                                   double w_c)
 {
-    self->pi.u_i = u;
+    if (self->discrete) {
+        discrete_complex_preset(&self->dc, u, w_c);
+    } else {
+        self->pi.u_i = u;
+    }
 }
 
 /* CurrentVectorController ---------------------------------------------------- */
@@ -73,7 +89,8 @@ static void sm_current_vector_ctrl_init(SMCurrentVectorController *self,
     reference_gen_init(&self->reference_gen, &par, cfg->i_s_max, cfg->psi_s_min,
                        cfg->psi_s_max, cfg->k_u, cfg->k_mtpv, NULL);
     self->reference_gen.alpha = cfg->alpha_ref;
-    sm_current_ctrl_init(&self->current_ctrl, par, cfg->alpha_c, cfg->alpha_i);
+    sm_current_ctrl_init(&self->current_ctrl, par, cfg->alpha_c, cfg->alpha_i,
+                         cfg->discrete, cfg->T_s);
     create_speed_flux_observer(&self->observer, par, cfg->alpha_o, cfg->T_s, cfg->k_o,
                                cfg->sensorless, cfg->J);
 }
@@ -86,7 +103,8 @@ static void sm_current_vector_ctrl_caught(SMCurrentVectorController *self,
 {
     if (fbk->caught) {
         self->reference_gen.i_s_ref = 0.0;
-        sm_current_ctrl_preset(&self->current_ctrl, I * fbk->w_m * fbk->psi_f);
+        sm_current_ctrl_preset(&self->current_ctrl, I * fbk->w_m * fbk->psi_f,
+                               fbk->w_c);
     }
 }
 
@@ -109,7 +127,11 @@ static void sm_current_vector_ctrl_update(SMCurrentVectorController *self,
                                           const ObserverOutputs *fbk)
 {
     speed_flux_observer_update(&self->observer, ref->T_s, fbk);
-    sm_current_ctrl_update(&self->current_ctrl, ref->T_s, fbk->u_s, fbk->w_c);
+    /* The discrete-time controller takes its limited output, except with blocked
+     * gates, when the open-circuit voltage of the observer is the realized one */
+    double complex u_s =
+        (self->current_ctrl.discrete && ref->enabled) ? ref->u_s_lim : fbk->u_s;
+    sm_current_ctrl_update(&self->current_ctrl, ref->T_s, u_s, fbk->w_c);
     reference_gen_update(&self->reference_gen, ref->T_s);
 }
 
@@ -121,7 +143,9 @@ static void sm_cvc_control_system_init(SMCVCControlSystem *self,
                                        PIController speed_ctrl)
 {
     pwm_init(&self->pwm, 1.5);
-    self->k_comp = 1.5; /* k_comp of CurrentVectorController (not discrete) */
+    /* k_comp of CurrentVectorController: the discrete-time current controller
+     * compensates for the delays itself */
+    self->k_comp = cfg->discrete ? 0.0 : 1.5;
     sm_current_vector_ctrl_init(&self->vector_ctrl, par, cfg);
     self->speed_ctrl = speed_ctrl;
     self->speed_ctrl.u_i = 0.0;
@@ -153,6 +177,7 @@ static void sm_cvc_control_system_compute_output(SMCVCControlSystem *self,
     vector_control_modulate(&self->pwm, self->k_comp, sensorless && standby, meas, fbk,
                             ref);
     ref->w_M = w_M_ref;
+    ref->enabled = enabled;
 }
 
 static void sm_cvc_control_system_update(SMCVCControlSystem *self)
