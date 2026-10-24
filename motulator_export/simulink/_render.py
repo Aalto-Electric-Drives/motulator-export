@@ -23,6 +23,7 @@ from typing import Any
 from motulator_export.plecs._netlist import (
     SIMULINK,
     CBlock,
+    Constant,
     Delay,
     Layout,
     Mask,
@@ -292,7 +293,8 @@ def _mfunction_block(
             return "Subsystem", ["ContentPreviewEnabled", "off"], mask
     sample_time = "" if fun.sample_time is None else f"p.{fun.sample_time}"
     widths = [float(w) for w in fun.output_widths]
-    return "MATLAB Function", [fun.name, sample_time, widths], mask
+    param = [] if fun.param == "p" else [fun.param]
+    return "MATLAB Function", [fun.name, sample_time, widths, *param], mask
 
 
 def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
@@ -314,7 +316,7 @@ def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
     return [path, mask.type, mask.description, init, params, display]
 
 
-def _block(b: Any) -> tuple[str, list[str]]:
+def _block(b: Any) -> tuple[str, list[str]]:  # noqa: PLR0911
     """Type and parameters of a block of the netlist."""
     if isinstance(b, CBlock):
         # Dummy parameters until the lines exist (see motulator.internal.add_netlist)
@@ -337,7 +339,19 @@ def _block(b: Any) -> tuple[str, list[str]]:
     if isinstance(b, Delay):
         sample_time = "-1" if b.sample_time is None else b.sample_time
         return "UnitDelay", ["SampleTime", sample_time]
-    # The names of the tags and the multiplexers are not shown
+    # The names of the tags, the multiplexers, and the constants are not shown (the
+    # value of a constant is)
+    if isinstance(b, Constant):
+        return "Constant", [
+            "Value",
+            b.value,
+            "SampleTime",
+            b.sample_time,
+            "OutDataTypeStr",
+            "double",
+            "ShowName",
+            "off",
+        ]
     if isinstance(b, Tag):
         params = ["GotoTag", b.tag, "ShowName", "off"]
         visibility = ["TagVisibility", "local"] if b.goto else []

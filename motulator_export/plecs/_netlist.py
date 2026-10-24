@@ -100,6 +100,13 @@ class MCode:
     computes the outputs, and the update code updates the state, as the code
     sections of the C-Script. The checks are pairs of an error condition and its
     message (in terms of p), evaluated in the mask initialization.
+
+    The hooks `param`, `header`, and `prologue` adapt the generated function (e.g.,
+    to initialize the state again from parameters changed while running): the
+    parameters are the argument `param` (the mask initialization assigns the struct
+    p to it), the header is the code after the help text (before the state is
+    initialized), and the prologue is the code after the state is initialized and
+    the deferred update is done, before the outputs are computed.
     """
 
     output: str
@@ -109,6 +116,9 @@ class MCode:
     outputs: dict[str, "SignalVector | str"] = field(default_factory=dict)
     functions: str = ""  # Local functions of the block
     checks: tuple[tuple[str, str], ...] = ()
+    param: str = "p"
+    header: str = ""
+    prologue: str = ""
 
 
 def m_variable(port: str) -> str:
@@ -218,6 +228,26 @@ class Tag:
 
 
 @dataclass
+class Constant:
+    """
+    Constant block, whose value is an expression in the mask workspace (e.g., a
+    tunable parameter).
+    """
+
+    name: str
+    value: str
+    sample_time: str = "-1"
+
+    @property
+    def inputs(self) -> list[Port]:
+        return []
+
+    @property
+    def outputs(self) -> list[Port]:
+        return [Port("y", 1)]
+
+
+@dataclass
 class Subsystem:
     """
     Subsystem of blocks.
@@ -258,7 +288,7 @@ class Subsystem:
         raise KeyError(name)
 
 
-Block = CBlock | Selector | Mux | Delay | Tag | Subsystem
+Block = CBlock | Selector | Mux | Delay | Tag | Subsystem | Constant
 
 
 def leaves(sub: Subsystem, path: str = "") -> list[tuple[str, CBlock]]:
@@ -360,6 +390,7 @@ PLECS = Geometry(
         "selector": (30, 20),
         "goto": (40, 10),
         "from": (40, 10),
+        "constant": (60, 10),
         "delay": (30, 30),
     },
     widths={"cblock": 100, "cscript": 60, "subsystem": 100, "mux": 10},
@@ -382,6 +413,7 @@ SIMULINK = Geometry(
         "selector": (50, 30),
         "goto": (70, 14),
         "from": (70, 14),
+        "constant": (100, 20),
         "delay": (35, 30),
     },
     widths={"cblock": 140, "cscript": 140, "subsystem": 140, "mux": 5},
@@ -398,6 +430,17 @@ SIMULINK = Geometry(
 )
 
 
+# Kinds of the blocks in the geometry by their types, also of the subclasses (a C
+# block is a cblock or a cscript, see `kind`, and a tag is a goto or a from)
+KINDS: dict[type, str] = {
+    Subsystem: "subsystem",
+    Selector: "selector",
+    Constant: "constant",
+    Delay: "delay",
+    Mux: "mux",
+}
+
+
 def kind(b: Block) -> str:
     """Kind of a block in the geometry."""
     if isinstance(b, CBlock):
@@ -405,15 +448,9 @@ def kind(b: Block) -> str:
         # are those of its default size, whatever its frame
         single = len(b.inputs) == 1 and len(b.outputs) == 1
         return "cscript" if single and b.mask is None else "cblock"
-    if isinstance(b, Subsystem):
-        return "subsystem"
-    if isinstance(b, Selector):
-        return "selector"
     if isinstance(b, Tag):
         return "goto" if b.goto else "from"
-    if isinstance(b, Delay):
-        return "delay"
-    return "mux"
+    return next(k for t, k in KINDS.items() if isinstance(b, t))
 
 
 # %%

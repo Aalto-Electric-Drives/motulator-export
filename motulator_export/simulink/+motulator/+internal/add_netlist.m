@@ -19,6 +19,8 @@ function add_netlist(blk, net)
 %              S-functions)
 %     folder   Folder of the files of the functions of the MATLAB Function blocks
 %              (only with MATLAB Function blocks)
+%     embed    (optional) True to copy the code of the functions into the MATLAB
+%              Function blocks, see motulator.internal.add_mfunction
 %
 %   The layout is computed by motulator_export, but Simulink places the ports of
 %   the blocks itself, so the blocks are aligned with the ports. The unconnected
@@ -30,14 +32,16 @@ types = struct('S_Function', 'built-in/S-Function', ...
     'Subsystem', 'built-in/Subsystem', 'Selector', 'built-in/Selector', ...
     'Mux', 'built-in/Mux', 'Goto', 'built-in/Goto', 'From', 'built-in/From', ...
     'Inport', 'built-in/Inport', 'Outport', 'built-in/Outport', ...
-    'UnitDelay', 'built-in/UnitDelay');
+    'Constant', 'built-in/Constant', 'UnitDelay', 'built-in/UnitDelay');
+embed = isfield(net, 'embed') && net.embed;
 for k = 1:size(net.blocks, 1)
     [path, type, pos, params] = net.blocks{k, :};
     if isempty(params)
         params = {};
     end
     if strcmp(type, 'MATLAB Function')
-        add_mfunction([blk '/' path], pos, net.folder, params{:});
+        params(end + 1:4) = {[]}; % The parameter p by default
+        add_mfunction([blk '/' path], pos, net.folder, params{:}, embed);
     else
         add([blk '/' path], types.(strrep(type, '-', '_')), pos, params{:});
     end

@@ -1,4 +1,4 @@
-function add_mfunction(blk, pos, folder, name, sample_time, widths, param)
+function add_mfunction(blk, pos, folder, name, sample_time, widths, param, embed)
 %ADD_MFUNCTION MATLAB Function block calling a function of a file.
 %   ADD_MFUNCTION(BLK, POS, FOLDER, NAME, SAMPLE_TIME, WIDTHS) adds the MATLAB
 %   Function block BLK at the position POS, calling the function NAME (the file
@@ -11,23 +11,34 @@ function add_mfunction(blk, pos, folder, name, sample_time, widths, param)
 %   argument p of the function is a nontunable parameter, the struct of the
 %   parameters from the mask (see motulator.internal.add_netlist).
 %
-%   ADD_MFUNCTION(..., PARAM) names the parameter PARAM instead of p.
-if nargin < 7
+%   ADD_MFUNCTION(..., PARAM) names the parameter PARAM instead of p ([] for p).
+%
+%   ADD_MFUNCTION(..., PARAM, EMBED) with EMBED true copies the code of the function
+%   into the block instead, so that the model does not need the file. The global
+%   variables of the code are Data Store Memory blocks of the model.
+if nargin < 7 || isempty(param)
     param = 'p';
 end
-% The signature of the function, e.g., 'y = name(u, p)'
-signature = regexp(fileread(fullfile(folder, [name '.m'])), ...
-    '^function\s+([^\r\n]*)', 'tokens', 'once');
-signature = signature{1};
-script = {
-    ['function ' strrep(signature, [name '('], 'fcn(')]
-    ['% Calls the function of the file ' name '.m of the folder of the library']
-    [signature ';']
-    'end'
-    };
+if nargin < 8
+    embed = false;
+end
+source = fileread(fullfile(folder, [name '.m']));
+if embed
+    script = source;
+else
+    % The signature of the function, e.g., 'y = name(u, p)'
+    signature = regexp(source, '^function\s+([^\r\n]*)', 'tokens', 'once');
+    signature = signature{1};
+    script = strjoin({
+        ['function ' strrep(signature, [name '('], 'fcn(')]
+        ['% Calls the function of the file ' name '.m of the folder of the library']
+        [signature ';']
+        'end'
+        }', newline);
+end
 add_block('simulink/User-Defined Functions/MATLAB Function', blk, 'Position', pos);
 config = get_param(blk, 'MATLABFunctionConfiguration');
-config.FunctionScript = strjoin(script', newline);
+config.FunctionScript = script;
 if isempty(sample_time)
     config.UpdateMethod = 'Inherited';
 else
@@ -45,6 +56,17 @@ outputs = chart.find('-isa', 'Stateflow.Data', 'Scope', 'Output');
 outputs = outputs(order);
 for k = 1:numel(widths)
     outputs(k).Props.Array.Size = num2str(widths(k));
+end
+lines = regexp(script, '^\s*global\s+([\w ]+)', 'tokens', 'lineanchors');
+for k = 1:numel(lines)
+    for store = strsplit(strtrim(lines{k}{1}))
+        data = chart.find('-isa', 'Stateflow.Data', 'Name', store{1});
+        if isempty(data)
+            data = Stateflow.Data(chart);
+            data.Name = store{1};
+        end
+        data.Scope = 'Data Store Memory';
+    end
 end
 % Simulink resizes the block when its code is set (by an amount depending on the
 % code), so its size is restored to that of the layout, at which the blocks are

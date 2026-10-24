@@ -2,11 +2,22 @@
  * Test API of the mock Simulink engine (see simstruc.h): the S-function callbacks
  * in the order Simulink calls them, with the inputs and outputs as flat arrays.
  * The parameters are column vectors. The callbacks that the S-function does not
- * define are not called.
+ * define are not called. Several blocks running the same S-function are its
+ * instances, selected by sfun_select (the instance 0 by default).
  */
 
-static SimStruct mock;
-static mxArray mock_params[MOCK_MAX_PARAMS];
+#define MOCK_MAX_INSTANCES 32
+static SimStruct mock_instances[MOCK_MAX_INSTANCES];
+static mxArray mock_instance_params[MOCK_MAX_INSTANCES][MOCK_MAX_PARAMS];
+static int mock_instance;
+#define mock (mock_instances[mock_instance])
+#define mock_params (mock_instance_params[mock_instance])
+
+/* Select the instance of the block for the following calls */
+void sfun_select(int k)
+{
+    mock_instance = k;
+}
 
 /* Initialize the block with the parameters (concatenated values and the numbers
  * of their elements), returning the error message or NULL */
