@@ -35,6 +35,8 @@ typedef struct {
     VectorControlSystem ctrl;
     Signal w_M_ref;
     double t; /* Controller time */
+    Signal enable; /* Gate enable (ControlSystem.set_enable) */
+    int enabled;   /* Gate enable of the latest step */
 } FluxVectorControlSystem;
 
 /* Save the signals of the step (FVC_FIELDS) */
@@ -61,7 +63,7 @@ static int fvc_save(FluxVectorControlSystem *self)
     for (int k = 0; k < 3; k++) {
         log_put(&p, ref->d_abc[k]);
     }
-    log_put(&p, 1.0); /* Gate enable */
+    log_put(&p, self->enabled); /* Gate enable */
     log_put(&p, fbk->u_dc);
     log_put_complex(&p, fbk->i_s);
     log_put_complex(&p, fbk->u_s);
@@ -84,12 +86,21 @@ static int fvc_save(FluxVectorControlSystem *self)
     return SIM_OK;
 }
 
+/* Gate enable at the controller time (ControlSystem.get_enable) */
+static int fvc_get_enable(const ControlSystem *base)
+{
+    const FluxVectorControlSystem *self = (const FluxVectorControlSystem *)base;
+    return signal_value(&self->enable, self->t) != 0.0;
+}
+
 /* Control step (ControlSystem.run_control_loop with the measurements of
  * VectorControlSystem.get_measurement) */
 static int fvc_run(ControlSystem *base, const Model *mdl, double t,
-                   const double complex *x, double *T_s, double d_abc[3])
+                   const double complex *x, int enabled, double *T_s,
+                   double d_abc[3])
 {
     FluxVectorControlSystem *self = (FluxVectorControlSystem *)base;
+    self->enabled = enabled;
     (void)t;
     const Drive *drive = (const Drive *)mdl;
     VectorControlSystem *ctrl = &self->ctrl;
@@ -101,7 +112,7 @@ static int fvc_run(ControlSystem *base, const Model *mdl, double t,
     if (!isfinite(w_M_ref)) {
         return SIM_ERROR_SIGNAL;
     }
-    vector_control_system_compute_output(ctrl, &meas, w_M_ref, 1);
+    vector_control_system_compute_output(ctrl, &meas, w_M_ref, enabled);
     int status = fvc_save(self);
     if (status != SIM_OK) {
         return status;
@@ -142,6 +153,8 @@ System *system_new(void)
     self->sim.ctrl = &self->ctrl.base;
     FluxVectorControlSystem *ctrl = &self->ctrl;
     ctrl->base.run = fvc_run;
+    ctrl->base.get_enable = fvc_get_enable;
+    signal_constant(&ctrl->enable, 1.0);
     ctrl->base.fields = FVC_FIELDS;
     log_init(&ctrl->base.log, log_fields_width(FVC_FIELDS));
     signal_constant(&ctrl->w_M_ref, 0.0);
@@ -223,6 +236,13 @@ void set_pwm(System *self, int mme, double t_d, double u_th, double i_0,
 Signal *speed_reference(System *self)
 {
     return &self->ctrl.w_M_ref;
+}
+
+/* Gate enable of the control system (ControlSystem.set_enable), set by signal_steps
+ * or signal_function */
+Signal *enable_signal(System *self)
+{
+    return &self->ctrl.enable;
 }
 
 /* Construct the control system and start the simulation at the time t0 with the

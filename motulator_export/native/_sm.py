@@ -5,8 +5,8 @@ The system is simulated by the library `c/native_sm.c`. Supported are the drive
 models of `motulator_export.native._drive` with a synchronous machine, and
 flux-vector control (`FluxVectorController`) in `VectorControlSystem` with a speed
 controller, with the features of the C port (see `motulator_export.plecs._sm`) and the
-duty-ratio error model of the PWM (without the minimum pulses, if compensated), the
-gates enabled.
+duty-ratio error model of the PWM (without the minimum pulses, if compensated), also
+with the gates blocked (`ControlSystem.set_enable`, a constant or a `StepSignal`).
 
 """
 

@@ -3,6 +3,7 @@
  * ported from motulator. See sim.h.
  */
 
+#include <float.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -407,7 +408,209 @@ static double complex converter_voltage(const VoltageSourceConverter *self,
 static double converter_dc_current(const VoltageSourceConverter *self,
                                    double complex i_c_ab)
 {
-    return 1.5 * creal(self->q_c_ab * conj(i_c_ab));
+    if (self->enabled) {
+        return 1.5 * creal(self->q_c_ab * conj(i_c_ab));
+    }
+    /* With blocked gates, the diodes rectify the phase currents */
+    double i_abc[3];
+    complex2abc(i_c_ab, i_abc);
+    return -0.5 * (fabs(i_abc[0]) + fabs(i_abc[1]) + fabs(i_abc[2]));
+}
+
+/* Time constant (s) at which the residual current of a floating leg decays */
+#define AC_PORT_TAU 1e-4
+/* Tolerances of the diode-state transitions: current (A) and voltage (V) */
+#define AC_PORT_I_TOL 1e-9
+#define AC_PORT_U_TOL 1e-9
+
+/* Transformation from the real and imaginary parts of a space vector to the phase
+ * quantities (_A of _ac_port.py), whose transpose times 2/3 is the inverse (_B) */
+static void ac_port_transform(double A[3][2])
+{
+    double r = sqrt(3.0) / 2.0;
+    A[0][0] = 1.0;
+    A[0][1] = 0.0;
+    A[1][0] = -0.5;
+    A[1][1] = r;
+    A[2][0] = -0.5;
+    A[2][1] = -r;
+}
+
+/* Solve the n-by-n linear system M x = b (n at most 3) by Gaussian elimination with
+ * partial pivoting (numpy.linalg.solve), b being overwritten by x */
+static void solve_small(int n, double M[3][3], double b[3])
+{
+    for (int j = 0; j < n; j++) {
+        int pivot = j;
+        for (int i = j + 1; i < n; i++) {
+            if (fabs(M[i][j]) > fabs(M[pivot][j])) {
+                pivot = i;
+            }
+        }
+        if (pivot != j) {
+            for (int k = 0; k < n; k++) {
+                double tmp = M[j][k];
+                M[j][k] = M[pivot][k];
+                M[pivot][k] = tmp;
+            }
+            double tmp = b[j];
+            b[j] = b[pivot];
+            b[pivot] = tmp;
+        }
+        for (int i = j + 1; i < n; i++) {
+            double l = M[i][j] / M[j][j];
+            for (int k = j; k < n; k++) {
+                M[i][k] -= l * M[j][k];
+            }
+            b[i] -= l * b[j];
+        }
+    }
+    for (int i = n - 1; i >= 0; i--) {
+        double sum = b[i];
+        for (int k = i + 1; k < n; k++) {
+            sum -= M[i][k] * b[k];
+        }
+        b[i] = sum / M[i][i];
+    }
+}
+
+static void leg_voltages(const ACPort *port, double u_dc, const double diodes[3],
+                         double u_abc[3])
+{
+    int floating[3], n_float = 0;
+    for (int k = 0; k < 3; k++) {
+        floating[k] = diodes[k] == 0.0;
+        n_float += floating[k];
+    }
+    if (n_float == 3) {
+        /* All the legs float: the voltage drives the current to zero, centered
+         * between the rails */
+        double M[3][3] = {{port->Y[0][0], port->Y[0][1], 0.0},
+                          {port->Y[1][0], port->Y[1][1], 0.0},
+                          {0.0, 0.0, 0.0}};
+        double b[3] = {creal(port->i), cimag(port->i), 0.0};
+        solve_small(2, M, b);
+        double complex u = port->e - complex_from(b[0], b[1]) / AC_PORT_TAU;
+        complex2abc(u, u_abc);
+        double u_max = fmax(fmax(u_abc[0], u_abc[1]), u_abc[2]);
+        double u_min = fmin(fmin(u_abc[0], u_abc[1]), u_abc[2]);
+        for (int k = 0; k < 3; k++) {
+            u_abc[k] += (u_dc - u_max - u_min) / 2.0;
+        }
+        return;
+    }
+    for (int k = 0; k < 3; k++) {
+        u_abc[k] = (diodes[k] < 0.0) ? u_dc : 0.0;
+    }
+    if (n_float == 0) {
+        return;
+    }
+    /* The current derivatives are affine in the leg voltages, M u_abc + c, from which
+     * the voltages of the floating legs are solved */
+    double A[3][2], AY[3][2], M[3][3], c[3], i_abc[3];
+    ac_port_transform(A);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 2; j++) {
+            AY[i][j] = A[i][0] * port->Y[0][j] + A[i][1] * port->Y[1][j];
+        }
+        for (int j = 0; j < 3; j++) {
+            M[i][j] =
+                AY[i][0] * (2.0 / 3.0 * A[j][0]) + AY[i][1] * (2.0 / 3.0 * A[j][1]);
+        }
+    }
+    double Ye[2];
+    for (int j = 0; j < 2; j++) {
+        Ye[j] = port->Y[j][0] * creal(port->e) + port->Y[j][1] * cimag(port->e);
+    }
+    for (int i = 0; i < 3; i++) {
+        c[i] = -A[i][0] * Ye[0] + -A[i][1] * Ye[1];
+    }
+    complex2abc(port->i, i_abc);
+    int f[3], n_f = 0;
+    for (int k = 0; k < 3; k++) {
+        if (floating[k]) {
+            f[n_f++] = k;
+        }
+    }
+    double M_f[3][3], rhs[3];
+    for (int i = 0; i < n_f; i++) {
+        double coupling = 0.0;
+        for (int k = 0; k < 3; k++) {
+            if (!floating[k]) {
+                coupling += M[f[i]][k] * u_abc[k];
+            }
+        }
+        rhs[i] = -i_abc[f[i]] / AC_PORT_TAU - c[f[i]] - coupling;
+        for (int j = 0; j < n_f; j++) {
+            M_f[i][j] = M[f[i]][f[j]];
+        }
+    }
+    solve_small(n_f, M_f, rhs);
+    for (int i = 0; i < n_f; i++) {
+        u_abc[f[i]] = rhs[i];
+    }
+}
+
+static double diode_margin(const ACPort *port, double u_dc, const double diodes[3],
+                           const double u_abc[3])
+{
+    double margin = INFINITY, i_abc[3];
+    complex2abc(port->i, i_abc);
+    int conducting = 0;
+    double i_margin = INFINITY, u_margin = INFINITY;
+    for (int k = 0; k < 3; k++) {
+        if (diodes[k] != 0.0) {
+            conducting++;
+            i_margin = fmin(i_margin, diodes[k] * i_abc[k]);
+        } else {
+            u_margin = fmin(u_margin, fmin(u_abc[k], u_dc - u_abc[k]));
+        }
+    }
+    if (conducting > 0) {
+        margin = i_margin + AC_PORT_I_TOL;
+    }
+    if (conducting < 3) {
+        margin = fmin(margin, u_margin + AC_PORT_U_TOL);
+    }
+    return margin;
+}
+
+static void update_diodes(const ACPort *port, double u_dc, double diodes[3], int latch)
+{
+    double i_abc[3];
+    complex2abc(port->i, i_abc);
+    int positive = 0, negative = 0;
+    for (int k = 0; k < 3; k++) {
+        if (latch) {
+            diodes[k] = (fabs(i_abc[k]) > AC_PORT_I_TOL) ? sign(i_abc[k]) : 0.0;
+        } else if (diodes[k] * i_abc[k] <= 0.0) {
+            diodes[k] = 0.0;
+        }
+        positive |= diodes[k] > 0.0;
+        negative |= diodes[k] < 0.0;
+    }
+    /* The current circulates between the legs conducting in opposite directions.
+     * Otherwise, the conducting legs carry only the residual currents of the floating
+     * legs, so they float too. */
+    if (!(positive && negative)) {
+        for (int k = 0; k < 3; k++) {
+            diodes[k] = 0.0;
+        }
+    }
+    for (int n = 0; n < 3; n++) { /* Each round clamps at least one leg */
+        double u_abc[3];
+        leg_voltages(port, u_dc, diodes, u_abc);
+        int clamped = 0;
+        for (int k = 0; k < 3; k++) {
+            if (diodes[k] == 0.0 && (u_abc[k] < 0.0 || u_abc[k] > u_dc)) {
+                diodes[k] = (u_abc[k] < 0.0) ? 1.0 : -1.0;
+                clamped = 1;
+            }
+        }
+        if (!clamped) {
+            break;
+        }
+    }
 }
 
 /* DC bus ------------------------------------------------------------------- */
@@ -473,6 +676,54 @@ static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_i
 static double model_dc_voltage(const Model *self, const double complex *x)
 {
     return dc_bus_voltage(&self->dc_bus, x, self->converter.u_dc);
+}
+
+/* Voltage (V) between the rails of the converter, including the drops of the diodes
+ * (VoltageSourceConverter._rail_voltage) */
+static double model_rail_voltage(const Model *self, const double complex *x)
+{
+    return model_dc_voltage(self, x) + 2.0 * self->converter.u_th;
+}
+
+static double complex model_converter_voltage(const Model *self, double t,
+                                              const double complex *x, double *margin)
+{
+    const VoltageSourceConverter *converter = &self->converter;
+    if (converter->enabled) {
+        if (margin != NULL) {
+            *margin = INFINITY;
+        }
+        return converter_voltage(converter, model_dc_voltage(self, x));
+    }
+    ACPort port;
+    self->ac_port(self, t, x, &port);
+    double u_dc = model_rail_voltage(self, x), u_abc[3];
+    leg_voltages(&port, u_dc, converter->diodes, u_abc);
+    if (margin != NULL) {
+        *margin = diode_margin(&port, u_dc, converter->diodes, u_abc);
+    }
+    return abc2complex(u_abc);
+}
+
+static void model_set_enable(Model *self, double t, const double complex *x,
+                             int enabled)
+{
+    VoltageSourceConverter *converter = &self->converter;
+    if (!enabled && converter->enabled) {
+        ACPort port;
+        self->ac_port(self, t, x, &port);
+        update_diodes(&port, model_rail_voltage(self, x), converter->diodes, 1);
+    }
+    converter->enabled = enabled;
+}
+
+/* Update the diode states of the converter with blocked gates at a transition
+ * (VoltageSourceConverter.update_diodes) */
+static void model_update_diodes(Model *self, double t, const double complex *x)
+{
+    ACPort port;
+    self->ac_port(self, t, x, &port);
+    update_diodes(&port, model_rail_voltage(self, x), self->converter.diodes, 0);
 }
 
 static void model_state_names(const Model *self, const char *names, char *buffer,
@@ -578,7 +829,7 @@ static void simulation_init(Simulation *self, Model *mdl, ControlSystem *ctrl,
     self->t_sample = t_start;
     self->n_events = 0;
     self->i_event = 0;
-    log_init(&self->log, 1 + 2 * mdl->n + 4);
+    log_init(&self->log, 1 + 2 * mdl->n + 7);
 }
 
 static void simulation_rhs(void *data, double t, const double complex *x,
@@ -588,19 +839,33 @@ static void simulation_rhs(void *data, double t, const double complex *x,
     mdl->rhs(mdl, t, x, dx);
 }
 
-/* Save a solution point with the switching state (Model.save) */
+/* Save a solution point with the switching state, the gate enable, and the voltage of
+ * the converter with blocked gates, evaluated at the point (Model.save) */
 static int simulation_save(Simulation *self, double t, const double complex *x)
 {
+    const Model *mdl = self->mdl;
+    const VoltageSourceConverter *converter = &mdl->converter;
     double *p = log_append(&self->log);
     if (p == NULL) {
         return SIM_ERROR_MEMORY;
     }
     log_put(&p, t);
-    for (int i = 0; i < self->mdl->n; i++) {
+    for (int i = 0; i < mdl->n; i++) {
         log_put_complex(&p, x[i]);
     }
-    log_put_complex(&p, self->mdl->converter.q_c_ab);
-    log_put_complex(&p, self->mdl->converter.s_c_ab);
+    log_put_complex(&p, converter->q_c_ab);
+    log_put_complex(&p, converter->s_c_ab);
+    log_put(&p, converter->enabled);
+    double complex u_c_ab = NAN;
+    if (!converter->enabled) {
+        double complex x_set[SIM_MAX_STATES];
+        for (int i = 0; i < mdl->n; i++) {
+            x_set[i] = x[i];
+        }
+        mdl->set_states(mdl, x_set); /* As Model._evaluate_outputs */
+        u_c_ab = model_converter_voltage(mdl, t, x_set, NULL);
+    }
+    log_put_complex(&p, u_c_ab);
     return SIM_OK;
 }
 
@@ -614,62 +879,135 @@ static int all_finite(const double complex *x, int n)
     return 1;
 }
 
+/* Event of the transitions of the diode states of the converter (_DiodeEvent): the
+ * margin of the diode states on the dense output of the latest step */
+typedef struct {
+    const Model *mdl;
+    const RK45 *solver;
+} DiodeEvent;
+
+static double diode_event(double t, void *data)
+{
+    const DiodeEvent *event = data;
+    double complex x[SIM_MAX_STATES];
+    rk45_dense_output(event->solver, t, x);
+    event->mdl->set_states(event->mdl, x); /* As the event function of motulator */
+    double margin;
+    model_converter_voltage(event->mdl, t, x, &margin);
+    return margin;
+}
+
+/* Margin of the diode states at the time t and the states x, set as by Model.set_states
+ * (the converter with blocked gates) */
+static double simulation_margin(const Model *mdl, double t, const double complex *x)
+{
+    double complex x_set[SIM_MAX_STATES];
+    for (int i = 0; i < mdl->n; i++) {
+        x_set[i] = x[i];
+    }
+    mdl->set_states(mdl, x_set);
+    double margin;
+    model_converter_voltage(mdl, t, x_set, &margin);
+    return margin;
+}
+
 /* Integrate from t0 to t1 and save the solution (Simulation._integrate). With N_eval,
  * the evenly spaced points of the interval are saved, excluding its end point, at
- * which the dense output gives the final states, as t_eval of solve_ivp. */
+ * which the dense output gives the final states, as t_eval of solve_ivp. With the
+ * gates of the converter blocked, the transitions of its diode states are located as
+ * the terminal events of solve_ivp (the margin decreasing to zero, the root found by
+ * brentq with the tolerances 4*eps), at which the diode states are updated and the
+ * integration is restarted. */
 static int simulation_integrate(Simulation *self, double t1, int N_eval)
 {
-    double t0 = self->t0;
-    if (t1 <= t0) {
+    double t_start = self->t0;
+    if (t1 <= t_start) {
         return SIM_OK;
     }
     Model *mdl = self->mdl;
-    RK45 solver;
-    /* The whole interval is tried as the first step */
-    double first_step = fmin(t1 - t0, self->cfg.max_step);
-    rk45_init(&solver, simulation_rhs, mdl, mdl->n, t0, self->x, t1, first_step,
-              &self->cfg);
-    double complex x_eval[SIM_MAX_STATES];
-    double dt_eval = (N_eval > 0) ? (t1 - t0) / N_eval : 0.0;
-    int i_eval = 0, status = SIM_OK;
-    int rows = self->log.rows; /* Points saved before the interval */
-    if (N_eval == 0) {
-        status = simulation_save(self, t0, self->x);
-    }
-    for (int result = RK45_RUNNING; status == SIM_OK && result == RK45_RUNNING;) {
-        result = rk45_step(&solver);
-        if (result == RK45_FAILED) {
-            status = SIM_ERROR_STEP_SIZE;
-        } else if (!all_finite(solver.x, mdl->n)) {
-            status = SIM_ERROR_NOT_FINITE;
-        } else if (N_eval == 0) {
-            status = simulation_save(self, solver.t, solver.x);
-        } else {
-            for (; i_eval <= N_eval && status == SIM_OK; i_eval++) {
-                double t = (i_eval < N_eval) ? i_eval * dt_eval + t0 : t1;
-                if (t > solver.t) {
-                    break;
+    int events = !mdl->converter.enabled;
+    /* The evaluation points over the whole interval, kept at the restarts */
+    double dt_eval = (N_eval > 0) ? (t1 - t_start) / N_eval : 0.0;
+    int i_eval = 0;
+    for (int transition = 0; transition < SIM_MAX_TRANSITIONS; transition++) {
+        double t0 = self->t0;
+        int rows = self->log.rows; /* Points saved before this solution */
+        RK45 solver;
+        /* The whole interval is tried as the first step */
+        double first_step = fmin(t1 - t0, self->cfg.max_step);
+        rk45_init(&solver, simulation_rhs, mdl, mdl->n, t0, self->x, t1, first_step,
+                  &self->cfg);
+        DiodeEvent event = {mdl, &solver};
+        double g = events ? simulation_margin(mdl, t0, self->x) : 0.0;
+        double complex x_eval[SIM_MAX_STATES], x_event[SIM_MAX_STATES];
+        const double complex *x_end = self->x;
+        double t_end = t1;
+        int status = SIM_OK, terminated = 0;
+        if (N_eval == 0) {
+            status = simulation_save(self, t0, self->x);
+        }
+        for (int result = RK45_RUNNING; status == SIM_OK && result == RK45_RUNNING;) {
+            result = rk45_step(&solver);
+            if (result == RK45_FAILED) {
+                status = SIM_ERROR_STEP_SIZE;
+                break;
+            }
+            if (!all_finite(solver.x, mdl->n)) {
+                status = SIM_ERROR_NOT_FINITE;
+                break;
+            }
+            double t = solver.t;
+            const double complex *x = solver.x;
+            if (events) {
+                double g_new = simulation_margin(mdl, solver.t, solver.x);
+                /* Active with the margin decreasing (find_active_events) */
+                if (g >= 0.0 && g_new <= 0.0) {
+                    t = brentq_tol(diode_event, solver.t_old, solver.t, &event,
+                                   4.0 * DBL_EPSILON, 4.0 * DBL_EPSILON);
+                    rk45_dense_output(&solver, t, x_event);
+                    x = x_event;
+                    terminated = 1;
                 }
-                rk45_dense_output(&solver, t, x_eval);
-                if (i_eval < N_eval) {
-                    status = simulation_save(self, t, x_eval);
+                g = g_new;
+            }
+            if (N_eval == 0) {
+                status = simulation_save(self, t, x);
+                x_end = x;
+            } else {
+                for (; i_eval <= N_eval && status == SIM_OK; i_eval++) {
+                    double t_i = (i_eval < N_eval) ? i_eval * dt_eval + t_start : t1;
+                    if (t_i > t) {
+                        break;
+                    }
+                    rk45_dense_output(&solver, t_i, x_eval);
+                    if (i_eval < N_eval) {
+                        status = simulation_save(self, t_i, x_eval);
+                    }
                 }
+                x_end = terminated ? x_event : x_eval;
+            }
+            if (terminated) {
+                t_end = t;
+                break;
             }
         }
+        if (status != SIM_OK) {
+            /* Nothing of the failed solution is saved, as in motulator, so the model
+             * remains at its start */
+            self->log.rows = rows;
+            return status;
+        }
+        for (int i = 0; i < mdl->n; i++) {
+            self->x[i] = x_end[i];
+        }
+        self->t0 = t_end;
+        mdl->set_states(mdl, self->x);
+        if (!terminated) {
+            return SIM_OK;
+        }
+        model_update_diodes(mdl, self->t0, self->x);
     }
-    if (status != SIM_OK) {
-        /* Nothing of the failed interval is saved, as in motulator, so the model
-         * remains at the start of the interval */
-        self->log.rows = rows;
-        return status;
-    }
-    const double complex *x1 = (N_eval == 0) ? solver.x : x_eval;
-    for (int i = 0; i < mdl->n; i++) {
-        self->x[i] = x1[i];
-    }
-    self->t0 = t1;
-    mdl->set_states(mdl, self->x);
-    return SIM_OK;
+    return SIM_ERROR_TRANSITIONS;
 }
 
 static int simulation_run(Simulation *self, double t_stop, int N_eval)
@@ -682,9 +1020,16 @@ static int simulation_run(Simulation *self, double t_stop, int N_eval)
             return SIM_OK;
         }
         if (due) {
+            /* The gate enable takes effect at the sampling instant, so that the
+             * control system measures the converter with blocked gates */
+            int enabled = self->ctrl->get_enable(self->ctrl);
+            if (enabled != mdl->converter.enabled) {
+                model_set_enable(mdl, t0, self->x, enabled);
+            }
             /* Control, computational delay, and PWM */
             double T_s, d_abc[3];
-            int status = self->ctrl->run(self->ctrl, mdl, t0, self->x, &T_s, d_abc);
+            int status =
+                self->ctrl->run(self->ctrl, mdl, t0, self->x, enabled, &T_s, d_abc);
             if (status != SIM_OK) {
                 return status;
             }
@@ -698,6 +1043,13 @@ static int simulation_run(Simulation *self, double t_stop, int N_eval)
             status = modulator_modulate(&mdl->modulator, T_s, d_abc, &seq);
             if (status != SIM_OK) {
                 return status;
+            }
+            if (!mdl->converter.enabled) {
+                /* The duty ratios pass through the delay and the PWM model, but the
+                 * gate signals are zero for the whole sampling period */
+                const double off[3] = {0.0, 0.0, 0.0};
+                seq.n = 0;
+                append_interval(&seq, T_s, off, off);
             }
             /* Switching instants, accumulated from the interval durations */
             double t_sw = t0;
@@ -761,14 +1113,30 @@ double sim_state(const Simulation *self, double *x)
 }
 
 /* Switching state and current-direction vector of the converter (real and
- * imaginary parts) */
-void sim_converter_state(const Simulation *self, double *q)
+ * imaginary parts), and its diode states with blocked gates, returning its gate
+ * enable */
+int sim_converter_state(const Simulation *self, double *q, double *diodes)
 {
     const VoltageSourceConverter *converter = &self->mdl->converter;
     q[0] = creal(converter->q_c_ab);
     q[1] = cimag(converter->q_c_ab);
     q[2] = creal(converter->s_c_ab);
     q[3] = cimag(converter->s_c_ab);
+    for (int k = 0; k < 3; k++) {
+        diodes[k] = converter->diodes[k];
+    }
+    return converter->enabled;
+}
+
+/* Gate enable and diode states of the converter, e.g., of a model whose gates were
+ * blocked by an earlier simulation */
+void sim_set_converter_state(Simulation *self, int enabled, const double *diodes)
+{
+    VoltageSourceConverter *converter = &self->mdl->converter;
+    converter->enabled = enabled;
+    for (int k = 0; k < 3; k++) {
+        converter->diodes[k] = diodes[k];
+    }
 }
 
 /* Log of the model (control = 0) or of the control system (control = 1) */

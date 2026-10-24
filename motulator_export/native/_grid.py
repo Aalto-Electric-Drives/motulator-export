@@ -15,7 +15,8 @@ Supported:
   disturbance-observer-based grid-forming control
   (`ObserverBasedGridFormingController`) in `GridConverterControlSystem` in the
   power-control mode, with the features of the C port (see
-  `motulator_export.plecs._grid`), the gates enabled
+  `motulator_export.plecs._grid`), also with the gates blocked
+  (`ControlSystem.set_enable`, a constant or a `StepSignal`)
 - Ideal sensors
 
 """

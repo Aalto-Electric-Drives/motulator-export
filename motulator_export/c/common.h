@@ -55,6 +55,10 @@ static double lut_interp(const LUT *lut, double x);
 typedef double (*ScalarFunction)(double x, void *data);
 
 static double brentq(ScalarFunction f, double xa, double xb, void *data);
+/* The same with the tolerances xtol and rtol (e.g., 4*eps of the events of
+ * scipy.integrate.solve_ivp) */
+static double brentq_tol(ScalarFunction f, double xa, double xb, void *data,
+                         double xtol, double rtol);
 
 /* 2DOF PI controller */
 typedef struct {

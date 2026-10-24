@@ -4,10 +4,11 @@ Test the native simulation against the simulation of motulator.
 The drive systems and the grid converter systems are simulated in motulator and
 natively, and the results are compared. With the zero-order hold (ZOH), the native
 simulation takes the same steps as motulator, so the results agree to the rounding
-errors. With the carrier comparison, a change of the quantized duty ratios at the
-rounding error changes the switching instants, so a fine quantization is used. With
-the diode bridge, the clamping of the inductor current at zero makes the step sizes
-sensitive to the rounding errors, so the control signals are compared.
+errors, also with the gates blocked, when the transitions of the diode states are
+located as events. With the carrier comparison, a change of the quantized duty ratios
+at the rounding error changes the switching instants, so a fine quantization is used.
+With the diode bridge, the clamping of the inductor current at zero makes the step
+sizes sensitive to the rounding errors, so the control signals are compared.
 
 Run from the repository root (requires gcc):
 
@@ -221,9 +222,6 @@ def test_interface() -> None:
     mdl, ctrl = ipmsm_drive()
     with pytest.raises(NotImplementedError, match="RK45"):
         native.Simulation(mdl, ctrl, cfg=SolverCfg(method="DOP853"))
-    ctrl.set_enable(False)
-    with pytest.raises(NotImplementedError, match="Gate blocking"):
-        native.Simulation(mdl, ctrl)
 
 
 @pytest.mark.parametrize("case", ["sm", "im_nonlinearity", "sm_dc_bus"])
@@ -255,6 +253,22 @@ def test_final_state(case: str) -> None:
     assert np.isclose(mdl_c.converter.out.u_dc, mdl_py.converter.out.u_dc)
     assert np.isclose(mdl_c.converter.out.u_c_ab, mdl_py.converter.out.u_c_ab)
     assert np.isclose(mdl_c.machine.inp.u_s_ab, mdl_py.machine.inp.u_s_ab)
+
+
+def test_final_state_blocked() -> None:
+    """
+    The model ends with the gate enable and the diode states of the converter of the
+    simulation, here with the gates blocked, as in motulator.
+    """
+    build = sm_system(sensorless=True, t_d=0.0, blocked=True)[0]
+    mdl_py, ctrl_py = build()
+    model.Simulation(mdl_py, ctrl_py, show_progress=False).simulate(0.16)
+    mdl_c, ctrl_c = build()
+    native.Simulation(mdl_c, ctrl_c, show_progress=False).simulate(0.16)
+    assert mdl_c.t0 == mdl_py.t0
+    assert not mdl_py.converter.inp.enabled and not mdl_c.converter.inp.enabled
+    assert np.array_equal(mdl_c.converter._diodes, mdl_py.converter._diodes)
+    assert np.isclose(mdl_c.converter.out.u_c_ab, mdl_py.converter.out.u_c_ab)
 
 
 @pytest.mark.parametrize("N_eval", [0, 4])
@@ -511,12 +525,45 @@ def test_grid_pwm() -> None:
     check(res_py, res_c, rtol=1e-6, same_steps=False)
 
 
+# %%
+# Gate blocking
+@pytest.mark.parametrize(
+    ("build", "t_stop"),
+    [
+        (sm_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
+        (sm_system(sensorless=False, t_d=0.0, blocked=True)[0], 0.3),
+        (im_system(sensorless=True, t_d=0.0, i_0=0.0, blocked=True)[0], 0.3),
+        (vhz_system(open_loop=False, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
+        (vhz_system(open_loop=True, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
+        (gfl_system(blocked=True)[0], 0.06),
+        (gfm_system(power_limitation=False, blocked=True)[0], 0.15),
+    ],
+    ids=["fvc", "fvc_sensored", "cvc", "vhz", "vhz_open_loop", "gfl", "gfm"],
+)
+def test_gate_blocking(build: Build, t_stop: float) -> None:
+    """
+    With the gates blocked at the start and during the operation (see tests/systems.py),
+    the diodes of the converter conduct according to the currents, and the native
+    simulation takes the same steps as motulator, also at the events of the diode
+    transitions.
+    """
+    res_py, res_c = simulate(build, t_stop)
+    assert not np.all(res_c.mdl.converter.enabled)
+    check(res_py, res_c, rtol=1e-9)
+
+
+def test_gate_blocking_n_eval() -> None:
+    """The events of the diode transitions with the evenly spaced points (N_eval)."""
+    build = sm_system(sensorless=True, t_d=0.0, blocked=True)[0]
+    check(*simulate(build, 0.2, N_eval=4), rtol=1e-9)
+
+
 def test_unsupported() -> None:
     """Unsupported systems raise errors."""
-    # Gate blocking
+    # Gate enable other than 0 and 1
     mdl, ctrl = gfl_system()[0]()
-    ctrl.set_enable(False)
-    with pytest.raises(NotImplementedError, match="Gate blocking"):
+    ctrl.set_enable(StepSignal(time=0.01, after=0.5))
+    with pytest.raises(ValueError, match="gate enable"):
         native.Simulation(mdl, ctrl)
     # DC-bus voltage control
     mdl, ctrl = gfl_system()[0]()

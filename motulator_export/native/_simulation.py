@@ -117,6 +117,7 @@ class Simulation:
             system.start(mdl, self._t_start, ctrl.t, self._solver_cfg)
             self._system = system
         system.set_signals(mdl, ctrl)
+        system.set_enable(ctrl)
 
         progress_bar = None
         if self.show_progress:
@@ -148,8 +149,11 @@ class Simulation:
             _save(system, mdl, ctrl)
             mdl.t0, x = system.state()
             mdl.set_states(list(x))
-            inp = mdl.converter.inp
-            inp.q_c_ab, inp.s_c_ab = system.converter_state()
+            converter = mdl.converter
+            inp = converter.inp
+            inp.q_c_ab, inp.s_c_ab, inp.enabled, converter._diodes = (
+                system.converter_state()
+            )
             mdl.set_outputs(mdl.t0)
         if status != 0:
             msg = f"Simulation stopped at {mdl.t0:.2f} s: {ERRORS[status]}"
@@ -177,19 +181,22 @@ def _save(system: NativeSystem, mdl: Model, ctrl: ControlSystem) -> None:
     Save the logged data of the system into the time series of the model and the
     control system, as `Model.save` and `ControlSystem.save` do.
     """
-    # Model: the time, the states, and the switching state of the converter
+    # Model: the time, the states, the switching state and the current-direction
+    # vector of the converter, its gate enable, and its voltage with the gates blocked
+    # (NaN with the gates enabled)
     data = system.fetch(control=False)
     n = len(system.fields(control=False))
-    z = data[:, 1::2] + 1j * data[:, 2::2]
+    m = 1 + 2 * n
+    z = data[:, 1:m:2] + 1j * data[:, 2:m:2]
     history = mdl._history
     history.t.extend(data[:, 0])
     index = 0
     for subsystem in mdl.subsystems:
-        index = subsystem.extend_state_history(z[:, :n].T, index)  # type: ignore
-    history.q_c_ab.extend(z[:, n])
-    history.s_c_ab.extend(z[:, n + 1])
-    history.enabled.extend([True] * len(data))
-    history.u_c_ab.extend([complex(np.nan)] * len(data))
+        index = subsystem.extend_state_history(z.T, index)  # type: ignore
+    history.q_c_ab.extend(data[:, m] + 1j * data[:, m + 1])
+    history.s_c_ab.extend(data[:, m + 2] + 1j * data[:, m + 3])
+    history.enabled.extend(bool(e) for e in data[:, m + 4])
+    history.u_c_ab.extend(data[:, m + 5] + 1j * data[:, m + 6])
 
     # Control system: the controller time and the signal groups
     data = system.fetch(control=True)

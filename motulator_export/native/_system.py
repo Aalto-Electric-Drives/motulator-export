@@ -50,7 +50,8 @@ API: Signatures = {
     "start": (None, [c_void_p, c_double, c_double_p] + [c_double] * 5),
     "sim_run": (c_int, [c_void_p, c_double, c_int]),
     "sim_state": (c_double, [c_void_p, c_double_p]),
-    "sim_converter_state": (None, [c_void_p, c_double_p]),
+    "sim_converter_state": (c_int, [c_void_p, c_double_p, c_double_p]),
+    "sim_set_converter_state": (None, [c_void_p, c_int, c_double_p]),
     "sim_log": (c_void_p, [c_void_p, c_int]),
     "sim_fields": (ctypes.c_char_p, [c_void_p, c_int]),
     "log_rows": (c_int, [c_void_p]),
@@ -63,6 +64,7 @@ API: Signatures = {
     "set_converter": (None, [c_void_p, c_double, c_double]),
     "set_modulator": (None, [c_void_p, c_int, c_double, c_double, c_int, c_int]),
     "set_dc_bus": (None, [c_void_p, c_int] + [c_double] * 4),
+    "enable_signal": (c_void_p, [c_void_p]),
 }
 
 # Function setting the PWM of the control system, in the libraries with a PWM
@@ -94,6 +96,7 @@ ERRORS = {
     4: "Out of memory for the results.",
     5: "Too many switching intervals in a sampling period.",
     6: "A reference signal is not finite.",
+    7: "Too many diode transitions in an interval.",
 }
 
 
@@ -148,6 +151,10 @@ class NativeSystem:
     def set_signals(self, mdl: Any, ctrl: Any) -> None:
         """Set the signals of the system from `mdl` and `ctrl` (e.g., references)."""
         raise NotImplementedError
+
+    def set_enable(self, ctrl: Any) -> None:
+        """Set the gate enable of the control system, see `enable_signal`."""
+        self.set_signal(self.lib.enable_signal(self.handle), enable_signal(ctrl))
 
     def set_signal(self, signal: int, x: float | Callable[[float], float]) -> None:
         """
@@ -256,6 +263,12 @@ class NativeSystem:
         self.lib.start(
             self.handle, mdl.t0, xy, t_start, t_ctrl, cfg.max_step, cfg.rtol, cfg.atol
         )
+        # The gate enable and the diode states of the converter (e.g., blocked by an
+        # earlier simulation)
+        converter = mdl.converter
+        self.lib.sim_set_converter_state(
+            self.handle, int(converter.inp.enabled), array(converter._diodes)
+        )
 
     def run(self, t_stop: float, N_eval: int) -> int:
         """
@@ -276,11 +289,14 @@ class NativeSystem:
         x = np.array(xy).reshape(n, 2)
         return t0, x[:, 0] + 1j * x[:, 1]
 
-    def converter_state(self) -> tuple[complex, complex]:
-        """Switching state and current-direction vector of the converter."""
-        q = (c_double * 4)()
-        self.lib.sim_converter_state(self.handle, q)
-        return complex(q[0], q[1]), complex(q[2], q[3])
+    def converter_state(self) -> tuple[complex, complex, bool, np.ndarray]:
+        """
+        Switching state and current-direction vector of the converter, its gate
+        enable, and its diode states with the gates blocked.
+        """
+        q, diodes = (c_double * 4)(), (c_double * 3)()
+        enabled = self.lib.sim_converter_state(self.handle, q, diodes)
+        return complex(q[0], q[1]), complex(q[2], q[3]), bool(enabled), np.array(diodes)
 
     def fields(self, control: bool) -> list[str]:
         """Names of the states of the model or of the logged fields of the control."""
@@ -330,13 +346,25 @@ def check_supported_converter(mdl: Model) -> None:
         raise NotImplementedError("Only the initial state of the PWM model supported")
 
 
+def enable_signal(ctrl: Any) -> StepSignal | float | Callable[[float], float]:
+    """
+    Gate enable of the control system (`ControlSystem.set_enable`) as a signal of the
+    native system: a constant or a `StepSignal` (see `gate_enable`), or a function of
+    the controller time, whose value is taken as a bool, as in motulator.
+    """
+    enable = ctrl._enable
+    if callable(enable) and not isinstance(enable, StepSignal):
+        return lambda t: float(bool(enable(t)))
+    return gate_enable(ctrl)
+
+
 def check_supported_control(ctrl: Any, d_err: bool) -> None:
     """
     Raise an error if the PWM of the control system is not supported (the duty-ratio
     error model only if `d_err`, and then without the minimum pulses if compensated)
-    or the gates are blocked.
+    or the gate enable is not supported (see `gate_enable`).
     """
-    check_supported_pwm(ctrl, d_err=d_err)
+    check_supported_pwm(ctrl, d_err=d_err, enable=False)
     pwm = ctrl.pwm
     pwm_values(pwm)  # Raises if the duty-ratio error model is not supported
     if pwm.d_err is not None and pwm.feedforward and pwm.d_min > 0:
@@ -344,5 +372,4 @@ def check_supported_control(ctrl: Any, d_err: bool) -> None:
             "Minimum pulses (d_min) with the compensation of the duty-ratio error not "
             "supported"
         )
-    if gate_enable(ctrl) != 1:
-        raise NotImplementedError("Gate blocking (set_enable) not supported")
+    enable_signal(ctrl)  # Raises if not supported

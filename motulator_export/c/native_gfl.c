@@ -32,6 +32,8 @@ typedef struct {
     Signal p_g_ref;
     Signal q_g_ref;
     double t; /* Controller time */
+    Signal enable; /* Gate enable (ControlSystem.set_enable) */
+    int enabled;   /* Gate enable of the latest step */
 } GFLSystemControl;
 
 /* Save the signals of the step (GFL_FIELDS) */
@@ -53,7 +55,7 @@ static int gfl_save(GFLSystemControl *self)
     for (int k = 0; k < 3; k++) {
         log_put(&p, ref->d_abc[k]);
     }
-    log_put(&p, 1.0); /* Gate enable */
+    log_put(&p, self->enabled); /* Gate enable */
     log_put_complex(&p, fbk->i_c);
     log_put_complex(&p, fbk->u_c);
     log_put(&p, fbk->u_g);
@@ -68,12 +70,21 @@ static int gfl_save(GFLSystemControl *self)
     return SIM_OK;
 }
 
+/* Gate enable at the controller time (ControlSystem.get_enable) */
+static int gfl_get_enable(const ControlSystem *base)
+{
+    const GFLSystemControl *self = (const GFLSystemControl *)base;
+    return signal_value(&self->enable, self->t) != 0.0;
+}
+
 /* Control step (ControlSystem.run_control_loop with the measurements of
  * GridConverterControlSystem.get_measurement) */
 static int gfl_run(ControlSystem *base, const Model *mdl, double t,
-                   const double complex *x, double *T_s, double d_abc[3])
+                   const double complex *x, int enabled, double *T_s,
+                   double d_abc[3])
 {
     GFLSystemControl *self = (GFLSystemControl *)base;
+    self->enabled = enabled;
     const GridConverterSystem *grid = (const GridConverterSystem *)mdl;
     double p_g_ref = signal_value(&self->p_g_ref, self->t);
     double q_g_ref = signal_value(&self->q_g_ref, self->t);
@@ -84,7 +95,7 @@ static int gfl_run(ControlSystem *base, const Model *mdl, double t,
     meas.i_c_ab = grid_meas_current(grid, x);
     meas.u_g_ab = grid_meas_pcc_voltage(grid, t, x);
     meas.u_dc = model_dc_voltage(mdl, x);
-    gfl_control_system_compute_output(&self->ctrl, &meas, p_g_ref, q_g_ref, 1);
+    gfl_control_system_compute_output(&self->ctrl, &meas, p_g_ref, q_g_ref, enabled);
     int status = gfl_save(self);
     if (status != SIM_OK) {
         return status;
@@ -123,6 +134,8 @@ System *system_new(void)
     self->sim.ctrl = &self->ctrl.base;
     GFLSystemControl *ctrl = &self->ctrl;
     ctrl->base.run = gfl_run;
+    ctrl->base.get_enable = gfl_get_enable;
+    signal_constant(&ctrl->enable, 1.0);
     ctrl->base.fields = GFL_FIELDS;
     log_init(&ctrl->base.log, log_fields_width(GFL_FIELDS));
     signal_constant(&ctrl->p_g_ref, 0.0);
@@ -173,6 +186,13 @@ Signal *power_reference(System *self)
 Signal *reactive_power_reference(System *self)
 {
     return &self->ctrl.q_g_ref;
+}
+
+/* Gate enable of the control system (ControlSystem.set_enable), set by signal_steps
+ * or signal_function */
+Signal *enable_signal(System *self)
+{
+    return &self->ctrl.enable;
 }
 
 /* Construct the control system and start the simulation at the time t0 with the

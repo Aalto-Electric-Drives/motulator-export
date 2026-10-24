@@ -81,8 +81,12 @@ static double lut_interp(const LUT *lut, double x)
  * bracket ends must have opposite signs (or be zero). */
 static double brentq(ScalarFunction f, double xa, double xb, void *data)
 {
-    const double xtol = 2e-12;
-    const double rtol = 8.881784197001252e-16;
+    return brentq_tol(f, xa, xb, data, 2e-12, 8.881784197001252e-16);
+}
+
+static double brentq_tol(ScalarFunction f, double xa, double xb, void *data,
+                         double xtol, double rtol)
+{
     const int iter = 100;
     double xpre = xa, xcur = xb;
     double xblk = 0.0, fblk = 0.0, spre = 0.0, scur = 0.0;

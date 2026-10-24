@@ -175,14 +175,17 @@ def system_type(mdl: Any, ctrl: Any) -> str:
 
 
 def check_supported_pwm(
-    ctrl: DriveControlSystem | GridConverterControlSystem, d_err: bool = False
+    ctrl: DriveControlSystem | GridConverterControlSystem,
+    d_err: bool = False,
+    enable: bool = True,
 ) -> None:
     """
     Raise an error if the PWM, the angle-advance factor `k_comp` of the voltage
     reference (given by the controller), or the gate enable of the control system is
     not supported (see `gate_enable`).
 
-    The duty-ratio error model `d_err` is supported only if `d_err` is True.
+    The duty-ratio error model `d_err` is supported only if `d_err` is True, and the
+    gate enable is checked only if `enable` is True.
 
     """
     pwm = ctrl.pwm
@@ -194,7 +197,8 @@ def check_supported_pwm(
         raise NotImplementedError("Only k_pred = 1.5 supported")
     if pwm.d_err is not None and not d_err:
         raise NotImplementedError("Duty-ratio error model d_err not supported")
-    gate_enable(ctrl)  # Raises if not supported
+    if enable:
+        gate_enable(ctrl)  # Raises if not supported
 
 
 # Space vectors in the results of simulate, from their phase signals

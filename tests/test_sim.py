@@ -56,12 +56,20 @@ typedef struct {
     double T_s;
 } Control;
 
+static int control_enabled(const ControlSystem *base)
+{
+    (void)base;
+    return 1;
+}
+
 static int control_run(ControlSystem *base, const Model *mdl, double t,
-                       const double complex *x, double *T_s, double d_abc[3])
+                       const double complex *x, int enabled, double *T_s,
+                       double d_abc[3])
 {
     (void)mdl;
     (void)t;
     (void)x;
+    (void)enabled;
     *T_s = ((Control *)base)->T_s;
     for (int k = 0; k < 3; k++) {
         d_abc[k] = 0.5;
@@ -84,7 +92,9 @@ int integrate(double T_s, const double *x0, double rtol, double atol, double max
     mdl.converter_current = zero_current;
     mdl.set_states = keep_states;
     mdl.converter.u_dc = 1.0;
+    mdl.converter.enabled = 1;
     modulator_init(&mdl.modulator, 0, 0.0, 0.0, 0, 0);
+    ctrl.base.get_enable = control_enabled;
     ctrl.base.run = control_run;
     ctrl.T_s = T_s;
     log_init(&ctrl.base.log, 1);

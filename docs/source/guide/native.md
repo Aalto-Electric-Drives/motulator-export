@@ -35,4 +35,5 @@ The results agree with *motulator* to the rounding errors, about 1e-12 relative 
 
 - The references and the load torque can be constants, `StepSignal` objects (evaluated in C, fastest), or functions of time (called from C).
 - As in *motulator*, the results are also stored in `mdl` and `ctrl`, and a subsequent call of `simulate` continues the simulation.
-- Gate blocking (`ctrl.set_enable`) is not supported. Other unsupported systems raise `NotImplementedError` when the simulation is created, see [](supported.md).
+- The gate enable (`ctrl.set_enable`) can block the gates, as in *motulator*: the diodes of the converter conduct according to the currents, and their transitions are located as events.
+- Unsupported systems raise `NotImplementedError` when the simulation is created, see [](supported.md).

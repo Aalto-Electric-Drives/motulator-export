@@ -61,7 +61,7 @@ static void grid_rhs(const Model *base, double t, const double complex *x,
     double complex *dx_f = dx + k;
     int k_s = filter_states(f);
     double complex exp_j_theta_g = x_f[k_s];
-    double complex u_c_ab = converter_voltage(&base->converter, model_dc_voltage(base, x));
+    double complex u_c_ab = model_converter_voltage(base, t, x, NULL);
     double complex e_g_ab = source_voltage(&self->ac_source, t, exp_j_theta_g);
 
     /* Filter */
@@ -85,6 +85,32 @@ static void grid_rhs(const Model *base, double t, const double complex *x,
 
     /* DC bus */
     dc_bus_rhs(&base->dc_bus, x, converter_dc_current(&base->converter, i_c_ab), dx);
+}
+
+/* AC port of the filter for the converter with blocked gates
+ * (LFilter.compute_ac_port or LCLFilter.compute_ac_port) */
+static void grid_ac_port(const Model *base, double t, const double complex *x,
+                         ACPort *port)
+{
+    const GridConverterSystem *self = (const GridConverterSystem *)base;
+    const ACFilter *f = &self->ac_filter;
+    const double complex *x_f = x + dc_bus_states(&base->dc_bus);
+    double complex i_c_ab = x_f[GRID_i_c_ab];
+    double L;
+    if (f->lcl) {
+        port->e = x_f[GRID_u_f_ab] + f->R_fc * i_c_ab;
+        L = f->L_fc;
+    } else {
+        double complex e_g_ab =
+            source_voltage(&self->ac_source, t, x_f[filter_states(f)]);
+        port->e = e_g_ab + (f->R_f + f->R_g) * i_c_ab;
+        L = f->L_f + f->L_g;
+    }
+    port->i = i_c_ab;
+    port->Y[0][0] = 1.0 / L;
+    port->Y[0][1] = 0.0 / L;
+    port->Y[1][0] = 0.0 / L;
+    port->Y[1][1] = 1.0 / L;
 }
 
 /* The states are not changed at the start of an integration interval */
@@ -111,6 +137,8 @@ static void grid_init(GridConverterSystem *self)
     base->converter_current = grid_current;
     base->set_states = grid_set_states;
     base->init_states = grid_init_states;
+    base->ac_port = grid_ac_port;
+    base->converter.enabled = 1;
     base->dc_bus.type = DC_BUS_NONE;
     self->ac_filter.lcl = 0;
     grid_init_states(base);
@@ -136,7 +164,7 @@ static double complex grid_meas_pcc_voltage(const GridConverterSystem *self, dou
     const Model *base = &self->base;
     const double complex *x_f = x + dc_bus_states(&base->dc_bus);
     double complex exp_j_theta_g = x_f[filter_states(&self->ac_filter)];
-    double complex u_c_ab = converter_voltage(&base->converter, model_dc_voltage(base, x));
+    double complex u_c_ab = model_converter_voltage(base, t, x, NULL);
     double complex e_g_ab = source_voltage(&self->ac_source, t, exp_j_theta_g);
     double complex u_g_ab = pcc_voltage(&self->ac_filter, x_f, u_c_ab, e_g_ab);
     /* Line-to-line voltages u_ab and u_bc (complex2line) */

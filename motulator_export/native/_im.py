@@ -11,8 +11,8 @@ models of `motulator_export.native._drive` with an induction machine, and
   including open-loop V/Hz control (`L_M = inf`),
 
 with the features of the C port (see `motulator_export.plecs._im`) and the duty-ratio
-error model of the PWM (without the minimum pulses, if compensated), the gates
-enabled.
+error model of the PWM (without the minimum pulses, if compensated), also with the
+gates blocked (`ControlSystem.set_enable`, a constant or a `StepSignal`).
 
 """
 
