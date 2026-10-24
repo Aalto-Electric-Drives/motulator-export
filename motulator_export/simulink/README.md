@@ -78,7 +78,7 @@ The synchronous machine with a GradNet current map is a MATLAB Function block to
 
 ## Model structure
 
-- **Control system**: a masked subsystem with the arguments of its top-level class (e.g., `vector_ctrl`, `speed_ctrl`, and `pwm`), containing the netlist of the blocks, built by `motulator.internal.add_netlist`: the S-functions (or the MATLAB Function blocks) of the classes (masked, showing the name of the class and the port labels), the subsystems (masked for the composite classes), and the Selector, Mux, Goto, and From blocks, as in the PLECS model (see [the PLECS export](../plecs/README.md)). The layout is computed in Python (`plecs/_netlist.py`), and the blocks are aligned with the actual ports of Simulink. The unconnected outputs (e.g., the load torque estimate of the speed observer) are terminated. The S-functions get their parameters after the masks are created. A GradNet flux map is a struct (`par.psi_s_dq_fcn`), whose fields the mask initialization passes to the S-functions. The monitored signals of the block `Monitored signals` are combined into the output `signals`.
+- **Control system**: a masked subsystem with the arguments of its top-level class (e.g., `vector_ctrl`, `speed_ctrl`, and `pwm`), containing the netlist of the blocks, built by `motulator.internal.add_netlist`: the S-functions (or the MATLAB Function blocks) of the classes (masked, showing the name of the class and the port labels), the subsystems (masked for the composite classes), and the Selector, Mux, Goto, and From blocks, as in the PLECS model (see [the PLECS export](../plecs/README.md)). The layout is computed in Python (`plecs/_netlist.py`), and the blocks are aligned with the actual ports of Simulink. The unconnected outputs (e.g., the load torque estimate of the speed observer) are terminated. The S-functions get their parameters after the lines are created and before the masks, since setting the parameters evaluates the mask of an S-function, which fails in the library. A GradNet flux map is a struct (`par.psi_s_dq_fcn`), whose fields the mask initialization passes to the S-functions. The monitored signals of the block `Monitored signals` are combined into the output `signals`.
 - **Computational delay**: a Unit Delay block.
 - **PWM**: a triangular carrier (Repeating Sequence, period `2*T_s`, starting from its maximum) compared with the duty ratios by a Relational Operator block. Simulink locates the switching instants by zero-crossing detection. This corresponds to `CarrierComparison` of *motulator* without the counter quantization.
 - **Converter**: the ideal two-level converter with a stiff DC bus, `u_s_ab = u_dc*q_ab` (`VoltageSourceConverter`). The dead time and the threshold voltage of the converter are not modeled, and the duty ratios are updated twice per carrier period, but the control system of a drive can compensate for the dead time and the threshold voltage (`PWM(d_err=InverterNonlinearity(t_d, u_th, sign))` with the current-direction function `np.sign` or `tanh(i/i_0)`), also with single update (`PWM(single_update=True)`), as in the PLECS export; this is intended for the control system running on the hardware. The DC-bus models of the PLECS export (a capacitor or a diode bridge, `DCBus` and `DiodeBridgeDCBus`, `ipmsm_2kw_fvc.py --diode`) are not supported, since their switching circuits would need Simscape Electrical or the zero-crossing detection of the diode states.
@@ -92,19 +92,19 @@ The synchronous machine with a GradNet current map is a MATLAB Function block to
 
 ## Agreement with *motulator*
 
-Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.17.0 and MATLAB R2026b with the MinGW-w64 compiler (gcc 14.2), at the level of the PLECS models (cf. [the PLECS export](../plecs/README.md#agreement-with-motulator)).
+Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.17.1 and MATLAB R2026b with gcc 14.2 on Linux, at the level of the PLECS models (cf. [the PLECS export](../plecs/README.md#agreement-with-motulator)).
 
 | Script                               | System model                               | Control system                                               |
 | ------------------------------------ | ------------------------------------------ | ------------------------------------------------------------ |
-| `ipmsm_2kw_fvc_simulink.py`          | w_M 1.2e-6, tau_M 2.0e-6, i_s_ab 1.4e-6    | w_M 3.0e-6, tau_M 2.0e-6, tau_M_ref 2.2e-6, psi_s_ref 8.1e-9 |
-| `im_2kw_cvc_simulink.py`             | w_M 6.5e-7, tau_M 2.5e-6, i_s_ab 1.1e-6    | w_M 4.6e-6, tau_M 3.3e-6, tau_M_ref 3.5e-6, psi_R 3.2e-8     |
+| `ipmsm_2kw_fvc_simulink.py`          | w_M 9.3e-7, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
+| `im_2kw_cvc_simulink.py`             | w_M 6.5e-7, tau_M 2.4e-6, i_s_ab 9.7e-7    | w_M 4.3e-6, tau_M 3.1e-6, tau_M_ref 3.3e-6, psi_R 3.2e-8     |
 | `im_2kw_vhz_simulink.py`             | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
-| `im_2kw_vhz_simulink.py --open-loop` | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 4.4e-16                   |
+| `im_2kw_vhz_simulink.py --open-loop` | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 2.2e-16                   |
 | `pmsyrm_6kw_gn_fvc_simulink.py`      | w_M 5.4e-5, tau_M 2.4e-4, i_s_ab 9.6e-5    |                                                              |
-| `gfl_10kva_lcl_simulink.py`          | i_c_ab 3.1e-6, i_g_ab 2.2e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 2.8e-13                   |
-| `gfm_13kva_do_simulink.py`           | i_c_ab 1.3e-6, i_c_a 1.2e-6                | p_g 5.2e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 1.9e-8           |
+| `gfl_10kva_lcl_simulink.py`          | i_c_ab 3.1e-6, i_g_ab 2.1e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 2.8e-13                   |
+| `gfm_13kva_do_simulink.py`           | i_c_ab 1.2e-6, i_c_a 1.2e-6                | p_g 4.9e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 1.8e-8           |
 
-With the MATLAB Function blocks (`--matlab`), the differences are the same to the printed digits (psi_s 2.2e-16 in open-loop V/Hz control), since the MATLAB port gives the results of the C port to the rounding errors.
+With the MATLAB Function blocks (`--matlab`), the differences are the same to the printed digits (psi_s 4.4e-16 in open-loop V/Hz control), since the MATLAB port gives the results of the C port to the rounding errors.
 In `pmsyrm_6kw_gn_fvc_simulink.py`, the differences are larger, as in the PLECS model.
 
 ## Run times
