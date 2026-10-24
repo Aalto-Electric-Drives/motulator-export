@@ -158,9 +158,11 @@ def simulate(
             eng.run(str(path.with_name(f"build_{path.stem}.m")), nargout=0)
         else:
             eng.load_system(str(path), nargout=0)
+        # Simulink rejects repeated output times (e.g., those of the solution of
+        # motulator at the sampling instants), so they are restored after simulation
+        times, inverse = np.unique(np.asarray(t_eval, float), return_inverse=True)
         # Without the Engine API, pyright takes the folder matlab (the MATLAB port)
-        times = np.asarray(t_eval, float).tolist()
-        eng.workspace["t_eval"] = matlab.double(times)  # pyright: ignore[reportAttributeAccessIssue]
+        eng.workspace["t_eval"] = matlab.double(times.tolist())  # pyright: ignore[reportAttributeAccessIssue]
         eng.eval(
             f"out = sim({_m(path.stem)}, 'OutputOption', "
             "'SpecifiedOutputTimes', 'OutputTimes', 't_eval');",
@@ -171,6 +173,11 @@ def simulate(
     finally:
         if new:
             eng.quit()
+    # Simulink also outputs at its stop time, which t_eval may not contain
+    keep = np.flatnonzero(np.isin(t, times))
+    if keep.size != times.size:
+        raise RuntimeError(f"Unexpected output times: {keep.size} of {times.size}")
+    t, values = t[keep[inverse]], values[:, keep[inverse]]
     n_mdl = len(mdl_outputs)
     if values.shape[0] != n_mdl + len(ctrl_signals):
         raise RuntimeError(f"Unexpected number of output signals: {values.shape}")
