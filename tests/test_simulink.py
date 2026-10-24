@@ -58,6 +58,7 @@ from tests.systems import (
     gfm_system,
     gradnet_control_system,
     im_system,
+    sm_cvc_system,
     sm_system,
     sm_vhz_system,
     vhz_system,
@@ -77,6 +78,11 @@ def cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 @pytest.fixture(scope="module")
 def vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(monolithic.VHZ, tmp_path_factory.mktemp("vhz"))
+
+
+@pytest.fixture(scope="module")
+def sm_cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(monolithic.SM_CVC, tmp_path_factory.mktemp("sm_cvc"))
 
 
 @pytest.fixture(scope="module")
@@ -197,6 +203,28 @@ def test_vhz_control(
     compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
     check_dc_bus_limit(vhz, monolithic.VHZ, VHZ_INPUTS, restarter(vhz, params))
     vhz.sfun_terminate()
+
+
+@pytest.mark.parametrize(
+    ("sensorless", "t_d", "blocked"),
+    [(True, 0.0, False), (False, 0.0, False), (True, 2e-6, False), (True, 0.0, True)],
+    ids=["sensorless", "sensored", "dead_time", "blocked"],
+)
+def test_sm_current_vector_control(
+    sm_cvc: ctypes.CDLL, sensorless: bool, t_d: float, blocked: bool
+) -> None:
+    """The S-function of current-vector control of a synchronous machine should agree
+    with motulator, also with the dead-time compensation and the gates blocked (the
+    flying start)."""
+    build, signals = sm_cvc_system(sensorless, t_d, blocked)
+    values, _ = _sm.export_values(build()[1])
+    params = sfunction_params(monolithic.SM_CVC, values)
+    assert start(sm_cvc, params) is None
+    compare(
+        build, model.Simulation, drive_sfun(sm_cvc, monolithic.SM_CVC), signals, 0.3
+    )
+    check_dc_bus_limit(sm_cvc, monolithic.SM_CVC, SM_INPUTS, restarter(sm_cvc, params))
+    sm_cvc.sfun_terminate()
 
 
 @pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)

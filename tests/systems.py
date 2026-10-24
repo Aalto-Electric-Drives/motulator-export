@@ -85,6 +85,46 @@ def sm_system(
     return build, signals
 
 
+def sm_cvc_system(
+    sensorless: bool, t_d: float, blocked: bool = False
+) -> tuple[Build, Signals]:
+    """
+    Synchronous machine drive of `sm_system` with current-vector control, optionally
+    with the gates blocked at the start and during the operation (`blocked`).
+    """
+
+    def build() -> tuple[model.Drive, VectorControlSystem]:
+        par = model.SynchronousMachinePars(**SM_PAR)
+        mdl = model.Drive(
+            model.SynchronousMachine(par),
+            model.MechanicalSystem(J=0.015),
+            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+        )
+        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 10.0)
+        cfg = sm_control.CurrentVectorControllerCfg(i_s_max=6.5, sensorless=sensorless)
+        d_err = None
+        if t_d > 0:
+            d_err = sm_control.InverterNonlinearity(t_d, sign=smooth_sign)
+        ctrl = VectorControlSystem(
+            sm_control.CurrentVectorController(par, cfg),
+            sm_control.SpeedController(**SM_SPEED),
+            sm_control.PWM(d_err=d_err),
+        )
+        ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
+        if blocked:
+            ctrl.set_enable(blocked_drive)
+        return mdl, ctrl
+
+    signals = {
+        "w_M": lambda fbk, _: fbk.w_M,
+        "tau_M_ref": lambda _, ref: ref.tau_M,
+        "i_d_ref": lambda _, ref: np.real(ref.i_s),
+        "i_q_ref": lambda _, ref: np.imag(ref.i_s),
+        "psi_s": lambda fbk, _: np.abs(fbk.psi_s),
+    }
+    return build, signals
+
+
 def im_system(
     sensorless: bool,
     t_d: float,
@@ -367,6 +407,7 @@ EXAMPLES = Path(__file__).parents[1] / "examples"
 EXAMPLE_SYSTEMS = [
     "ipmsm_2kw_fvc",
     "ipmsm_2kw_vhz",
+    "ipmsm_2kw_cvc",
     "pmsyrm_6kw_gn_fvc",
     "im_2kw_cvc",
     "im_2kw_vhz",

@@ -1,0 +1,37 @@
+classdef CurrentVectorControllerCfg < motulator.internal.Object
+    %CURRENTVECTORCONTROLLERCFG Configuration of the current-vector controller.
+    %   CFG = CURRENTVECTORCONTROLLERCFG(i_s_max=..., ...) as in motulator, []
+    %   meaning None (the default). The observer gain k_o is [k0 k1], k_o(w_m) = k0 +
+    %   k1*abs(w_m), or [] for the default. The offline reference generation
+    %   (online_ref = false), k_f = [], and the continuous-time current controller
+    %   (discrete = false) only.
+
+    properties
+        i_s_max                % Maximum stator current (A)
+        alpha_c = 2*pi*200     % Current-control bandwidth (rad/s)
+        alpha_i = []           % Integral-action bandwidth (rad/s), [] = alpha_c
+        alpha_o = []           % Speed estimation poles (rad/s), [] = default
+        alpha_ref = 2*pi*100   % Bandwidth of the current-reference tracking (rad/s)
+        k_o = []               % Observer gain [k0 k1], [] = default
+        k_f = []               % PM-flux estimation gain, only []
+        psi_s_min = []         % Minimum stator flux (Vs), [] = psi_f
+        psi_s_max = inf        % Maximum stator flux (Vs)
+        k_u = 0.9              % Voltage utilization factor
+        k_mtpv = 0.9           % MTPV margin
+        J = []                 % Inertia (kgm^2) of the speed observer, [] = none
+        sensorless = true      % Sensorless mode (or sensored)
+        online_ref = false     % Online reference generation, only false
+        T_s = 125e-6           % Sampling period (s)
+        discrete = false       % Discrete-time current controller, only false
+    end
+
+    methods
+        function obj = CurrentVectorControllerCfg(varargin)
+            obj.set_args(varargin, {'i_s_max'}, {'i_s_max'});
+            if ~isempty(obj.k_f) || obj.online_ref || obj.discrete
+                error('motulator:unsupported', ['Only k_f = [], online_ref = ' ...
+                    'false, and discrete = false supported.']);
+            end
+        end
+    end
+end

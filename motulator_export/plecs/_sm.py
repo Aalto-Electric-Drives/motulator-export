@@ -36,6 +36,10 @@ Currently supported:
   map), and a speed controller (`SpeedController`) in `VectorControlSystem`, with
   the compensation of the dead time and the threshold voltage in the PWM as in
   `motulator_export.plecs._im`
+- Current-vector control (`CurrentVectorController`) with a speed controller in
+  `VectorControlSystem`, with the continuous-time current controller and the
+  machine models of the control system and the observer gains of flux-vector
+  control (see `_sm_cvc_control`)
 - Observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
   with the same machine models of the control system and observer gains as in
   flux-vector control (see `_sm_vhz_control`)
@@ -58,6 +62,10 @@ import numpy as np
 from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
+from motulator.drive.control._sm_current_vector import (
+    CurrentVectorController,
+    CurrentVectorControllerCfg,
+)
 from motulator.drive.control._sm_flux_vector import (
     FluxVectorController,
     FluxVectorControllerCfg,
@@ -128,6 +136,9 @@ from motulator_export.plecs._sm_control import (
     PAR_FIELDS,
     init_script,
 )
+from motulator_export.plecs._sm_cvc_control import CFG_FIELDS as CVC_CFG_FIELDS
+from motulator_export.plecs._sm_cvc_control import CVC_BLOCK
+from motulator_export.plecs._sm_cvc_control import init_script as cvc_init_script
 from motulator_export.plecs._sm_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._sm_vhz_control import VHZ_BLOCK
 from motulator_export.plecs._sm_vhz_control import init_script as vhz_init_script
@@ -221,8 +232,23 @@ def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> No
         check_supported_vhz_ctrl(ctrl.vhz_ctrl)
         _check_supported_vhz_control(ctrl)
         return
-    check_supported_fvc(ctrl.vector_ctrl)
+    check_supported_vector_ctrl(ctrl.vector_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
+
+
+def check_supported_vector_ctrl(vector_ctrl: Any) -> None:
+    """
+    Raise an error if the vector controller is not supported, see
+    `check_supported_fvc` and `check_supported_cvc`.
+    """
+    if isinstance(vector_ctrl, CurrentVectorController):
+        check_supported_cvc(vector_ctrl)
+    elif isinstance(vector_ctrl, FluxVectorController):
+        check_supported_fvc(vector_ctrl)
+    else:
+        raise NotImplementedError(
+            "Only FluxVectorController and CurrentVectorController supported"
+        )
 
 
 def check_supported_fvc(fvc: Any) -> None:
@@ -239,6 +265,24 @@ def check_supported_fvc(fvc: Any) -> None:
     if cfg.k_o is not None:
         fit_speed_dependent_gain(cfg.k_o, "k_o")  # Raises if not supported
     _check_supported_par(fvc.par)
+
+
+def check_supported_cvc(cvc: Any) -> None:
+    """
+    Raise an error if the current-vector controller is not supported: the
+    continuous-time current controller, and the references, `k_f`, `k_o`, and the
+    machine models of `check_supported_fvc`.
+    """
+    if not isinstance(cvc, CurrentVectorController):
+        raise NotImplementedError("Only CurrentVectorController supported")
+    cfg = cvc.cfg
+    if cfg.online_ref or cfg.k_f is not None:
+        raise NotImplementedError("Only offline references and k_f=None supported")
+    if cfg.discrete:
+        raise NotImplementedError("Direct discrete-time current control not supported")
+    if cfg.k_o is not None:
+        fit_speed_dependent_gain(cfg.k_o, "k_o")  # Raises if not supported
+    _check_supported_par(cvc.par)
 
 
 def check_supported_vhz_ctrl(vhz: Any) -> None:
@@ -267,8 +311,15 @@ def _check_supported_par(par: Any) -> None:
 
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
-    """Control-system block of flux-vector control or V/Hz control."""
-    return VHZ_BLOCK if isinstance(ctrl, VHzControlSystem) else FVC_BLOCK
+    """
+    Control-system block of flux-vector control, current-vector control, or V/Hz
+    control.
+    """
+    if isinstance(ctrl, VHzControlSystem):
+        return VHZ_BLOCK
+    if isinstance(ctrl.vector_ctrl, CurrentVectorController):
+        return CVC_BLOCK
+    return FVC_BLOCK
 
 
 def export_values(
@@ -285,12 +336,17 @@ def export_values(
     Returns
     -------
     values : dict[str, Any]
-        Parameter values, None for the defaults (see `_sm_control.init_script`).
+        Parameter values, None for the defaults (see `_sm_control.init_script` and
+        `_sm_cvc_control.init_script`).
     flux_map : dict[str, Any] | None
         GradNet flux map of the control system, None if constant inductances are used.
 
     """
-    values, flux_map = fvc_values(cast(FluxVectorController, ctrl.vector_ctrl))
+    vector_ctrl = ctrl.vector_ctrl
+    if isinstance(vector_ctrl, CurrentVectorController):
+        values, flux_map = cvc_values(vector_ctrl)
+    else:
+        values, flux_map = fvc_values(cast(FluxVectorController, vector_ctrl))
     return values | speed_ctrl_values(ctrl) | pwm_values(ctrl.pwm), flux_map
 
 
@@ -306,6 +362,24 @@ def fvc_values(
     cfg: FluxVectorControllerCfg = fvc.cfg
     values, flux_map = _par_values(fvc.par)
     values |= {n: getattr(cfg, n) for n in CFG_FIELDS}
+    values["k_o"] = (
+        None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
+    )
+    values["sensorless"] = int(cfg.sensorless)
+    return values, flux_map
+
+
+def cvc_values(
+    cvc: CurrentVectorController,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """
+    Get the parameter values of the current-vector controller (see `export_values`):
+    its machine model (`_par_values`) and its configuration (`CVC_CFG_FIELDS`, with
+    `k_o` as [k0, k1]), with the GradNet flux map.
+    """
+    cfg: CurrentVectorControllerCfg = cvc.cfg
+    values, flux_map = _par_values(cvc.par)
+    values |= {n: getattr(cfg, n) for n in CVC_CFG_FIELDS}
     values["k_o"] = (
         None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
     )
@@ -636,7 +710,7 @@ def write_model(
         script = vhz_init_script
     else:
         values, flux_map = export_values(ctrl)
-        script = init_script
+        script = cvc_init_script if control_block(ctrl) is CVC_BLOCK else init_script
     w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
     variables = export_plant_variables(mdl)
     if flux_map is not None:
@@ -651,7 +725,7 @@ def write_model(
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
     ]
-    if block is FVC_BLOCK:
+    if not isinstance(ctrl, VHzControlSystem):
         sources += [("theta_M", _probe("Machine", MACHINE_PROBES[2:3]))]
     y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)

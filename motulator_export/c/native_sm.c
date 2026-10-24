@@ -1,11 +1,12 @@
 /*
- * Native simulation of synchronous machine drives with flux-vector control or
- * observer-based V/Hz control: the translation unit of the shared library of
- * motulator_export.native, with its API for Python (ctypes).
+ * Native simulation of synchronous machine drives with flux-vector control,
+ * current-vector control, or observer-based V/Hz control: the translation unit of
+ * the shared library of motulator_export.native, with its API for Python (ctypes).
  *
  * The system (System) consists of the simulation (sim.h), the drive model (drive.h)
  * with a synchronous machine, and the control system with the speed reference:
- * VectorControlSystem with FluxVectorController and a speed controller, or
+ * VectorControlSystem with FluxVectorController (sm_flux_vector.h) or
+ * CurrentVectorController (sm_current_vector.h) and a speed controller, or
  * VHzControlSystem with ObserverBasedVHzController (sm_flux_vector.h). The API
  * functions mirror the constructors of motulator; those of the model are in sim.c
  * and drive.c. The control system is constructed from its parameters when the
@@ -17,6 +18,7 @@
 #include "sm_parameters.c"
 #include "sm_control_loci.c"
 #include "sm_flux_vector.c"
+#include "sm_current_vector.c"
 #include "sim.c"
 #include "drive.c"
 #include "native.c"
@@ -34,8 +36,10 @@
 typedef struct {
     ControlSystem base;
     int vhz; /* VHzControlSystem (else VectorControlSystem) */
+    int cvc; /* VectorControlSystem with CurrentVectorController */
     VectorControlSystem ctrl;
     SMVHzControlSystem vhz_ctrl;
+    SMCVCControlSystem cvc_ctrl;
     Signal w_M_ref;
     double t; /* Controller time */
     Signal enable; /* Gate enable (ControlSystem.set_enable) */
@@ -54,6 +58,11 @@ static int fvc_save(FluxVectorControlSystem *self)
         fbk = &self->vhz_ctrl.fbk;
         pwm = &self->vhz_ctrl.pwm;
         k_comp = self->vhz_ctrl.k_comp;
+    } else if (self->cvc) {
+        ref = &self->cvc_ctrl.ref;
+        fbk = &self->cvc_ctrl.fbk;
+        pwm = &self->cvc_ctrl.pwm;
+        k_comp = self->cvc_ctrl.k_comp;
     } else {
         ref = &self->ctrl.ref;
         fbk = &self->ctrl.fbk;
@@ -68,7 +77,7 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, ref->T_s);
     log_put(&p, ref->tau_M);
     log_put(&p, ref->psi_s);
-    log_put_complex(&p, 0.0); /* Current reference, not used */
+    log_put_complex(&p, ref->i_s); /* Zero except in current-vector control */
     log_put_complex(&p, ref->u_s);
     double complex u_s_lim = native_limited_voltage(
         pwm, ref->u_c_ab, ref->u_s, fbk->theta_c, k_comp, ref->T_s, fbk->w_c, fbk->u_dc);
@@ -128,6 +137,10 @@ static int fvc_run(ControlSystem *base, const Model *mdl, double t,
         meas.theta_M = 0.0; /* Not measured */
         sm_vhz_control_system_compute_output(&self->vhz_ctrl, &meas, w_M_ref,
                                              enabled);
+    } else if (self->cvc) {
+        meas.theta_M = drive_meas_position(drive, x);
+        sm_cvc_control_system_compute_output(&self->cvc_ctrl, &meas, w_M_ref,
+                                             enabled);
     } else {
         meas.theta_M = drive_meas_position(drive, x);
         vector_control_system_compute_output(&self->ctrl, &meas, w_M_ref, enabled);
@@ -140,6 +153,9 @@ static int fvc_run(ControlSystem *base, const Model *mdl, double t,
     if (self->vhz) {
         sm_vhz_control_system_update(&self->vhz_ctrl);
         ref = &self->vhz_ctrl.ref;
+    } else if (self->cvc) {
+        sm_cvc_control_system_update(&self->cvc_ctrl);
+        ref = &self->cvc_ctrl.ref;
     } else {
         vector_control_system_update(&self->ctrl);
         ref = &self->ctrl.ref;
@@ -162,6 +178,7 @@ typedef struct {
     SynchronousMachinePars est_par;
     FluxVectorControllerCfg cfg;
     PIController speed_ctrl;
+    SMCurrentVectorControllerCfg cvc_cfg;
     SMVHzControllerCfg vhz_cfg;
     double slew_rate;
     PWM pwm; /* Settings of the PWM */
@@ -244,6 +261,35 @@ void set_flux_vector_controller(System *self, double i_s_max, double alpha_tau,
     cfg->T_s = T_s;
     cfg->sensorless = sensorless;
     self->ctrl.vhz = 0;
+    self->ctrl.cvc = 0;
+}
+
+/* CurrentVectorControllerCfg (of synchronous machines), NAN for None, in the order
+ * of CFG_FIELDS of plecs/_sm_cvc_control.py; the observer gain is k_o0 +
+ * k_o1*abs(w_m) */
+void set_current_vector_controller(System *self, double i_s_max, double alpha_c,
+                                   double alpha_i, double alpha_o, double alpha_ref,
+                                   double k_o0, double k_o1, double psi_s_min,
+                                   double psi_s_max, double k_u, double k_mtpv,
+                                   double J, int sensorless, double T_s)
+{
+    SMCurrentVectorControllerCfg *cfg = &self->cvc_cfg;
+    *cfg = sm_current_vector_controller_cfg(i_s_max);
+    cfg->alpha_c = alpha_c;
+    cfg->alpha_i = alpha_i;
+    cfg->alpha_o = alpha_o;
+    cfg->alpha_ref = alpha_ref;
+    cfg->k_o[0] = k_o0;
+    cfg->k_o[1] = k_o1;
+    cfg->psi_s_min = psi_s_min;
+    cfg->psi_s_max = psi_s_max;
+    cfg->k_u = k_u;
+    cfg->k_mtpv = k_mtpv;
+    cfg->J = J;
+    cfg->T_s = T_s;
+    cfg->sensorless = sensorless;
+    self->ctrl.vhz = 0;
+    self->ctrl.cvc = 1;
 }
 
 /* Speed controller (PIController, e.g., SpeedController) by its gains */
@@ -276,6 +322,7 @@ void set_vhz_controller(System *self, double i_s_max, double alpha_psi,
     cfg->T_s = T_s;
     self->slew_rate = slew_rate;
     self->ctrl.vhz = 1;
+    self->ctrl.cvc = 0;
 }
 
 /* PWM of the control system, see native_pwm_settings */
@@ -310,6 +357,10 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
         sm_vhz_control_system_init(&ctrl->vhz_ctrl, self->est_par, &self->vhz_cfg,
                                    self->slew_rate);
         native_pwm_copy_settings(&ctrl->vhz_ctrl.pwm, &self->pwm);
+    } else if (ctrl->cvc) {
+        sm_cvc_control_system_init(&ctrl->cvc_ctrl, self->est_par, &self->cvc_cfg,
+                                   self->speed_ctrl);
+        native_pwm_copy_settings(&ctrl->cvc_ctrl.pwm, &self->pwm);
     } else {
         vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
                                    self->speed_ctrl);

@@ -21,6 +21,7 @@ from motulator_export.plecs import (
     _im_control,
     _im_vhz_control,
     _sm_control,
+    _sm_cvc_control,
     _sm_vhz_control,
 )
 from motulator_export.plecs._common import (
@@ -302,6 +303,77 @@ FVC = MonolithicBlock(
     mask_params=SM_MASK_PARAMS,
     code=_sm_code,
     cscript_params=_sm_cscript_params(SM_MASK_PARAMS),
+)
+
+
+# %%
+# Current-vector control of synchronous machine drives
+TAB = "Current-vector control (SM)"
+SM_CVC_MASK_PARAMS = [
+    *(replace(m, tab=TAB) for m in SM_MASK_PARAMS[:7]),  # Machine model, i_s_max
+    MaskParam("alpha_c", "alpha_c", TAB, "cfg.alpha_c"),
+    MaskParam("alpha_i", "alpha_i", TAB, "cfg.alpha_i"),
+    MaskParam("alpha_o", "alpha_o", TAB, "cfg.alpha_o"),
+    MaskParam("alpha_ref", "alpha_ref", TAB, "cfg.alpha_ref"),
+    MaskParam("k_o", "k_o", TAB, ""),
+    MaskParam("psi_s_min", "psi_s_min", TAB, "cfg.psi_s_min"),
+    MaskParam("psi_s_max", "psi_s_max", TAB, "cfg.psi_s_max"),
+    MaskParam("k_u", "k_u", TAB, "cfg.k_u"),
+    MaskParam("k_mtpv", "k_mtpv", TAB, "cfg.k_mtpv"),
+    MaskParam("J", "J", TAB, "cfg.J"),
+    MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
+    MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    *SPEED_MASK_PARAMS,
+    *PWM_MASK_PARAMS,
+]
+
+
+def _sm_cvc_code() -> dict[str, str]:
+    """Code sections of the C-Script of current-vector control of an SM."""
+    sources = ["common.c", "gradnet.c", "sm_parameters.c", "sm_control_loci.c"]
+    sources += ["sm_flux_vector.c", "sm_current_vector.c"]
+    declarations = _declarations(sources, "SMCVCControlSystem")
+    i = {m.variable: k for k, m in enumerate(SM_CVC_MASK_PARAMS)}
+    start = (
+        sm_par_code(SM_CVC_MASK_PARAMS) + "SMCurrentVectorControllerCfg cfg = "
+        f"sm_current_vector_controller_cfg(P({i['i_s_max']}, 0));\n"
+        + cfg_assignments(SM_CVC_MASK_PARAMS)
+        + k_o_code(i["k_o"])
+        + speed_controller_code(i)
+        + "\n"
+        "sm_cvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n" + pwm_code(i)
+    )
+    monitored = {
+        "w_M_ref": "ctrl.ref.w_M",
+        "w_M": "ctrl.fbk.w_M",
+        "tau_M_ref": "ctrl.ref.tau_M",
+        "tau_M": "ctrl.fbk.tau_M",
+        "psi_s_ref": "ctrl.ref.psi_s",
+        "psi_s": "cabs(ctrl.fbk.psi_s)",
+        "i_d_ref": "creal(ctrl.ref.i_s)",
+        "i_d": "creal(ctrl.fbk.i_s)",
+        "i_q_ref": "cimag(ctrl.ref.i_s)",
+        "i_q": "cimag(ctrl.fbk.i_s)",
+    }
+    output = _drive_output(
+        "Measurements", "sm_cvc_control_system_compute_output"
+    ) + monitored_code(_sm_cvc_control.CTRL_OUTPUTS, monitored)
+    return {
+        "Declarations": declarations,
+        "StartFcn": start,
+        "OutputFcn": output,
+        "UpdateFcn": "sm_cvc_control_system_update(&ctrl);\n",
+    }
+
+
+SM_CVC = MonolithicBlock(
+    name="Current-vector control (SM)",
+    inputs=_names(_sm_cvc_control.CTRL_INPUTS),
+    input_widths=_widths(_sm_cvc_control.CTRL_INPUTS),
+    outputs=_sm_cvc_control.CTRL_OUTPUTS,
+    mask_params=SM_CVC_MASK_PARAMS,
+    code=_sm_cvc_code,
+    cscript_params=_sm_cscript_params(SM_CVC_MASK_PARAMS),
 )
 
 

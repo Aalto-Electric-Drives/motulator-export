@@ -56,6 +56,7 @@ M_FILES = (
     "sm_parameters.m",
     "sm_control_loci.m",
     "sm_flux_vector.m",
+    "sm_current_vector.m",
     "im_current_vector.m",
     "im_flux_vector.m",
     "gfl_current_vector.m",

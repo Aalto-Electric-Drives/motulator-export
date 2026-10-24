@@ -47,6 +47,7 @@ from motulator_export.plecs import (
     _im_vhz_control,
     _sm,
     _sm_control,
+    _sm_cvc_control,
     _sm_vhz_control,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
@@ -92,6 +93,7 @@ from tests.systems import (
     gfm_system,
     gradnet_control_system,
     im_system,
+    sm_cvc_system,
     sm_system,
     sm_vhz_system,
     vhz_system,
@@ -243,6 +245,17 @@ def case(name: str) -> Case:  # noqa: PLR0911
         values = _im.export_values(build()[1])
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
+    if name.startswith("smcvc"):
+        sensorless, t_d, blocked = {
+            "smcvc_sensorless": (True, 0.0, False),
+            "smcvc_sensored": (False, 0.0, False),
+            "smcvc_dead_time": (True, 2e-6, False),
+            "smcvc_blocked": (True, 0.0, True),
+        }[name]
+        build, signals = sm_cvc_system(sensorless, t_d, blocked)
+        values, _ = _sm.export_values(build()[1])
+        run = drive_run(build, signals, _sm_cvc_control.CVC_BLOCK, 0.3)
+        return "smcvc", values, None, run, SM_INPUTS
     if name.startswith("smvhz"):
         build, signals = sm_vhz_system(*SM_VHZ_CASES[SM_VHZ_IDS.index(name)])
         values, _ = _sm.export_vhz_values(build()[1])
@@ -273,6 +286,10 @@ CASES = [
     "fvc_dead_time",
     "fvc_blocked",
     "fvc_gradnet",
+    "smcvc_sensorless",
+    "smcvc_sensored",
+    "smcvc_dead_time",
+    "smcvc_blocked",
     "cvc_sensorless",
     "cvc_sensored",
     "cvc_dead_time_tanh",
@@ -404,6 +421,7 @@ def replay(
     "name",
     [
         "fvc_sensorless",
+        "smcvc_sensorless",
         "cvc_sensorless",
         f"vhz_{VHZ_IDS[0]}",
         SM_VHZ_IDS[0],

@@ -111,6 +111,9 @@ def simulate(
 
     - Flux-vector control: `w_M_ref`, `w_M`, `tau_M_ref`, `tau_M`, `psi_s_ref`,
       `psi_s`, `theta_m`, `i_d`, and `i_q`.
+    - Current-vector control of a synchronous machine: `w_M_ref`, `w_M`,
+      `tau_M_ref`, `tau_M`, `psi_s_ref`, `psi_s`, `i_d_ref`, `i_d`, `i_q_ref`, and
+      `i_q`.
     - Current-vector control: `w_M_ref`, `w_M`, `tau_M_ref`, `tau_M`, `psi_s`,
       `psi_R`, `i_sd_ref`, `i_sd`, `i_sq_ref`, and `i_sq`.
     - Observer-based V/Hz control of an induction machine: `w_M_ref`, `w_s`,

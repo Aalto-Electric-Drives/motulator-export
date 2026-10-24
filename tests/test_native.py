@@ -18,7 +18,7 @@ Run from the repository root (requires gcc):
 
 # %%
 from math import inf, nan, pi
-from typing import Any
+from typing import Any, cast
 
 import motulator.drive.control.sm as control
 import motulator.drive.gradnet as gn
@@ -40,6 +40,7 @@ from tests.systems import (
     gfl_system,
     gfm_system,
     im_system,
+    sm_cvc_system,
     sm_system,
     sm_vhz_system,
     vhz_system,
@@ -113,6 +114,27 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
     )
     ctrl.set_speed_ref(StepSignal(time=0.05, after=2 * base.w_M))
     mdl.mechanics.set_external_load_torque(StepSignal(time=0.2, after=0.5 * base.tau))
+    return mdl, ctrl
+
+
+def gradnet_cvc_drive() -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Drive of `gradnet_drive` with sensored current-vector control, whose machine
+    model is the GradNet flux map.
+    """
+    mdl, fvc = gradnet_drive()
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
+    par = control.SaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
+    )
+    cfg = control.CurrentVectorControllerCfg(
+        i_s_max=17.6, alpha_o=2 * pi * 8, J=0.05, sensorless=False
+    )
+    ctrl = control.VectorControlSystem(
+        control.CurrentVectorController(par, cfg),
+        control.SpeedController(J=0.05, alpha_s=2 * pi * 4),
+    )
+    ctrl.set_speed_ref(cast(Any, fvc.ext_ref.w_M))
     return mdl, ctrl
 
 
@@ -215,6 +237,20 @@ def test_gradnet() -> None:
 )
 def test_sm_vhz(build: Build) -> None:
     """Observer-based V/Hz control, also with a GradNet flux map."""
+    check(*simulate(build, 0.3), rtol=1e-9)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        sm_cvc_system(sensorless=True, t_d=0.0)[0],
+        sm_cvc_system(sensorless=False, t_d=0.0)[0],
+        gradnet_cvc_drive,
+    ],
+    ids=["sensorless", "sensored", "gradnet"],
+)
+def test_sm_current_vector_control(build: Build) -> None:
+    """Current-vector control, also with a GradNet flux map."""
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
@@ -566,6 +602,7 @@ def test_grid_pwm() -> None:
     [
         (sm_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
         (sm_system(sensorless=False, t_d=0.0, blocked=True)[0], 0.3),
+        (sm_cvc_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
         (im_system(sensorless=True, t_d=0.0, i_0=0.0, blocked=True)[0], 0.3),
         (vhz_system(open_loop=False, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
         (vhz_system(open_loop=True, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
@@ -573,7 +610,17 @@ def test_grid_pwm() -> None:
         (gfl_system(blocked=True)[0], 0.06),
         (gfm_system(power_limitation=False, blocked=True)[0], 0.15),
     ],
-    ids=["fvc", "fvc_sensored", "cvc", "vhz", "vhz_open_loop", "smvhz", "gfl", "gfm"],
+    ids=[
+        "fvc",
+        "fvc_sensored",
+        "smcvc",
+        "cvc",
+        "vhz",
+        "vhz_open_loop",
+        "smvhz",
+        "gfl",
+        "gfm",
+    ],
 )
 def test_gate_blocking(build: Build, t_stop: float) -> None:
     """

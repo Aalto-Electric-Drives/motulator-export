@@ -1,12 +1,12 @@
 """
-Native simulation of synchronous machine drives with flux-vector control or
-observer-based V/Hz control.
+Native simulation of synchronous machine drives with flux-vector control,
+current-vector control, or observer-based V/Hz control.
 
 The system is simulated by the library `c/native_sm.c`. Supported are the drive
 models of `motulator_export.native._drive` with a synchronous machine, and
 
-- flux-vector control (`FluxVectorController`) in `VectorControlSystem` with a speed
-  controller, or
+- flux-vector control (`FluxVectorController`) or current-vector control
+  (`CurrentVectorController`) in `VectorControlSystem` with a speed controller, or
 - observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
 
 with the features of the C port (see `motulator_export.plecs._sm`) and the
@@ -19,6 +19,7 @@ from typing import Any, cast
 
 from motulator.common.control._controllers import PIController
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
+from motulator.drive.control._sm_current_vector import CurrentVectorController
 from motulator.drive.control._sm_flux_vector import FluxVectorController
 from motulator.drive.model import Drive, SynchronousMachine
 
@@ -39,12 +40,14 @@ from motulator_export.native._system import (
     check_supported_control,
 )
 from motulator_export.plecs._sm import (
-    check_supported_fvc,
+    check_supported_vector_ctrl,
     check_supported_vhz_ctrl,
+    cvc_values,
     export_vhz_values,
     fvc_values,
 )
 from motulator_export.plecs._sm_control import CFG_FIELDS, PAR_FIELDS
+from motulator_export.plecs._sm_cvc_control import CFG_FIELDS as CVC_CFG_FIELDS
 from motulator_export.plecs._sm_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 
 # Functions of the library setting the parameters of the control system, the
@@ -58,6 +61,10 @@ API: Signatures = {
         None,
         [c_void_p] + [c_double] * 12 + [c_int, c_double],
     ),
+    "set_current_vector_controller": (
+        None,
+        [c_void_p] + [c_double] * 12 + [c_int, c_double],
+    ),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 13),
     "speed_reference": (c_void_p, [c_void_p]),
@@ -67,8 +74,8 @@ API: Signatures = {
 
 class SynchronousMachineDriveSystem(NativeSystem):
     """
-    Synchronous machine drive with flux-vector control or observer-based V/Hz
-    control in the native library.
+    Synchronous machine drive with flux-vector control, current-vector control, or
+    observer-based V/Hz control in the native library.
 
     Parameters
     ----------
@@ -88,6 +95,8 @@ class SynchronousMachineDriveSystem(NativeSystem):
         # Control system
         if isinstance(ctrl, VHzControlSystem):
             v, flux_map = export_vhz_values(ctrl)
+        elif isinstance(ctrl.vector_ctrl, CurrentVectorController):
+            v, flux_map = cvc_values(ctrl.vector_ctrl)
         else:
             ctrl = cast(VectorControlSystem, ctrl)
             v, flux_map = fvc_values(cast(FluxVectorController, ctrl.vector_ctrl))
@@ -100,7 +109,10 @@ class SynchronousMachineDriveSystem(NativeSystem):
         if isinstance(ctrl, VHzControlSystem):
             lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
         else:
-            lib.set_flux_vector_controller(h, *c_args(v, CFG_FIELDS))
+            if isinstance(ctrl.vector_ctrl, CurrentVectorController):
+                lib.set_current_vector_controller(h, *c_args(v, CVC_CFG_FIELDS))
+            else:
+                lib.set_flux_vector_controller(h, *c_args(v, CFG_FIELDS))
             speed_ctrl = cast(PIController, ctrl.speed_ctrl)
             lib.set_speed_controller(
                 h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
@@ -134,9 +146,7 @@ def _check_supported_control(ctrl: Any) -> None:
     if type(ctrl) is VHzControlSystem:
         check_supported_vhz_ctrl(ctrl.vhz_ctrl)
     elif type(ctrl) is VectorControlSystem:
-        if type(ctrl.vector_ctrl) is not FluxVectorController:
-            raise NotImplementedError("Only FluxVectorController supported")
-        check_supported_fvc(ctrl.vector_ctrl)
+        check_supported_vector_ctrl(ctrl.vector_ctrl)
         if not isinstance(ctrl.speed_ctrl, PIController):
             raise NotImplementedError(
                 "Speed-control mode with a speed controller required"

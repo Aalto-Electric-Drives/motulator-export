@@ -5,7 +5,8 @@
 %
 % Python counterparts:
 %   motulator/drive/control/_sm_observers.py      FluxObserver
-%   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based)
+%   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based,
+%                                                 with the current reference)
 %   motulator/drive/control/_sm_flux_vector.py    FluxTorqueController
 %
 % As in motulator, the output functions are free of side effects (apart from
@@ -156,14 +157,23 @@ function self = reference_gen_init(par, psi_s_min, psi_s_max, k_u, k_mtpv, luts)
 %   tables (ReferenceGenerator); psi_s_min = NaN means psi_f. The tables luts are
 %   the 16-by-6 matrix of compute_reference_luts (sm_control_loci.m), computed
 %   outside the block by sm_reference_luts.m in the mask initialization.
+%   The current reference of current-vector control is a state, initialized at the
+%   zero-torque operating point of the minimum flux (zero current with PMs), and
+%   tracked with the bandwidth alpha (zero, i.e., not tracked, unless set).
 if isnan(psi_s_min)
     psi_s_min = par.psi_f;
 end
-self = struct('k_u', k_u, 'k_mtpv', k_mtpv, 'psi_s_min', psi_s_min, ...
-    'psi_s_max', psi_s_max, ...
+i_s_ref = complex(0);
+if par.psi_f == 0
+    L0 = incr_ind_mat(par, complex(0));
+    i_s_ref = complex(psi_s_min/L0.L_dd);
+end
+self = struct('par', par, 'k_u', k_u, 'k_mtpv', k_mtpv, 'alpha', 0, ...
+    'psi_s_min', psi_s_min, 'psi_s_max', psi_s_max, ...
     'psi_s_mtpa', struct('x', luts(:, 1), 'y', luts(:, 2)), ...
     'tau_M_cl', struct('x', luts(:, 3), 'y', luts(:, 4)), ...
-    'tau_M_mtpv', struct('x', luts(:, 5), 'y', luts(:, 6)));
+    'tau_M_mtpv', struct('x', luts(:, 5), 'y', luts(:, 6)), ...
+    'i_s_ref', i_s_ref, 'tau_M_ref', 0, 'psi_s_ref', psi_s_min);
 end
 
 function psi = reference_gen_max_flux(self, w_m, u_dc)
@@ -194,6 +204,41 @@ if tau_M_mtpv > 0
     tau_M_ref = min(self.k_mtpv*tau_M_mtpv, abs(tau_M_ref))*sign(tau_M_ref);
 end
 psi_s_ref = psi_s_abs_ref;
+end
+
+function [self, i_s_ref] = reference_gen_compute_current_ref(self, psi_s_ref, ...
+    tau_M_ref)
+%REFERENCE_GEN_COMPUTE_CURRENT_REF Current reference of current-vector control: the
+%   state, conjugated for a negative torque reference. The flux and torque
+%   references are stored for the tracking.
+self.psi_s_ref = psi_s_ref;
+self.tau_M_ref = tau_M_ref;
+if tau_M_ref >= 0
+    i_s_ref = self.i_s_ref;
+else
+    i_s_ref = conj(self.i_s_ref);
+end
+end
+
+function self = reference_gen_update(self, T_s)
+%REFERENCE_GEN_UPDATE Update the current-reference state, driven toward the stored
+%   flux and torque references by the tracking law.
+par = self.par;
+psi_s = psi_s_dq(par, self.i_s_ref);
+tau_M = 1.5*par.n_p*imag(self.i_s_ref*conj(psi_s));
+psi_s_abs = abs(psi_s);
+if psi_s_abs > 0
+    L_s = incr_ind_mat(par, self.i_s_ref);
+    psi_a = aux_flux(L_s, self.i_s_ref, psi_s);
+    ell = mat_vec(L_s, psi_s)/psi_s_abs;
+    den = real(psi_a*conj(ell));
+    if den ~= 0
+        err_tau = (abs(self.tau_M_ref) - tau_M)/(1.5*par.n_p);
+        err_psi = self.psi_s_ref - psi_s_abs;
+        err = (1i*ell*err_tau + psi_a*err_psi)/den;
+        self.i_s_ref = self.i_s_ref + T_s*self.alpha*err;
+    end
+end
 end
 
 function self = flux_torque_ctrl_init(par, alpha_psi, alpha_tau, alpha_i)

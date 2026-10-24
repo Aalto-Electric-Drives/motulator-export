@@ -211,7 +211,7 @@ M_K_O = (
 )
 
 
-def _flux_observer() -> CBlock:
+def _flux_observer(sig: Signals = SIGNALS) -> CBlock:
     """Flux observer (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
@@ -265,7 +265,7 @@ def _flux_observer() -> CBlock:
         "i_s_ab_prev = NAN;\n"
     )
     output = (
-        SIGNALS.read(0, "meas") + f"double complex u_s_ab = {complex_in(1)};\n"
+        sig.read(0, "meas") + f"double complex u_s_ab = {complex_in(1)};\n"
         f"double complex u_s_zoh_ab = {complex_in(2)};\n"
         "double w_M = InputSignal(3, 0);\n"
         "/* Flying start when the voltage is known again (SpeedFluxObserver), the\n"
@@ -289,7 +289,7 @@ def _flux_observer() -> CBlock:
         " * open-circuit voltage of the observer if unknown */\n"
         "out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n"
         "                               : cexp(-I * out.theta_c) * u_s_ab;\n"
-        + SIGNALS.write(1, "fbk", "out")
+        + sig.write(1, "fbk", "out")
     )
     mcode = MCode(
         start=M_PAR + M_K_O + "self = flux_observer_init(par, p.k_theta, k_o);\n"
@@ -321,12 +321,8 @@ def _flux_observer() -> CBlock:
         "    out.u_s = exp(-1i*out.theta_c)*u_s_ab;\n"
         "end\n",
         update="self = flux_observer_update(self, p.T_s, out);\n",
-        inputs={
-            "meas": SIGNALS.vector("meas"),
-            "u_s_ab": COMPLEX,
-            "u_s_zoh_ab": COMPLEX,
-        },
-        outputs={"out": SIGNALS.vector("fbk")},
+        inputs={"meas": sig.vector("meas"), "u_s_ab": COMPLEX, "u_s_zoh_ab": COMPLEX},
+        outputs={"out": sig.vector("fbk")},
         functions=M_PAR_FUNCTION,
         checks=(
             *required("k_theta", "h", "T_s"),
@@ -337,14 +333,9 @@ def _flux_observer() -> CBlock:
     )
     return CBlock(
         "FluxObserver",
-        [
-            SIGNALS.port("meas"),
-            Port("u_s_ab", 2),
-            Port("u_s_zoh_ab", 2),
-            Port("w_M", 1),
-        ],
-        [Port("init", 2), Port("out", SIGNALS.width("fbk"))],
-        SIGNALS.class_code(
+        [sig.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2), Port("w_M", 1)],
+        [Port("init", 2), Port("out", sig.width("fbk"))],
+        sig.class_code(
             "FluxObserver",
             start,
             output,
@@ -355,7 +346,7 @@ def _flux_observer() -> CBlock:
             "static double complex i_s_ab_prev;\n",
         ),
         params,
-        SIGNALS.sfunction("flux_observer"),
+        sig.sfunction("flux_observer"),
         mask=mask,
         mcode=mcode,
     )
@@ -405,7 +396,7 @@ SFO_INIT = (
 )
 
 
-def _speed_flux_observer() -> Subsystem:
+def _speed_flux_observer(sig: Signals = SIGNALS) -> Subsystem:
     """Speed and flux observer (SpeedFluxObserver)."""
     mask = Mask(
         "SpeedFluxObserver (motulator)",
@@ -436,18 +427,18 @@ def _speed_flux_observer() -> Subsystem:
         ],
         init=SFO_INIT,
     )
-    fbk = SIGNALS.width("fbk")
+    fbk = sig.width("fbk")
     return Subsystem(
         "SpeedFluxObserver",
-        [SIGNALS.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
+        [sig.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
         [Port("out", fbk)],
         [
-            _flux_observer(),
+            _flux_observer(sig),
             Tag("Goto init", "init", 2, goto=True),
-            SIGNALS.selector("fbk", "eps"),
+            sig.selector("fbk", "eps"),
             Tag("From init", "init", 2, goto=False),
-            SIGNALS.selector("fbk", "tau_M"),
-            speed_observer(SIGNALS, init=True),
+            sig.selector("fbk", "tau_M"),
+            speed_observer(sig, init=True),
         ],
         [
             ("meas", "FluxObserver:meas"),
@@ -522,6 +513,58 @@ def _luts_code(i: int) -> str:
     )
 
 
+def _reference_gen_start(params: list[str]) -> str:
+    """
+    C code of the start of a ReferenceGenerator block with the parameters `params`
+    (the machine model, i_s_max, psi_s_min, psi_s_max, k_u, k_mtpv, and luts).
+    """
+    i = {p: k for k, p in enumerate(params)}
+    return (
+        checks(params, ["i_s_max", "psi_s_max", "k_u", "k_mtpv"])
+        + _par_code(i["par_n_p"])
+        + _luts_code(i["luts"])
+        + f"reference_gen_init(&self, &par, P({i['i_s_max']}, 0), "
+        f"PARAM({i['psi_s_min']}),\n"
+        f"                   P({i['psi_s_max']}, 0), P({i['k_u']}, 0), "
+        f"P({i['k_mtpv']}, 0), luts);\n"
+        "/* Errors of ReferenceGenerator of motulator */\n"
+        "const char *error = reference_gen_error(&self, &par);\n"
+        "if (error != NULL) {\n"
+        "    SetErrorMessage(error);\n"
+        "    return;\n"
+        "}\n"
+    )
+
+
+# The start of a ReferenceGenerator block in the MATLAB code (see
+# `_reference_gen_start`), and the checks of its parameters
+M_REFERENCE_GEN_START = (
+    M_PAR + "% Lookup tables of the loci from the mask initialization "
+    "(sm_reference_luts.m)\n"
+    "self = reference_gen_init(par, p.psi_s_min, p.psi_s_max, p.k_u, "
+    "p.k_mtpv, p.luts);\n"
+    "% Error of ReferenceGenerator of motulator, also with a flux map (the\n"
+    "% check of the mask needs psi_f)\n"
+    "if par.psi_f == 0 && self.psi_s_min <= 0\n"
+    "    error('psi_s_min must be positive for machines without PMs.');\n"
+    "end\n"
+)
+M_REFERENCE_GEN_CHECKS = (
+    *required("i_s_max", "psi_s_max", "k_u", "k_mtpv"),
+    *M_PAR_CHECKS,
+    (
+        "~isequal(size(p.luts), [16, 6])",
+        "luts must be a 16-by-6 matrix (sm_reference_luts.m).",
+    ),
+    # Error of ReferenceGenerator of motulator (psi_s_min NaN being psi_f), checked
+    # here with constant inductances
+    (
+        "p.par_psi_f == 0 && ~(p.psi_s_min > 0)",
+        "psi_s_min must be positive for machines without PMs.",
+    ),
+)
+
+
 def _reference_generator(sig: Signals = SIGNALS) -> CBlock:
     """Flux and torque reference generator (ReferenceGenerator)."""
     mask = Mask(
@@ -547,22 +590,7 @@ def _reference_generator(sig: Signals = SIGNALS) -> CBlock:
         simulink_init=LUTS_SIMULINK_INIT,
     )
     params = [*mask_params(mask, PAR), "luts"]
-    i = {p: k for k, p in enumerate(params)}
-    start = (
-        checks(params, ["i_s_max", "psi_s_max", "k_u", "k_mtpv"])
-        + _par_code(i["par_n_p"])
-        + _luts_code(i["luts"])
-        + f"reference_gen_init(&self, &par, P({i['i_s_max']}, 0), "
-        f"PARAM({i['psi_s_min']}),\n"
-        f"                   P({i['psi_s_max']}, 0), P({i['k_u']}, 0), "
-        f"P({i['k_mtpv']}, 0), luts);\n"
-        "/* Errors of ReferenceGenerator of motulator */\n"
-        "const char *error = reference_gen_error(&self, &par);\n"
-        "if (error != NULL) {\n"
-        "    SetErrorMessage(error);\n"
-        "    return;\n"
-        "}\n"
-    )
+    start = _reference_gen_start(params)
     output = (
         "/* Flux and limited torque references (ref.psi_s, ref.tau_M) */\n"
         "double psi_s_ref, tau_M_ref;\n"
@@ -581,34 +609,13 @@ def _reference_generator(sig: Signals = SIGNALS) -> CBlock:
         sample_time=None,
         mask=mask,
         mcode=MCode(
-            start=M_PAR + "% Lookup tables of the loci from the mask initialization "
-            "(sm_reference_luts.m)\n"
-            "self = reference_gen_init(par, p.psi_s_min, p.psi_s_max, p.k_u, "
-            "p.k_mtpv, p.luts);\n"
-            "% Error of ReferenceGenerator of motulator, also with a flux map (the\n"
-            "% check of the mask needs psi_f)\n"
-            "if par.psi_f == 0 && self.psi_s_min <= 0\n"
-            "    error('psi_s_min must be positive for machines without PMs.');\n"
-            "end\n",
+            start=M_REFERENCE_GEN_START,
             output="% Flux and limited torque references (ref.psi_s, ref.tau_M)\n"
             "[psi_s_ref, tau_M_lim] = reference_gen_compute_flux_and_torque_refs( ...\n"
             "    self, tau_M_ref, w_m, u_dc);\n"
             "ref = [psi_s_ref; tau_M_lim];\n",
             functions=M_PAR_FUNCTION,
-            checks=(
-                *required("i_s_max", "psi_s_max", "k_u", "k_mtpv"),
-                *M_PAR_CHECKS,
-                (
-                    "~isequal(size(p.luts), [16, 6])",
-                    "luts must be a 16-by-6 matrix (sm_reference_luts.m).",
-                ),
-                # Error of ReferenceGenerator of motulator (psi_s_min NaN being
-                # psi_f), checked here with constant inductances
-                (
-                    "p.par_psi_f == 0 && ~(p.psi_s_min > 0)",
-                    "psi_s_min must be positive for machines without PMs.",
-                ),
-            ),
+            checks=M_REFERENCE_GEN_CHECKS,
         ),
     )
 

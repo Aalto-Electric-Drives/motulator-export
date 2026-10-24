@@ -97,6 +97,16 @@ CLASSES = {
     "+drive/+control/VHzControlSystem.m": VHzControlSystem,
     "+drive/+control/+sm/FluxVectorControllerCfg.m": sm_control.FluxVectorControllerCfg,
     "+drive/+control/+sm/FluxVectorController.m": sm_control.FluxVectorController,
+    "+drive/+control/+sm/CurrentVectorControllerCfg.m": (
+        sm_control.CurrentVectorControllerCfg
+    ),
+    "+drive/+control/+sm/CurrentVectorController.m": sm_control.CurrentVectorController,
+    "+drive/+control/+sm/ObserverBasedVHzControllerCfg.m": (
+        sm_control.ObserverBasedVHzControllerCfg
+    ),
+    "+drive/+control/+sm/ObserverBasedVHzController.m": (
+        sm_control.ObserverBasedVHzController
+    ),
     "+drive/+control/+im/CurrentVectorControllerCfg.m": (
         im_control.CurrentVectorControllerCfg
     ),

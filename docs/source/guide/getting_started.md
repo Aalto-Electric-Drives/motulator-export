@@ -82,6 +82,7 @@ The scripts for PLECS and Simulink are:
 | System                                                    | PLECS                     | Simulink                        |
 | --------------------------------------------------------- | ------------------------- | ------------------------------- |
 | 2.2-kW IPMSM, sensorless flux-vector control              | `ipmsm_2kw_fvc.py`        | `ipmsm_2kw_fvc_simulink.py`     |
+| 2.2-kW IPMSM, sensorless current-vector control           | `ipmsm_2kw_cvc.py`        | `ipmsm_2kw_cvc_simulink.py`     |
 | 2.2-kW IPMSM, observer-based V/Hz control                 | `ipmsm_2kw_vhz.py`        | `ipmsm_2kw_vhz_simulink.py`     |
 | 5.6-kW PM-SyRM, GradNet models, flux-vector control       | `pmsyrm_6kw_gn_fvc.py`    | `pmsyrm_6kw_gn_fvc_simulink.py` |
 | 2.2-kW induction machine, current-vector control          | `im_2kw_cvc.py`           | `im_2kw_cvc_simulink.py`        |

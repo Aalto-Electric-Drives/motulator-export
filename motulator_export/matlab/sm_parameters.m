@@ -76,6 +76,11 @@ for k = 1:50
 end
 end
 
+function y = mat_vec(L, x)
+%MAT_VEC Matrix-vector product L*x of the incremental inductance matrix.
+y = L.L_dd*real(x) + 1i*L.L_qq*imag(x) + 1i*L.L_dq*conj(x);
+end
+
 function psi_a = aux_flux(L, i_s, psi_s)
 %AUX_FLUX Auxiliary flux linkage.
 psi_a = psi_s - L.L_qq*real(i_s) - 1i*L.L_dd*imag(i_s) + 1i*L.L_dq*conj(i_s);

@@ -48,6 +48,7 @@ from motulator_export.plecs._im_control import PAR_FIELDS as IM_PAR_FIELDS
 from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._sm_control import CFG_FIELDS as FVC_CFG_FIELDS
 from motulator_export.plecs._sm_control import PAR_FIELDS as SM_PAR_FIELDS
+from motulator_export.plecs._sm_cvc_control import CFG_FIELDS as SM_CVC_CFG_FIELDS
 from motulator_export.plecs._sm_vhz_control import CFG_FIELDS as SM_VHZ_CFG_FIELDS
 
 SIMULINK = Path(__file__).parent
@@ -235,6 +236,9 @@ def _sm_script(
             sm_control.ObserverBasedVHzControllerCfg,
             SM_VHZ_CFG_FIELDS,
         )
+    elif isinstance(ctrl.vector_ctrl, sm_control.CurrentVectorController):
+        values, flux_map = _sm.export_values(ctrl)
+        cfg_cls, cfg_fields = sm_control.CurrentVectorControllerCfg, SM_CVC_CFG_FIELDS
     else:
         values, flux_map = _sm.export_values(ctrl)
         cfg_cls, cfg_fields = sm_control.FluxVectorControllerCfg, FVC_CFG_FIELDS
@@ -287,8 +291,9 @@ def _sm_script(
             _vhz_control_system(values),
         ]
     else:
+        vector_ctrl = type(ctrl.vector_ctrl).__name__
         control += [
-            f"vector_ctrl = FluxVectorController({est}, cfg);",
+            f"vector_ctrl = {vector_ctrl}({est}, cfg);",
             f"speed_ctrl = {_speed_ctrl(values)};",
             _control_system("VectorControlSystem", VECTOR_ARGS, values),
         ]

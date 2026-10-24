@@ -196,14 +196,23 @@ function self = reference_gen_init(par, psi_s_min, psi_s_max, k_u, k_mtpv, luts)
 %   tables (ReferenceGenerator); psi_s_min = NaN means psi_f. The tables luts are
 %   the 16-by-6 matrix of compute_reference_luts (sm_control_loci.m), computed
 %   outside the block by sm_reference_luts.m in the mask initialization.
+%   The current reference of current-vector control is a state, initialized at the
+%   zero-torque operating point of the minimum flux (zero current with PMs), and
+%   tracked with the bandwidth alpha (zero, i.e., not tracked, unless set).
 if isnan(psi_s_min)
     psi_s_min = par.psi_f;
 end
-self = struct('k_u', k_u, 'k_mtpv', k_mtpv, 'psi_s_min', psi_s_min, ...
-    'psi_s_max', psi_s_max, ...
+i_s_ref = complex(0);
+if par.psi_f == 0
+    L0 = incr_ind_mat(par, complex(0));
+    i_s_ref = complex(psi_s_min/L0.L_dd);
+end
+self = struct('par', par, 'k_u', k_u, 'k_mtpv', k_mtpv, 'alpha', 0, ...
+    'psi_s_min', psi_s_min, 'psi_s_max', psi_s_max, ...
     'psi_s_mtpa', struct('x', luts(:, 1), 'y', luts(:, 2)), ...
     'tau_M_cl', struct('x', luts(:, 3), 'y', luts(:, 4)), ...
-    'tau_M_mtpv', struct('x', luts(:, 5), 'y', luts(:, 6)));
+    'tau_M_mtpv', struct('x', luts(:, 5), 'y', luts(:, 6)), ...
+    'i_s_ref', i_s_ref, 'tau_M_ref', 0, 'psi_s_ref', psi_s_min);
 end
 
 function psi = reference_gen_max_flux(self, w_m, u_dc)

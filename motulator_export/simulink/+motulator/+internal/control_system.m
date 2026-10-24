@@ -15,6 +15,9 @@ if isa(ctrl, 'motulator.drive.control.VectorControlSystem')
     if isa(vc, 'motulator.drive.control.sm.FluxVectorController')
         c.name = 'Flux-vector control';
         plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
+    elseif isa(vc, 'motulator.drive.control.sm.CurrentVectorController')
+        c.name = 'Current-vector control (SM)';
+        plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
     elseif isa(vc, 'motulator.drive.control.im.CurrentVectorController')
         c.name = 'Current-vector control';
         plant = {'machine', 'motulator.drive.model.InductionMachine'};
