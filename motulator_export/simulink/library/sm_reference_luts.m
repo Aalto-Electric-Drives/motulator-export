@@ -21,6 +21,11 @@ else
         par.psi_f, gradnet_placeholder());
 end
 luts = compute_reference_luts(par, i_s_max);
+% Error of ReferenceGenerator of motulator (the MTPA locus is NaN without a
+% solution, see compute_mtpa_current_angle)
+if any(isnan(luts(:, 1:2)), 'all')
+    error('No MTPA solution found. Check the alignment of the d axis.');
+end
 end
 
 function [x, aux] = brentq(f, xa, xb, data)
@@ -309,7 +314,7 @@ function gamma = compute_mtpa_current_angle(par, i_s_abs)
 d = struct('par', par, 'magnitude', i_s_abs);
 r = angle_range(par);
 if mtpa_cond(r(1), d)*mtpa_cond(r(2), d) > 0
-    gamma = 0; % No root in the range
+    gamma = NaN; % No root in the range, an error in motulator
     return
 end
 gamma = brentq(@mtpa_cond, r(1), r(2), d);

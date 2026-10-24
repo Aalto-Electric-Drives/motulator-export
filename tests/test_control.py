@@ -18,6 +18,7 @@ Run from the repository root:
 
 # %%
 import ctypes
+import re
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -340,6 +341,40 @@ def test_parameter_errors(compiled: Compiled) -> None:
         init = init_script("fvc", values | {name: value})
         err = net.start(block_params(net.top, init, _sm_control.FVC_BLOCK), start)
         assert err is not None and err.endswith(message), err
+    net.sfun_terminate()
+
+
+@pytest.mark.parametrize(
+    ("changed", "message"),
+    [
+        ({"psi_f": 0.0}, "psi_s_min must be positive for machines without PMs."),
+        (
+            {"L_d": SM_PAR["L_q"], "L_q": SM_PAR["L_d"]},
+            "No MTPA solution found. Check the alignment of the d axis",
+        ),
+    ],
+    ids=["psi_s_min", "mtpa"],
+)
+def test_reference_generator_errors(
+    compiled: Compiled, changed: dict[str, float], message: str
+) -> None:
+    """
+    The block ReferenceGenerator should report the errors that ReferenceGenerator of
+    motulator raises: a machine without PMs needs a positive psi_s_min (the default
+    psi_f being zero), and the MTPA locus needs a solution (here, the inductances of
+    a PM machine swapped).
+    """
+    net, _ = compiled("fvc")
+    build, _ = sm_system(True, 0.0)
+    values, _ = _sm.export_values(build()[1])
+    pars: dict[str, Any] = {**SM_PAR, **changed}
+    par = model.SynchronousMachinePars(**pars)
+    cfg = sm_control.FluxVectorControllerCfg(i_s_max=values["i_s_max"])
+    with pytest.raises(ValueError, match=re.escape(message)):
+        sm_control.FluxVectorController(par, cfg)
+    init = init_script("fvc", values | changed)
+    err = net.start(block_params(net.top, init, _sm_control.FVC_BLOCK), start)
+    assert err is not None and message in err, err
     net.sfun_terminate()
 
 

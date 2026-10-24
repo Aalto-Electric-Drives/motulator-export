@@ -186,6 +186,12 @@ static void mdlStart(SimStruct *S)
     }
     reference_gen_init(&self, &par, P(0, 0), PARAM(1),
                        P(2, 0), P(3, 0), P(4, 0), luts);
+    /* Errors of ReferenceGenerator of motulator */
+    const char *error = reference_gen_error(&self, &par);
+    if (error != NULL) {
+        SetErrorMessage(error);
+        return;
+    }
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)

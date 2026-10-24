@@ -12,6 +12,11 @@ if isempty(self)
     par = machine_pars(p);
     % Lookup tables of the loci from the mask initialization (sm_reference_luts.m)
     self = reference_gen_init(par, p.psi_s_min, p.psi_s_max, p.k_u, p.k_mtpv, p.luts);
+    % Error of ReferenceGenerator of motulator, also with a flux map (the
+    % check of the mask needs psi_f)
+    if par.psi_f == 0 && self.psi_s_min <= 0
+        error('psi_s_min must be positive for machines without PMs.');
+    end
 end
 % Flux and limited torque references (ref.psi_s, ref.tau_M)
 [psi_s_ref, tau_M_lim] = reference_gen_compute_flux_and_torque_refs( ...

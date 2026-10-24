@@ -67,7 +67,7 @@ static double compute_mtpa_current_angle(const SynchronousMachinePars *par,
     double r[2];
     angle_range(par, r);
     if (mtpa_cond(r[0], &d) * mtpa_cond(r[1], &d) > 0.0) {
-        return 0.0; /* No root in the range */
+        return NAN; /* No root in the range, an error in motulator */
     }
     return brentq(mtpa_cond, r[0], r[1], &d);
 }

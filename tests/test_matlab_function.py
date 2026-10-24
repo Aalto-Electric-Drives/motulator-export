@@ -64,7 +64,7 @@ from motulator_export.simulink._mfunction import (
 from motulator_export.simulink._render import CODES, netlist_rows, with_signals, wrapper
 from motulator_export.simulink._script import write_script
 from tests.c_port import arr
-from tests.matlab import block_params
+from tests.matlab import Struct, block_params, evaluate
 from tests.netlist import Netlist
 from tests.sfunctions import (
     GFL_INPUTS,
@@ -79,6 +79,7 @@ from tests.sfunctions import (
     start,
 )
 from tests.systems import (
+    SM_PAR,
     VHZ_CASES,
     VHZ_IDS,
     VHZ_RTOL,
@@ -127,6 +128,29 @@ def test_functions() -> None:
             assert f.sample_time is None or f.sample_time in fields
             assert f.source.startswith("function ")
             assert f"{f.name}(" in f.source.splitlines()[0]
+
+
+def test_reference_generator_check() -> None:
+    """
+    The check of the mask of the MATLAB Function block ReferenceGenerator should give
+    the error of motulator for psi_s_min with constant inductances (psi_s_min NaN
+    being psi_f); with a flux map (psi_f NaN), the start code checks it.
+    """
+    block = _sm_control.FVC_BLOCK
+    gen = dict(leaves(block.netlist()))["FluxVectorController/ReferenceGenerator"]
+    assert gen.mcode is not None
+    message = "psi_s_min must be positive for machines without PMs."
+    cond = next(c for c, m in gen.mcode.checks if m == message)
+    nan = float("nan")
+    for psi_f, psi_s_min, error in [
+        (0.0, nan, True),
+        (0.0, 0.0, True),
+        (0.0, 0.3, False),
+        (0.5, nan, False),
+        (nan, nan, False),
+    ]:
+        p = Struct(par_psi_f=psi_f, psi_s_min=psi_s_min)
+        assert bool(evaluate(cond, {"p": p})) == error, (psi_f, psi_s_min)
 
 
 def test_port_used() -> None:
@@ -495,6 +519,26 @@ def require_compiler(eng: Any, code: str) -> None:
         "~isempty(mex.getCompilerConfigurations('C', 'Selected'))"
     ):
         pytest.skip("No C compiler for mex")
+
+
+def test_reference_luts_error(harnesses: Harnesses) -> None:
+    """
+    sm_reference_luts.m of the library should raise the error of ReferenceGenerator of
+    motulator if the MTPA locus has no solution (the inductances of a PM machine
+    swapped), and give the lookup tables otherwise.
+    """
+    import matlab.engine  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+    eng = harnesses.eng
+    eng.eval("motulator.setup();", nargout=0)
+    par = {k: float(v) for k, v in SM_PAR.items()}
+    luts = np.asarray(eng.sm_reference_luts(par, 6.5))
+    assert luts.shape == (16, 6) and not np.any(np.isnan(luts))
+    swapped = par | {"L_d": par["L_q"], "L_q": par["L_d"]}
+    # Without the Engine API, pyright takes the folder matlab (the MATLAB port)
+    error = matlab.engine.MatlabExecutionError  # pyright: ignore[reportAttributeAccessIssue]
+    with pytest.raises(error, match="No MTPA solution found"):
+        eng.sm_reference_luts(swapped, 6.5)
 
 
 @pytest.mark.parametrize("code", CODES)

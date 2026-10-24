@@ -540,6 +540,12 @@ def _reference_generator() -> CBlock:
         f"PARAM({i['psi_s_min']}),\n"
         f"                   P({i['psi_s_max']}, 0), P({i['k_u']}, 0), "
         f"P({i['k_mtpv']}, 0), luts);\n"
+        "/* Errors of ReferenceGenerator of motulator */\n"
+        "const char *error = reference_gen_error(&self, &par);\n"
+        "if (error != NULL) {\n"
+        "    SetErrorMessage(error);\n"
+        "    return;\n"
+        "}\n"
     )
     output = (
         "/* Flux and limited torque references (ref.psi_s, ref.tau_M) */\n"
@@ -562,7 +568,12 @@ def _reference_generator() -> CBlock:
             start=M_PAR + "% Lookup tables of the loci from the mask initialization "
             "(sm_reference_luts.m)\n"
             "self = reference_gen_init(par, p.psi_s_min, p.psi_s_max, p.k_u, "
-            "p.k_mtpv, p.luts);\n",
+            "p.k_mtpv, p.luts);\n"
+            "% Error of ReferenceGenerator of motulator, also with a flux map (the\n"
+            "% check of the mask needs psi_f)\n"
+            "if par.psi_f == 0 && self.psi_s_min <= 0\n"
+            "    error('psi_s_min must be positive for machines without PMs.');\n"
+            "end\n",
             output="% Flux and limited torque references (ref.psi_s, ref.tau_M)\n"
             "[psi_s_ref, tau_M_lim] = reference_gen_compute_flux_and_torque_refs( ...\n"
             "    self, tau_M_ref, w_m, u_dc);\n"
@@ -574,6 +585,12 @@ def _reference_generator() -> CBlock:
                 (
                     "~isequal(size(p.luts), [16, 6])",
                     "luts must be a 16-by-6 matrix (sm_reference_luts.m).",
+                ),
+                # Error of ReferenceGenerator of motulator (psi_s_min NaN being
+                # psi_f), checked here with constant inductances
+                (
+                    "p.par_psi_f == 0 && ~(p.psi_s_min > 0)",
+                    "psi_s_min must be positive for machines without PMs.",
                 ),
             ),
         ),

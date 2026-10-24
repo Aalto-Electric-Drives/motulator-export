@@ -264,6 +264,22 @@ static void reference_gen_init(ReferenceGenerator *self,
     self->tau_M_mtpv = luts->tau_M_mtpv;
 }
 
+/* Error of the initialization, as raised by ReferenceGenerator of motulator (the
+ * MTPA locus is NaN without a solution, see compute_mtpa_current_angle), or NULL */
+static const char *reference_gen_error(const ReferenceGenerator *self,
+                                       const SynchronousMachinePars *par)
+{
+    if (par->psi_f == 0.0 && self->psi_s_min <= 0.0) {
+        return "psi_s_min must be positive for machines without PMs.";
+    }
+    for (int k = 0; k < self->psi_s_mtpa.n; k++) {
+        if (isnan(self->psi_s_mtpa.x[k]) || isnan(self->psi_s_mtpa.y[k])) {
+            return "No MTPA solution found. Check the alignment of the d axis.";
+        }
+    }
+    return NULL;
+}
+
 static double reference_gen_max_flux(const ReferenceGenerator *self, double w_m,
                                      double u_dc)
 {

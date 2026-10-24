@@ -440,6 +440,11 @@ def reference_luts_mfunction() -> MFunction:
         "        par.psi_f, gradnet_placeholder());\n"
         "end\n"
         "luts = compute_reference_luts(par, i_s_max);\n"
+        "% Error of ReferenceGenerator of motulator (the MTPA locus is NaN without a\n"
+        "% solution, see compute_mtpa_current_angle)\n"
+        "if any(isnan(luts(:, 1:2)), 'all')\n"
+        "    error('No MTPA solution found. Check the alignment of the d axis.');\n"
+        "end\n"
         "end\n"
     )
     source = "\n".join([main, *local_functions(main, library())])
