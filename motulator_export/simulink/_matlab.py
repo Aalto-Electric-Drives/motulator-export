@@ -321,23 +321,26 @@ def _assign(lhs: str, value: Any, ws: MutableMapping) -> None:
 
 # %%
 def block_params(
-    top: Subsystem, init: str, block: ControlBlock, plecs: bool = False
+    top: Subsystem, init: str, block: ControlBlock | None, plecs: bool = False
 ) -> dict[str, list[Any]]:
     """
     Parameters of the C blocks of a control system, by their paths, as the masks of
     the model compute them: the model initialization `init` is run, the values of
     the mask of the control-system block `block` (the contents `top`) are evaluated
     and its initialization run, and so on to the blocks, the mask initializations
-    defining the variables of the masks.
+    defining the variables of the masks. Without `block` (None), `top` is the
+    contents of another subsystem, whose mask `init` defines the variables.
 
     In Simulink, a mask sees the variables of the masks around it and of the model
     initialization. In PLECS (`plecs`), it sees only its own variables.
     """
     base: dict[str, Any] = {}
     run(init, base)
-    top_vars = {n: evaluate(v, base) for n, v in mask_values(block).items()}
+    values = {} if block is None else mask_values(block)
+    top_vars = {n: evaluate(v, base) for n, v in values.items()}
     ws = ChainMap(top_vars) if plecs else ChainMap(top_vars, base)
-    run(block.mask_init, ws)
+    if block is not None:
+        run(block.mask_init, ws)
     out: dict[str, list[Any]] = {}
 
     def visit(sub: Subsystem, ws: ChainMap, path: str) -> None:
