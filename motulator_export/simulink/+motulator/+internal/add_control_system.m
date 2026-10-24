@@ -14,9 +14,8 @@ function add_control_system(blk, c, pos)
 %                    with MATLAB Function blocks)
 %
 %   The subsystem has the outputs 'd_abc' and 'signals' (the monitored signals).
-%   The ports of an S-function are created only if its parameters can be evaluated,
-%   so the S-functions are added with dummy values and their parameters are set
-%   after the masks are created.
+%   The S-functions are added with dummy values, and their parameters are set
+%   after the lines, see motulator.internal.add_netlist.
 import motulator.internal.*
 
 add(blk, 'built-in/Subsystem', pos);
@@ -24,11 +23,11 @@ net = c.netlist;
 if isfield(c, 'folder')
     net.folder = c.folder;
 end
+if ~isempty(c.sfunctions)
+    net.sfunctions = c.sfunctions;
+end
 add_netlist(blk, net);
 add_tabbed_mask(blk, c);
-for k = 1:size(c.sfunctions, 1)
-    set_param([blk '/' c.sfunctions{k, 1}], 'Parameters', c.sfunctions{k, 2});
-end
 end
 
 function add_tabbed_mask(blk, c)

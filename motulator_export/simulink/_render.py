@@ -317,7 +317,7 @@ def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
 def _block(b: Any) -> tuple[str, list[str]]:
     """Type and parameters of a block of the netlist."""
     if isinstance(b, CBlock):
-        # Dummy parameters until the mask exists (see motulator.internal.add_netlist)
+        # Dummy parameters until the lines exist (see motulator.internal.add_netlist)
         dummy = ", ".join(["1"] * len(b.params))
         return "S-Function", ["FunctionName", b.sfunction, "Parameters", dummy]
     if isinstance(b, Subsystem):

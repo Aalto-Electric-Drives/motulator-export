@@ -5,7 +5,7 @@ function add_netlist(blk, net)
 %
 %     blocks   Blocks {path, type, position, parameters}, the paths relative to
 %              BLK, a subsystem before its contents. The S-functions have dummy
-%              parameters until the mask of BLK exists. The parameters of a MATLAB
+%              parameters until the lines exist. The parameters of a MATLAB
 %              Function block are {function, sample time, output widths}, see
 %              motulator.internal.add_mfunction.
 %     aligns   Alignments {system, block, kind, number, target, kind, number,
@@ -15,6 +15,8 @@ function add_netlist(blk, net)
 %              'block/number' and the corners as in motulator.internal.route.
 %     masks    Masks of the blocks of the classes {path, type, description,
 %              initialization, parameters {variable, prompt, value}, display}.
+%     sfunctions  Parameters of the S-functions {path, parameters} (only with
+%              S-functions)
 %     folder   Folder of the files of the functions of the MATLAB Function blocks
 %              (only with MATLAB Function blocks)
 %
@@ -51,6 +53,15 @@ for k = 1:size(net.lines, 1)
         corners = {};
     end
     route(fullpath(blk, sys), src, dst, corners{:});
+end
+% The ports of an S-function are created only if its parameters can be evaluated,
+% so its parameters are set after the lines. They are set before the masks, since
+% setting them evaluates the mask of the S-function, which fails in a library.
+if isfield(net, 'sfunctions')
+    for k = 1:size(net.sfunctions, 1)
+        set_param([blk '/' net.sfunctions{k, 1}], ...
+            'Parameters', net.sfunctions{k, 2});
+    end
 end
 % Masks of the blocks of the classes, the outer ones first
 for k = 1:size(net.masks, 1)

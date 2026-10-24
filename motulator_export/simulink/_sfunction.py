@@ -62,6 +62,10 @@ class SFunction:
                 "    ssSetOffsetTime(S, 0, 0.0);\n"
             )
             ts_check = (
+                "    if (ssGetSimMode(S) == SS_SIMMODE_SIZES_CALL_ONLY\n"
+                f"        && mxIsEmpty(ssGetSFcnParam(S, {ts}))) {{\n"
+                "        return; /* Not evaluated yet, e.g., in a library */\n"
+                "    }\n"
                 f"    if (ParamDim({ts}, 0) * ParamDim({ts}, 1) != 1\n"
                 f"        || !(ParamRealData({ts}, 0) > 0.0)) {{\n"
                 '        SetErrorMessage("The sampling period must be a positive '

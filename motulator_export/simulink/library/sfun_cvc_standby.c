@@ -82,6 +82,10 @@ static void mdlInitializeSizes(SimStruct *S)
         }
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
+    if (ssGetSimMode(S) == SS_SIMMODE_SIZES_CALL_ONLY
+        && mxIsEmpty(ssGetSFcnParam(S, 1))) {
+        return; /* Not evaluated yet, e.g., in a library */
+    }
     if (ParamDim(1, 0) * ParamDim(1, 1) != 1
         || !(ParamRealData(1, 0) > 0.0)) {
         SetErrorMessage("The sampling period must be a positive scalar.");
