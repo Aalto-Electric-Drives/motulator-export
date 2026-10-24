@@ -9,6 +9,7 @@ Run from the repository root:
 """
 
 # %%
+import os
 import re
 from math import inf, pi
 from pathlib import Path
@@ -25,6 +26,7 @@ from motulator.drive import model
 
 from motulator_export import StepSignal, plecs, simulink
 from motulator_export._common import add_space_vectors, sampled_step
+from motulator_export.plecs._common import LIBRARY
 from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
 from motulator_export.simulink._export import model_path
@@ -222,12 +224,14 @@ def test_references(tmp_path: Path, system: str) -> None:
         step = r'Type\s+Step\s+Name\s+"v_c_ref"[^}]*"Time"\s+Value\s+"0\.0299375'
         assert re.search(step, text)
         assert re.search(constant % ("p_g_ref", r"2000\.0"), text)
-        assert "'v_c_ref', 'step', [0.0299375" in script
-        assert "'p_g_ref', 'constant', 2000.0" in script
+        # The Simulink model samples the step as the motulator objects of the script
+        assert "ctrl.set_ac_voltage_ref(StepSignal(time=0.03, after=" in script
+        assert "ctrl.set_power_ref(2000);" in script
     else:
         assert re.search(constant % ("w_M_ref", r"50\.0"), text)
         assert re.search(constant % ("tau_L", r"3\.0"), text)
-        assert "s.w_M_ref = 50.0;" in script and "s.tau_L = 3.0;" in script
+        assert "ctrl.set_speed_ref(50);" in script
+        assert "mdl.mechanics.set_external_load_torque(3);" in script
     files = set(tmp_path.iterdir())
     for bad, error in [(lambda t: 1.0, NotImplementedError), (inf, ValueError)]:
         set_bad(bad)
@@ -243,7 +247,9 @@ def test_sampled_references(tmp_path: Path) -> None:
     """
     The step signals of the control system (the speed reference) switch at the same
     sampling instant as in motulator (halfway between the samples), while the load
-    torque of the mechanics acts in continuous time at its step time.
+    torque of the mechanics acts in continuous time at its step time. The script of
+    the Simulink model has the step signals of motulator, which the model samples
+    (StepSignal.sampled of the MATLAB classes).
     """
     mdl, ctrl = _drive(sm=True)  # Steps at 0.1 s and 0.2 s, T_s = 125 us
     plecs.write_model(tmp_path / "model.plecs", mdl, ctrl, T_STOP)
@@ -253,8 +259,11 @@ def test_sampled_references(tmp_path: Path) -> None:
     step = r'Type\s+Step\s+Name\s+"%s"[^}]*"Time"\s+Value\s+"%s"'
     assert re.search(step % ("w_M_ref", r"0\.0999375"), text)
     assert re.search(step % ("tau_L", r"0\.2"), text)
-    assert "s.w_M_ref = [0.0999375 0.0 50.0];" in script
-    assert "s.tau_L = [0.2 0.0 5.0];" in script
+    assert "ctrl.set_speed_ref(StepSignal(time=0.1, after=50));" in script
+    assert (
+        "mdl.mechanics.set_external_load_torque(StepSignal(time=0.2, after=5));"
+        in script
+    )
 
 
 def test_unsupported_system(tmp_path: Path) -> None:
@@ -300,10 +309,12 @@ def test_initial_mechanics(tmp_path: Path) -> None:
     plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
     simulink.write_model(tmp_path / "drive.slx", mdl, ctrl, T_STOP)
     model_plecs = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
-    for text in (model_plecs, (tmp_path / "init_drive.m").read_text(encoding="utf-8")):
-        assert "mechanics.w_M0 = 50;" in text
-        assert "mechanics.theta_M0 = 0.25;" in text
+    assert "mechanics.w_M0 = 50;" in model_plecs
+    assert "mechanics.theta_M0 = 0.25;" in model_plecs
     assert '"mechanics.w_M0"' in model_plecs  # The initial speed of the machine
+    script = (tmp_path / "build_drive.m").read_text(encoding="utf-8")
+    assert "mechanics.state.w_M = 50;" in script
+    assert "mechanics.state.theta_M = 0.25;" in script
 
 
 def test_modified_speed_controller(tmp_path: Path) -> None:
@@ -328,17 +339,18 @@ def test_speed_controller(tmp_path: Path, alpha_i: float | None) -> None:
     )
     plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
     simulink.write_model(tmp_path / "drive.slx", mdl, ctrl, T_STOP)
-    for name in ("drive.plecs", "init_drive.m"):
-        text = (tmp_path / name).read_text(encoding="utf-8")
-        for line in (
-            "speed_ctrl.J = 0.02;",
-            "speed_ctrl.alpha_s = 30;",
-            "speed_ctrl.alpha_i = [];"
-            if alpha_i is None
-            else "speed_ctrl.alpha_i = 10;",
-            "speed_ctrl.tau_M_max = 12;",
-        ):
-            assert line in text, (name, line)
+    text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+    for line in (
+        "speed_ctrl.J = 0.02;",
+        "speed_ctrl.alpha_s = 30;",
+        "speed_ctrl.alpha_i = [];" if alpha_i is None else "speed_ctrl.alpha_i = 10;",
+        "speed_ctrl.tau_M_max = 12;",
+    ):
+        assert line in text, line
+    script = (tmp_path / "build_drive.m").read_text(encoding="utf-8")
+    alpha = "" if alpha_i is None else ", alpha_i=10"
+    call = f"speed_ctrl = SpeedController(J=0.02, alpha_s=30{alpha}, tau_M_max=12);"
+    assert call in script
 
 
 @pytest.mark.parametrize(
@@ -500,8 +512,9 @@ def test_threshold_voltage_single_update(tmp_path: Path) -> None:
     # system model with double update
     mdl, _ = _im_drive(0.0, 0.0, False)
     simulink.write_model(tmp_path / "drive.slx", mdl, ctrl, T_STOP)
-    text = (tmp_path / "init_drive.m").read_text(encoding="utf-8")
-    assert "pwm.u_th = 1;" in text and "pwm.single_update = 1;" in text
+    text = (tmp_path / "build_drive.m").read_text(encoding="utf-8")
+    pwm = "pwm=PWM(d_err=InverterNonlinearity(t_d=2e-06, u_th=1), single_update=true)"
+    assert pwm in text
 
 
 @pytest.mark.parametrize("single_update", [False, True], ids=["double", "single"])
@@ -610,3 +623,30 @@ def test_unsupported_gate_blocking_gradnet(tmp_path: Path) -> None:
     with pytest.raises(NotImplementedError, match="GradNet"):
         plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
     assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("gradnet", [False, True], ids=["pmsm", "gradnet"])
+def test_library_references(tmp_path: Path, gradnet: bool) -> None:
+    """
+    With ``library=True``, the control system and the GradNet machine are Model
+    References to the blocks of the library, by a path relative to the model, and
+    the model has no C code of its own.
+    """
+    mdl, ctrl = _drive(sm=True)
+    if gradnet:
+        current_map = gn.CurrentMapWithHarmonics(gn.load_gradnet(CURRENT_MAP))
+        par = model.SpatialSaturatedSynchronousMachinePars(
+            n_p=2, R_s=0.63, magnetic_map_fcn=current_map
+        )
+        mdl.machine = model.SynchronousMachine(par)
+    path = tmp_path / "models" / "drive.plecs"
+    path.parent.mkdir()
+    text = plecs.write_model(path, mdl, ctrl, T_STOP, library=True).read_text()
+    lib = re.escape(Path(os.path.relpath(LIBRARY, path.parent)).as_posix())
+    blocks = ["Flux-vector control"]
+    blocks += ["SynchronousMachine (GradNet)"] if gradnet else []
+    for block in blocks:
+        ref = r'Type\s+ModelReference\s+SrcComponent\s+"\./%s"\s+SrcModel\s+"%s"'
+        assert re.search(ref % (re.escape(block), lib), text)
+    assert text.count("ModelReference") == len(blocks)
+    assert "CScript" not in text

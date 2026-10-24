@@ -137,6 +137,18 @@ class: only-dark
 
 *Top level of the model written by `examples/gfl_10kva_lcl.py`: grid-following control of a converter with an LCL filter.*
 
+## The library
+
+The blocks of the control systems and the GradNet machine are also in the PLECS library `motulator_lib.plecs`, in the folder `motulator_export/plecs` of the package (see [](getting_started.md#installation)). To use them in your own models, open the Library page of File > PLECS Preferences, add the folder to the Search Path table, and add `motulator_lib.plecs` to the User Libraries table with a description, e.g., *motulator*, which names it in the Library Browser. The blocks dragged from the Library Browser are links to the library, so they follow the updates of the package. Their masks refer to the structs of the initialization commands (see [Parameters](#parameters)), which you can copy from a model written by `plecs.write_model`.
+
+With `library=True`, `plecs.write_model` writes a model whose control system (and GradNet machine) refers to the library by a path relative to the model file, without the settings above:
+
+```python
+plecs.write_model("ipmsm.plecs", mdl, ctrl, t_stop=1.2, library=True)
+```
+
+The model file is then small, but it needs the library. Before you send it to someone without the package, break the links (Edit > Break all external links…).
+
 ## Simulating from Python
 
 `plecs.simulate` runs a model through the RPC interface of PLECS and returns the signals of the system model and the monitored signals of the control system, e.g., for comparing with *motulator*. The model needs output ports for this:
@@ -158,5 +170,5 @@ In the comparisons of the examples, the PLECS models agree with *motulator* to a
 ## Good to know
 
 - The first input of the control system is the gate enable (`ctrl.set_enable`). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*; after the release, a sensorless drive catches the rotating machine with a flying start.
-- The model refers to the C sources of the installed package by a path relative to the model file. If you move the model or update the package, write the model again.
+- The model refers to the C sources of the installed package (with `library=True`, to its library) by a path relative to the model file. If you move the model or update the package, write the model again.
 - `plecs.simulate` closes the model in PLECS before loading it, discarding unsaved changes, since PLECS does not reload an open model from the file.

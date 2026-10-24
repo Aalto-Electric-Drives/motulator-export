@@ -28,6 +28,7 @@ import numpy as np
 from PIL import Image
 
 HERE = Path(__file__).parent
+SIMULINK = HERE.parent / "motulator_export" / "simulink"  # The package +motulator
 MODEL = HERE / "simulink" / "pmsyrm_6kw_gn_fvc.slx"
 IMAGES = HERE.parent / "docs" / "source" / "images"
 SCREENSHOT = IMAGES / "simulink_drive.png"
@@ -40,13 +41,16 @@ def print_simulink(model: Path, png: Path) -> None:
 
     eng: Any = matlab.engine.start_matlab()
     try:
-        eng.addpath(str(model.parent), nargout=0)
-        eng.load_system(str(model), nargout=0)  # Runs the initialization script
-        # Subsystems as plain blocks, without the previews of their contents
+        # The package of motulator and its library on the path
+        eng.addpath(str(SIMULINK), nargout=0)
+        eng.eval("motulator.setup();", nargout=0)
+        eng.load_system(str(model), nargout=0)
+        # Subsystems as plain blocks, without the previews of their contents (the
+        # blocks of the library are masked, and the links keep their settings)
         eng.eval(
-            "cellfun(@(b) set_param(b, 'ContentPreviewEnabled', 'off'), "
-            f"find_system('{model.stem}', 'SearchDepth', 1, 'BlockType', "
-            "'SubSystem'));",
+            f"b = find_system('{model.stem}', 'SearchDepth', 1, 'BlockType', "
+            "'SubSystem'); for k = 1:numel(b), try, set_param(b{k}, "
+            "'ContentPreviewEnabled', 'off'); catch, end, end",
             nargout=0,
         )
         eng.print(f"-s{model.stem}", "-dpng", f"-r{DPI}", str(png), nargout=0)

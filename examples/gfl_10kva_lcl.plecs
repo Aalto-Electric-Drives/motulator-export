@@ -176,7 +176,7 @@ Plecs {
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
-      MaskType      "GridConverterControlSystem (motulator)"
+      MaskType      "Grid-following control (motulator)"
       MaskDescription "Current-vector grid-following control with a PLL in the power-control mode (GridConverterControlSystem with CurrentVectorController). Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of GridConverterControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
       MaskInit      "T_s = inner_ctrl.cfg.T_s;\n"
       MaskIconFrame on

@@ -118,7 +118,7 @@ Plecs {
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
-      MaskType      "VHzControlSystem (motulator)"
+      MaskType      "Observer-based VHz control (motulator)"
       MaskDescription "Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
       MaskInit      "T_s = vhz_ctrl.cfg.T_s;\n"
       MaskIconFrame on

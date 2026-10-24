@@ -1409,13 +1409,14 @@ def control_block(
     Control-system block of a control system of the class `cls` (e.g.,
     VectorControlSystem) with the inner controller of the class `inner` (e.g.,
     FluxVectorController), whose contents are `netlist`. The mask has the arguments
-    of `cls` (`TOP_ARGS`).
+    of `cls` (`TOP_ARGS`). The mask type is the name of the block, which the Library
+    Browser of PLECS shows, and the description names the classes.
     """
     args, init = TOP_ARGS[cls]
     params = [MaskParam(v, p.format(inner), cls, "", True) for v, p in args]
     return ControlBlock(
         name=name,
-        mask_type=f"{cls} (motulator)",
+        mask_type=f"{name} (motulator)",
         description=description
         + " Each class of motulator is a block with a mask of its arguments, nested as "
         f"in motulator: the arguments of {cls} are structs of the arguments of its "

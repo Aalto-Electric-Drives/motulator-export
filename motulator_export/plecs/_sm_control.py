@@ -467,14 +467,14 @@ def _speed_flux_observer() -> Subsystem:
 
 
 # The lookup tables of the loci of the ReferenceGenerator: computed by the mask
-# initialization in Simulink (the function sm_reference_luts.m next to the model),
-# or by the C-Script block at its start in PLECS
+# initialization in Simulink (the function sm_reference_luts.m of the library), or
+# by the C-Script block at its start in PLECS
 LUTS_INIT = (
-    "% Lookup tables of the loci: empty, so the block computes them at the start\n"
+    "% Lookup tables of the loci, computed by the block at its start if empty\n"
     "luts = [];\n"
 )
 LUTS_SIMULINK_INIT = (
-    "% Lookup tables of the loci by sm_reference_luts.m next to the model\n"
+    "% Lookup tables of the loci by sm_reference_luts.m of the library\n"
     "luts = sm_reference_luts(par, i_s_max);\n"
 )
 
@@ -512,7 +512,7 @@ def _reference_generator() -> CBlock:
         "ReferenceGenerator (motulator)",
         "Flux and torque reference generator (ReferenceGenerator) with the lookup "
         "tables of the MTPA, MTPV, and current-limit loci, computed by the function "
-        "sm_reference_luts.m next to the model in the mask initialization (Simulink) "
+        "sm_reference_luts.m of the library in the mask initialization (Simulink) "
         "or by the block at the start (PLECS). The output ref is [psi_s tau_M], the "
         "flux reference and the limited torque reference." + PAR_DESCRIPTION,
         [
@@ -800,8 +800,7 @@ def init_script(
     """
     Model initialization: the variables of the system model, and the structs of the
     control system (par, cfg, vector_ctrl, speed_ctrl, and pwm) from the parameter
-    values of the
-    control system (`_sm.export_values`).
+    values of the control system (`_sm.export_values`).
     """
     flux_map = values["psi_s_dq_fcn"]
     machine = PAR_FIELDS if flux_map is None else PAR_FIELDS[:2]

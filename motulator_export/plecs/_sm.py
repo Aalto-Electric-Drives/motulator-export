@@ -85,6 +85,7 @@ from motulator_export.plecs._common import (
     _add_dc_bus,
     _add_delay,
     _add_pwm,
+    _add_reference,
     _write_model,
 )
 from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
@@ -407,9 +408,13 @@ def _add_pmsm(sch: _Schematic) -> None:
     )
 
 
-def _add_gradnet_machine(sch: _Schematic) -> None:
+# Name of the machine with a GradNet current map in the library
+GRADNET_MACHINE = "SynchronousMachine (GradNet)"
+
+
+def gradnet_machine() -> tuple[str, str]:
     """
-    Add the machine with a GradNet current map as a subsystem.
+    Mask and contents of the subsystem of the machine with a GradNet current map.
 
     The subsystem looks like the PLECS permanent-magnet synchronous machine. Inside,
     a C-Script block computes the phase currents and the torque from the flux
@@ -502,6 +507,24 @@ def _add_gradnet_machine(sch: _Schematic) -> None:
         + _inner_schematic(sub, (820, 360))
         + _mask_probes(probes_out)
     )
+    return header, trailer
+
+
+def _add_gradnet_machine(sch: _Schematic, library: bool) -> None:
+    """Add the machine with a GradNet current map (`gradnet_machine`)."""
+    if library:
+        terminals = _terminals(MACHINE_TERMINALS)
+        _add_reference(
+            sch,
+            GRADNET_MACHINE,
+            "Machine",
+            MACH,
+            MACHINE_FRAME,
+            terminals,
+            label="east",
+        )
+        return
+    header, trailer = gradnet_machine()
     sch.component(
         "Subsystem",
         "Machine",
@@ -519,6 +542,7 @@ def write_model(
     ctrl: VectorControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the synchronous machine drive, see `plecs.write_model`.
@@ -541,7 +565,7 @@ def write_model(
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
         ("theta_M", _probe("Machine", MACHINE_PROBES[2:3])),
     ]
-    y_sources = _add_control_system(sch, block, sources, VALUES)
+    y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
@@ -555,7 +579,7 @@ def write_model(
     _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
     if gradnet_plant:
-        _add_gradnet_machine(sch)
+        _add_gradnet_machine(sch, library)
     else:
         _add_pmsm(sch)
     _add_phase_lines(sch)

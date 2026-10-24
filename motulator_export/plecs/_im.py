@@ -245,6 +245,7 @@ def write_model(
     ctrl: VectorControlSystem | VHzControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the induction machine drive, see `plecs.write_model`.
@@ -276,7 +277,7 @@ def write_model(
     ]
     if block is CVC_BLOCK:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
-    y_sources = _add_control_system(sch, block, sources, VALUES)
+    y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d

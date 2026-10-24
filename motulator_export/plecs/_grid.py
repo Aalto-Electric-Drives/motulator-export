@@ -395,6 +395,7 @@ def write_model(
     ctrl: GridConverterControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the grid converter system, see `plecs.write_model`.
@@ -422,7 +423,7 @@ def write_model(
     voltages += _probe("u_gbc", ["Measured voltage"])
     sources += [("u_g_line", voltages)]
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
-    _add_control_system(sch, block, sources, VALUES)
+    _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     sch.dx = DC_DX + GATE_DX  # Space for the gate enable and the DC bus

@@ -52,7 +52,7 @@ class Mask:
     parameters, and its initialization commands (MATLAB syntax, also understood by
     PLECS), which compute the variables passed to the blocks inside it. The commands
     `simulink_init` run after them only in Simulink: they may call the functions of
-    the m-files written next to the model (`simulink._mfunction.PATH_FUNCTIONS`),
+    the m-files of the library (`simulink._mfunction.PATH_FUNCTIONS`),
     e.g., to compute lookup tables that the C-Script block of PLECS computes itself.
     """
 

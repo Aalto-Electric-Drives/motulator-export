@@ -549,8 +549,8 @@ def init_script(
     variables: list[tuple[str, Any]], values: dict[str, Any], comment: str
 ) -> str:
     """
-    Model initialization: the variables of the system model, and the variables of
-    the control system (par, cfg, vhz_ctrl, slew_rate, and pwm) from the parameter
+    Model initialization: the variables of the system model, and the structs of the
+    control system (par, cfg, vhz_ctrl, slew_rate, and pwm) from the parameter
     values of the control system (`_im.export_vhz_values`).
     """
     open_loop = values["L_M"] == float("inf")

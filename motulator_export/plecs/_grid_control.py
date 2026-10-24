@@ -908,9 +908,9 @@ def init_script(
 ) -> str:
     """
     Model initialization: the variables of the system model, and the structs of the
-    control system (cfg and pwm) from the parameter values of the control system
-    (`_grid.export_values`), of grid-following control (`gfl`) or grid-forming
-    control.
+    control system (cfg, inner_ctrl, and pwm) from the parameter values of the
+    control system (`_grid.export_values`), of grid-following control (`gfl`) or
+    grid-forming control.
     """
     if gfl:
         cfg = GFL_CFG_FIELDS

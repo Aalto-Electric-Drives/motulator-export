@@ -20,6 +20,7 @@ def write_model(
     ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the system.
@@ -44,6 +45,12 @@ def write_model(
         Simulation stop time (s).
     outputs : bool, optional
         Add the output ports "mdl" and "ctrl" for `simulate`, defaults to False.
+    library : bool, optional
+        Refer to the blocks of the library of the package (`motulator_lib.plecs`),
+        the control system and the GradNet machine, instead of copying them into the
+        model, defaults to False. The model refers to the library by a path relative
+        to the model file, and PLECS copies the blocks from it when it loads the
+        model.
 
     Returns
     -------
@@ -52,7 +59,7 @@ def write_model(
 
     """
     return _MODULES[system_type(mdl, ctrl)].write_model(
-        path, mdl, ctrl, t_stop, outputs
+        path, mdl, ctrl, t_stop, outputs, library
     )
 
 

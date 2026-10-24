@@ -642,8 +642,7 @@ def init_script(
     """
     Model initialization: the variables of the system model, and the structs of the
     control system (par, cfg, vector_ctrl, speed_ctrl, and pwm) from the parameter
-    values of the
-    control system (`_im.export_values`).
+    values of the control system (`_im.export_values`).
     """
     return (
         init_header(variables, comment)

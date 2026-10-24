@@ -39,9 +39,9 @@ from motulator_export.plecs import (
     _sm_control,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
-from motulator_export.plecs._control import T_S_EXPR, VALUES
+from motulator_export.plecs._control import T_S_EXPR
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
-from motulator_export.simulink._common import write_script
+from motulator_export.simulink._common import SIMULINK_SOURCES
 from motulator_export.simulink._mfunction import (
     block_mfunction,
     functions,
@@ -81,6 +81,9 @@ from tests.test_control import SYSTEMS, Compiled, init_script
 TESTS = Path(__file__).parent
 # Tolerance of the outputs relative to their magnitudes (at least 1)
 RTOL = 1e-9
+# The variables of the model initializations of the harnesses are cleared first, so
+# that the fields of a previous initialization (e.g., a flux map) are not left
+CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm\n"
 
 Run = Callable[[Netlist], list[list[float]]]
 
@@ -264,22 +267,21 @@ class Harnesses:
     def build(self, key: str, init: str) -> Path:
         """The harness model of the control system, built with the initialization
         when needed."""
+        import matlab  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
         name = f"harness_{key}"
         if key not in self.models:
             folder = self.tmp.mktemp(key)
-            path = folder / f"{name}.slx"
-            (folder / f"init_{name}.m").write_text(init, encoding="utf-8")
+            (folder / f"init_{name}.m").write_text(CLEAR + init, encoding="utf-8")
             block, _ = SYSTEMS[key]
-            fields = [
-                ("init_script", f"init_{name}"),
-                ("input_widths", block.input_widths),
-            ]
-            script = write_script(
-                path, block, VALUES, fields, "build_harness", T_S_EXPR, 1.0,
-                code="matlab",
+            self.eng.addpath(str(folder), nargout=0)
+            # Without the Engine API, pyright takes the module tests/matlab.py
+            widths = matlab.double([float(w) for w in block.input_widths])  # pyright: ignore[reportAttributeAccessIssue]
+            self.eng.build_harness(
+                name, str(folder), block.name, f"init_{name}", widths, T_S_EXPR,
+                nargout=0,
             )  # fmt: skip
-            self.eng.run(str(script), nargout=0)
-            self.models[key] = path
+            self.models[key] = folder / f"{name}.slx"
         return self.models[key]
 
     def lines(self, key: str) -> set[tuple[str, ...]]:
@@ -298,7 +300,7 @@ class Harnesses:
 
         name = f"harness_{key}"
         path = self.build(key, init)
-        path.with_name(f"init_{name}.m").write_text(init, encoding="utf-8")
+        path.with_name(f"init_{name}.m").write_text(CLEAR + init, encoding="utf-8")
         self.eng.eval(f"clear('init_{name}');", nargout=0)
         # The input of the sampling instant k at (k - 0.5)*T_s (k > 0), so that the
         # inputs are sampled at the instants regardless of the rounding of the time,
@@ -324,6 +326,7 @@ def harnesses(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Harnesses]:
     engine = pytest.importorskip("matlab.engine")
     eng = engine.start_matlab()
     eng.addpath(str(TESTS), nargout=0)
+    eng.addpath(str(SIMULINK_SOURCES), nargout=0)  # The package +motulator
     try:
         yield Harnesses(eng, tmp_path_factory)
     finally:
