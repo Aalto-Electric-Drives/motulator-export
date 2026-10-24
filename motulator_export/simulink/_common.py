@@ -114,6 +114,7 @@ def simulate(
     mdl_outputs: list[str],
     ctrl_signals: list[str],
     build: bool = True,
+    eng: Any = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
     Simulate a Simulink model via the MATLAB Engine API for Python.
@@ -130,6 +131,8 @@ def simulate(
         Names of the signals of the output port "ctrl".
     build : bool, optional
         Run the build script `build_<model>.m` first, defaults to True.
+    eng : MatlabEngine, optional
+        MATLAB engine to use, by default a new one, which is quit at the end.
 
     Returns
     -------
@@ -144,7 +147,9 @@ def simulate(
     import matlab.engine  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
     path = Path(path).resolve()
-    eng: Any = matlab.engine.start_matlab()
+    new = eng is None
+    if new:
+        eng = matlab.engine.start_matlab()
     try:
         # The package of motulator and its library on the path
         eng.addpath(str(SIMULINK_SOURCES), nargout=0)
@@ -164,7 +169,8 @@ def simulate(
         t = np.asarray(eng.eval("out.tout")).ravel()
         values = np.asarray(eng.eval("out.yout")).T
     finally:
-        eng.quit()
+        if new:
+            eng.quit()
     n_mdl = len(mdl_outputs)
     if values.shape[0] != n_mdl + len(ctrl_signals):
         raise RuntimeError(f"Unexpected number of output signals: {values.shape}")

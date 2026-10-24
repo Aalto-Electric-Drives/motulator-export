@@ -1,5 +1,6 @@
 """
-Test the control systems with MATLAB Function blocks in Simulink.
+Test the Simulink export in MATLAB: the control systems with MATLAB Function blocks,
+the libraries, and the models of the examples.
 
 The blocks of the control systems run the MATLAB port of motulator in MATLAB Function
 blocks (`code` "matlab" of the Simulink export). Each control system is built alone
@@ -11,8 +12,15 @@ monitored signals, should agree with those of the S-functions of the blocks
 (`tests/netlist.py`), which agree with motulator, to the rounding errors (amplified
 by the replay in the vector control of the drives, see `test_matlab_function`).
 
-Needs MATLAB with the MATLAB Engine API for Python (skipped otherwise) and gcc. Run
-from the repository root:
+The libraries of both codes are built (`test_library`), and the systems of the
+examples are built by the scripts of `simulink.write_model` and simulated, and their
+signals compared with the native simulation (`test_example`), so that this module
+tests the whole Simulink export before a release. It takes several minutes, mostly
+for the build of the library with S-functions and the compilation of the models.
+
+Needs MATLAB with the MATLAB Engine API for Python (skipped otherwise) and gcc; the
+S-functions in MATLAB need a C compiler for mex (skipped otherwise). Run from the
+repository root:
 
     pytest tests/test_matlab_function.py
 
@@ -20,15 +28,18 @@ from the repository root:
 
 # %%
 import ctypes
+import importlib
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 import pytest
+from motulator.common.model import SolverCfg
 from motulator.drive import model
 from motulator.grid import model as grid_model
 
+from motulator_export import native, simulink
 from motulator_export.plecs import (
     _grid,
     _grid_control,
@@ -40,6 +51,7 @@ from motulator_export.plecs import (
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
 from motulator_export.plecs._control import T_S_EXPR
+from motulator_export.plecs._library import CONTROL_BLOCKS
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
 from motulator_export.simulink._common import SIMULINK_SOURCES
 from motulator_export.simulink._mfunction import (
@@ -49,7 +61,7 @@ from motulator_export.simulink._mfunction import (
     library,
     reference_luts_mfunction,
 )
-from motulator_export.simulink._render import netlist_rows, with_signals, wrapper
+from motulator_export.simulink._render import CODES, netlist_rows, with_signals, wrapper
 from tests.c_port import arr
 from tests.matlab import block_params
 from tests.netlist import Netlist
@@ -456,3 +468,106 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
         err = np.max(np.abs(f(x) - y)) / np.max(np.abs(y))
         print(f"  {name}: max relative error {err:.3g}")
         assert err < (RTOL if gradnet else 1e-12)
+
+
+# %%
+# Libraries and models of the examples
+EXAMPLES = TESTS.parent / "examples"
+# Systems of the examples (the scripts of examples/), and the tolerance of their
+# signals relative to the magnitudes, compared with the native simulation (the
+# differences from motulator are about 1e-6 relative, see the Simulink README)
+EXAMPLE_SYSTEMS = [
+    "ipmsm_2kw_fvc",
+    "pmsyrm_6kw_gn_fvc",
+    "im_2kw_cvc",
+    "im_2kw_vhz",
+    "im_2kw_vhz_open_loop",
+    "gfl_10kva_lcl",
+    "gfm_13kva_do",
+]
+EXAMPLE_RTOL = 1e-4
+
+
+def require_compiler(eng: Any, code: str) -> None:
+    """Skip the S-functions (`code` "c") without a C compiler for mex."""
+    if code == "c" and not eng.eval(
+        "~isempty(mex.getCompilerConfigurations('C', 'Selected'))"
+    ):
+        pytest.skip("No C compiler for mex")
+
+
+@pytest.mark.parametrize("code", CODES)
+def test_library(harnesses: Harnesses, code: str) -> None:
+    """
+    The library should be built, and the lines of its control systems should connect
+    the ports of the netlists, also those of the S-functions, whose parameters are
+    set in the library after the lines (see add_control_system.m).
+    """
+    eng = harnesses.eng
+    require_compiler(eng, code)
+    lib = eng.eval(f"motulator.internal.library('{code}')")
+    for block in CONTROL_BLOCKS:
+        rows = netlist_rows(with_signals(block.netlist(), MONITOR), code=code)
+        expected = {(path, src, dst) for path, src, dst, _ in rows["lines"]}
+        lines = eng.model_lines(f"{lib}/{block.name}")
+        assert {tuple(row.split("|")) for row in lines} == expected, block.name
+
+
+def example_system(name: str) -> tuple[Any, Any, float]:
+    """The system of an example with its references (as the script sets them), and
+    its stop time."""
+    open_loop = name.endswith("_open_loop")
+    ex = importlib.import_module(name.removesuffix("_open_loop"))
+    mdl, ctrl = ex.build_system(True) if open_loop else ex.build_system()
+    if hasattr(ex, "W_M_REF"):
+        ctrl.set_speed_ref(ex.W_M_REF)
+        mdl.mechanics.set_external_load_torque(ex.TAU_L)
+    elif hasattr(ex, "Q_G_REF"):
+        ctrl.set_power_ref(ex.P_G_REF)
+        ctrl.set_reactive_power_ref(ex.Q_G_REF)
+    else:
+        ctrl.set_ac_voltage_ref(ex.V_C_REF)
+        ctrl.set_power_ref(ex.P_G_REF)
+    return mdl, ctrl, ex.T_STOP
+
+
+@pytest.mark.parametrize("code", CODES)
+@pytest.mark.parametrize("name", EXAMPLE_SYSTEMS)
+def test_example(
+    harnesses: Harnesses,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    code: str,
+) -> None:
+    """
+    The system of the example should be built by the script of
+    `simulink.write_model` (with the MATLAB classes and the blocks of the library),
+    and the signals of its system model should agree with those of the native
+    simulation (motulator to the rounding errors) to EXAMPLE_RTOL relative to their
+    magnitudes. The scripts of the drives and the grid converters run in the same
+    MATLAB session, so their imports must not conflict.
+    """
+    require_compiler(harnesses.eng, code)
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system(name)
+    path = tmp_path / f"{name}_{code}.slx"
+    script = simulink.write_model(path, mdl, ctrl, t_stop, code=code)
+    # Simulated after the script is written, since the simulation changes the states
+    cfg = SolverCfg(rtol=1e-9, atol=1e-9)
+    res = native.Simulation(mdl, ctrl, cfg=cfg).simulate(t_stop)
+    t = res.mdl.t[res.mdl.t <= t_stop]
+    signals, _ = simulink.simulate(script, t, mdl, ctrl, eng=harnesses.eng)
+    if isinstance(mdl, model.Drive):
+        machine = res.mdl.machine
+        expected = {"w_M": res.mdl.mechanics.w_M, "tau_M": machine.tau_M}
+        expected["i_s_ab"] = machine.i_s_ab
+    else:
+        expected = {"i_c_ab": res.mdl.ac_filter.i_c_ab}
+        if "i_g_ab" in signals:  # LCL filter
+            expected["i_g_ab"] = res.mdl.ac_filter.i_g_ab
+    for key, value in expected.items():
+        err = np.max(np.abs(signals[key] - value[: len(t)]))
+        scale = np.max(np.abs(value))
+        print(f"  {key}: max difference {err:.3g} (scale {scale:.3g})")
+        assert err <= EXAMPLE_RTOL * scale

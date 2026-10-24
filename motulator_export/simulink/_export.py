@@ -12,7 +12,7 @@ for the dead time and the threshold voltage, as on the hardware.
 """
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 from motulator.common.model._converter import VoltageSourceConverter
@@ -121,6 +121,7 @@ def simulate(
     mdl: Drive | GridConverterSystem,
     ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
     build: bool = True,
+    eng: Any = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
     Simulate the Simulink model of the system via the MATLAB Engine API for Python.
@@ -139,6 +140,9 @@ def simulate(
         monitored signals.
     build : bool, optional
         Run the build script `build_<model>.m` first, defaults to True.
+    eng : MatlabEngine, optional
+        MATLAB engine to use, e.g., for several simulations. By default, a new one
+        is started, and quit at the end.
 
     Returns
     -------
@@ -163,7 +167,7 @@ def simulate(
         signals = _im.control_block(cast(VectorControlSystem, ctrl)).signals
     else:
         outputs, signals = MDL_OUTPUTS, _sm.FVC_BLOCK.signals
-    results = _simulate(model_path(path), t_eval, outputs, signals, build)
+    results = _simulate(model_path(path), t_eval, outputs, signals, build, eng)
     return add_space_vectors(results[0]), results[1]
 
 
