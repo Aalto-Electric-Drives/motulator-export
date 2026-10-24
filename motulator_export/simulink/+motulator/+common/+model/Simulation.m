@@ -12,6 +12,13 @@ classdef Simulation < handle
     %   of the parts of MDL and CTRL as structs, are in its model workspace, and
     %   the masks of the blocks refer to them.
     %
+    %   SIM.BUILD(..., control_block=BLOCK) builds the model with the block BLOCK
+    %   of another library (e.g., 'my_lib/Control system', the library on the
+    %   MATLAB path) as the control system, instead of the block of the class of
+    %   CTRL, keeping the values of its mask. It must have the inputs and the
+    %   outputs 'd_abc' and 'signals' of that block; its further outputs are shown
+    %   in Display blocks.
+    %
     %   RES = SIM.SIMULATE(t_stop=...) simulates the built model, by default to its
     %   stop time, and returns the results (SimulationResults).
 
@@ -37,11 +44,15 @@ classdef Simulation < handle
         function build(obj, name, varargin)
             %BUILD Build the Simulink model and save it.
             opts = motulator.internal.options(varargin, ...
-                struct('t_stop', 1, 'folder', pwd, 'code', 'c'));
+                struct('t_stop', 1, 'folder', pwd, 'code', 'c', 'control_block', ''));
             code = char(opts.code);
             [variables, builder, obj.mdl_signals] = ...
                 motulator.internal.system_model(obj.mdl);
             c = motulator.internal.control_system(obj.ctrl, obj.mdl);
+            if strlength(opts.control_block) > 0
+                c.block = char(opts.control_block);
+                load_system(strtok(c.block, '/'));
+            end
             lib = motulator.internal.library(code);
             fields = fieldnames(c.variables);
             for k = 1:numel(fields)

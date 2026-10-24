@@ -22,7 +22,8 @@ lcl = isa(mdl.ac_filter, 'motulator.grid.model.LCLFilter');
 % period, the PWM, the converter, and the AC filter, with the grid below the line
 % from the converter to the filter
 n_in = numel(info.inputs);
-add_block([lib '/' cs], [sys '/' cs], 'Position', [160 100 300 100 + 50*n_in]);
+add_block(control_block(c, lib), [sys '/' cs], ...
+    'Position', [160 100 300 100 + 50*n_in]);
 add([sys '/Delay'], 'built-in/UnitDelay', [340 0 375 30], 'SampleTime', c.T_s_expr);
 add_block([lib '/CarrierComparison'], [sys '/PWM'], 'Position', [410 0 490 60]);
 set_param([sys '/PWM'], 'T_s', c.T_s_expr);

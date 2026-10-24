@@ -41,6 +41,7 @@ The classes of the package `+motulator` have the names, the arguments, and the d
 The arguments are the public properties, set by name-value arguments (`motulator.internal.Object`), `[]` being `None`, and `params` gives them as a struct, nested for the arguments that are objects (e.g., the struct `vector_ctrl` with the fields `par` and `cfg`).
 `Simulation.build` builds the model: the parameters of the model, the structs of the parts of the system model and the control system named as in *motulator* (`machine`, `mechanics`, `converter`, `vector_ctrl`, `speed_ctrl`, `pwm`, etc.), are put in its model workspace, and the blocks of the library are added, whose masks refer to them by default, and connected (`motulator.internal.build_drive` and `build_grid`).
 The references of the control system are sampled to switch at the same sampling instant as in *motulator* (`StepSignal.sampled`, the counterpart of `sampled_step`).
+With `control_block`, `Simulation.build` takes the control system from a block of another library with the same inputs and outputs, keeping the values of its mask (e.g., a block with tunable parameters), and shows its further outputs in Display blocks (`motulator.internal.control_block` and `add_outputs`); `write_script` writes such a build script with its argument `control_block`.
 `Simulation.simulate` runs the model and returns the signals of its output ports (`SimulationResults`), which `plot` shows as the scope of the model.
 
 ## Library

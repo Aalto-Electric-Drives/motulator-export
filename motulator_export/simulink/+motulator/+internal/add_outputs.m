@@ -5,7 +5,9 @@ function add_outputs(sys, cs, scope, x0, y_ctrl)
 %   port 'ctrl' of the monitored signals (the output 'signals' of the control
 %   system CS), and a scope of the signals selected from [mdl; ctrl] by the rows
 %   {name, indices} of SCOPE. The scope is placed from X0 to the right, and the
-%   monitored signals run in the lane Y_CTRL below the system model.
+%   monitored signals run in the lane Y_CTRL below the system model. The further
+%   outputs of the control system, if any (e.g., a status of a block of another
+%   library, see Simulation.build), are shown in Display blocks below the lane.
 import motulator.internal.*
 
 % Output port 'mdl'
@@ -39,4 +41,16 @@ pos = get_param([sys '/Scope'], 'Position');
 add([sys '/ctrl'], 'built-in/Outport', [x0 + 240 0 x0 + 270 14]);
 align(sys, 'ctrl', 'Inport', 1, pos(4) + 40);
 route(sys, [cs '/2'], 'ctrl/1', 'x', 320, 'y', y_ctrl, 'x', x0 - 20);
+
+% Further outputs of the control system, named by their ports, the lines left of
+% the lane of the monitored signals
+outs = find_system([sys '/' cs], 'SearchDepth', 1, 'FollowLinks', 'on', ...
+    'LookUnderMasks', 'all', 'BlockType', 'Outport');
+ports = str2double(get_param(outs, 'Port'));
+for k = 3:numel(outs)
+    name = get_param(outs{ports == k}, 'Name');
+    add([sys '/' name], 'built-in/Display', [340 0 400 30]);
+    align(sys, name, 'Inport', 1, y_ctrl + 50*(k - 2));
+    route(sys, sprintf('%s/%d', cs, k), [name '/1'], 'x', 310 - 5*(k - 3));
+end
 end

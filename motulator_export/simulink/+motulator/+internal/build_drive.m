@@ -19,7 +19,7 @@ in = @(name) find(strcmp(info.inputs, name));
 
 % Main path in a row: the control system, the computational delay of one sampling
 % period, the PWM, the converter, the machine, and the mechanics
-add_block([lib '/' cs], [sys '/' cs], 'Position', [160 100 300 300]);
+add_block(control_block(c, lib), [sys '/' cs], 'Position', [160 100 300 300]);
 add([sys '/Delay'], 'built-in/UnitDelay', [340 0 375 30], 'SampleTime', c.T_s_expr);
 add_block([lib '/CarrierComparison'], [sys '/PWM'], 'Position', [410 0 490 60]);
 set_param([sys '/PWM'], 'T_s', c.T_s_expr);

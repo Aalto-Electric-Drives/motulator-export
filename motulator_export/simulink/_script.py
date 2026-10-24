@@ -405,11 +405,18 @@ def _control_system(
 
 # %%
 def write_script(
-    path: str | Path, mdl: Any, ctrl: Any, t_stop: float, code: str
+    path: str | Path,
+    mdl: Any,
+    ctrl: Any,
+    t_stop: float,
+    code: str,
+    control_block: str | None = None,
 ) -> Path:
     """
     Write the script `build_<model>.m` that builds the Simulink model `path` (.slx)
-    of the system, in the folder of the model, and return its path.
+    of the system, in the folder of the model, and return its path. The control
+    system is the block `control_block` of another library if given (see
+    `Simulation.build`).
     """
     path = Path(path)
     kind = system_type(mdl, ctrl)
@@ -427,6 +434,9 @@ def write_script(
         else "the blocks of the control system are MATLAB Function blocks"
     )
     code_arg = "" if code == "c" else ", code='matlab'"
+    block_arg = (
+        "" if control_block is None else f", control_block={_value(control_block)}"
+    )
     text = (
         f"% Build the Simulink model {path.stem}.slx in the folder of this script.\n"
         "% Written by motulator_export.simulink from motulator: the system is built\n"
@@ -442,7 +452,7 @@ def write_script(
         f"%% Simulink model ({blocks})\n"
         "simulation = Simulation(mdl, ctrl);\n"
         f"simulation.build('{path.stem}', t_stop={_value(t_stop)}, folder=here"
-        f"{code_arg});\n"
+        f"{code_arg}{block_arg});\n"
         "% Simulate the model and plot the results:\n"
         "%   res = simulation.simulate();\n"
         "%   res.plot();\n"

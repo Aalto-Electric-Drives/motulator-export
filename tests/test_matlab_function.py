@@ -62,6 +62,7 @@ from motulator_export.simulink._mfunction import (
     reference_luts_mfunction,
 )
 from motulator_export.simulink._render import CODES, netlist_rows, with_signals, wrapper
+from motulator_export.simulink._script import write_script
 from tests.c_port import arr
 from tests.matlab import block_params
 from tests.netlist import Netlist
@@ -511,6 +512,51 @@ def test_library(harnesses: Harnesses, code: str) -> None:
         expected = {(path, src, dst) for path, src, dst, _ in rows["lines"]}
         lines = eng.model_lines(f"{lib}/{block.name}")
         assert {tuple(row.split("|")) for row in lines} == expected, block.name
+
+
+def test_control_block(
+    harnesses: Harnesses, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A model should be built with the control-system block of another library
+    (`control_block` of `Simulation.build`), here a copy of the block of the library
+    with the further output status, which should be shown in a Display block.
+    """
+    eng = harnesses.eng
+    lib = eng.eval("motulator.internal.library('matlab')")
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system("im_2kw_vhz")
+    name = "Observer-based VHz control"
+    block = f"ctrl_lib/{name}"
+    eng.eval(
+        "; ".join(
+            [
+                "new_system('ctrl_lib', 'Library')",
+                f"add_block('{lib}/{name}', '{block}')",
+                f"set_param('{block}', 'LinkStatus', 'none')",
+                f"add_block('built-in/Constant', '{block}/one', 'Value', '1')",
+                f"add_block('built-in/Outport', '{block}/status')",
+                f"add_line('{block}', 'one/1', 'status/1')",
+                f"save_system('ctrl_lib', '{tmp_path / 'ctrl_lib.slx'}')",
+                "close_system('ctrl_lib')",
+                f"addpath('{tmp_path}')",
+            ]
+        ),
+        nargout=0,
+    )
+    try:
+        path = tmp_path / "vhz_block.slx"
+        script = write_script(path, mdl, ctrl, t_stop, "matlab", control_block=block)
+        eng.run(str(script), nargout=0)
+        assert eng.get_param(f"vhz_block/{name}", "ReferenceBlock") == block
+        assert eng.get_param("vhz_block/status", "BlockType") == "Display"
+        handles = eng.get_param("vhz_block/status", "PortConnectivity")
+        assert handles["SrcBlock"] == eng.get_param(f"vhz_block/{name}", "Handle")
+    finally:
+        eng.eval(
+            f"bdclose('vhz_block'); bdclose('ctrl_lib'); rmpath('{tmp_path}')",
+            nargout=0,
+        )
 
 
 def example_system(name: str) -> tuple[Any, Any, float]:
