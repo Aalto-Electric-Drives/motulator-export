@@ -28,7 +28,6 @@ repository root:
 
 # %%
 import ctypes
-import importlib
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -80,12 +79,15 @@ from tests.sfunctions import (
     start,
 )
 from tests.systems import (
+    EXAMPLE_SYSTEMS,
+    EXAMPLES,
     SM_PAR,
     SM_VHZ_CASES,
     SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
     VHZ_RTOL,
+    example_system,
     gfl_system,
     gfm_system,
     gradnet_control_system,
@@ -515,20 +517,9 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
 
 # %%
 # Libraries and models of the examples
-EXAMPLES = TESTS.parent / "examples"
-# Systems of the examples (the scripts of examples/), and the tolerance of their
-# signals relative to the magnitudes, compared with the native simulation (the
-# differences from motulator are about 1e-6 relative, see the Simulink README)
-EXAMPLE_SYSTEMS = [
-    "ipmsm_2kw_fvc",
-    "ipmsm_2kw_vhz",
-    "pmsyrm_6kw_gn_fvc",
-    "im_2kw_cvc",
-    "im_2kw_vhz",
-    "im_2kw_vhz_open_loop",
-    "gfl_10kva_lcl",
-    "gfm_13kva_do",
-]
+# Tolerance of the signals of the systems of the examples relative to the magnitudes,
+# compared with the native simulation (the differences from motulator are about 1e-6
+# relative, see the Simulink README)
 EXAMPLE_RTOL = 1e-4
 
 
@@ -620,24 +611,6 @@ def test_control_block(
             f"bdclose('vhz_block'); bdclose('ctrl_lib'); rmpath('{tmp_path}')",
             nargout=0,
         )
-
-
-def example_system(name: str) -> tuple[Any, Any, float]:
-    """The system of an example with its references (as the script sets them), and
-    its stop time."""
-    open_loop = name.endswith("_open_loop")
-    ex = importlib.import_module(name.removesuffix("_open_loop"))
-    mdl, ctrl = ex.build_system(True) if open_loop else ex.build_system()
-    if hasattr(ex, "W_M_REF"):
-        ctrl.set_speed_ref(ex.W_M_REF)
-        mdl.mechanics.set_external_load_torque(ex.TAU_L)
-    elif hasattr(ex, "Q_G_REF"):
-        ctrl.set_power_ref(ex.P_G_REF)
-        ctrl.set_reactive_power_ref(ex.Q_G_REF)
-    else:
-        ctrl.set_ac_voltage_ref(ex.V_C_REF)
-        ctrl.set_power_ref(ex.P_G_REF)
-    return mdl, ctrl, ex.T_STOP
 
 
 @pytest.mark.parametrize("code", CODES)

@@ -5,6 +5,7 @@ motulator, and the signals compared with those of the exported control systems.
 """
 
 # %%
+import importlib
 from collections.abc import Callable
 from math import inf, pi
 from pathlib import Path
@@ -358,3 +359,39 @@ def gradnet_control_system() -> VectorControlSystem:
         sm_control.SpeedController(J=0.05, alpha_s=2 * pi * 4),
     )
     return ctrl
+
+
+# %%
+# Systems of the examples (the scripts of examples/)
+EXAMPLES = Path(__file__).parents[1] / "examples"
+EXAMPLE_SYSTEMS = [
+    "ipmsm_2kw_fvc",
+    "ipmsm_2kw_vhz",
+    "pmsyrm_6kw_gn_fvc",
+    "im_2kw_cvc",
+    "im_2kw_vhz",
+    "im_2kw_vhz_open_loop",
+    "gfl_10kva_lcl",
+    "gfm_13kva_do",
+]
+
+
+def example_system(name: str) -> tuple[Any, Any, float]:
+    """
+    The system of an example with its references (as the script sets them), and its
+    stop time. The folder `EXAMPLES` must be on the path, since the scripts import
+    their helpers.
+    """
+    open_loop = name.endswith("_open_loop")
+    ex = importlib.import_module(name.removesuffix("_open_loop"))
+    mdl, ctrl = ex.build_system(True) if open_loop else ex.build_system()
+    if hasattr(ex, "W_M_REF"):
+        ctrl.set_speed_ref(ex.W_M_REF)
+        mdl.mechanics.set_external_load_torque(ex.TAU_L)
+    elif hasattr(ex, "Q_G_REF"):
+        ctrl.set_power_ref(ex.P_G_REF)
+        ctrl.set_reactive_power_ref(ex.Q_G_REF)
+    else:
+        ctrl.set_ac_voltage_ref(ex.V_C_REF)
+        ctrl.set_power_ref(ex.P_G_REF)
+    return mdl, ctrl, ex.T_STOP

@@ -231,10 +231,13 @@ def _sm_script(
     """The system model and the control system of a synchronous machine drive."""
     if isinstance(ctrl, VHzControlSystem):
         values, flux_map = _sm.export_vhz_values(ctrl)
-        cls, fields = sm_control.ObserverBasedVHzControllerCfg, SM_VHZ_CFG_FIELDS
+        cfg_cls, cfg_fields = (
+            sm_control.ObserverBasedVHzControllerCfg,
+            SM_VHZ_CFG_FIELDS,
+        )
     else:
         values, flux_map = _sm.export_values(ctrl)
-        cls, fields = sm_control.FluxVectorControllerCfg, FVC_CFG_FIELDS
+        cfg_cls, cfg_fields = sm_control.FluxVectorControllerCfg, FVC_CFG_FIELDS
     model: list[str] = []
     if _sm.has_gradnet_plant(mdl):
         par = cast(SpatialSaturatedSynchronousMachinePars, mdl.machine.par)
@@ -275,7 +278,8 @@ def _sm_script(
             + ";"
         )
         est = "est_par"
-    cfg = _call(cls.__name__, [], [(f, values[f]) for f in fields], _defaults(cls))
+    cfg_values = [(f, values[f]) for f in cfg_fields]
+    cfg = _call(cfg_cls.__name__, [], cfg_values, _defaults(cfg_cls))
     control.append(f"cfg = {cfg};")
     if isinstance(ctrl, VHzControlSystem):
         control += [

@@ -1,6 +1,7 @@
 """
 Test the checks of the inputs of the exports: the step signals, the references, and
-the supported systems. PLECS and MATLAB are not needed.
+the supported systems, and the build scripts of the Simulink models of the examples.
+PLECS and MATLAB are not needed.
 
 Run from the repository root:
 
@@ -30,7 +31,16 @@ from motulator_export.plecs._common import LIBRARY
 from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
 from motulator_export.simulink._export import model_path
-from tests.systems import BASE, CURRENT_MAP, im_system, sm_system
+from motulator_export.simulink._render import CODES
+from tests.systems import (
+    BASE,
+    CURRENT_MAP,
+    EXAMPLE_SYSTEMS,
+    EXAMPLES,
+    example_system,
+    im_system,
+    sm_system,
+)
 
 TOOLS = [(plecs, "model.plecs"), (simulink, "model.slx")]
 T_STOP = 0.3
@@ -650,3 +660,26 @@ def test_library_references(tmp_path: Path, gradnet: bool) -> None:
         assert re.search(ref % (re.escape(block), lib), text)
     assert text.count("ModelReference") == len(blocks)
     assert "CScript" not in text
+
+
+@pytest.mark.parametrize("code", CODES)
+@pytest.mark.parametrize("name", EXAMPLE_SYSTEMS)
+def test_example_scripts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, code: str
+) -> None:
+    """
+    The build scripts of the Simulink models of the examples (examples/simulink/)
+    should be those written from the systems of the examples, apart from the path of
+    the package, i.e., up to date.
+    """
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system(name)
+    suffix = "_matlab" if code == "matlab" else ""
+    path = tmp_path / f"{name}{suffix}.slx"
+    script = simulink.write_model(path, mdl, ctrl, t_stop, code=code)
+
+    def without_path(text: str) -> str:
+        return re.sub(r"^addpath\(.*\);$", "", text, flags=re.MULTILINE)
+
+    expected = (EXAMPLES / "simulink" / script.name).read_text(encoding="utf-8")
+    assert without_path(script.read_text(encoding="utf-8")) == without_path(expected)
