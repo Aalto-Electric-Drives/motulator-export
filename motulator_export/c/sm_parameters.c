@@ -88,6 +88,11 @@ static double complex iterate_i_s_dq(const SynchronousMachinePars *par,
     return i_s;
 }
 
+static double complex mat_vec(const IncrIndMat *L, double complex x)
+{
+    return L->L_dd * creal(x) + I * L->L_qq * cimag(x) + I * L->L_dq * conj(x);
+}
+
 static double complex aux_flux(const IncrIndMat *L, double complex i_s,
                                double complex psi_s)
 {

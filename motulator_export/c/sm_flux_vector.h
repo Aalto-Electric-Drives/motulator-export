@@ -5,7 +5,8 @@
  * Python counterparts:
  *   motulator/drive/control/_sm_observers.py      FluxObserver, SpeedFluxObserver,
  *                                                 create_vhz_observer
- *   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based)
+ *   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based,
+ *                                                 with the current reference)
  *   motulator/drive/control/_sm_flux_vector.py    FluxTorqueController,
  *                                                 FluxVectorController,
  *                                                 ObserverBasedVHzControllerCfg,
@@ -75,15 +76,24 @@ typedef struct {
     double complex i_s_ab;
 } SpeedFluxObserver;
 
-/* Flux and torque reference generator based on precomputed lookup tables */
+/* Flux and torque reference generator based on precomputed lookup tables, with the
+ * current reference of current-vector control as a state, driven toward the flux
+ * and torque references by the tracking law (alpha the bandwidth, zero if not used,
+ * as in flux-vector and V/Hz control) */
 typedef struct {
+    SynchronousMachinePars par;
     double k_u;
     double k_mtpv;
+    double alpha;
     double psi_s_min;
     double psi_s_max;
     LUT psi_s_mtpa;  /* MTPA flux magnitude vs. torque */
     LUT tau_M_cl;    /* Current-limit torque vs. flux magnitude */
     LUT tau_M_mtpv;  /* MTPV torque vs. flux magnitude */
+    /* States: the current reference, and the flux and torque references tracked */
+    double complex i_s_ref;
+    double tau_M_ref;
+    double psi_s_ref;
 } ReferenceGenerator;
 
 typedef struct {
@@ -114,6 +124,7 @@ typedef struct {
     double w_M;
     double tau_M;
     double psi_s;
+    double complex i_s; /* Current reference of current-vector control */
     double complex u_s;
     double complex u_c_ab; /* Limited converter voltage from the PWM */
 } References;

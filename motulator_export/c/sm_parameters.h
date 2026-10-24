@@ -46,6 +46,9 @@ static IncrIndMat incr_ind_mat(const SynchronousMachinePars *par, double complex
 static double complex iterate_i_s_dq(const SynchronousMachinePars *par,
                                      double complex psi_s);
 
+/* Matrix-vector product L*x of the incremental inductance matrix (mat_vec) */
+static double complex mat_vec(const IncrIndMat *L, double complex x);
+
 /* Auxiliary flux linkage and current vectors */
 static double complex aux_flux(const IncrIndMat *L, double complex i_s,
                                double complex psi_s);
