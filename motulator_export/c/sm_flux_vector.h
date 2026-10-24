@@ -1,14 +1,19 @@
 /*
- * Sensorless flux-vector control of synchronous machine drives, ported from
- * motulator.
+ * Sensorless flux-vector control and observer-based V/Hz control of synchronous
+ * machine drives, ported from motulator.
  *
  * Python counterparts:
- *   motulator/drive/control/_sm_observers.py      FluxObserver, SpeedFluxObserver
+ *   motulator/drive/control/_sm_observers.py      FluxObserver, SpeedFluxObserver,
+ *                                                 create_vhz_observer
  *   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based)
  *   motulator/drive/control/_sm_flux_vector.py    FluxTorqueController,
- *                                                 FluxVectorController
+ *                                                 FluxVectorController,
+ *                                                 ObserverBasedVHzControllerCfg,
+ *                                                 ObserverBasedVHzController
  *   motulator/drive/control/_base.py              DriveControlSystem,
- *                                                 VectorControlSystem
+ *                                                 VectorControlSystem,
+ *                                                 VHzControlSystem
+ *   motulator/common/control/_controllers.py      RateLimiter
  *   motulator/common/control/_base.py             ControlSystem (gate enable)
  *   motulator/drive/control/_common.py            FluxTorqueControllerBase,
  *                                                 SpeedController
@@ -171,6 +176,60 @@ static void vector_control_system_compute_output(VectorControlSystem *self,
                                                  const Measurements *meas,
                                                  double w_M_ref, int enabled);
 static void vector_control_system_update(VectorControlSystem *self);
+
+/* Observer-based V/Hz controller configuration (ObserverBasedVHzControllerCfg). As in
+ * FluxVectorControllerCfg, the optional parameters default to None, represented by
+ * NAN, and the observer gain is k_o(w_m) = k_o[0] + k_o[1]*abs(w_m). */
+typedef struct {
+    double i_s_max;
+    double alpha_psi;
+    double alpha_tau;
+    double alpha_f;
+    double alpha_o;
+    double k_o[2];
+    double k_u;
+    double k_mtpv;
+    double psi_s_min;
+    double psi_s_max;
+    double T_s;
+} SMVHzControllerCfg;
+
+/* Observer-based V/Hz controller (ObserverBasedVHzController): the flux observer
+ * without speed estimation (create_vhz_observer), whose rotor speed is the
+ * rate-limited speed reference, and the flux and torque references from the
+ * low-pass-filtered torque estimate */
+typedef struct {
+    double T_s;
+    double alpha_f;
+    ReferenceGenerator reference_gen;
+    FluxTorqueController flux_torque_ctrl;
+    FluxObserver observer;
+    double tau_M_lpf; /* Low-pass-filtered torque estimate (state) */
+} SMVHzController;
+
+/* V/Hz control system (VHzControlSystem). While the gates are blocked, the converter
+ * voltage is unknown: the observer runs on its open-circuit model, and the
+ * controller computes its standby output. */
+typedef struct {
+    PWM pwm;
+    double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
+    SMVHzController vhz_ctrl;
+    RateLimiter rate_limiter; /* Of the speed reference (mechanical rad/s^2) */
+    /* Workspace variables passed from the output to the update function */
+    ObserverOutputs fbk;
+    References ref;
+} SMVHzControlSystem;
+
+static SMVHzControllerCfg sm_vhz_controller_cfg(double i_s_max);
+
+static void sm_vhz_control_system_init(SMVHzControlSystem *self,
+                                       SynchronousMachinePars par,
+                                       const SMVHzControllerCfg *cfg, double slew_rate);
+/* Output of the control loop, with the gate enable at the sampling instant */
+static void sm_vhz_control_system_compute_output(SMVHzControlSystem *self,
+                                                 const Measurements *meas,
+                                                 double w_M_ref, int enabled);
+static void sm_vhz_control_system_update(SMVHzControlSystem *self);
 
 /* Signal vectors of the modular control system, in which each class is a block (see
  * motulator_export.plecs._sm): the measurements (meas), the feedback signals (fbk),

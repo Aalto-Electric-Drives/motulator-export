@@ -538,6 +538,126 @@ static void vector_control_system_update(VectorControlSystem *self)
     self->release_step = self->vector_ctrl.sensorless && !self->enabled;
 }
 
+/* SMVHzController -------------------------------------------------------- */
+
+static SMVHzControllerCfg sm_vhz_controller_cfg(double i_s_max)
+{
+    SMVHzControllerCfg cfg;
+    cfg.i_s_max = i_s_max;
+    cfg.alpha_psi = 2.0 * M_PI * 100.0;
+    cfg.alpha_tau = 2.0 * M_PI * 20.0;
+    cfg.alpha_f = 2.0 * M_PI * 1.0;
+    cfg.alpha_o = 2.0 * M_PI * 200.0;
+    cfg.k_o[0] = NAN;
+    cfg.k_o[1] = NAN;
+    cfg.k_u = 0.9;
+    cfg.k_mtpv = 0.9;
+    cfg.psi_s_min = NAN;
+    cfg.psi_s_max = INFINITY;
+    cfg.T_s = 250e-6;
+    return cfg;
+}
+
+static void sm_vhz_ctrl_init(SMVHzController *self, SynchronousMachinePars par,
+                             const SMVHzControllerCfg *cfg)
+{
+    /* Default observer gain of create_vhz_observer (default_sensorless_k_o) */
+    double k_o[2] = {cfg->k_o[0], cfg->k_o[1]};
+    if (isnan(k_o[0]) || isnan(k_o[1])) {
+        IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);
+        k_o[0] = 0.25 * par.R_s * (1.0 / L_s0.L_dd + 1.0 / L_s0.L_qq);
+        k_o[1] = 0.2;
+    }
+    self->T_s = cfg->T_s;
+    self->alpha_f = cfg->alpha_f;
+    self->tau_M_lpf = 0.0;
+    /* The current reference is not used, so its tracking is not ported */
+    reference_gen_init(&self->reference_gen, &par, cfg->i_s_max, cfg->psi_s_min,
+                       cfg->psi_s_max, cfg->k_u, cfg->k_mtpv, NULL);
+    flux_torque_ctrl_init(&self->flux_torque_ctrl, par, cfg->alpha_psi, cfg->alpha_tau,
+                          0.0);
+    /* First-order angle estimation */
+    flux_observer_init(&self->observer, par, matched_pole(cfg->alpha_o, cfg->T_s),
+                       k_o);
+}
+
+/* SMVHzControlSystem ----------------------------------------------------- */
+
+static void sm_vhz_control_system_init(SMVHzControlSystem *self,
+                                       SynchronousMachinePars par,
+                                       const SMVHzControllerCfg *cfg, double slew_rate)
+{
+    pwm_init(&self->pwm, 1.5);
+    pwm_set_overmodulation(&self->pwm, 1); /* Default of VHzControlSystem: MME */
+    self->k_comp = 1.5; /* k_comp of ObserverBasedVHzController */
+    sm_vhz_ctrl_init(&self->vhz_ctrl, par, cfg);
+    rate_limiter_init(&self->rate_limiter, slew_rate);
+}
+
+static void sm_vhz_control_system_compute_output(SMVHzControlSystem *self,
+                                                 const Measurements *meas,
+                                                 double w_M_ref, int enabled)
+{
+    SMVHzController *ctrl = &self->vhz_ctrl;
+    ObserverOutputs *fbk = &self->fbk;
+    References *ref = &self->ref;
+    double T_s = ctrl->T_s;
+
+    /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
+     * voltage of the ongoing sampling period, while the control laws use the voltage
+     * averaged over the previous and ongoing periods. With blocked gates, the
+     * voltage is unknown (NAN), and the observer runs on its open-circuit model,
+     * whose voltage is used for the control laws too. */
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
+    if (enabled) {
+        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
+
+    /* Rate-limited speed reference (RateLimiter), stored in the update function */
+    w_M_ref = rate_limiter_compute_output(&self->rate_limiter, T_s, w_M_ref);
+
+    /* The rotor speed of the observer is the speed reference (sensorless) */
+    flux_observer_compute_output(&ctrl->observer, u_c_ab_zoh, meas->i_c_ab, w_M_ref,
+                                 0.0, 0.0, fbk);
+    fbk->u_s = enabled ? cexp(-I * fbk->theta_c) * u_c_ab : fbk->u_s_zoh;
+    fbk->u_dc = meas->u_dc;
+
+    /* References from the filtered torque estimate, or with blocked gates, the
+     * standby references: the flux and torque controller tracks the estimated flux
+     * and torque */
+    ref->T_s = T_s;
+    if (enabled) {
+        reference_gen_compute_flux_and_torque_refs(&ctrl->reference_gen,
+                                                   ctrl->tau_M_lpf, fbk->w_m,
+                                                   fbk->u_dc, &ref->psi_s, &ref->tau_M);
+    } else {
+        ref->tau_M = fbk->tau_M;
+        ref->psi_s = cabs(fbk->psi_s);
+    }
+    ref->u_s = flux_torque_ctrl_compute_output(&ctrl->flux_torque_ctrl, ref->psi_s,
+                                               ref->tau_M, fbk);
+
+    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
+     * k_comp*T_s*w_c */
+    double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
+    u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
+    ref->u_c_ab = pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
+                                     meas->i_c_ab, ref->d_abc);
+    ref->w_M = w_M_ref;
+}
+
+static void sm_vhz_control_system_update(SMVHzControlSystem *self)
+{
+    SMVHzController *ctrl = &self->vhz_ctrl;
+    double T_s = self->ref.T_s;
+    pwm_update(&self->pwm, T_s, self->ref.d_abc);
+    rate_limiter_update(&self->rate_limiter, self->ref.w_M);
+    ctrl->tau_M_lpf += T_s * ctrl->alpha_f * (self->fbk.tau_M - ctrl->tau_M_lpf);
+    flux_observer_update(&ctrl->observer, T_s, &self->fbk);
+}
+
 /* Signal vectors of the modular control system ---------------------------- */
 
 #define COMPLEX_AT(u, i) complex_from((u)[i], (u)[(i) + 1])
