@@ -80,10 +80,13 @@ route(sys, 'Machine/1', sprintf('%s/%d', cs, in('i_s_abc')), 'x', 800, 'y', y_to
     'x', 60);
 route(sys, 'Mechanics/1', 'Machine/2', 'x', 1010, 'y', y_w_M, 'x', 660);
 if isa(mdl.machine, 'motulator.drive.model.SynchronousMachine')
-    % The rotor angle to the machine and to the control system
+    % The rotor angle to the machine, and to the control system (not in V/Hz
+    % control)
     route(sys, 'Mechanics/2', 'Machine/3', 'x', 1025, 'y', y_theta_M, 'x', 640);
-    route(sys, 'Mechanics/2', sprintf('%s/%d', cs, in('theta_M')), ...
-        'x', 1025, 'y', y_theta_M, 'x', 140);
+    if ~isempty(in('theta_M'))
+        route(sys, 'Mechanics/2', sprintf('%s/%d', cs, in('theta_M')), ...
+            'x', 1025, 'y', y_theta_M, 'x', 140);
+    end
 elseif ~isempty(in('w_M'))
     % The rotor speed to the control system (not in V/Hz control)
     route(sys, 'Mechanics/1', sprintf('%s/%d', cs, in('w_M')), ...

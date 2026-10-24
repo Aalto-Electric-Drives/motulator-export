@@ -8,9 +8,10 @@ of the converter and their compensation, with single update, with the minimum
 pulses, and with the gates blocked at the start and during the operation. PLECS is
 not needed. With the dead time or the threshold voltage, the system model is
 sensitive to the rounding errors at the zero crossings of the currents (the voltage
-error depends on their signs), so they are not tested with single update or with the
-gates blocked, in which motulator itself differs as much after a perturbation of the
-states at the rounding errors.
+error depends on their signs), so they are not tested with single update, with the
+minimum pulses, or with the gates blocked, in which motulator itself differs as much
+after a perturbation of the states at the rounding errors. The minimum duty ratio is
+above the smallest duty ratios at the speed reference.
 
 Run from the repository root (requires gcc):
 
@@ -174,7 +175,7 @@ class CControlSystem(control.VHzControlSystem):
     [
         (0.0, 0.0, 0.0, False, False),
         (T_D, 0.0, 0.0, False, False),
-        (T_D, 0.06, 0.0, False, False),
+        (0.0, 0.15, 0.0, False, False),
         (0.0, 0.0, 0.0, True, False),
         (0.0, 0.0, U_TH, False, False),
         # Without the threshold voltage, since the current of the PM machine vanishes

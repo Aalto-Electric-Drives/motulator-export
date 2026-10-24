@@ -185,6 +185,32 @@ M_PAR = (
 
 # %%
 # Blocks of the classes
+def _k_o_code(i: int) -> str:
+    """
+    C code of the observer gain k_o = [k0 k1] from the parameter i, k0 = NaN being
+    sigma0 of the machine model par.
+    """
+    return (
+        f"double k_o[2] = {{P({i}, 0), P({i}, 1)}};\n"
+        "if (isnan(k_o[0])) {\n"
+        "    /* Poles at zero speed at s = 0 and s = -2*sigma0 */\n"
+        "    IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);\n"
+        "    k_o[0] = 0.25 * par.R_s * (1.0 / L_s0.L_dd + 1.0 / L_s0.L_qq);\n"
+        "}\n"
+    )
+
+
+# The observer gain k_o in the MATLAB code (see `_k_o_code`)
+M_K_O = (
+    "k_o = p.k_o;\n"
+    "if isnan(k_o(1))\n"
+    "    % Poles at zero speed at s = 0 and s = -2*sigma0\n"
+    "    L_s0 = incr_ind_mat(par, complex(0));\n"
+    "    k_o(1) = 0.25*par.R_s*(1/L_s0.L_dd + 1/L_s0.L_qq);\n"
+    "end\n"
+)
+
+
 def _flux_observer() -> CBlock:
     """Flux observer (FluxObserver)."""
     mask = Mask(
@@ -230,14 +256,10 @@ def _flux_observer() -> CBlock:
         f"if (PDIM({k_f}) > 0 && P({k_f}, 0) != 0.0) {{\n"
         '    SetErrorMessage("Only k_f = [] (zero) supported.");\n'
         "    return;\n"
-        "}\n" + _par_code(i["par_n_p"]) + f"double k_o[2] = {{P({k_o}, 0), "
-        f"P({k_o}, 1)}};\n"
-        "if (isnan(k_o[0])) {\n"
-        "    /* Poles at zero speed at s = 0 and s = -2*sigma0 */\n"
-        "    IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);\n"
-        "    k_o[0] = 0.25 * par.R_s * (1.0 / L_s0.L_dd + 1.0 / L_s0.L_qq);\n"
         "}\n"
-        f"flux_observer_init(&self, par, P({i['k_theta']}, 0), k_o);\n"
+        + _par_code(i["par_n_p"])
+        + _k_o_code(k_o)
+        + f"flux_observer_init(&self, par, P({i['k_theta']}, 0), k_o);\n"
         f"T_s = P({i['T_s']}, 0);\n"
         f"h = P({i['h']}, 0);\n"
         "i_s_ab_prev = NAN;\n"
@@ -270,13 +292,7 @@ def _flux_observer() -> CBlock:
         + SIGNALS.write(1, "fbk", "out")
     )
     mcode = MCode(
-        start=M_PAR + "k_o = p.k_o;\n"
-        "if isnan(k_o(1))\n"
-        "    % Poles at zero speed at s = 0 and s = -2*sigma0\n"
-        "    L_s0 = incr_ind_mat(par, complex(0));\n"
-        "    k_o(1) = 0.25*par.R_s*(1/L_s0.L_dd + 1/L_s0.L_qq);\n"
-        "end\n"
-        "self = flux_observer_init(par, p.k_theta, k_o);\n"
+        start=M_PAR + M_K_O + "self = flux_observer_init(par, p.k_theta, k_o);\n"
         "% Current at the start of the latest sampling period with an unknown voltage\n"
         "self.i_s_ab_prev = complex(NaN);\n",
         output="% Flying start when the voltage is known again (SpeedFluxObserver), "
@@ -506,7 +522,7 @@ def _luts_code(i: int) -> str:
     )
 
 
-def _reference_generator() -> CBlock:
+def _reference_generator(sig: Signals = SIGNALS) -> CBlock:
     """Flux and torque reference generator (ReferenceGenerator)."""
     mask = Mask(
         "ReferenceGenerator (motulator)",
@@ -559,9 +575,9 @@ def _reference_generator() -> CBlock:
         "ReferenceGenerator",
         [Port("tau_M_ref", 1), Port("u_dc", 1), Port("w_m", 1)],
         [Port("ref", 2)],
-        SIGNALS.class_code("ReferenceGenerator", start, output),
+        sig.class_code("ReferenceGenerator", start, output),
         params,
-        SIGNALS.sfunction("reference_generator"),
+        sig.sfunction("reference_generator"),
         sample_time=None,
         mask=mask,
         mcode=MCode(
@@ -597,7 +613,7 @@ def _reference_generator() -> CBlock:
     )
 
 
-def _flux_torque_controller() -> CBlock:
+def _flux_torque_controller(sig: Signals = SIGNALS) -> CBlock:
     """Flux and torque controller (FluxTorqueController)."""
     mask = Mask(
         "FluxTorqueController (motulator)",
@@ -630,15 +646,15 @@ def _flux_torque_controller() -> CBlock:
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
-        SIGNALS.read(1, "fbk", declare=False) + "double complex u_s_ref =\n"
+        sig.read(1, "fbk", declare=False) + "double complex u_s_ref =\n"
         "    flux_torque_ctrl_compute_output(&self, InputSignal(0, 0), "
         "InputSignal(0, 1), &fbk);\n" + complex_out(0, "u_s_ref")
     )
     return CBlock(
         "FluxTorqueController",
-        [Port("ref", 2), SIGNALS.port("fbk")],
+        [Port("ref", 2), sig.port("fbk")],
         [Port("u_s", 2)],
-        SIGNALS.class_code(
+        sig.class_code(
             "FluxTorqueController",
             start,
             output,
@@ -646,7 +662,7 @@ def _flux_torque_controller() -> CBlock:
             workspace=SAMPLING + "static ObserverOutputs fbk;\n",
         ),
         params,
-        SIGNALS.sfunction("flux_torque_controller"),
+        sig.sfunction("flux_torque_controller"),
         mask=mask,
         mcode=MCode(
             start=M_PAR + "self = flux_torque_ctrl_init(par, p.alpha_psi, "
@@ -654,7 +670,7 @@ def _flux_torque_controller() -> CBlock:
             output="[self, u_s] = flux_torque_ctrl_compute_output(self, ref(1), "
             "ref(2), fbk);\n",
             update="self = flux_torque_ctrl_update(self, p.T_s, fbk);\n",
-            inputs={"fbk": SIGNALS.vector("fbk")},
+            inputs={"fbk": sig.vector("fbk")},
             outputs={"u_s": COMPLEX},
             functions=M_PAR_FUNCTION,
             checks=(

@@ -10,7 +10,8 @@ the `c` directory. The derived quantities (e.g., the gains and the lookup tables
 the reference generator) are computed by the C code at the start of the simulation,
 as in motulator. The parameters are defined in the initialization commands of the
 PLECS model: the system model, and the structs of the control system (vector_ctrl
-with par and cfg, speed_ctrl, and pwm), as in the motulator API.
+with par and cfg, speed_ctrl, and pwm, or vhz_ctrl with par and cfg, slew_rate, and
+pwm), as in the motulator API.
 
 Currently supported:
 
@@ -35,6 +36,9 @@ Currently supported:
   map), and a speed controller (`SpeedController`) in `VectorControlSystem`, with
   the compensation of the dead time and the threshold voltage in the PWM as in
   `motulator_export.plecs._im`
+- Observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
+  with the same machine models of the control system and observer gains as in
+  flux-vector control (see `_sm_vhz_control`)
 - Gate blocking (`set_enable`): the input `enable` of the control system, which
   then runs in standby, and the gates of the IGBT converter blocked (not with the
   GradNet machine model, whose controlled current sources would toggle the diodes
@@ -53,10 +57,12 @@ import motulator.drive.gradnet as gn
 import numpy as np
 from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
-from motulator.drive.control._base import VectorControlSystem
+from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._sm_flux_vector import (
     FluxVectorController,
     FluxVectorControllerCfg,
+    ObserverBasedVHzController,
+    ObserverBasedVHzControllerCfg,
 )
 from motulator.drive.model import Drive, SynchronousMachine
 from motulator.drive.utils._parameters import (
@@ -79,6 +85,7 @@ from motulator_export.plecs._common import (
     GRADNET_MAX_IN_DIM,
     MACH,
     SRC,
+    ControlBlock,
     _add_blanking_time,
     _add_control_system,
     _add_converter,
@@ -99,6 +106,7 @@ from motulator_export.plecs._drive import (
     _add_phase_lines,
     _check_supported_plant,
     _check_supported_speed_control,
+    _check_supported_vhz_control,
     drive_references,
     mechanics_and_converter_variables,
     speed_ctrl_values,
@@ -120,6 +128,9 @@ from motulator_export.plecs._sm_control import (
     PAR_FIELDS,
     init_script,
 )
+from motulator_export.plecs._sm_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
+from motulator_export.plecs._sm_vhz_control import VHZ_BLOCK
+from motulator_export.plecs._sm_vhz_control import init_script as vhz_init_script
 
 __all__ = ["simulate", "write_model"]
 
@@ -179,7 +190,7 @@ def has_gradnet_plant(mdl: Drive) -> bool:
     return isinstance(mdl.machine.par, SpatialSaturatedSynchronousMachinePars)
 
 
-def check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
+def check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the drive system is not supported."""
     # System model
     par = mdl.machine.par
@@ -204,8 +215,12 @@ def check_supported(mdl: Drive, ctrl: VectorControlSystem) -> None:
     _check_supported_control(ctrl)
 
 
-def _check_supported_control(ctrl: VectorControlSystem) -> None:
+def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the control system is not supported."""
+    if isinstance(ctrl, VHzControlSystem):
+        check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        _check_supported_vhz_control(ctrl)
+        return
     check_supported_fvc(ctrl.vector_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
 
@@ -223,12 +238,37 @@ def check_supported_fvc(fvc: Any) -> None:
         raise NotImplementedError("Only offline references and k_f=None supported")
     if cfg.k_o is not None:
         fit_speed_dependent_gain(cfg.k_o, "k_o")  # Raises if not supported
-    if isinstance(fvc.par, SaturatedSynchronousMachinePars):
-        if fvc.par.psi_s_dq_fcn is None:
+    _check_supported_par(fvc.par)
+
+
+def check_supported_vhz_ctrl(vhz: Any) -> None:
+    """
+    Raise an error if the V/Hz controller is not supported: the observer gain `k_o`
+    of the form k0 + k1*abs(w_m), and the machine models of `check_supported_fvc`.
+    """
+    if not isinstance(vhz, ObserverBasedVHzController):
+        raise NotImplementedError("Only ObserverBasedVHzController supported")
+    if vhz.cfg.k_o is not None:
+        fit_speed_dependent_gain(vhz.cfg.k_o, "k_o")  # Raises if not supported
+    _check_supported_par(vhz.reference_gen.par)
+
+
+def _check_supported_par(par: Any) -> None:
+    """
+    Raise an error if the machine model of the control system is not supported:
+    constant inductances or a GradNet flux map.
+    """
+    if isinstance(par, SaturatedSynchronousMachinePars):
+        if par.psi_s_dq_fcn is None:
             raise NotImplementedError("A flux map (psi_s_dq_fcn) is required")
-        export_gradnet(fvc.par.psi_s_dq_fcn)  # Raises if not supported
-    elif not isinstance(fvc.par, SynchronousMachinePars):
+        export_gradnet(par.psi_s_dq_fcn)  # Raises if not supported
+    elif not isinstance(par, SynchronousMachinePars):
         raise NotImplementedError("Machine model of the control system not supported")
+
+
+def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
+    """Control-system block of flux-vector control or V/Hz control."""
+    return VHZ_BLOCK if isinstance(ctrl, VHzControlSystem) else FVC_BLOCK
 
 
 def export_values(
@@ -264,19 +304,55 @@ def fvc_values(
     GradNet flux map.
     """
     cfg: FluxVectorControllerCfg = fvc.cfg
-    flux_map = None
-    if isinstance(fvc.par, SaturatedSynchronousMachinePars):
-        flux_map = export_gradnet(fvc.par.psi_s_dq_fcn)
-        values = {"n_p": fvc.par.n_p, "R_s": fvc.par.R_s, "L_d": None, "L_q": None}
-        values |= {"psi_f": None, "psi_s_dq_fcn": "est_flux_map"}
-    else:
-        values = {n: getattr(fvc.par, n) for n in PAR_FIELDS}
-        values |= {"psi_s_dq_fcn": None}
+    values, flux_map = _par_values(fvc.par)
     values |= {n: getattr(cfg, n) for n in CFG_FIELDS}
     values["k_o"] = (
         None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
     )
     values["sensorless"] = int(cfg.sensorless)
+    return values, flux_map
+
+
+def _par_values(par: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """
+    Get the parameter values of the machine model of the control system
+    (`PAR_FIELDS` and `psi_s_dq_fcn`, the name of the struct of a flux map), with
+    the GradNet flux map (None with constant inductances).
+    """
+    if isinstance(par, SaturatedSynchronousMachinePars):
+        values = {"n_p": par.n_p, "R_s": par.R_s, "L_d": None, "L_q": None}
+        values |= {"psi_f": None, "psi_s_dq_fcn": "est_flux_map"}
+        return values, export_gradnet(par.psi_s_dq_fcn)
+    values = {n: getattr(par, n) for n in PAR_FIELDS}
+    return values | {"psi_s_dq_fcn": None}, None
+
+
+def export_vhz_values(
+    ctrl: VHzControlSystem,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """
+    Get the parameter values of the V/Hz control system in the motulator API (see
+    `_sm_vhz_control.init_script` and `export_values`).
+    """
+    values, flux_map = vhz_values(cast(ObserverBasedVHzController, ctrl.vhz_ctrl))
+    values["slew_rate"] = ctrl.rate_limiter.rate_limit
+    return values | pwm_values(ctrl.pwm), flux_map
+
+
+def vhz_values(
+    vhz: ObserverBasedVHzController,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """
+    Get the parameter values of the V/Hz controller (see `export_vhz_values`): its
+    machine model (`_par_values`) and its configuration (`VHZ_CFG_FIELDS`, with `k_o`
+    as [k0, k1]), with the GradNet flux map.
+    """
+    cfg: ObserverBasedVHzControllerCfg = vhz.cfg
+    values, flux_map = _par_values(vhz.reference_gen.par)
+    values |= {n: getattr(cfg, n) for n in VHZ_CFG_FIELDS}
+    values["k_o"] = (
+        None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
+    )
     return values, flux_map
 
 
@@ -539,23 +615,34 @@ def _add_gradnet_machine(sch: _Schematic, library: bool) -> None:
 def write_model(
     path: str | Path,
     mdl: Drive,
-    ctrl: VectorControlSystem,
+    ctrl: VectorControlSystem | VHzControlSystem,
     t_stop: float,
     outputs: bool = False,
     library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the synchronous machine drive, see `plecs.write_model`.
+
+    The control system is flux-vector control (`VectorControlSystem`), whose inputs
+    are `enable` (the gate enable of `ctrl`), the speed reference, the phase
+    currents, the DC-bus voltage, and the rotor angle, or observer-based V/Hz control
+    (`VHzControlSystem`) without the rotor angle.
+
     """
     path = Path(path)
     check_supported(mdl, ctrl)
-    values, flux_map = export_values(ctrl)
+    if isinstance(ctrl, VHzControlSystem):
+        values, flux_map = export_vhz_values(ctrl)
+        script = vhz_init_script
+    else:
+        values, flux_map = export_values(ctrl)
+        script = init_script
     w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
     variables = export_plant_variables(mdl)
     if flux_map is not None:
         variables += [(f"est_flux_map.{f}", flux_map[f]) for f in GRADNET_FIELDS]
-    init = init_script(variables, values, INIT_COMMENT)
-    block, T_s = FVC_BLOCK, T_S_EXPR
+    init = script(variables, values, INIT_COMMENT)
+    block, T_s = control_block(ctrl), T_S_EXPR
     sch = _Schematic()
     gradnet_plant = has_gradnet_plant(mdl)
     sources: list[tuple[str, StepSignal | float | str]] = [
@@ -563,8 +650,9 @@ def write_model(
         ("w_M_ref", w_M_ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
-        ("theta_M", _probe("Machine", MACHINE_PROBES[2:3])),
     ]
+    if block is FVC_BLOCK:
+        sources += [("theta_M", _probe("Machine", MACHINE_PROBES[2:3]))]
     y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
@@ -590,11 +678,15 @@ def write_model(
 
 
 def simulate(
-    path: str | Path, t_eval: np.ndarray, mdl: Drive, ctrl: VectorControlSystem
+    path: str | Path,
+    t_eval: np.ndarray,
+    mdl: Drive,
+    ctrl: VectorControlSystem | VHzControlSystem,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
     Simulate the PLECS model of a synchronous machine drive, see `plecs.simulate`.
+    The control system `ctrl` defines the monitored signals.
     """
     return simulate_plecs(
-        path, t_eval, mdl_outputs=MDL_OUTPUTS, ctrl_outputs=FVC_BLOCK.signals
+        path, t_eval, mdl_outputs=MDL_OUTPUTS, ctrl_outputs=control_block(ctrl).signals
     )

@@ -65,7 +65,7 @@ def _check_supported(kind: str, mdl: Drive | GridConverterSystem, ctrl: object) 
     drive = cast(Drive, mdl)
     drive_ctrl = cast(VectorControlSystem | VHzControlSystem, ctrl)
     if kind == "sm":
-        _sm.check_supported(drive, cast(VectorControlSystem, drive_ctrl))
+        _sm.check_supported(drive, drive_ctrl)
     else:
         _im.check_supported(drive, drive_ctrl)
     check_supported_converter(drive, drive_ctrl)
@@ -157,16 +157,16 @@ def simulate(
     The signals are those of `plecs.simulate`.
 
     """
-    if system_type(mdl, ctrl) == "grid":
+    kind = system_type(mdl, ctrl)
+    if kind == "grid":
         grid = cast(GridConverterSystem, mdl)
         grid_ctrl = cast(GridConverterControlSystem, ctrl)
         outputs = _grid.mdl_outputs(grid)
         signals = _grid.control_block(grid_ctrl).signals
-    elif isinstance(ctrl, VHzControlSystem) or system_type(mdl, ctrl) == "im":
-        outputs = MDL_OUTPUTS
-        signals = _im.control_block(cast(VectorControlSystem, ctrl)).signals
     else:
-        outputs, signals = MDL_OUTPUTS, _sm.FVC_BLOCK.signals
+        drive_ctrl = cast(VectorControlSystem | VHzControlSystem, ctrl)
+        machine = _sm if kind == "sm" else _im
+        outputs, signals = MDL_OUTPUTS, machine.control_block(drive_ctrl).signals
     results = _simulate(model_path(path), t_eval, outputs, signals, build, eng)
     return add_space_vectors(results[0]), results[1]
 

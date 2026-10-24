@@ -54,7 +54,7 @@ from motulator.drive.utils._parameters import (
     InductionMachinePars,
 )
 
-from motulator_export._common import StepSignal, check_supported_pwm, gate_enable
+from motulator_export._common import StepSignal, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
     DC_DX,
@@ -81,6 +81,7 @@ from motulator_export.plecs._drive import (
     _add_phase_lines,
     _check_supported_plant,
     _check_supported_speed_control,
+    _check_supported_vhz_control,
     drive_references,
     mechanics_and_converter_variables,
     speed_ctrl_values,
@@ -118,7 +119,8 @@ def check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) ->
 def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the control system is not supported."""
     if isinstance(ctrl, VHzControlSystem):
-        _check_supported_vhz(ctrl)
+        check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        _check_supported_vhz_control(ctrl)
         return
     check_supported_cvc(ctrl.vector_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
@@ -134,14 +136,6 @@ def check_supported_cvc(cvc: Any) -> None:
         raise NotImplementedError("Direct discrete-time current control not supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
-
-
-def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
-    """Raise an error if the V/Hz control system is not supported."""
-    check_supported_vhz_ctrl(ctrl.vhz_ctrl)
-    if type(ctrl).modulate is not VHzControlSystem.modulate:
-        raise NotImplementedError("Overridden modulate method not supported")
-    check_supported_pwm(ctrl, d_err=True)
 
 
 def check_supported_vhz_ctrl(vhz: Any) -> None:

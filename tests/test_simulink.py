@@ -49,6 +49,8 @@ from tests.sfunctions import (
 from tests.systems import (
     CURRENT_MAP,
     SM_PAR,
+    SM_VHZ_CASES,
+    SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
     VHZ_RTOL,
@@ -57,6 +59,7 @@ from tests.systems import (
     gradnet_control_system,
     im_system,
     sm_system,
+    sm_vhz_system,
     vhz_system,
 )
 
@@ -74,6 +77,11 @@ def cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 @pytest.fixture(scope="module")
 def vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(monolithic.VHZ, tmp_path_factory.mktemp("vhz"))
+
+
+@pytest.fixture(scope="module")
+def sm_vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(monolithic.SM_VHZ, tmp_path_factory.mktemp("sm_vhz"))
 
 
 @pytest.fixture(scope="module")
@@ -189,6 +197,23 @@ def test_vhz_control(
     compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
     check_dc_bus_limit(vhz, monolithic.VHZ, VHZ_INPUTS, restarter(vhz, params))
     vhz.sfun_terminate()
+
+
+@pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)
+def test_sm_vhz_control(
+    sm_vhz: ctypes.CDLL, t_d: float, d_min: float, blocked: bool
+) -> None:
+    """The S-function of observer-based V/Hz control of a synchronous machine should
+    agree with motulator, also with the dead-time compensation, the minimum pulses,
+    and the gates blocked."""
+    build, signals = sm_vhz_system(t_d, d_min, blocked)
+    values, _ = _sm.export_vhz_values(build()[1])
+    params = sfunction_params(monolithic.SM_VHZ, values)
+    assert start(sm_vhz, params) is None
+    sfun = drive_sfun(sm_vhz, monolithic.SM_VHZ)
+    compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
+    check_dc_bus_limit(sm_vhz, monolithic.SM_VHZ, VHZ_INPUTS, restarter(sm_vhz, params))
+    sm_vhz.sfun_terminate()
 
 
 @pytest.mark.parametrize("blocked", [False, True], ids=["enabled", "blocked"])

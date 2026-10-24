@@ -41,6 +41,7 @@ from tests.systems import (
     gfm_system,
     im_system,
     sm_system,
+    sm_vhz_system,
     vhz_system,
 )
 from tests.systems import NOM as GRID_NOM
@@ -115,6 +116,24 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
     return mdl, ctrl
 
 
+def gradnet_vhz_drive() -> tuple[model.Drive, control.VHzControlSystem]:
+    """
+    Drive of `gradnet_drive` with observer-based V/Hz control, whose machine model is
+    the GradNet flux map.
+    """
+    mdl, _ = gradnet_drive()
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
+    par = control.SaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
+    )
+    cfg = control.ObserverBasedVHzControllerCfg(i_s_max=17.6)
+    ctrl = control.VHzControlSystem(
+        control.ObserverBasedVHzController(par, cfg), slew_rate=2 * pi * 60
+    )
+    ctrl.set_speed_ref(StepSignal(time=0.05, after=100.0))
+    return mdl, ctrl
+
+
 def simulate(build: Any, t_stop: float, **kwargs: Any) -> tuple[Any, Any]:
     """Simulate the system in motulator and natively."""
     res_py = model.Simulation(*build(), show_progress=False).simulate(t_stop, **kwargs)
@@ -183,6 +202,20 @@ def test_ipmsm_pwm() -> None:
 def test_gradnet() -> None:
     """GradNet current map with spatial harmonics in the machine model."""
     check(*simulate(gradnet_drive, 0.3), rtol=1e-9)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        sm_vhz_system(t_d=0.0, d_min=0.0)[0],
+        sm_vhz_system(t_d=0.0, d_min=0.2)[0],
+        gradnet_vhz_drive,
+    ],
+    ids=["smvhz", "smvhz_d_min", "smvhz_gradnet"],
+)
+def test_sm_vhz(build: Build) -> None:
+    """Observer-based V/Hz control, also with a GradNet flux map."""
+    check(*simulate(build, 0.3), rtol=1e-9)
 
 
 def test_n_eval() -> None:
@@ -536,10 +569,11 @@ def test_grid_pwm() -> None:
         (im_system(sensorless=True, t_d=0.0, i_0=0.0, blocked=True)[0], 0.3),
         (vhz_system(open_loop=False, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
         (vhz_system(open_loop=True, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
+        (sm_vhz_system(t_d=0.0, d_min=0.0, blocked=True)[0], 0.8),
         (gfl_system(blocked=True)[0], 0.06),
         (gfm_system(power_limitation=False, blocked=True)[0], 0.15),
     ],
-    ids=["fvc", "fvc_sensored", "cvc", "vhz", "vhz_open_loop", "gfl", "gfm"],
+    ids=["fvc", "fvc_sensored", "cvc", "vhz", "vhz_open_loop", "smvhz", "gfl", "gfm"],
 )
 def test_gate_blocking(build: Build, t_stop: float) -> None:
     """

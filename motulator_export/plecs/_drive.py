@@ -136,6 +136,16 @@ def _check_supported_speed_control(
     check_supported_pwm(ctrl, d_err=dead_time)
 
 
+def _check_supported_vhz_control(ctrl: VHzControlSystem) -> None:
+    """
+    Raise an error if the V/Hz control system (its methods or its PWM) is not
+    supported, the duty-ratio error model `d_err` of the PWM included.
+    """
+    if type(ctrl).modulate is not VHzControlSystem.modulate:
+        raise NotImplementedError("Overridden modulate method not supported")
+    check_supported_pwm(ctrl, d_err=True)
+
+
 def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     """
     Get the parameter values of the speed controller (the struct speed_ctrl of the

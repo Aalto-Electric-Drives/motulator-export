@@ -48,6 +48,7 @@ from motulator_export.plecs import (
     _im_vhz_control,
     _sm,
     _sm_control,
+    _sm_vhz_control,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
 from motulator_export.plecs._control import T_S_EXPR
@@ -80,6 +81,8 @@ from tests.sfunctions import (
 )
 from tests.systems import (
     SM_PAR,
+    SM_VHZ_CASES,
+    SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
     VHZ_RTOL,
@@ -88,6 +91,7 @@ from tests.systems import (
     gradnet_control_system,
     im_system,
     sm_system,
+    sm_vhz_system,
     vhz_system,
 )
 from tests.test_control import SYSTEMS, Compiled, init_script
@@ -198,7 +202,7 @@ def grid_run(build: Any, signals: Any, block: ControlBlock, t_stop: float) -> Ru
     return run
 
 
-def case(name: str) -> Case:
+def case(name: str) -> Case:  # noqa: PLR0911
     """Case of a test, see `Case`."""
     if name.startswith("fvc_gradnet"):
         ctrl = gradnet_control_system()
@@ -237,6 +241,11 @@ def case(name: str) -> Case:
         values = _im.export_values(build()[1])
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
+    if name.startswith("smvhz"):
+        build, signals = sm_vhz_system(*SM_VHZ_CASES[SM_VHZ_IDS.index(name)])
+        values, _ = _sm.export_vhz_values(build()[1])
+        run = drive_run(build, signals, _sm_vhz_control.VHZ_BLOCK, 1.0, VHZ_RTOL)
+        return "smvhz", values, None, run, VHZ_INPUTS
     if name.startswith("vhz"):
         vhz_args = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
         build, signals = vhz_system(*vhz_args)
@@ -268,6 +277,7 @@ CASES = [
     "cvc_u_th_single",
     "cvc_u_th_blocked",
     *(f"vhz_{v}" for v in VHZ_IDS),
+    *SM_VHZ_IDS,
     "gfl",
     "gfl_blocked",
     "gfm",
@@ -389,7 +399,15 @@ def replay(
 
 
 @pytest.mark.parametrize(
-    "name", ["fvc_sensorless", "cvc_sensorless", f"vhz_{VHZ_IDS[0]}", "gfl", "gfm"]
+    "name",
+    [
+        "fvc_sensorless",
+        "cvc_sensorless",
+        f"vhz_{VHZ_IDS[0]}",
+        SM_VHZ_IDS[0],
+        "gfl",
+        "gfm",
+    ],
 )
 def test_model_lines(harnesses: Harnesses, name: str) -> None:
     """
@@ -503,6 +521,7 @@ EXAMPLES = TESTS.parent / "examples"
 # differences from motulator are about 1e-6 relative, see the Simulink README)
 EXAMPLE_SYSTEMS = [
     "ipmsm_2kw_fvc",
+    "ipmsm_2kw_vhz",
     "pmsyrm_6kw_gn_fvc",
     "im_2kw_cvc",
     "im_2kw_vhz",

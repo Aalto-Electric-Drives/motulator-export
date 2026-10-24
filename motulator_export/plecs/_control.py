@@ -824,6 +824,39 @@ def rate_limiter(sig: Signals) -> CBlock:
     )
 
 
+def torque_filter(sig: Signals) -> CBlock:
+    """Low-pass filter of the torque estimate (tau_M_lpf of a V/Hz controller)."""
+    params = ["cfg.alpha_f", "cfg.T_s"]
+    start = (
+        checks(params, params) + "/* Low-pass-filtered torque estimate */\n"
+        "self = 0.0;\n"
+        "alpha_f = P(0, 0);\n"
+        "T_s = P(1, 0);\n"
+    )
+    return CBlock(
+        "tau_M_lpf",
+        [Port("tau_M", 1)],
+        [Port("tau_M_lpf", 1)],
+        sig.class_code(
+            "double",
+            start,
+            "OutputSignal(0, 0) = self;\n",
+            "self += T_s * alpha_f * (InputSignal(0, 0) - self);\n",
+            SAMPLING + "static double alpha_f; /* Low-pass-filter bandwidth */\n",
+        ),
+        params,
+        sig.sfunction("torque_filter"),
+        feedthrough=[0],
+        sample_time="cfg.T_s",
+        mcode=MCode(
+            start="% Low-pass-filtered torque estimate\nself = 0;\n",
+            output="tau_M_lpf = self;\n",
+            update="self = self + p.T_s*p.alpha_f*(tau_M - self);\n",
+            checks=required("alpha_f", "T_s"),
+        ),
+    )
+
+
 def pwm_values(pwm: PWM) -> dict[str, Any]:
     """
     Get the parameter values of the PWM (the struct pwm of the model

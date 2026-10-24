@@ -41,6 +41,7 @@ from motulator_export.plecs import (
     _im_vhz_control,
     _sm,
     _sm_control,
+    _sm_vhz_control,
 )
 from motulator_export.plecs._common import ControlBlock
 from motulator_export.plecs._netlist import PLECS, SIMULINK, Subsystem, layout, problems
@@ -69,6 +70,8 @@ from tests.systems import (
     IM_SPEED,
     SM_PAR,
     SM_SPEED,
+    SM_VHZ_CASES,
+    SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
     VHZ_RTOL,
@@ -77,6 +80,7 @@ from tests.systems import (
     gradnet_control_system,
     im_system,
     sm_system,
+    sm_vhz_system,
     vhz_system,
 )
 
@@ -85,6 +89,7 @@ SYSTEMS: dict[str, tuple[ControlBlock, MonolithicBlock]] = {
     "fvc": (_sm_control.FVC_BLOCK, monolithic.FVC),
     "cvc": (_im_control.CVC_BLOCK, monolithic.CVC),
     "vhz": (_im_vhz_control.VHZ_BLOCK, monolithic.VHZ),
+    "smvhz": (_sm_vhz_control.VHZ_BLOCK, monolithic.SM_VHZ),
     "gfl": (_grid_control.GFL_BLOCK, monolithic.GFL),
     "gfm": (_grid_control.GFM_BLOCK, monolithic.GFM),
 }
@@ -133,11 +138,12 @@ def compiled(tmp_path_factory: pytest.TempPathFactory) -> Compiled:
 
 def init_script(key: str, values: dict[str, Any], flux_map: Any = None) -> str:
     """Model initialization of the control system (without the system model)."""
-    if key == "fvc":
+    if key in ("fvc", "smvhz"):
         variables = []
         if flux_map is not None:
             variables = [(f"est_flux_map.{f}", flux_map[f]) for f in _sm.GRADNET_FIELDS]
-        return _sm_control.init_script(variables, values, "")
+        module = _sm_control if key == "fvc" else _sm_vhz_control
+        return module.init_script(variables, values, "")
     if key == "cvc":
         return _im_control.init_script([], values, "")
     if key == "vhz":
@@ -291,6 +297,21 @@ def test_vhz_control(
         return compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
 
     check(compiled, "vhz", values, run, VHZ_INPUTS)
+
+
+@pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)
+def test_sm_vhz_control(
+    compiled: Compiled, t_d: float, d_min: float, blocked: bool
+) -> None:
+    """Observer-based V/Hz control of a synchronous machine drive."""
+    build, signals = sm_vhz_system(t_d, d_min, blocked)
+    values, _ = _sm.export_vhz_values(build()[1])
+
+    def run(net: Netlist) -> list[list[float]]:
+        sfun = drive_sfun(net, _sm_vhz_control.VHZ_BLOCK)
+        return compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
+
+    check(compiled, "smvhz", values, run, VHZ_INPUTS)
 
 
 @pytest.mark.parametrize("blocked", [False, True], ids=["enabled", "blocked"])

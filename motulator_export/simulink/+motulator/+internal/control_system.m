@@ -29,10 +29,16 @@ if isa(ctrl, 'motulator.drive.control.VectorControlSystem')
     c.refs = {'w_M_ref', required(ctrl.w_M_ref, 'speed reference', 'set_speed_ref')};
 elseif isa(ctrl, 'motulator.drive.control.VHzControlSystem')
     vhz = ctrl.vhz_ctrl;
-    check_class(vhz, ...
-        'motulator.drive.control.im.ObserverBasedVHzController');
-    c.name = 'Observer-based VHz control';
-    plant = {'machine', 'motulator.drive.model.InductionMachine'};
+    if isa(vhz, 'motulator.drive.control.sm.ObserverBasedVHzController')
+        c.name = 'Observer-based VHz control (SM)';
+        plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
+    elseif isa(vhz, 'motulator.drive.control.im.ObserverBasedVHzController')
+        c.name = 'Observer-based VHz control';
+        plant = {'machine', 'motulator.drive.model.InductionMachine'};
+    else
+        error('motulator:unsupported', ['Only ObserverBasedVHzController ' ...
+            'supported in VHzControlSystem.']);
+    end
     c.variables = struct('vhz_ctrl', vhz.params(), 'slew_rate', ctrl.slew_rate, ...
         'pwm', ctrl.pwm.params());
     c.T_s = vhz.cfg.T_s;

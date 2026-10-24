@@ -184,6 +184,52 @@ def vhz_system(
     return build, signals
 
 
+SM_NOM = utils.NominalValues(U=370, I=4.3, f=75, P=2.2e3, tau=14)
+SM_BASE = utils.BaseValues.from_nominal(SM_NOM, n_p=3)
+
+
+def sm_vhz_system(
+    t_d: float, d_min: float, blocked: bool = False
+) -> tuple[Build, Signals]:
+    """
+    Synchronous machine drive with observer-based V/Hz control (the 2.2-kW IPMSM of
+    plot_2kw_ipmsm_ovhz.py of motulator), see `sm_system`.
+    """
+
+    def build() -> tuple[model.Drive, VHzControlSystem]:
+        par = model.SynchronousMachinePars(**SM_PAR)
+        mdl = model.Drive(
+            model.SynchronousMachine(par),
+            model.MechanicalSystem(J=0.015),
+            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+        )
+        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * 0.5 * SM_NOM.tau)
+        cfg = sm_control.ObserverBasedVHzControllerCfg(i_s_max=1.5 * SM_BASE.i)
+        d_err = None
+        if t_d > 0:
+            d_err = sm_control.InverterNonlinearity(t_d, sign=smooth_sign)
+        pwm = sm_control.PWM(overmodulation="MME", d_err=d_err, d_min=d_min)
+        ctrl = VHzControlSystem(
+            sm_control.ObserverBasedVHzController(par, cfg),
+            slew_rate=2 * pi * 120,
+            pwm=pwm,
+        )
+        ctrl.set_speed_ref(lambda t: (t > 0.1) * 0.8 * SM_BASE.w_M)
+        if blocked:
+            ctrl.set_enable(lambda t: 0.02 <= t < 0.7 or t >= 0.72)
+        return mdl, ctrl
+
+    signals = {
+        "w_M_ref": lambda _, ref: ref.w_M,
+        "w_c": lambda fbk, _: fbk.w_c,
+        "tau_M_ref": lambda _, ref: ref.tau_M,
+        "psi_s_ref": lambda _, ref: ref.psi_s,
+        "psi_s": lambda fbk, _: np.abs(fbk.psi_s),
+        "theta_m": lambda fbk, _: fbk.theta_m,
+    }
+    return build, signals
+
+
 NOM = grid_utils.NominalValues(U=400, I=18, f=50, P=12.5e3)
 BASE = grid_utils.BaseValues.from_nominal(NOM)
 
@@ -276,6 +322,17 @@ VHZ_IDS = [
     "open_loop_dead_time_min_pulse",
     "ovhz_blocked",
 ]
+# Cases of V/Hz control of synchronous machines: the dead time, the minimum duty ratio
+# (above the smallest duty ratios at the speed reference), and the gates blocked. The
+# dead time of the system model makes it sensitive to the rounding errors at the zero
+# crossings of the currents, so it is not combined with the minimum pulses.
+SM_VHZ_CASES = [
+    (0.0, 0.0, False),
+    (2e-6, 0.0, False),
+    (0.0, 0.15, False),
+    (0.0, 0.0, True),
+]
+SM_VHZ_IDS = ["smvhz", "smvhz_dead_time", "smvhz_min_pulse", "smvhz_blocked"]
 # Tolerances of V/Hz control relative to the signal magnitudes (see `compare`): with
 # the flux reference at its current limit (e.g., after the release of the gates), the
 # current limit of the torque reference is the square root of a rounding error

@@ -13,7 +13,7 @@ of the motulator API. Its S-function is compared with motulator in
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from motulator_export.plecs import (
@@ -21,6 +21,7 @@ from motulator_export.plecs import (
     _im_control,
     _im_vhz_control,
     _sm_control,
+    _sm_vhz_control,
 )
 from motulator_export.plecs._common import (
     C_DIR,
@@ -194,16 +195,18 @@ SM_MASK_PARAMS = [
 ]
 
 
-def _sm_code() -> dict[str, str]:
-    """Code sections of the C-Script of flux-vector control."""
-    sources = ["common.c", "gradnet.c", "sm_parameters.c", "sm_control_loci.c"]
-    declarations = _declarations([*sources, "sm_flux_vector.c"], "VectorControlSystem")
-    i = {m.variable: k for k, m in enumerate(SM_MASK_PARAMS)}
-    i_gn = len(SM_MASK_PARAMS)  # The GradNet parameters follow the mask parameters
+def sm_par_code(mask_params: list[MaskParam]) -> str:
+    """
+    C code checking the mask parameters and creating the machine model par of a
+    synchronous machine (`SynchronousMachinePars`, or
+    `SaturatedSynchronousMachinePars` with a GradNet flux map).
+    """
+    i = {m.variable: k for k, m in enumerate(mask_params)}
+    i_gn = len(mask_params)  # The GradNet parameters follow the mask parameters
     k_o = i["k_o"]
     L_d, L_q, psi_f = i["L_d"], i["L_q"], i["psi_f"]
-    start = (
-        parameter_checks(SM_MASK_PARAMS)
+    return (
+        parameter_checks(mask_params)
         + f"if (PDIM({k_o}) != 0 && PDIM({k_o}) != 2) {{\n"
         '    SetErrorMessage("k_o must be [] or [k0 k1].");\n'
         "    return;\n"
@@ -224,13 +227,31 @@ def _sm_code() -> dict[str, str]:
         f"        P({i['n_p']}, 0), P({i['R_s']}, 0), P({L_d}, 0), P({L_q}, 0),\n"
         f"        P({psi_f}, 0));\n"
         "}\n"
-        "FluxVectorControllerCfg cfg = "
+    )
+
+
+def k_o_code(k: int) -> str:
+    """C code assigning the observer gain [k0 k1] of the parameter k to cfg.k_o."""
+    return (
+        f"if (PDIM({k}) == 2) {{\n"
+        f"    cfg.k_o[0] = P({k}, 0);\n"
+        f"    cfg.k_o[1] = P({k}, 1);\n"
+        "}\n"
+    )
+
+
+def _sm_code() -> dict[str, str]:
+    """Code sections of the C-Script of flux-vector control."""
+    sources = ["common.c", "gradnet.c", "sm_parameters.c", "sm_control_loci.c"]
+    declarations = _declarations([*sources, "sm_flux_vector.c"], "VectorControlSystem")
+    i = {m.variable: k for k, m in enumerate(SM_MASK_PARAMS)}
+    start = (
+        sm_par_code(SM_MASK_PARAMS) + "FluxVectorControllerCfg cfg = "
         f"flux_vector_controller_cfg(P({i['i_s_max']}, 0));\n"
         + cfg_assignments(SM_MASK_PARAMS)
-        + f"if (PDIM({k_o}) == 2) {{\n"
-        f"    cfg.k_o[0] = P({k_o}, 0);\n"
-        f"    cfg.k_o[1] = P({k_o}, 1);\n"
-        "}\n" + speed_controller_code(i) + "\n"
+        + k_o_code(i["k_o"])
+        + speed_controller_code(i)
+        + "\n"
         "vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n" + pwm_code(i)
     )
     monitored = {
@@ -264,6 +285,15 @@ def _widths(ports: list[Any]) -> list[int]:
     return [p.width for p in ports]
 
 
+def _sm_cscript_params(mask_params: list[MaskParam]) -> list[str]:
+    """Parameters of a synchronous machine drive, the flux map (a struct) as gn_*."""
+    params = [
+        f"isempty({m.variable})" if m.variable == "psi_s_dq_fcn" else m.variable
+        for m in mask_params
+    ]
+    return params + [f"gn_{f}" for f in GRADNET_FIELDS]
+
+
 FVC = MonolithicBlock(
     name="Flux-vector control",
     inputs=_names(_sm_control.CTRL_INPUTS),
@@ -271,12 +301,82 @@ FVC = MonolithicBlock(
     outputs=_sm_control.CTRL_OUTPUTS,
     mask_params=SM_MASK_PARAMS,
     code=_sm_code,
-    # The flux map (a struct) is passed via the gn_* parameters
-    cscript_params=[
-        f"isempty({m.variable})" if m.variable == "psi_s_dq_fcn" else m.variable
-        for m in SM_MASK_PARAMS
-    ]
-    + [f"gn_{f}" for f in GRADNET_FIELDS],
+    cscript_params=_sm_cscript_params(SM_MASK_PARAMS),
+)
+
+
+# %%
+# Observer-based V/Hz control of synchronous machine drives
+TAB = "Observer-based VHz control (SM)"
+SM_VHZ_MASK_PARAMS = [
+    *(replace(m, tab=TAB) for m in SM_MASK_PARAMS[:7]),  # Machine model, i_s_max
+    MaskParam("alpha_psi", "alpha_psi", TAB, "cfg.alpha_psi"),
+    MaskParam("alpha_tau", "alpha_tau", TAB, "cfg.alpha_tau"),
+    MaskParam("alpha_f", "alpha_f", TAB, "cfg.alpha_f"),
+    MaskParam("alpha_o", "alpha_o", TAB, "cfg.alpha_o"),
+    MaskParam("k_o", "k_o", TAB, ""),
+    MaskParam("k_u", "k_u", TAB, "cfg.k_u"),
+    MaskParam("k_mtpv", "k_mtpv", TAB, "cfg.k_mtpv"),
+    MaskParam("psi_s_min", "psi_s_min", TAB, "cfg.psi_s_min"),
+    MaskParam("psi_s_max", "psi_s_max", TAB, "cfg.psi_s_max"),
+    MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    MaskParam("slew_rate", "slew_rate", TAB, "", True),
+    *PWM_MASK_PARAMS,
+]
+
+
+def _sm_vhz_code() -> dict[str, str]:
+    """Code sections of the C-Script of observer-based V/Hz control of an SM."""
+    sources = ["common.c", "gradnet.c", "sm_parameters.c", "sm_control_loci.c"]
+    declarations = _declarations([*sources, "sm_flux_vector.c"], "SMVHzControlSystem")
+    i = {m.variable: k for k, m in enumerate(SM_VHZ_MASK_PARAMS)}
+    start = (
+        sm_par_code(SM_VHZ_MASK_PARAMS)
+        + f"SMVHzControllerCfg cfg = sm_vhz_controller_cfg(P({i['i_s_max']}, 0));\n"
+        + cfg_assignments(SM_VHZ_MASK_PARAMS)
+        + k_o_code(i["k_o"])
+        + f"sm_vhz_control_system_init(&ctrl, par, &cfg, P({i['slew_rate']}, 0));\n"
+        + pwm_code(i)
+    )
+    monitored = {
+        "w_M_ref": "ctrl.ref.w_M",
+        "w_c": "ctrl.fbk.w_c",
+        "tau_M_ref": "ctrl.ref.tau_M",
+        "tau_M": "ctrl.fbk.tau_M",
+        "psi_s_ref": "ctrl.ref.psi_s",
+        "psi_s": "cabs(ctrl.fbk.psi_s)",
+        "theta_m": "ctrl.fbk.theta_m",
+        "i_d": "creal(ctrl.fbk.i_s)",
+        "i_q": "cimag(ctrl.fbk.i_s)",
+    }
+    output = (
+        "double w_M_ref = InputSignal(1, 0);\n"
+        "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
+        "                     InputSignal(2, 2)};\n"
+        "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
+        "Measurements meas = {abc2complex(i_s_abc), u_dc, 0.0};\n"
+        "/* The gate enable */\n"
+        "sm_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref,\n"
+        "                                     InputSignal(0, 0) > 0.0);\n"
+        + DUTY_RATIO_CODE
+        + monitored_code(_sm_vhz_control.CTRL_OUTPUTS, monitored)
+    )
+    return {
+        "Declarations": declarations,
+        "StartFcn": start,
+        "OutputFcn": output,
+        "UpdateFcn": "sm_vhz_control_system_update(&ctrl);\n",
+    }
+
+
+SM_VHZ = MonolithicBlock(
+    name="Observer-based VHz control (SM)",
+    inputs=_names(_sm_vhz_control.CTRL_INPUTS),
+    input_widths=_widths(_sm_vhz_control.CTRL_INPUTS),
+    outputs=_sm_vhz_control.CTRL_OUTPUTS,
+    mask_params=SM_VHZ_MASK_PARAMS,
+    code=_sm_vhz_code,
+    cscript_params=_sm_cscript_params(SM_VHZ_MASK_PARAMS),
 )
 
 

@@ -1,15 +1,15 @@
 /*
- * Native simulation of synchronous machine drives with flux-vector control: the
- * translation unit of the shared library of motulator_export.native, with its API
- * for Python (ctypes).
+ * Native simulation of synchronous machine drives with flux-vector control or
+ * observer-based V/Hz control: the translation unit of the shared library of
+ * motulator_export.native, with its API for Python (ctypes).
  *
  * The system (System) consists of the simulation (sim.h), the drive model (drive.h)
- * with a synchronous machine, and the control system: VectorControlSystem with
- * FluxVectorController and a speed controller (sm_flux_vector.h), with the speed
- * reference. The API functions mirror the constructors of motulator; those of the
- * model are in sim.c and drive.c. The control system is constructed from its
- * parameters when the simulation starts (start), after which sim_run of sim.c runs
- * the simulation.
+ * with a synchronous machine, and the control system with the speed reference:
+ * VectorControlSystem with FluxVectorController and a speed controller, or
+ * VHzControlSystem with ObserverBasedVHzController (sm_flux_vector.h). The API
+ * functions mirror the constructors of motulator; those of the model are in sim.c
+ * and drive.c. The control system is constructed from its parameters when the
+ * simulation starts (start), after which sim_run of sim.c runs the simulation.
  */
 
 #include "common.c"
@@ -22,17 +22,20 @@
 #include "native.c"
 
 /* Signals logged at each step (the signal groups of ControlSystem.save), see
- * log_fields_width */
+ * log_fields_width. Both control systems have the references and the feedback
+ * signals of flux-vector control. */
 #define FVC_FIELDS                                                                     \
     "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c ref.w_M "           \
     "ref.d_abc:3 ref.enabled:b fbk.u_dc fbk.i_s:c fbk.u_s:c fbk.u_s_zoh:c "            \
     "fbk.psi_s:c fbk.e_o:c fbk.eps fbk.eps_f fbk.psi_a:c fbk.tau_M fbk.tau_L fbk.w_c " \
     "fbk.w_m fbk.w_M fbk.theta_c fbk.theta_m fbk.psi_f fbk.h fbk.caught:b"
 
-/* Vector control system with the speed reference */
+/* Vector control system or V/Hz control system with the speed reference */
 typedef struct {
     ControlSystem base;
+    int vhz; /* VHzControlSystem (else VectorControlSystem) */
     VectorControlSystem ctrl;
+    SMVHzControlSystem vhz_ctrl;
     Signal w_M_ref;
     double t; /* Controller time */
     Signal enable; /* Gate enable (ControlSystem.set_enable) */
@@ -42,9 +45,21 @@ typedef struct {
 /* Save the signals of the step (FVC_FIELDS) */
 static int fvc_save(FluxVectorControlSystem *self)
 {
-    const VectorControlSystem *ctrl = &self->ctrl;
-    const References *ref = &ctrl->ref;
-    const ObserverOutputs *fbk = &ctrl->fbk;
+    const References *ref;
+    const ObserverOutputs *fbk;
+    const PWM *pwm;
+    double k_comp;
+    if (self->vhz) {
+        ref = &self->vhz_ctrl.ref;
+        fbk = &self->vhz_ctrl.fbk;
+        pwm = &self->vhz_ctrl.pwm;
+        k_comp = self->vhz_ctrl.k_comp;
+    } else {
+        ref = &self->ctrl.ref;
+        fbk = &self->ctrl.fbk;
+        pwm = &self->ctrl.pwm;
+        k_comp = self->ctrl.k_comp;
+    }
     double *p = log_append(&self->base.log);
     if (p == NULL) {
         return SIM_ERROR_MEMORY;
@@ -55,9 +70,8 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, ref->psi_s);
     log_put_complex(&p, 0.0); /* Current reference, not used */
     log_put_complex(&p, ref->u_s);
-    double complex u_s_lim =
-        native_limited_voltage(&ctrl->pwm, ref->u_c_ab, ref->u_s, fbk->theta_c,
-                               ctrl->k_comp, ref->T_s, fbk->w_c, fbk->u_dc);
+    double complex u_s_lim = native_limited_voltage(
+        pwm, ref->u_c_ab, ref->u_s, fbk->theta_c, k_comp, ref->T_s, fbk->w_c, fbk->u_dc);
     log_put_complex(&p, cexp(-I * fbk->theta_c) * u_s_lim);
     log_put(&p, ref->w_M);
     for (int k = 0; k < 3; k++) {
@@ -94,7 +108,7 @@ static int fvc_get_enable(const ControlSystem *base)
 }
 
 /* Control step (ControlSystem.run_control_loop with the measurements of
- * VectorControlSystem.get_measurement) */
+ * VectorControlSystem.get_measurement or VHzControlSystem.get_measurement) */
 static int fvc_run(ControlSystem *base, const Model *mdl, double t,
                    const double complex *x, int enabled, double *T_s,
                    double d_abc[3])
@@ -103,25 +117,37 @@ static int fvc_run(ControlSystem *base, const Model *mdl, double t,
     self->enabled = enabled;
     (void)t;
     const Drive *drive = (const Drive *)mdl;
-    VectorControlSystem *ctrl = &self->ctrl;
     Measurements meas;
     meas.i_c_ab = drive_meas_current(drive, x);
     meas.u_dc = model_dc_voltage(mdl, x);
-    meas.theta_M = drive_meas_position(drive, x);
     double w_M_ref = signal_value(&self->w_M_ref, self->t);
     if (!isfinite(w_M_ref)) {
         return SIM_ERROR_SIGNAL;
     }
-    vector_control_system_compute_output(ctrl, &meas, w_M_ref, enabled);
+    if (self->vhz) {
+        meas.theta_M = 0.0; /* Not measured */
+        sm_vhz_control_system_compute_output(&self->vhz_ctrl, &meas, w_M_ref,
+                                             enabled);
+    } else {
+        meas.theta_M = drive_meas_position(drive, x);
+        vector_control_system_compute_output(&self->ctrl, &meas, w_M_ref, enabled);
+    }
     int status = fvc_save(self);
     if (status != SIM_OK) {
         return status;
     }
-    vector_control_system_update(ctrl);
-    *T_s = ctrl->ref.T_s;
+    const References *ref;
+    if (self->vhz) {
+        sm_vhz_control_system_update(&self->vhz_ctrl);
+        ref = &self->vhz_ctrl.ref;
+    } else {
+        vector_control_system_update(&self->ctrl);
+        ref = &self->ctrl.ref;
+    }
+    *T_s = ref->T_s;
     self->t = fmod(self->t + *T_s, 1e9); /* Avoid overflow, as ControlSystem.update */
     for (int k = 0; k < 3; k++) {
-        d_abc[k] = ctrl->ref.d_abc[k];
+        d_abc[k] = ref->d_abc[k];
     }
     return SIM_OK;
 }
@@ -136,6 +162,8 @@ typedef struct {
     SynchronousMachinePars est_par;
     FluxVectorControllerCfg cfg;
     PIController speed_ctrl;
+    SMVHzControllerCfg vhz_cfg;
+    double slew_rate;
     PWM pwm; /* Settings of the PWM */
 } System;
 
@@ -215,6 +243,7 @@ void set_flux_vector_controller(System *self, double i_s_max, double alpha_tau,
     cfg->J = J;
     cfg->T_s = T_s;
     cfg->sensorless = sensorless;
+    self->ctrl.vhz = 0;
 }
 
 /* Speed controller (PIController, e.g., SpeedController) by its gains */
@@ -222,6 +251,31 @@ void set_speed_controller(System *self, double k_p, double k_t, double alpha_i,
                           double u_max)
 {
     pi_init(&self->speed_ctrl, k_p, k_t, alpha_i, u_max);
+}
+
+/* ObserverBasedVHzControllerCfg in VHzControlSystem with the slew rate (mechanical
+ * rad/s^2), NAN for None, in the order of CFG_FIELDS of plecs/_sm_vhz_control.py;
+ * the observer gain is k_o0 + k_o1*abs(w_m) */
+void set_vhz_controller(System *self, double i_s_max, double alpha_psi,
+                        double alpha_tau, double alpha_f, double alpha_o, double k_o0,
+                        double k_o1, double k_u, double k_mtpv, double psi_s_min,
+                        double psi_s_max, double T_s, double slew_rate)
+{
+    SMVHzControllerCfg *cfg = &self->vhz_cfg;
+    *cfg = sm_vhz_controller_cfg(i_s_max);
+    cfg->alpha_psi = alpha_psi;
+    cfg->alpha_tau = alpha_tau;
+    cfg->alpha_f = alpha_f;
+    cfg->alpha_o = alpha_o;
+    cfg->k_o[0] = k_o0;
+    cfg->k_o[1] = k_o1;
+    cfg->k_u = k_u;
+    cfg->k_mtpv = k_mtpv;
+    cfg->psi_s_min = psi_s_min;
+    cfg->psi_s_max = psi_s_max;
+    cfg->T_s = T_s;
+    self->slew_rate = slew_rate;
+    self->ctrl.vhz = 1;
 }
 
 /* PWM of the control system, see native_pwm_settings */
@@ -252,9 +306,15 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
            double max_step, double rtol, double atol)
 {
     FluxVectorControlSystem *ctrl = &self->ctrl;
-    vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
-                               self->speed_ctrl);
-    native_pwm_copy_settings(&ctrl->ctrl.pwm, &self->pwm);
+    if (ctrl->vhz) {
+        sm_vhz_control_system_init(&ctrl->vhz_ctrl, self->est_par, &self->vhz_cfg,
+                                   self->slew_rate);
+        native_pwm_copy_settings(&ctrl->vhz_ctrl.pwm, &self->pwm);
+    } else {
+        vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
+                                   self->speed_ctrl);
+        native_pwm_copy_settings(&ctrl->ctrl.pwm, &self->pwm);
+    }
     ctrl->t = t_ctrl;
 
     double complex x[SIM_MAX_STATES];

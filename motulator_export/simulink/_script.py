@@ -48,6 +48,7 @@ from motulator_export.plecs._im_control import PAR_FIELDS as IM_PAR_FIELDS
 from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._sm_control import CFG_FIELDS as FVC_CFG_FIELDS
 from motulator_export.plecs._sm_control import PAR_FIELDS as SM_PAR_FIELDS
+from motulator_export.plecs._sm_vhz_control import CFG_FIELDS as SM_VHZ_CFG_FIELDS
 
 SIMULINK = Path(__file__).parent
 
@@ -224,9 +225,16 @@ def _par_call(cls: str, par: Any, fields: Sequence[str]) -> str:
     return _call(cls, [], [(f, getattr(par, f)) for f in fields])
 
 
-def _sm_script(mdl: Drive, ctrl: VectorControlSystem) -> tuple[list[str], list[str]]:
+def _sm_script(
+    mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem
+) -> tuple[list[str], list[str]]:
     """The system model and the control system of a synchronous machine drive."""
-    values, flux_map = _sm.export_values(ctrl)
+    if isinstance(ctrl, VHzControlSystem):
+        values, flux_map = _sm.export_vhz_values(ctrl)
+        cls, fields = sm_control.ObserverBasedVHzControllerCfg, SM_VHZ_CFG_FIELDS
+    else:
+        values, flux_map = _sm.export_values(ctrl)
+        cls, fields = sm_control.FluxVectorControllerCfg, FVC_CFG_FIELDS
     model: list[str] = []
     if _sm.has_gradnet_plant(mdl):
         par = cast(SpatialSaturatedSynchronousMachinePars, mdl.machine.par)
@@ -267,21 +275,20 @@ def _sm_script(mdl: Drive, ctrl: VectorControlSystem) -> tuple[list[str], list[s
             + ";"
         )
         est = "est_par"
-    cfg_cls = sm_control.FluxVectorControllerCfg
-    cfg = _call(
-        cfg_cls.__name__,
-        [],
-        [(f, values[f]) for f in FVC_CFG_FIELDS],
-        _defaults(cfg_cls),
-    )
-    control += [
-        f"cfg = {cfg};",
-        f"vector_ctrl = FluxVectorController({est}, cfg);",
-        f"speed_ctrl = {_speed_ctrl(values)};",
-        _control_system("VectorControlSystem", VECTOR_ARGS, values),
-        *_drive_references(mdl, ctrl),
-    ]
-    return model, control
+    cfg = _call(cls.__name__, [], [(f, values[f]) for f in fields], _defaults(cls))
+    control.append(f"cfg = {cfg};")
+    if isinstance(ctrl, VHzControlSystem):
+        control += [
+            f"vhz_ctrl = ObserverBasedVHzController({est}, cfg);",
+            _vhz_control_system(values),
+        ]
+    else:
+        control += [
+            f"vector_ctrl = FluxVectorController({est}, cfg);",
+            f"speed_ctrl = {_speed_ctrl(values)};",
+            _control_system("VectorControlSystem", VECTOR_ARGS, values),
+        ]
+    return model, [*control, *_drive_references(mdl, ctrl)]
 
 
 def _im_script(
@@ -320,14 +327,7 @@ def _im_script(
     if isinstance(ctrl, VHzControlSystem):
         control += [
             f"vhz_ctrl = ObserverBasedVHzController({est}, cfg);",
-            _control_system(
-                "VHzControlSystem",
-                ["vhz_ctrl"],
-                values,
-                [("slew_rate", values["slew_rate"])],
-                _defaults(VHzControlSystem),
-                "MME",
-            ),
+            _vhz_control_system(values),
         ]
     else:
         control += [
@@ -401,6 +401,18 @@ def _control_system(
     pwm = _pwm(values, overmodulation)
     args = [*named, *([("pwm", _Code(pwm))] if pwm is not None else [])]
     return f"ctrl = {_call(cls, positional, args, defaults)};"
+
+
+def _vhz_control_system(values: dict[str, Any]) -> str:
+    """The V/Hz control system of the V/Hz controller vhz_ctrl."""
+    return _control_system(
+        "VHzControlSystem",
+        ["vhz_ctrl"],
+        values,
+        [("slew_rate", values["slew_rate"])],
+        _defaults(VHzControlSystem),
+        "MME",
+    )
 
 
 # %%

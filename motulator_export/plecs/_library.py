@@ -20,6 +20,7 @@ from motulator_export.plecs import (
     _im_control,
     _im_vhz_control,
     _sm_control,
+    _sm_vhz_control,
 )
 from motulator_export.plecs._common import LIBRARY, _control_subsystem, _model_text
 from motulator_export.plecs._control import VALUES
@@ -31,6 +32,7 @@ CONTROL_BLOCKS = [
     _sm_control.FVC_BLOCK,
     _im_control.CVC_BLOCK,
     _im_vhz_control.VHZ_BLOCK,
+    _sm_vhz_control.VHZ_BLOCK,
     _grid_control.GFL_BLOCK,
     _grid_control.GFM_BLOCK,
 ]
@@ -57,7 +59,7 @@ def library_text(path: Path = LIBRARY) -> str:
         extra=header,
         trailer=trailer,
     )
-    return _model_text(path, "", 1.0, 1e-4, sch, (440, 580), False)
+    return _model_text(path, "", 1.0, 1e-4, sch, (440, 690), False)
 
 
 def write_library(path: str | Path = LIBRARY) -> Path:
