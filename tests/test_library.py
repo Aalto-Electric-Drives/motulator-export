@@ -111,6 +111,8 @@ CLASSES = {
         im_control.CurrentVectorControllerCfg
     ),
     "+drive/+control/+im/CurrentVectorController.m": im_control.CurrentVectorController,
+    "+drive/+control/+im/FluxVectorControllerCfg.m": im_control.FluxVectorControllerCfg,
+    "+drive/+control/+im/FluxVectorController.m": im_control.FluxVectorController,
     "+drive/+control/+im/ObserverBasedVHzControllerCfg.m": (
         im_control.ObserverBasedVHzControllerCfg
     ),

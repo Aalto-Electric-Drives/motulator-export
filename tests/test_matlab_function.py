@@ -44,6 +44,7 @@ from motulator_export.plecs import (
     _grid_control,
     _im,
     _im_control,
+    _im_fvc_control,
     _im_vhz_control,
     _sm,
     _sm_control,
@@ -82,6 +83,7 @@ from tests.sfunctions import (
 from tests.systems import (
     EXAMPLE_SYSTEMS,
     EXAMPLES,
+    IM_FVC_RTOL,
     SM_CVC_D_MIN,
     SM_PAR,
     SM_VHZ_CASES,
@@ -93,17 +95,24 @@ from tests.systems import (
     gfl_system,
     gfm_system,
     gradnet_control_system,
+    im_fvc_system,
     im_system,
     sm_cvc_system,
     sm_system,
     sm_vhz_system,
     vhz_system,
 )
-from tests.test_control import SYSTEMS, Compiled, init_script
+from tests.test_control import IM_FVC_CASES, SYSTEMS, Compiled, init_script
 
 TESTS = Path(__file__).parent
 # Tolerance of the outputs relative to their magnitudes (at least 1)
 RTOL = 1e-9
+# Tolerances of the control systems whose outputs depend on the square root of
+# rounding errors: in flux-vector control of induction machines, while the flux
+# reference is at its current limit, so is the current limit of the torque reference
+# (see IM_FVC_RTOL), so the rounding errors of the MATLAB code show at the square
+# root of their level, which the perturbations need not show
+KEY_RTOL = {"imfvc": 1e-6}
 # The variables of the model initializations of the harnesses are cleared first, so
 # that the fields of a previous initialization (e.g., a flux map) are not left
 CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm\n"
@@ -248,6 +257,13 @@ def case(name: str) -> Case:  # noqa: PLR0911
         values = _im.export_values(build()[1])
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
+    if name.startswith("imfvc"):
+        imfvc_args = IM_FVC_CASES[name.removeprefix("imfvc_")]
+        build, signals = im_fvc_system(*imfvc_args)
+        values = _im.export_values(build()[1])
+        rtol = IM_FVC_RTOL if imfvc_args[2] else None  # With the gates blocked
+        run = drive_run(build, signals, _im_fvc_control.FVC_BLOCK, 0.3, rtol)
+        return "imfvc", values, None, run, IM_FVC_CONSTANT
     if name.startswith("smcvc"):
         sm_cvc_args = {
             "smcvc_sensorless": (True, 0.0, False, False, 0.0),
@@ -306,6 +322,7 @@ CASES = [
     "cvc_u_th_blocked",
     "cvc_discrete_dead_time",
     "cvc_discrete_blocked",
+    *(f"imfvc_{v}" for v in IM_FVC_CASES),
     *(f"vhz_{v}" for v in VHZ_IDS),
     *SM_VHZ_IDS,
     "gfl",
@@ -314,6 +331,13 @@ CASES = [
     "gfm_power_limitation",
     "gfm_power_limitation_blocked",
 ]
+
+
+# Constant inputs of flux-vector control of induction machines with the zero speed
+# reference: while the flux builds up from zero, the flux reference is at its current
+# limit, where the current limit of the torque reference is the square root of a
+# rounding error (see IM_FVC_RTOL), which the perturbations need not show
+IM_FVC_CONSTANT = [0.0, *IM_INPUTS[1:]]
 
 
 def constant_sequence(block: ControlBlock, inputs: list[float]) -> list[list[float]]:
@@ -434,6 +458,7 @@ def replay(
         "fvc_sensorless",
         "smcvc_sensorless",
         "cvc_sensorless",
+        "imfvc_sensorless",
         f"vhz_{VHZ_IDS[0]}",
         SM_VHZ_IDS[0],
         "gfl",
@@ -473,8 +498,8 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     of them reaches 1e-6 relative to its magnitude, after which the replay is
     meaningless (an output that does not respond to the perturbation, e.g., the
     torque reference at its limit, does not show that the states still agree). The
-    tolerance is RTOL plus 100 times the sensitivity (the rounding errors of the
-    MATLAB code grow as the perturbation does).
+    tolerance is RTOL (or KEY_RTOL) plus 100 times the sensitivity (the rounding
+    errors of the MATLAB code grow as the perturbation does).
     """
     key, values, flux_map, run, constant = case(name)
     net, _ = compiled(key)
@@ -498,7 +523,7 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
         compared = np.cumprod(conditioned).astype(bool)
         sensitivity = np.maximum.accumulate(sensitivity, axis=0)
         err = np.where(compared[:, None], np.abs(actual - expected), 0.0)
-        tol = RTOL * scale + 100 * sensitivity
+        tol = KEY_RTOL.get(key, RTOL) * scale + 100 * sensitivity
         print(f"  steps compared: {np.sum(compared)} of {len(inputs)}")
         for j, signal in enumerate(["d_a", "d_b", "d_c", *block.signals]):
             ratio = np.max(err[:, j] / tol[:, j])

@@ -124,7 +124,8 @@ static void mdlStart(SimStruct *S)
     /* Machine model (InductionMachineInvGammaPars) */
     InductionMachineInvGammaPars par = {P(2, 0), P(3, 0), P(4, 0),
                                         P(5, 0), P(6, 0)};
-    im_flux_torque_ctrl_init(&self, par, P(0, 0), P(1, 0));
+    im_flux_torque_ctrl_init(&self, par, P(0, 0), P(1, 0),
+                             0.0); /* No integral action */
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)

@@ -41,6 +41,7 @@ from tests.systems import (
     blocked_drive,
     gfl_system,
     gfm_system,
+    im_fvc_system,
     im_system,
     sm_cvc_system,
     sm_system,
@@ -402,6 +403,9 @@ def test_failed_interval(N_eval: int) -> None:
         im_system(sensorless=True, t_d=2e-6, i_0=0.5, discrete=True)[0],
         im_system(sensorless=True, t_d=2e-6, i_0=0.5, d_min=0.2)[0],
         im_system(sensorless=True, t_d=2e-6, i_0=0.5, discrete=True, d_min=0.2)[0],
+        im_fvc_system(sensorless=True)[0],
+        im_fvc_system(sensorless=False, alpha_i=0.0)[0],
+        im_fvc_system(sensorless=True, t_d=2e-6, d_min=0.2)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.1)[0],
@@ -413,14 +417,17 @@ def test_failed_interval(N_eval: int) -> None:
         "cvc_discrete",
         "cvc_d_err_d_min",
         "cvc_discrete_d_err_d_min",
+        "fvc",
+        "fvc_sensored_no_integral",
+        "fvc_d_err_d_min",
         "vhz",
         "vhz_open_loop",
         "vhz_d_min",
     ],
 )
 def test_induction_machine(build: Build) -> None:
-    """Current-vector control and observer-based V/Hz control, also with the minimum
-    pulses and the compensation of the duty-ratio error."""
+    """Current-vector control, flux-vector control, and observer-based V/Hz control,
+    also with the minimum pulses and the compensation of the duty-ratio error."""
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
@@ -663,6 +670,17 @@ def test_gate_blocking(build: Build, t_stop: float) -> None:
     res_py, res_c = simulate(build, t_stop)
     assert not np.all(res_c.mdl.converter.enabled)
     check(res_py, res_c, rtol=1e-9)
+
+
+def test_gate_blocking_im_fvc() -> None:
+    """
+    Gate blocking in flux-vector control of an induction machine, as in
+    `test_gate_blocking`, to the tolerance of the torque reference limited by the
+    current while the rotor flux builds up after the release (see IM_FVC_RTOL).
+    """
+    res_py, res_c = simulate(im_fvc_system(sensorless=True, blocked=True)[0], 0.3)
+    assert not np.all(res_c.mdl.converter.enabled)
+    check(res_py, res_c, rtol=1e-6)
 
 
 def test_gate_blocking_gradnet() -> None:

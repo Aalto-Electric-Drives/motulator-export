@@ -21,6 +21,9 @@ if isa(ctrl, 'motulator.drive.control.VectorControlSystem')
     elseif isa(vc, 'motulator.drive.control.im.CurrentVectorController')
         c.name = 'Current-vector control';
         plant = {'machine', 'motulator.drive.model.InductionMachine'};
+    elseif isa(vc, 'motulator.drive.control.im.FluxVectorController')
+        c.name = 'Flux-vector control (IM)';
+        plant = {'machine', 'motulator.drive.model.InductionMachine'};
     else
         error('motulator:unsupported', ['Only FluxVectorController and ' ...
             'CurrentVectorController supported in VectorControlSystem.']);

@@ -207,8 +207,11 @@ def _flux_observer() -> CBlock:
     )
 
 
-def _reference_generator() -> CBlock:
-    """Flux and torque reference generator (ReferenceGenerator)."""
+def _reference_generator(sig: Signals = SIGNALS, fvc: bool = False) -> CBlock:
+    """
+    Flux and torque reference generator (ReferenceGenerator), with `fvc` that of
+    flux-vector control (FluxVectorController, with tau_M_max and k_u of cfg).
+    """
     mask = Mask(
         "ReferenceGenerator (motulator)",
         "Reference generator with field weakening and torque limits "
@@ -216,7 +219,7 @@ def _reference_generator() -> CBlock:
         "reference, and the feedback signals fbk (the synchronous angular frequency "
         "fbk.w_s and the rotor flux estimate fbk.psi_R). The output ref is [psi_s "
         "tau_M], the flux reference and the limited torque reference."
-        + VHZ_PAR_DESCRIPTION,
+        + (PAR_DESCRIPTION if fvc else VHZ_PAR_DESCRIPTION),
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -225,8 +228,14 @@ def _reference_generator() -> CBlock:
                 "cfg.psi_s_nom",
             ),
             Param("i_s_max", "i_s_max: Maximum stator current (A)", "cfg.i_s_max"),
-            Param("tau_M_max", "tau_M_max: Maximum torque reference (Nm)", "inf"),
-            Param("k_u", "k_u: Voltage utilization factor", "k_u"),
+            Param(
+                "tau_M_max",
+                "tau_M_max: Maximum torque reference (Nm)",
+                "cfg.tau_M_max" if fvc else "inf",
+            ),
+            Param(
+                "k_u", "k_u: Voltage utilization factor", "cfg.k_u" if fvc else "k_u"
+            ),
             Param("k_b", "k_b: Breakdown torque margin", "cfg.k_b"),
         ],
         init=PAR_INIT,
@@ -242,7 +251,7 @@ def _reference_generator() -> CBlock:
         f"P({i['k_b']}, 0));\n"
     )
     output = (
-        SIGNALS.read(2, "fbk")
+        sig.read(2, "fbk")
         + "/* Flux and limited torque references (ref.psi_s, ref.tau_M) */\n"
         "double psi_s_ref, tau_M_ref;\n"
         "im_reference_gen_flux_and_torque(&self, InputSignal(1, 0), fbk.w_s,\n"
@@ -253,11 +262,11 @@ def _reference_generator() -> CBlock:
     )
     return CBlock(
         "ReferenceGenerator",
-        [Port("u_dc", 1), Port("tau_M_ref", 1), SIGNALS.port("fbk")],
+        [Port("u_dc", 1), Port("tau_M_ref", 1), sig.port("fbk")],
         [Port("ref", 2)],
-        SIGNALS.class_code("IMReferenceGenerator", start, output),
+        sig.class_code("IMReferenceGenerator", start, output),
         params,
-        SIGNALS.sfunction("reference_generator"),
+        sig.sfunction("reference_generator"),
         sample_time=None,
         mask=mask,
         mcode=MCode(
@@ -269,7 +278,7 @@ def _reference_generator() -> CBlock:
             "tau_M_ref, ...\n"
             "    fbk.w_s, abs(fbk.psi_R), u_dc);\n"
             "ref = [psi_s_ref; tau_M_lim];\n",
-            inputs={"fbk": SIGNALS.vector("fbk")},
+            inputs={"fbk": sig.vector("fbk")},
             checks=(
                 *required("psi_s_nom", "i_s_max", "tau_M_max", "k_u", "k_b"),
                 *M_PAR_CHECKS,
@@ -278,59 +287,105 @@ def _reference_generator() -> CBlock:
     )
 
 
-def _flux_torque_controller() -> CBlock:
-    """Flux and torque controller (FluxTorqueController)."""
+def _flux_torque_controller(sig: Signals = SIGNALS, fvc: bool = False) -> CBlock:
+    """
+    Flux and torque controller (FluxTorqueController), with `fvc` that of flux-vector
+    control (FluxVectorController, with the integral action, whose state is updated
+    with the realized voltage fbk.u_s, and alpha_psi resolved by its mask).
+    """
+    integral = (
+        [
+            Param("alpha_i", "alpha_i: Integral-action bandwidth (rad/s)", "alpha_i"),
+            Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
+        ]
+        if fvc
+        else []
+    )
     mask = Mask(
         "FluxTorqueController (motulator)",
-        "Flux and torque controller (FluxTorqueController) without the integral "
-        "action. The input ref is [psi_s tau_M], the flux and torque references, and "
-        "the output is the stator voltage reference." + VHZ_PAR_DESCRIPTION,
+        "Flux and torque controller (FluxTorqueController) "
+        + (
+            "with the integral action, whose states are updated with the realized "
+            "voltage fbk.u_s"
+            if fvc
+            else "without the integral action"
+        )
+        + ". The input ref is [psi_s tau_M], the flux and torque references, and "
+        "the output is the stator voltage reference."
+        + (PAR_DESCRIPTION if fvc else VHZ_PAR_DESCRIPTION),
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
                 "alpha_psi",
                 "alpha_psi: Flux-control bandwidth (rad/s)",
-                "cfg.alpha_psi",
+                "alpha_psi" if fvc else "cfg.alpha_psi",
             ),
             Param(
                 "alpha_tau",
                 "alpha_tau: Torque-control bandwidth (rad/s)",
                 "cfg.alpha_tau",
             ),
+            *integral,
         ],
         init=PAR_INIT,
     )
     params = mask_params(mask, PAR)
     i = {p: k for k, p in enumerate(params)}
+    scalars = ["alpha_psi", "alpha_tau", *(["alpha_i", "T_s"] if fvc else [])]
     start = (
-        checks(params, ["alpha_psi", "alpha_tau"])
+        checks(params, scalars)
         + _par_code(params)
         + f"im_flux_torque_ctrl_init(&self, par, P({i['alpha_psi']}, 0), "
-        f"P({i['alpha_tau']}, 0));\n"
+        f"P({i['alpha_tau']}, 0),\n"
+        + (
+            f"                         P({i['alpha_i']}, 0));\n"
+            f"T_s = P({i['T_s']}, 0);\n"
+            if fvc
+            else "                         0.0); /* No integral action */\n"
+        )
     )
     output = (
-        SIGNALS.read(1, "fbk") + "double complex u_s_ref =\n"
+        sig.read(1, "fbk", declare=not fvc) + "double complex u_s_ref =\n"
         "    im_flux_torque_ctrl_compute_output(&self, InputSignal(0, 0),\n"
         "                                       InputSignal(0, 1), &fbk);\n"
         + complex_out(0, "u_s_ref")
     )
+    code = (
+        sig.class_code(
+            "IMFluxTorqueController",
+            start,
+            output,
+            "im_flux_torque_ctrl_update(&self, T_s, &fbk);\n",
+            workspace=SAMPLING + "static IMObserverOutputs fbk;\n",
+        )
+        if fvc
+        else sig.class_code("IMFluxTorqueController", start, output)
+    )
     return CBlock(
         "FluxTorqueController",
-        [Port("ref", 2), SIGNALS.port("fbk")],
+        [Port("ref", 2), sig.port("fbk")],
         [Port("u_s", 2)],
-        SIGNALS.class_code("IMFluxTorqueController", start, output),
+        code,
         params,
-        SIGNALS.sfunction("flux_torque_controller"),
-        sample_time=None,
+        sig.sfunction("flux_torque_controller"),
+        **({} if fvc else {"sample_time": None}),
         mask=mask,
         mcode=MCode(
-            start=M_PAR + "self = im_flux_torque_ctrl_init(par, p.alpha_psi, "
-            "p.alpha_tau);\n",
-            output="u_s = im_flux_torque_ctrl_compute_output(self, ref(1), ref(2), "
-            "fbk);\n",
-            inputs={"fbk": SIGNALS.vector("fbk")},
+            start=M_PAR
+            + "self = im_flux_torque_ctrl_init(par, p.alpha_psi, "
+            + (
+                "p.alpha_tau, p.alpha_i);\n"
+                if fvc
+                else "p.alpha_tau, 0); % No integral action\n"
+            ),
+            output="[self, u_s] = im_flux_torque_ctrl_compute_output(self, ref(1), "
+            "ref(2), fbk);\n",
+            update="self = im_flux_torque_ctrl_update(self, p.T_s, fbk);\n"
+            if fvc
+            else "",
+            inputs={"fbk": sig.vector("fbk")},
             outputs={"u_s": COMPLEX},
-            checks=(*required("alpha_psi", "alpha_tau"), *M_PAR_CHECKS),
+            checks=(*required(*scalars), *M_PAR_CHECKS),
         ),
     )
 

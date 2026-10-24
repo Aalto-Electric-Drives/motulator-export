@@ -189,6 +189,61 @@ def im_system(
     return build, signals
 
 
+def im_fvc_system(
+    sensorless: bool,
+    t_d: float = 0.0,
+    blocked: bool = False,
+    d_min: float = 0.0,
+    alpha_i: float | None = None,
+) -> tuple[Build, Signals]:
+    """
+    Induction machine drive of `im_system` with flux-vector control, optionally with
+    the dead time and its compensation (`smooth_sign`), the gates blocked at the
+    start and during the operation (`blocked`), the minimum duty ratio `d_min`, and
+    the integral action (`alpha_i`, None for its default).
+    """
+    par = model.InductionMachineInvGammaPars(**IM_PAR)
+
+    def build() -> tuple[model.Drive, VectorControlSystem]:
+        mdl = model.Drive(
+            model.InductionMachine(par),
+            model.MechanicalSystem(J=0.015),
+            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+        )
+        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 14.6)
+        cfg = im_control.FluxVectorControllerCfg(
+            psi_s_nom=1.04, i_s_max=10.6, alpha_i=alpha_i, sensorless=sensorless
+        )
+        d_err = None
+        if t_d > 0:
+            d_err = im_control.InverterNonlinearity(t_d, sign=smooth_sign)
+        ctrl = VectorControlSystem(
+            im_control.FluxVectorController(par, cfg),
+            im_control.SpeedController(**IM_SPEED),
+            im_control.PWM(d_err=d_err, d_min=d_min),
+        )
+        # After the rotor flux has built up, see IM_FVC_RTOL
+        ctrl.set_speed_ref(lambda t: (t > 0.1) * 2 * pi * 20)
+        if blocked:
+            ctrl.set_enable(blocked_drive)
+        return mdl, ctrl
+
+    signals = {
+        "w_M": lambda fbk, _: fbk.w_M,
+        "tau_M_ref": lambda _, ref: ref.tau_M,
+        "psi_s_ref": lambda _, ref: ref.psi_s,
+        "psi_R": lambda fbk, _: np.abs(fbk.psi_R),
+    }
+    return build, signals
+
+
+# Tolerances of flux-vector control of induction machines relative to the signal
+# magnitudes (see `compare`) with the gates blocked: while the rotor flux builds up
+# after the release, the current limit of the torque reference is the square root of
+# a rounding error (as in V/Hz control, see VHZ_RTOL), which the voltage reference
+# follows
+IM_FVC_RTOL = {"tau_M_ref": 1e-6, "d_a": 1e-6, "d_b": 1e-6, "d_c": 1e-6}
+
 IM_NOM = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
 IM_BASE = utils.BaseValues.from_nominal(IM_NOM, n_p=2)
 # Pure open-loop V/Hz control, as in plot_2kw_im_diode_vhz.py of motulator
@@ -430,6 +485,7 @@ EXAMPLE_SYSTEMS = [
     "ipmsm_2kw_cvc_discrete",
     "pmsyrm_6kw_gn_fvc",
     "im_2kw_cvc",
+    "im_2kw_fvc",
     "im_2kw_vhz",
     "im_2kw_vhz_open_loop",
     "gfl_10kva_lcl",

@@ -207,6 +207,22 @@ static void im_speed_flux_observer_update(IMSpeedFluxObserver *self, double T_s,
     im_flux_observer_update(&self->flux_observer, T_s, out);
 }
 
+/* Speed and flux observer with the defaults of create_speed_flux_observer: alpha_o
+ * NAN for None, and J NAN (or zero) for None */
+static void im_create_speed_flux_observer(IMSpeedFluxObserver *self,
+                                          InductionMachineInvGammaPars par,
+                                          double alpha_o, double T_s, int sensorless,
+                                          double J)
+{
+    J = isnan(J) ? 0.0 : J; /* Zero means None */
+    if (isnan(alpha_o)) {
+        /* With J, the double pole at alpha_o/2 keeps the speed gain about the same */
+        alpha_o = sensorless ? 2.0 * M_PI * 60.0 : 2.0 * M_PI * 400.0;
+        alpha_o = (J > 0.0) ? 0.5 * alpha_o : alpha_o;
+    }
+    im_speed_flux_observer_init(self, par, alpha_o, T_s, sensorless, J);
+}
+
 /* IMCurrentReferenceGenerator ---------------------------------------------- */
 
 static void im_reference_gen_init(IMCurrentReferenceGenerator *self,
@@ -302,25 +318,16 @@ static void im_current_vector_ctrl_init(IMCurrentVectorController *self,
                                         InductionMachineInvGammaPars par,
                                         const IMCurrentVectorControllerCfg *cfg)
 {
-    /* Resolve the defaults, as in CurrentVectorController.__init__ and
-     * create_speed_flux_observer */
+    /* Resolve the default, as in CurrentVectorController.__init__ */
     double alpha_i = isnan(cfg->alpha_i) ? cfg->alpha_c : cfg->alpha_i;
-    double J = isnan(cfg->J) ? 0.0 : cfg->J; /* Zero means None */
-    double alpha_o = cfg->alpha_o;
-    if (isnan(alpha_o)) {
-        /* With J, the double pole at alpha_o/2 keeps the speed gain about the same */
-        alpha_o = cfg->sensorless ? 2.0 * M_PI * 60.0 : 2.0 * M_PI * 400.0;
-        alpha_o = (J > 0.0) ? 0.5 * alpha_o : alpha_o;
-    }
-
     self->T_s = cfg->T_s;
     self->sensorless = cfg->sensorless;
     im_reference_gen_init(&self->reference_gen, par, cfg->psi_s_nom, cfg->i_s_max,
                           cfg->w_s_nom, cfg->k_u, cfg->k_fw);
     im_current_ctrl_init(&self->current_ctrl, &par, cfg->alpha_c, alpha_i,
                          cfg->discrete, cfg->T_s);
-    im_speed_flux_observer_init(&self->observer, par, alpha_o, cfg->T_s,
-                                cfg->sensorless, J);
+    im_create_speed_flux_observer(&self->observer, par, cfg->alpha_o, cfg->T_s,
+                                  cfg->sensorless, cfg->J);
 }
 
 static void im_current_vector_ctrl_compute_output(IMCurrentVectorController *self,
@@ -349,6 +356,59 @@ static void im_current_vector_ctrl_update(IMCurrentVectorController *self,
     im_current_ctrl_update(&self->current_ctrl, ref->T_s, u_s, fbk->w_c);
 }
 
+/* VectorControlSystem helpers --------------------------------------------- */
+
+/* Feedback signals (DriveControlSystem.get_feedback). The observer uses the voltage
+ * of the ongoing sampling period, while the control laws use the voltage averaged
+ * over the previous and ongoing periods. In standby (with blocked gates, and at the
+ * first sampling instant after the release of a sensorless drive,
+ * VectorControlSystem._standby), the voltage is unknown (NAN), and the observer runs
+ * on its open-circuit model, whose voltage is used for the control laws too. */
+static void im_vector_control_feedback(const IMSpeedFluxObserver *observer,
+                                       int sensorless, const PWM *pwm,
+                                       const IMMeasurements *meas, int standby,
+                                       IMObserverOutputs *fbk)
+{
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
+    if (!standby) {
+        u_c_ab_zoh = pwm_realized_voltage(pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
+    if (sensorless) {
+        im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, 0.0,
+                                              0.0, fbk);
+    } else {
+        /* Speed error from the measured rotor speed (compute_feedback) */
+        double eps = meas->w_M - observer->speed_observer.w_M;
+        im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
+                                              1.0, fbk);
+    }
+    fbk->u_s = standby ? fbk->u_s_zoh : cexp(-I * fbk->theta_c) * u_c_ab;
+    fbk->u_dc = meas->u_dc;
+}
+
+/* Duty ratios for the PWM (modulate), the angle of the voltage reference u_s_ref
+ * advanced by k_comp*T_s*w_c, or the zero vector (zero_vector nonzero). Returns the
+ * limited voltage reference in the controller coordinates (u_s_lim). */
+static double complex im_vector_control_modulate(PWM *pwm, double k_comp,
+                                                 int zero_vector, double T_s,
+                                                 double complex u_s_ref,
+                                                 const IMMeasurements *meas,
+                                                 const IMObserverOutputs *fbk,
+                                                 double d_abc[3])
+{
+    double complex u_s_ab_ref = cexp(I * fbk->theta_c) * u_s_ref;
+    u_s_ab_ref *= cexp(I * k_comp * T_s * fbk->w_c);
+    if (zero_vector) {
+        u_s_ab_ref = 0.0;
+    }
+    double complex u_lim_ab;
+    pwm_compute_output(pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab, d_abc,
+                       &u_lim_ab);
+    return cexp(-I * fbk->theta_c) * u_lim_ab;
+}
+
 /* IMVectorControlSystem ---------------------------------------------------- */
 
 static void im_vector_control_system_init(IMVectorControlSystem *self,
@@ -375,33 +435,10 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
     IMObserverOutputs *fbk = &self->fbk;
     IMReferences *ref = &self->ref;
     self->enabled = enabled;
-
-    /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
-     * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. In standby (with blocked gates,
-     * and at the first sampling instant after the release of a sensorless drive,
-     * VectorControlSystem._standby), the voltage is unknown (NAN), and the observer
-     * runs on its open-circuit model, whose voltage is used for the control laws too.
-     */
     int standby = !enabled || self->release_step;
-    double complex u_c_ab_zoh = NAN;
-    double complex u_c_ab = NAN;
-    if (!standby) {
-        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
-        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
-    }
-    const IMSpeedFluxObserver *observer = &self->vector_ctrl.observer;
-    if (self->vector_ctrl.sensorless) {
-        im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, 0.0,
-                                              0.0, fbk);
-    } else {
-        /* Speed error from the measured rotor speed (compute_feedback) */
-        double eps = meas->w_M - observer->speed_observer.w_M;
-        im_speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
-                                              1.0, fbk);
-    }
-    fbk->u_s = standby ? fbk->u_s_zoh : cexp(-I * fbk->theta_c) * u_c_ab;
-    fbk->u_dc = meas->u_dc;
+    int sensorless = self->vector_ctrl.sensorless;
+    im_vector_control_feedback(&self->vector_ctrl.observer, sensorless, &self->pwm,
+                               meas, standby, fbk);
 
     /* Speed controller and vector controller, or in standby, the vector controller
      * with zero torque reference and the zero vector of a sensorless drive */
@@ -410,18 +447,9 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
         tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
     }
     im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
-
-    /* Duty ratios for the PWM (modulate), the angle of the voltage reference advanced
-     * by k_comp*T_s*w_c, or the zero vector of a sensorless drive in standby */
-    double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
-    u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
-    if (self->vector_ctrl.sensorless && standby) {
-        u_s_ab_ref = 0.0;
-    }
-    double complex u_lim_ab;
-    pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c,
-                       meas->i_c_ab, ref->d_abc, &u_lim_ab);
-    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+    ref->u_s_lim = im_vector_control_modulate(&self->pwm, self->k_comp,
+                                              sensorless && standby, ref->T_s,
+                                              ref->u_s, meas, fbk, ref->d_abc);
     ref->w_M = w_M_ref;
     ref->enabled = enabled;
 }

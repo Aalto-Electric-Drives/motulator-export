@@ -58,6 +58,7 @@ from tests.systems import (
     gfl_system,
     gfm_system,
     gradnet_control_system,
+    im_fvc_system,
     im_system,
     sm_cvc_system,
     sm_system,
@@ -74,6 +75,11 @@ def fvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 @pytest.fixture(scope="module")
 def cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(monolithic.CVC, tmp_path_factory.mktemp("cvc"))
+
+
+@pytest.fixture(scope="module")
+def im_fvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(monolithic.IM_FVC, tmp_path_factory.mktemp("im_fvc"))
 
 
 @pytest.fixture(scope="module")
@@ -189,6 +195,26 @@ def test_current_vector_control(
     compare(build, model.Simulation, drive_sfun(cvc, monolithic.CVC), signals, 0.3)
     check_dc_bus_limit(cvc, monolithic.CVC, IM_INPUTS, restarter(cvc, params))
     cvc.sfun_terminate()
+
+
+@pytest.mark.parametrize(
+    ("sensorless", "t_d", "blocked", "d_min"),
+    [(True, 0.0, False, 0.0), (False, 0.0, False, 0.0), (True, 2e-6, False, 0.2)],
+    ids=["sensorless", "sensored", "dead_time_min_pulse"],
+)
+def test_im_flux_vector_control(
+    im_fvc: ctypes.CDLL, sensorless: bool, t_d: float, blocked: bool, d_min: float
+) -> None:
+    """The S-function of flux-vector control of an induction machine should agree
+    with motulator, also with the dead-time compensation and the minimum pulses."""
+    build, signals = im_fvc_system(sensorless, t_d, blocked, d_min)
+    values = _im.export_values(build()[1])
+    params = sfunction_params(monolithic.IM_FVC, values)
+    assert start(im_fvc, params) is None
+    sfun = drive_sfun(im_fvc, monolithic.IM_FVC)
+    compare(build, model.Simulation, sfun, signals, 0.3)
+    check_dc_bus_limit(im_fvc, monolithic.IM_FVC, IM_INPUTS, restarter(im_fvc, params))
+    im_fvc.sfun_terminate()
 
 
 @pytest.mark.parametrize(

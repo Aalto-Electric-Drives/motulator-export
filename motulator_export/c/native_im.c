@@ -1,13 +1,13 @@
 /*
- * Native simulation of induction machine drives with current-vector control or
- * observer-based V/Hz control: the translation unit of the shared library of
- * motulator_export.native, with its API for Python (ctypes).
+ * Native simulation of induction machine drives with current-vector control,
+ * flux-vector control, or observer-based V/Hz control: the translation unit of the
+ * shared library of motulator_export.native, with its API for Python (ctypes).
  *
  * The system (System) consists of the simulation (sim.h), the drive model (drive.h)
  * with an induction machine, and the control system with the speed reference:
- * VectorControlSystem with CurrentVectorController and a speed controller
- * (im_current_vector.h), or VHzControlSystem with ObserverBasedVHzController
- * (im_flux_vector.h). The API functions mirror the constructors of motulator; those
+ * VectorControlSystem with CurrentVectorController (im_current_vector.h) or
+ * FluxVectorController (im_flux_vector.h) and a speed controller, or
+ * VHzControlSystem with ObserverBasedVHzController (im_flux_vector.h). The API functions mirror the constructors of motulator; those
  * of the model are in sim.c and drive.c. The control system is constructed from its
  * parameters when the simulation starts (start), after which sim_run of sim.c runs
  * the simulation.
@@ -22,7 +22,7 @@
 #include "native.c"
 
 /* Signals logged at each step (the signal groups of ControlSystem.save), see
- * log_fields_width. Both control systems have the feedback signals of the flux
+ * log_fields_width. The control systems have the feedback signals of the flux
  * observer. */
 #define IM_FIELDS                                                                      \
     "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c ref.w_M "           \
@@ -34,7 +34,9 @@
 typedef struct {
     ControlSystem base;
     int vhz; /* VHzControlSystem (else VectorControlSystem) */
+    int fvc; /* Flux-vector control (else current-vector control) */
     IMVectorControlSystem cvc;
+    IMFVCControlSystem fvc_ctrl;
     IMVHzControlSystem vhz_ctrl;
     Signal w_M_ref;
     double t; /* Controller time */
@@ -49,10 +51,10 @@ static int im_save(IMControlSystem *self)
     double T_s, tau_M, psi_s, w_M;
     const double *d_abc;
     double complex i_s, u_s, u_s_lim;
-    if (self->vhz) {
-        const IMVHzControlSystem *ctrl = &self->vhz_ctrl;
-        const IMVHzReferences *ref = &ctrl->ref;
-        fbk = &ctrl->fbk;
+    if (self->vhz || self->fvc) {
+        /* The references of V/Hz control, also of flux-vector control */
+        const IMVHzReferences *ref = self->vhz ? &self->vhz_ctrl.ref : &self->fvc_ctrl.ref;
+        fbk = self->vhz ? &self->vhz_ctrl.fbk : &self->fvc_ctrl.fbk;
         T_s = ref->T_s;
         tau_M = ref->tau_M;
         psi_s = ref->psi_s;
@@ -139,7 +141,13 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
     } else {
         /* The measured speed is used only in the sensored mode */
         IMMeasurements meas = {i_c_ab, u_dc, drive_meas_speed(drive, x)};
-        im_vector_control_system_compute_output(&self->cvc, &meas, w_M_ref, enabled);
+        if (self->fvc) {
+            im_fvc_control_system_compute_output(&self->fvc_ctrl, &meas, w_M_ref,
+                                                 enabled);
+        } else {
+            im_vector_control_system_compute_output(&self->cvc, &meas, w_M_ref,
+                                                    enabled);
+        }
     }
     int status = im_save(self);
     if (status != SIM_OK) {
@@ -150,6 +158,10 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
         im_vhz_control_system_update(&self->vhz_ctrl);
         *T_s = self->vhz_ctrl.ref.T_s;
         d = self->vhz_ctrl.ref.d_abc;
+    } else if (self->fvc) {
+        im_fvc_control_system_update(&self->fvc_ctrl);
+        *T_s = self->fvc_ctrl.ref.T_s;
+        d = self->fvc_ctrl.ref.d_abc;
     } else {
         im_vector_control_system_update(&self->cvc);
         *T_s = self->cvc.ref.T_s;
@@ -171,6 +183,7 @@ typedef struct {
     /* Parameters of the control system, from which it is constructed at the start */
     InductionMachineInvGammaPars par;
     IMCurrentVectorControllerCfg cvc_cfg;
+    IMFluxVectorControllerCfg fvc_cfg;
     PIController speed_ctrl;
     IMVHzControllerCfg vhz_cfg;
     double slew_rate;
@@ -236,6 +249,30 @@ void set_current_vector_controller(System *self, double psi_s_nom, double i_s_ma
     cfg->sensorless = sensorless;
     cfg->discrete = discrete;
     self->ctrl.vhz = 0;
+    self->ctrl.fvc = 0;
+}
+
+/* FluxVectorControllerCfg, NAN for None, in VectorControlSystem, in the order of
+ * CFG_FIELDS of plecs/_im_fvc_control.py */
+void set_flux_vector_controller(System *self, double psi_s_nom, double i_s_max,
+                                double alpha_tau, double alpha_psi, double alpha_i,
+                                double alpha_o, double tau_M_max, double k_u,
+                                double k_b, double J, int sensorless, double T_s)
+{
+    IMFluxVectorControllerCfg *cfg = &self->fvc_cfg;
+    *cfg = im_flux_vector_controller_cfg(psi_s_nom, i_s_max);
+    cfg->alpha_tau = alpha_tau;
+    cfg->alpha_psi = alpha_psi;
+    cfg->alpha_i = alpha_i;
+    cfg->alpha_o = alpha_o;
+    cfg->tau_M_max = tau_M_max;
+    cfg->k_u = k_u;
+    cfg->k_b = k_b;
+    cfg->J = J;
+    cfg->sensorless = sensorless;
+    cfg->T_s = T_s;
+    self->ctrl.vhz = 0;
+    self->ctrl.fvc = 1;
 }
 
 /* Speed controller (PIController, e.g., SpeedController) by its gains */
@@ -261,6 +298,7 @@ void set_vhz_controller(System *self, double psi_s_nom, double i_s_max,
     cfg->T_s = T_s;
     self->slew_rate = slew_rate;
     self->ctrl.vhz = 1;
+    self->ctrl.fvc = 0;
 }
 
 /* PWM of the control system, see native_pwm_settings */
@@ -295,6 +333,10 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
         im_vhz_control_system_init(&ctrl->vhz_ctrl, self->par, &self->vhz_cfg,
                                    self->slew_rate);
         native_pwm_copy_settings(&ctrl->vhz_ctrl.pwm, &self->pwm);
+    } else if (ctrl->fvc) {
+        im_fvc_control_system_init(&ctrl->fvc_ctrl, self->par, &self->fvc_cfg,
+                                   self->speed_ctrl);
+        native_pwm_copy_settings(&ctrl->fvc_ctrl.pwm, &self->pwm);
     } else {
         im_vector_control_system_init(&ctrl->cvc, self->par, &self->cvc_cfg,
                                       self->speed_ctrl);

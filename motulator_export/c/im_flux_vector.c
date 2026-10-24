@@ -1,6 +1,6 @@
 /*
- * Observer-based V/Hz control of induction machine drives, ported from motulator. See
- * im_flux_vector.h.
+ * Flux-vector control and observer-based V/Hz control of induction machine drives,
+ * ported from motulator. See im_flux_vector.h.
  */
 
 #include "im_flux_vector.h"
@@ -20,6 +20,25 @@ static double py_max(double a, double b)
 
 /* Configuration ------------------------------------------------------------ */
 
+static IMFluxVectorControllerCfg im_flux_vector_controller_cfg(double psi_s_nom,
+                                                               double i_s_max)
+{
+    IMFluxVectorControllerCfg cfg;
+    cfg.psi_s_nom = psi_s_nom;
+    cfg.i_s_max = i_s_max;
+    cfg.alpha_tau = 2.0 * M_PI * 100.0;
+    cfg.alpha_psi = NAN;
+    cfg.alpha_i = NAN;
+    cfg.alpha_o = NAN;
+    cfg.tau_M_max = INFINITY;
+    cfg.k_u = 0.9;
+    cfg.k_b = 0.9;
+    cfg.J = NAN;
+    cfg.sensorless = 1;
+    cfg.T_s = 125e-6;
+    return cfg;
+}
+
 static IMVHzControllerCfg im_vhz_controller_cfg(double psi_s_nom, double i_s_max)
 {
     IMVHzControllerCfg cfg;
@@ -38,39 +57,66 @@ static IMVHzControllerCfg im_vhz_controller_cfg(double psi_s_nom, double i_s_max
 
 static void im_flux_torque_ctrl_init(IMFluxTorqueController *self,
                                      InductionMachineInvGammaPars par,
-                                     double alpha_psi, double alpha_tau)
+                                     double alpha_psi, double alpha_tau,
+                                     double alpha_i)
 {
     self->par = par;
     self->alpha_psi = alpha_psi;
     self->alpha_tau = alpha_tau;
+    self->alpha_i = alpha_i;
+    self->x_psi = 0.0;
+    self->x_tau = 0.0;
+    self->i_a = 0.0;
+    self->u_ff = 0.0;
 }
 
-static double complex im_flux_torque_ctrl_compute_output(
-    const IMFluxTorqueController *self, double psi_s_ref, double tau_M_ref,
-    const IMObserverOutputs *fbk)
+static double complex im_flux_torque_ctrl_compute_output(IMFluxTorqueController *self,
+                                                         double psi_s_ref,
+                                                         double tau_M_ref,
+                                                         const IMObserverOutputs *fbk)
 {
     const InductionMachineInvGammaPars *par = &self->par;
+    double psi_s_abs = cabs(fbk->psi_s);
 
-    /* Auxiliary current, torque-production factor, and directions */
-    double complex t_psi = 1.0, t_tau = 0.0;
-    if (par->L_sgm > 0.0) { /* L_sgm = 0 in open-loop V/Hz control */
-        double complex i_a = fbk->psi_R / par->L_sgm;
-        double c_tau = 1.5 * par->n_p * creal(i_a * conj(fbk->psi_s));
-        if (c_tau > 0.0) {
-            t_psi = 1.5 * par->n_p * cabs(fbk->psi_s) * i_a / c_tau;
-            t_tau = I * fbk->psi_s / c_tau;
-        }
-    }
+    /* Auxiliary current (L_sgm = 0 in open-loop V/Hz control, where only the flux is
+     * controlled) */
+    double complex i_a = (par->L_sgm > 0.0) ? fbk->psi_R / par->L_sgm : 0.0;
 
-    /* Error signals (the integral action is not used: alpha_i = 0) */
-    double e_psi = psi_s_ref - cabs(fbk->psi_s);
+    /* Torque-production factor and directions */
+    double c_tau = 1.5 * par->n_p * creal(i_a * conj(fbk->psi_s));
+    double complex t_psi = (c_tau > 0.0) ? 1.5 * par->n_p * psi_s_abs * i_a / c_tau : 1.0;
+    double complex t_tau = (c_tau > 0.0) ? I * fbk->psi_s / c_tau : 0.0;
+
+    /* Error signals */
+    double e_psi = psi_s_ref - psi_s_abs;
     double e_tau = tau_M_ref - fbk->tau_M;
-    double complex e_u =
-        self->alpha_psi * e_psi * t_psi + self->alpha_tau * e_tau * t_tau;
+    double complex e_u = self->alpha_psi * e_psi * t_psi + self->alpha_tau * e_tau * t_tau;
+    double complex u_i = self->x_psi * t_psi + self->x_tau * t_tau;
+    double complex e_v = u_i - self->alpha_i * (psi_s_abs * t_psi + fbk->tau_M * t_tau);
 
-    /* Voltage reference */
-    double complex v = par->R_s * fbk->i_s + I * fbk->w_s * fbk->psi_s;
-    return v + e_u;
+    /* Voltage reference, consisting of the feedforward and integral action (u_ff)
+     * and the proportional action (e_u) */
+    double complex u_ff = par->R_s * fbk->i_s + I * fbk->w_s * fbk->psi_s + e_v;
+
+    /* Workspace variables for the update function */
+    self->i_a = i_a;
+    self->u_ff = u_ff;
+
+    return u_ff + e_u;
+}
+
+static void im_flux_torque_ctrl_update(IMFluxTorqueController *self, double T_s,
+                                       const IMObserverOutputs *fbk)
+{
+    const InductionMachineInvGammaPars *par = &self->par;
+    double psi_s_abs = cabs(fbk->psi_s);
+    /* Error signal and gains */
+    double complex u_err = fbk->u_s - self->u_ff;
+    double k_psi = (psi_s_abs > 0.0) ? self->alpha_i / psi_s_abs : 0.0;
+    double k_tau = 1.5 * par->n_p * self->alpha_i;
+    /* Update the integral states */
+    self->x_psi += T_s * k_psi * creal(fbk->psi_s * conj(u_err));
+    self->x_tau += T_s * k_tau * creal(I * self->i_a * conj(u_err));
 }
 
 /* IMReferenceGenerator ------------------------------------------------------ */
@@ -129,6 +175,98 @@ static void im_reference_gen_flux_and_torque(const IMReferenceGenerator *self,
     *tau_M_ref_lim = tau_M_ref;
 }
 
+/* IMFluxVectorController ----------------------------------------------------- */
+
+static void im_flux_vector_ctrl_init(IMFluxVectorController *self,
+                                     InductionMachineInvGammaPars par,
+                                     const IMFluxVectorControllerCfg *cfg)
+{
+    /* Resolve the defaults, as in FluxVectorController.__init__ */
+    double alpha_psi = isnan(cfg->alpha_psi) ? cfg->alpha_tau : cfg->alpha_psi;
+    double alpha_i = isnan(cfg->alpha_i) ? cfg->alpha_tau : cfg->alpha_i;
+    self->T_s = cfg->T_s;
+    self->sensorless = cfg->sensorless;
+    im_flux_reference_gen_init(&self->reference_gen, par, cfg->psi_s_nom, cfg->i_s_max,
+                               cfg->tau_M_max, cfg->k_u, cfg->k_b);
+    im_flux_torque_ctrl_init(&self->flux_torque_ctrl, par, alpha_psi, cfg->alpha_tau,
+                             alpha_i);
+    im_create_speed_flux_observer(&self->observer, par, cfg->alpha_o, cfg->T_s,
+                                  cfg->sensorless, cfg->J);
+}
+
+static void im_flux_vector_ctrl_compute_output(IMFluxVectorController *self,
+                                               double tau_M_ref,
+                                               const IMObserverOutputs *fbk,
+                                               IMVHzReferences *ref)
+{
+    ref->T_s = self->T_s;
+    im_reference_gen_flux_and_torque(&self->reference_gen, tau_M_ref, fbk->w_s,
+                                     cabs(fbk->psi_R), fbk->u_dc, &ref->psi_s,
+                                     &ref->tau_M);
+    ref->u_s = im_flux_torque_ctrl_compute_output(&self->flux_torque_ctrl, ref->psi_s,
+                                                  ref->tau_M, fbk);
+}
+
+static void im_flux_vector_ctrl_update(IMFluxVectorController *self,
+                                       const IMVHzReferences *ref,
+                                       const IMObserverOutputs *fbk)
+{
+    im_speed_flux_observer_update(&self->observer, ref->T_s, fbk);
+    im_flux_torque_ctrl_update(&self->flux_torque_ctrl, ref->T_s, fbk);
+}
+
+/* IMFVCControlSystem --------------------------------------------------------- */
+
+static void im_fvc_control_system_init(IMFVCControlSystem *self,
+                                       InductionMachineInvGammaPars par,
+                                       const IMFluxVectorControllerCfg *cfg,
+                                       PIController speed_ctrl)
+{
+    pwm_init(&self->pwm, 1.5);
+    self->k_comp = 1.5; /* k_comp of FluxVectorController */
+    im_flux_vector_ctrl_init(&self->vector_ctrl, par, cfg);
+    self->speed_ctrl = speed_ctrl;
+    self->speed_ctrl.u_i = 0.0;
+    self->speed_ctrl.v = 0.0;
+    self->enabled = 1;
+    self->release_step = 0;
+}
+
+static void im_fvc_control_system_compute_output(IMFVCControlSystem *self,
+                                                 const IMMeasurements *meas,
+                                                 double w_M_ref, int enabled)
+{
+    IMObserverOutputs *fbk = &self->fbk;
+    IMVHzReferences *ref = &self->ref;
+    self->enabled = enabled;
+    int standby = !enabled || self->release_step;
+    int sensorless = self->vector_ctrl.sensorless;
+    im_vector_control_feedback(&self->vector_ctrl.observer, sensorless, &self->pwm,
+                               meas, standby, fbk);
+
+    /* Speed controller and vector controller, or in standby, the vector controller
+     * with zero torque reference and the zero vector of a sensorless drive */
+    double tau_M_ref = 0.0;
+    if (!standby) {
+        tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
+    }
+    im_flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
+    ref->u_s_lim = im_vector_control_modulate(&self->pwm, self->k_comp,
+                                              sensorless && standby, ref->T_s,
+                                              ref->u_s, meas, fbk, ref->d_abc);
+    ref->w_M = w_M_ref;
+}
+
+static void im_fvc_control_system_update(IMFVCControlSystem *self)
+{
+    pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
+    im_flux_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
+    if (self->enabled && !self->release_step) {
+        pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
+    }
+    self->release_step = self->vector_ctrl.sensorless && !self->enabled;
+}
+
 /* IMVHzController ------------------------------------------------------------ */
 
 static void im_vhz_ctrl_init(IMVHzController *self, InductionMachineInvGammaPars par,
@@ -142,7 +280,7 @@ static void im_vhz_ctrl_init(IMVHzController *self, InductionMachineInvGammaPars
     im_flux_reference_gen_init(gen, par, cfg->psi_s_nom, cfg->i_s_max, INFINITY,
                                cfg->k_u, cfg->k_b);
     im_flux_torque_ctrl_init(&self->flux_torque_ctrl, par, cfg->alpha_psi,
-                             cfg->alpha_tau);
+                             cfg->alpha_tau, 0.0);
     /* Sensorless observer with the default gain of create_vhz_observer */
     im_flux_observer_init(&self->observer, par, 1);
     if (isinf(par.L_M) && par.L_M > 0.0) {

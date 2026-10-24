@@ -1,12 +1,12 @@
 """
-Native simulation of induction machine drives with current-vector control or
-observer-based V/Hz control.
+Native simulation of induction machine drives with current-vector control,
+flux-vector control, or observer-based V/Hz control.
 
 The system is simulated by the library `c/native_im.c`. Supported are the drive
 models of `motulator_export.native._drive` with an induction machine, and
 
-- current-vector control (`CurrentVectorController`) in `VectorControlSystem` with a
-  speed controller, or
+- current-vector control (`CurrentVectorController`) or flux-vector control
+  (`FluxVectorController`) in `VectorControlSystem` with a speed controller, or
 - observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
   including open-loop V/Hz control (`L_M = inf`),
 
@@ -21,6 +21,7 @@ from typing import Any, cast
 from motulator.common.control._controllers import PIController
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import CurrentVectorController
+from motulator.drive.control._im_flux_vector import FluxVectorController
 from motulator.drive.model import Drive, InductionMachine
 
 from motulator_export.native._build import Signatures
@@ -40,12 +41,14 @@ from motulator_export.native._system import (
     check_supported_control,
 )
 from motulator_export.plecs._im import (
-    check_supported_cvc,
+    check_supported_vector_ctrl,
     check_supported_vhz_ctrl,
     cvc_values,
     export_vhz_values,
+    fvc_values,
 )
 from motulator_export.plecs._im_control import CFG_FIELDS, PAR_FIELDS
+from motulator_export.plecs._im_fvc_control import CFG_FIELDS as FVC_CFG_FIELDS
 from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 
 # Functions of the library setting the parameters of the control system, the
@@ -57,6 +60,10 @@ API: Signatures = {
         None,
         [c_void_p] + [c_double] * 9 + [c_int, c_double, c_int],
     ),
+    "set_flux_vector_controller": (
+        None,
+        [c_void_p] + [c_double] * 10 + [c_int, c_double],
+    ),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 9),
     "speed_reference": (c_void_p, [c_void_p]),
@@ -66,8 +73,8 @@ API: Signatures = {
 
 class InductionMachineDriveSystem(NativeSystem):
     """
-    Induction machine drive with current-vector control or observer-based V/Hz
-    control in the native library.
+    Induction machine drive with current-vector control, flux-vector control, or
+    observer-based V/Hz control in the native library.
 
     Parameters
     ----------
@@ -91,9 +98,14 @@ class InductionMachineDriveSystem(NativeSystem):
             lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
         else:
             ctrl = cast(VectorControlSystem, ctrl)
-            v = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
-            lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
-            lib.set_current_vector_controller(h, *c_args(v, CFG_FIELDS))
+            if isinstance(ctrl.vector_ctrl, FluxVectorController):
+                v = fvc_values(ctrl.vector_ctrl)
+                lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
+                lib.set_flux_vector_controller(h, *c_args(v, FVC_CFG_FIELDS))
+            else:
+                v = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
+                lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
+                lib.set_current_vector_controller(h, *c_args(v, CFG_FIELDS))
             speed_ctrl = cast(PIController, ctrl.speed_ctrl)
             lib.set_speed_controller(
                 h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
@@ -118,7 +130,7 @@ class InductionMachineDriveSystem(NativeSystem):
         if type(ctrl) is VHzControlSystem:
             check_supported_vhz_ctrl(ctrl.vhz_ctrl)
         elif type(ctrl) is VectorControlSystem:
-            check_supported_cvc(ctrl.vector_ctrl)
+            check_supported_vector_ctrl(ctrl.vector_ctrl)
             if not isinstance(ctrl.speed_ctrl, PIController):
                 raise NotImplementedError(
                     "Speed-control mode with a speed controller required"

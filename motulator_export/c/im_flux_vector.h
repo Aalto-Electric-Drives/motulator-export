@@ -1,21 +1,28 @@
 /*
- * Observer-based V/Hz control of induction machine drives, ported from motulator.
+ * Flux-vector control and observer-based V/Hz control of induction machine drives,
+ * ported from motulator.
  *
  * Python counterparts:
  *   motulator/drive/control/_im_flux_vector.py    FluxTorqueController,
  *                                                 ReferenceGenerator,
+ *                                                 FluxVectorControllerCfg,
+ *                                                 FluxVectorController,
  *                                                 ObserverBasedVHzControllerCfg,
  *                                                 ObserverBasedVHzController
- *   motulator/drive/control/_im_observers.py      create_vhz_observer
+ *   motulator/drive/control/_im_observers.py      create_speed_flux_observer,
+ *                                                 create_vhz_observer
  *   motulator/drive/control/_common.py            FluxTorqueControllerBase
  *   motulator/drive/control/_base.py              DriveControlSystem,
+ *                                                 VectorControlSystem,
  *                                                 VHzControlSystem
  *   motulator/common/control/_controllers.py      RateLimiter
  *
- * The flux observer of im_current_vector.h is used without speed estimation, the
- * rotor speed being the rate-limited speed reference. Pure open-loop V/Hz control is
- * the special case L_M = inf (with R_s = R_R = L_sgm = 0 and zero gains), as in
- * motulator. The observer gain k_o is the default of motulator. The PWM uses the MME
+ * Flux-vector control uses the speed and flux observer of im_current_vector.h, with
+ * the measurements and the feedback signals of current-vector control. In V/Hz
+ * control, its flux observer is used without speed estimation, the rotor speed being
+ * the rate-limited speed reference. Pure open-loop V/Hz control is the special case
+ * L_M = inf (with R_s = R_R = L_sgm = 0 and zero gains), as in motulator. The
+ * observer gain k_o is the default of motulator. The PWM of V/Hz control uses the MME
  * overmodulation (the default PWM of VHzControlSystem). As in the other control
  * systems, the output function has no side effects (apart from workspace variables),
  * and all states are updated in the update function.
@@ -26,21 +33,33 @@
 
 #include "im_current_vector.h"
 
-/* Flux and torque controller (FluxTorqueController), without the integral action,
- * which observer-based V/Hz control does not use */
+/* Flux and torque controller (FluxTorqueController), with the integral action of the
+ * bandwidth alpha_i (zero in observer-based V/Hz control) */
 typedef struct {
     InductionMachineInvGammaPars par;
     double alpha_psi;
     double alpha_tau;
+    double alpha_i;
+    /* Integral states */
+    double x_psi;
+    double x_tau;
+    /* Workspace variables */
+    double complex i_a;
+    double complex u_ff;
 } IMFluxTorqueController;
 
 static void im_flux_torque_ctrl_init(IMFluxTorqueController *self,
                                      InductionMachineInvGammaPars par,
-                                     double alpha_psi, double alpha_tau);
+                                     double alpha_psi, double alpha_tau,
+                                     double alpha_i);
 /* Stator voltage reference from the flux and torque references */
-static double complex im_flux_torque_ctrl_compute_output(
-    const IMFluxTorqueController *self, double psi_s_ref, double tau_M_ref,
-    const IMObserverOutputs *fbk);
+static double complex im_flux_torque_ctrl_compute_output(IMFluxTorqueController *self,
+                                                         double psi_s_ref,
+                                                         double tau_M_ref,
+                                                         const IMObserverOutputs *fbk);
+/* Update the integral states with the realized voltage fbk->u_s */
+static void im_flux_torque_ctrl_update(IMFluxTorqueController *self, double T_s,
+                                       const IMObserverOutputs *fbk);
 
 /* Reference generator with field weakening and torque limits (ReferenceGenerator) */
 typedef struct {
@@ -61,6 +80,33 @@ static void im_reference_gen_flux_and_torque(const IMReferenceGenerator *self,
                                              double tau_M_ref, double w_s,
                                              double psi_R, double u_dc,
                                              double *psi_s_ref, double *tau_M_ref_lim);
+
+/* Flux-vector controller configuration (FluxVectorControllerCfg). As in motulator,
+ * the optional parameters default to None, represented here by NAN. The observer
+ * gain k_o is the default of motulator. */
+typedef struct {
+    double psi_s_nom;
+    double i_s_max;
+    double alpha_tau;
+    double alpha_psi;
+    double alpha_i;
+    double alpha_o;
+    double tau_M_max;
+    double k_u;
+    double k_b;
+    double J;
+    int sensorless;
+    double T_s;
+} IMFluxVectorControllerCfg;
+
+/* Flux-vector controller (FluxVectorController) */
+typedef struct {
+    double T_s;
+    int sensorless;
+    IMReferenceGenerator reference_gen;
+    IMFluxTorqueController flux_torque_ctrl;
+    IMSpeedFluxObserver observer;
+} IMFluxVectorController;
 
 /* Observer-based V/Hz controller configuration (ObserverBasedVHzControllerCfg). The
  * observer gain k_o is the default of motulator. */
@@ -86,11 +132,11 @@ typedef struct {
     double tau_M_lpf; /* Low-pass-filtered torque estimate (state) */
 } IMVHzController;
 
-/* Reference signals */
+/* Reference signals of V/Hz control and flux-vector control */
 typedef struct {
     double T_s;
     double d_abc[3];
-    double w_M;   /* Rate-limited speed reference */
+    double w_M;   /* Speed reference, rate-limited in V/Hz control */
     double tau_M; /* Limited torque reference */
     double psi_s; /* Stator flux reference */
     double complex u_s;
@@ -117,6 +163,34 @@ typedef struct {
     IMVHzReferences ref;
 } IMVHzControlSystem;
 
+/* Vector control system (VectorControlSystem) with flux-vector control, in standby
+ * as with current-vector control (see im_current_vector.h). The references are those
+ * of V/Hz control. */
+typedef struct {
+    PWM pwm;
+    double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
+    IMFluxVectorController vector_ctrl;
+    PIController speed_ctrl;
+    /* Workspace variables passed from the output to the update function */
+    int enabled; /* Gate enable */
+    IMObserverOutputs fbk;
+    IMVHzReferences ref;
+    int release_step; /* First sampling instant after the release */
+} IMFVCControlSystem;
+
+static IMFluxVectorControllerCfg im_flux_vector_controller_cfg(double psi_s_nom,
+                                                               double i_s_max);
+
+static void im_fvc_control_system_init(IMFVCControlSystem *self,
+                                       InductionMachineInvGammaPars par,
+                                       const IMFluxVectorControllerCfg *cfg,
+                                       PIController speed_ctrl);
+/* Output of the control loop, with the gate enable at the sampling instant */
+static void im_fvc_control_system_compute_output(IMFVCControlSystem *self,
+                                                 const IMMeasurements *meas,
+                                                 double w_M_ref, int enabled);
+static void im_fvc_control_system_update(IMFVCControlSystem *self);
+
 static IMVHzControllerCfg im_vhz_controller_cfg(double psi_s_nom, double i_s_max);
 
 static void im_vhz_control_system_init(IMVHzControlSystem *self,
@@ -128,9 +202,11 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
                                                  double w_M_ref, int enabled);
 static void im_vhz_control_system_update(IMVHzControlSystem *self);
 
-/* Signal vectors of the control system (see sm_flux_vector.h): the measurements
- * (VHZ_MEAS), and the references (VHZ_REF) psi_s, tau_M, and u_s. The feedback
- * signals are those of current-vector control (FBK of im_current_vector.h). */
+/* Signal vectors of the control systems (see sm_flux_vector.h): the measurements of
+ * V/Hz control (VHZ_MEAS), and the references (VHZ_REF) psi_s, tau_M, and u_s, also
+ * of flux-vector control. The feedback signals are those of current-vector control
+ * (FBK of im_current_vector.h), and so are the measurements of flux-vector control
+ * (MEAS). */
 #define VHZ_MEAS_i_c_ab 0
 #define VHZ_MEAS_u_dc 2
 #define VHZ_MEAS_WIDTH 3

@@ -38,6 +38,7 @@ from motulator_export.plecs import (
     _grid_control,
     _im,
     _im_control,
+    _im_fvc_control,
     _im_vhz_control,
     _sm,
     _sm_control,
@@ -67,6 +68,7 @@ from tests.sfunctions import (
 )
 from tests.systems import (
     BASE,
+    IM_FVC_RTOL,
     IM_PAR,
     IM_SPEED,
     SM_CVC_D_MIN,
@@ -80,6 +82,7 @@ from tests.systems import (
     gfl_system,
     gfm_system,
     gradnet_control_system,
+    im_fvc_system,
     im_system,
     sm_cvc_system,
     sm_system,
@@ -92,6 +95,7 @@ SYSTEMS: dict[str, tuple[ControlBlock, MonolithicBlock]] = {
     "fvc": (_sm_control.FVC_BLOCK, monolithic.FVC),
     "smcvc": (_sm_cvc_control.CVC_BLOCK, monolithic.SM_CVC),
     "cvc": (_im_control.CVC_BLOCK, monolithic.CVC),
+    "imfvc": (_im_fvc_control.FVC_BLOCK, monolithic.IM_FVC),
     "vhz": (_im_vhz_control.VHZ_BLOCK, monolithic.VHZ),
     "smvhz": (_sm_vhz_control.VHZ_BLOCK, monolithic.SM_VHZ),
     "gfl": (_grid_control.GFL_BLOCK, monolithic.GFL),
@@ -152,6 +156,8 @@ def init_script(key: str, values: dict[str, Any], flux_map: Any = None) -> str:
         return module.init_script(variables, values, "")
     if key == "cvc":
         return _im_control.init_script([], values, "")
+    if key == "imfvc":
+        return _im_fvc_control.init_script([], values, "")
     if key == "vhz":
         return _im_vhz_control.init_script([], values, "")
     return _grid_control.init_script([], values, "", gfl=key == "gfl")
@@ -298,6 +304,34 @@ def test_current_vector_control(
         return compare(build, model.Simulation, sfun, signals, 0.3)
 
     check(compiled, "cvc", values, run, IM_INPUTS)
+
+
+# Cases of flux-vector control of induction machines: the arguments of
+# `im_fvc_system` (sensorless, t_d, blocked, d_min, alpha_i)
+IM_FVC_CASES = {
+    "sensorless": (True, 0.0, False, 0.0, None),
+    "sensored": (False, 0.0, False, 0.0, None),
+    "no_integral": (True, 0.0, False, 0.0, 0.0),
+    "dead_time_min_pulse": (True, 2e-6, False, 0.2, None),
+    "blocked": (True, 0.0, True, 0.0, None),
+}
+
+
+@pytest.mark.parametrize("case", IM_FVC_CASES)
+def test_im_flux_vector_control(compiled: Compiled, case: str) -> None:
+    """Flux-vector control of an induction machine drive should agree with
+    motulator, and exactly with the monolithic control system, also with the dead
+    time and its compensation, the minimum pulses, and the gates blocked."""
+    args = IM_FVC_CASES[case]
+    build, signals = im_fvc_system(*args)
+    values = _im.export_values(build()[1])
+    rtol = IM_FVC_RTOL if args[2] else None  # With the gates blocked
+
+    def run(net: Netlist) -> list[list[float]]:
+        sfun = drive_sfun(net, _im_fvc_control.FVC_BLOCK)
+        return compare(build, model.Simulation, sfun, signals, 0.3, rtol)
+
+    check(compiled, "imfvc", values, run, IM_INPUTS)
 
 
 @pytest.mark.parametrize(

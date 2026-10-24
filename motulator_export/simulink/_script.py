@@ -45,6 +45,7 @@ from motulator_export.plecs._control import assign
 from motulator_export.plecs._grid_control import GFL_CFG_FIELDS, GFM_CFG_FIELDS
 from motulator_export.plecs._im_control import CFG_FIELDS as CVC_CFG_FIELDS
 from motulator_export.plecs._im_control import PAR_FIELDS as IM_PAR_FIELDS
+from motulator_export.plecs._im_fvc_control import CFG_FIELDS as IM_FVC_CFG_FIELDS
 from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._sm_control import CFG_FIELDS as FVC_CFG_FIELDS
 from motulator_export.plecs._sm_control import PAR_FIELDS as SM_PAR_FIELDS
@@ -319,6 +320,9 @@ def _im_script(
     if isinstance(ctrl, VHzControlSystem):
         values = _im.export_vhz_values(ctrl)
         cls, fields = im_control.ObserverBasedVHzControllerCfg, VHZ_CFG_FIELDS
+    elif isinstance(ctrl.vector_ctrl, im_control.FluxVectorController):
+        values = _im.export_values(ctrl)
+        cls, fields = im_control.FluxVectorControllerCfg, IM_FVC_CFG_FIELDS
     else:
         values = _im.export_values(ctrl)
         cls, fields = im_control.CurrentVectorControllerCfg, CVC_CFG_FIELDS
@@ -339,8 +343,9 @@ def _im_script(
             _vhz_control_system(values),
         ]
     else:
+        vector_ctrl = type(ctrl.vector_ctrl).__name__
         control += [
-            f"vector_ctrl = CurrentVectorController({est}, cfg);",
+            f"vector_ctrl = {vector_ctrl}({est}, cfg);",
             f"speed_ctrl = {_speed_ctrl(values)};",
             _control_system("VectorControlSystem", VECTOR_ARGS, values),
         ]

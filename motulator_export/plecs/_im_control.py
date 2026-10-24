@@ -138,7 +138,7 @@ M_PAR_CHECKS = required(*PAR["par"])
 
 # %%
 # Blocks of the classes
-def _flux_observer() -> CBlock:
+def _flux_observer(sig: Signals = SIGNALS) -> CBlock:
     """Flux observer (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
@@ -177,7 +177,7 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
+        sig.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
         "double w_M = InputSignal(3, 0);\n"
         "/* Speed error from the measured rotor speed in the sensored mode */\n"
         "double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\n"
@@ -188,18 +188,13 @@ def _flux_observer() -> CBlock:
         f"double complex u_s_ab = {complex_in(1)};\n"
         "out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n"
         "                               : cexp(-I * out.theta_c) * u_s_ab;\n"
-        + SIGNALS.write(0, "fbk", "out")
+        + sig.write(0, "fbk", "out")
     )
     return CBlock(
         "FluxObserver",
-        [
-            SIGNALS.port("meas"),
-            Port("u_s_ab", 2),
-            Port("u_s_zoh_ab", 2),
-            Port("w_M", 1),
-        ],
-        [Port("out", SIGNALS.width("fbk"))],
-        SIGNALS.class_code(
+        [sig.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2), Port("w_M", 1)],
+        [Port("out", sig.width("fbk"))],
+        sig.class_code(
             "IMFluxObserver",
             start,
             output,
@@ -207,7 +202,7 @@ def _flux_observer() -> CBlock:
             workspace=SAMPLING + "static double h;\nstatic IMObserverOutputs out;\n",
         ),
         params,
-        SIGNALS.sfunction("flux_observer"),
+        sig.sfunction("flux_observer"),
         mask=mask,
         mcode=MCode(
             start=M_PAR + "self = im_flux_observer_init(par, p.k_o);\n",
@@ -229,11 +224,11 @@ def _flux_observer() -> CBlock:
             "end\n",
             update="self = im_flux_observer_update(self, p.T_s, out);\n",
             inputs={
-                "meas": SIGNALS.vector("meas"),
+                "meas": sig.vector("meas"),
                 "u_s_ab": COMPLEX,
                 "u_s_zoh_ab": COMPLEX,
             },
-            outputs={"out": SIGNALS.vector("fbk")},
+            outputs={"out": sig.vector("fbk")},
             checks=(*required("k_o", "h", "T_s"), *M_PAR_CHECKS),
         ),
     )
@@ -272,7 +267,7 @@ SFO_INIT = (
 )
 
 
-def _speed_flux_observer() -> Subsystem:
+def _speed_flux_observer(sig: Signals = SIGNALS) -> Subsystem:
     """Speed and flux observer (SpeedFluxObserver)."""
     mask = Mask(
         "SpeedFluxObserver (motulator)",
@@ -300,13 +295,13 @@ def _speed_flux_observer() -> Subsystem:
     )
     return Subsystem(
         "SpeedFluxObserver",
-        [SIGNALS.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
-        [Port("out", SIGNALS.width("fbk"))],
+        [sig.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
+        [Port("out", sig.width("fbk"))],
         [
-            _flux_observer(),
-            SIGNALS.selector("fbk", "eps"),
-            SIGNALS.selector("fbk", "tau_M"),
-            speed_observer(SIGNALS),
+            _flux_observer(sig),
+            sig.selector("fbk", "eps"),
+            sig.selector("fbk", "tau_M"),
+            speed_observer(sig),
         ],
         [
             ("meas", "FluxObserver:meas"),

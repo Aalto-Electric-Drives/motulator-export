@@ -18,6 +18,7 @@ from pathlib import Path
 from motulator_export.plecs import (
     _grid_control,
     _im_control,
+    _im_fvc_control,
     _im_vhz_control,
     _sm_control,
     _sm_cvc_control,
@@ -33,6 +34,7 @@ CONTROL_BLOCKS = [
     _sm_control.FVC_BLOCK,
     _sm_cvc_control.CVC_BLOCK,
     _im_control.CVC_BLOCK,
+    _im_fvc_control.FVC_BLOCK,
     _im_vhz_control.VHZ_BLOCK,
     _sm_vhz_control.VHZ_BLOCK,
     _grid_control.GFL_BLOCK,

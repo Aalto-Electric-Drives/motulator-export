@@ -19,6 +19,7 @@ from typing import Any
 from motulator_export.plecs import (
     _grid_control,
     _im_control,
+    _im_fvc_control,
     _im_vhz_control,
     _sm_control,
     _sm_cvc_control,
@@ -531,6 +532,79 @@ CVC = MonolithicBlock(
     outputs=_im_control.CTRL_OUTPUTS,
     mask_params=IM_MASK_PARAMS,
     code=_im_code,
+)
+
+
+# %%
+# Flux-vector control of induction machine drives
+TAB = "Flux-vector control (IM)"
+IM_FVC_MASK_PARAMS = [
+    *(replace(m, tab=TAB) for m in IM_MASK_PARAMS[:7]),  # Machine, psi_s_nom, i_s_max
+    MaskParam("alpha_tau", "alpha_tau", TAB, "cfg.alpha_tau"),
+    MaskParam("alpha_psi", "alpha_psi", TAB, "cfg.alpha_psi"),
+    MaskParam("alpha_i", "alpha_i", TAB, "cfg.alpha_i"),
+    MaskParam("alpha_o", "alpha_o", TAB, "cfg.alpha_o"),
+    MaskParam("tau_M_max", "tau_M_max", TAB, "cfg.tau_M_max"),
+    MaskParam("k_u", "k_u", TAB, "cfg.k_u"),
+    MaskParam("k_b", "k_b", TAB, "cfg.k_b"),
+    MaskParam("J", "J", TAB, "cfg.J"),
+    MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
+    MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    *SPEED_MASK_PARAMS,
+    *PWM_MASK_PARAMS,
+]
+
+
+def _im_fvc_code() -> dict[str, str]:
+    """Code sections of the C-Script of flux-vector control of an IM."""
+    declarations = _declarations(
+        ["common.c", "im_current_vector.c", "im_flux_vector.c"], "IMFVCControlSystem"
+    )
+    i = {m.variable: k for k, m in enumerate(IM_FVC_MASK_PARAMS)}
+    start = (
+        parameter_checks(IM_FVC_MASK_PARAMS) + "InductionMachineInvGammaPars par = {\n"
+        f"    P({i['n_p']}, 0), P({i['R_s']}, 0), P({i['R_R']}, 0), "
+        f"P({i['L_sgm']}, 0), P({i['L_M']}, 0)}};\n"
+        "IMFluxVectorControllerCfg cfg = im_flux_vector_controller_cfg(\n"
+        f"    P({i['psi_s_nom']}, 0), P({i['i_s_max']}, 0));\n"
+        + cfg_assignments(IM_FVC_MASK_PARAMS)
+        + speed_controller_code(i)
+        + "im_fvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + pwm_code(i)
+    )
+    monitored = {
+        "w_M_ref": "ctrl.ref.w_M",
+        "w_M": "ctrl.fbk.w_M",
+        "tau_M_ref": "ctrl.ref.tau_M",
+        "tau_M": "ctrl.fbk.tau_M",
+        "psi_s_ref": "ctrl.ref.psi_s",
+        "psi_s": "cabs(ctrl.fbk.psi_s)",
+        "psi_R": "cabs(ctrl.fbk.psi_R)",
+        "i_sd": "creal(rot * ctrl.fbk.i_s)",
+        "i_sq": "cimag(rot * ctrl.fbk.i_s)",
+    }
+    output = _drive_output(
+        "IMMeasurements", "im_fvc_control_system_compute_output"
+    ) + monitored_code(
+        _im_fvc_control.CTRL_OUTPUTS,
+        monitored,
+        prelude="double complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\n",
+    )
+    return {
+        "Declarations": declarations,
+        "StartFcn": start,
+        "OutputFcn": output,
+        "UpdateFcn": "im_fvc_control_system_update(&ctrl);\n",
+    }
+
+
+IM_FVC = MonolithicBlock(
+    name="Flux-vector control (IM)",
+    inputs=_names(_im_fvc_control.CTRL_INPUTS),
+    input_widths=_widths(_im_fvc_control.CTRL_INPUTS),
+    outputs=_im_fvc_control.CTRL_OUTPUTS,
+    mask_params=IM_FVC_MASK_PARAMS,
+    code=_im_fvc_code,
 )
 
 
