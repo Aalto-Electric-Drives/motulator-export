@@ -36,6 +36,7 @@ from tests.systems import (
     CURRENT_MAP,
     FLUX_MAP,
     Build,
+    blocked_drive,
     gfl_system,
     gfm_system,
     im_system,
@@ -550,6 +551,20 @@ def test_gate_blocking(build: Build, t_stop: float) -> None:
     res_py, res_c = simulate(build, t_stop)
     assert not np.all(res_c.mdl.converter.enabled)
     check(res_py, res_c, rtol=1e-9)
+
+
+def test_gate_blocking_gradnet() -> None:
+    """
+    The gates blocked with the GradNet current map with spatial harmonics, whose AC
+    port includes the current derivative due to the harmonics.
+    """
+
+    def build() -> tuple[model.Drive, control.VectorControlSystem]:
+        mdl, ctrl = gradnet_drive()
+        ctrl.set_enable(blocked_drive)
+        return mdl, ctrl
+
+    check(*simulate(build, 0.2), rtol=1e-9)
 
 
 def test_gate_blocking_n_eval() -> None:
