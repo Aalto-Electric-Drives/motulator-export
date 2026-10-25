@@ -171,6 +171,8 @@ typedef struct {
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     IMFluxVectorController vector_ctrl;
     PIController speed_ctrl;
+    int torque_mode; /* Torque-control mode (speed_ctrl = None): the external
+                      * reference is the torque reference */
     /* Workspace variables passed from the output to the update function */
     int enabled; /* Gate enable */
     IMObserverOutputs fbk;
@@ -185,10 +187,12 @@ static void im_fvc_control_system_init(IMFVCControlSystem *self,
                                        InductionMachineInvGammaPars par,
                                        const IMFluxVectorControllerCfg *cfg,
                                        PIController speed_ctrl);
-/* Output of the control loop, with the gate enable at the sampling instant */
+/* Output of the control loop with the external reference (the speed reference,
+ * or the torque reference in torque-control mode) and the gate enable at the
+ * sampling instant */
 static void im_fvc_control_system_compute_output(IMFVCControlSystem *self,
                                                  const IMMeasurements *meas,
-                                                 double w_M_ref, int enabled);
+                                                 double ext_ref, int enabled);
 static void im_fvc_control_system_update(IMFVCControlSystem *self);
 
 static IMVHzControllerCfg im_vhz_controller_cfg(double psi_s_nom, double i_s_max);

@@ -150,6 +150,8 @@ typedef struct {
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     FluxVectorController vector_ctrl;
     PIController speed_ctrl;
+    int torque_mode; /* Torque-control mode (speed_ctrl = None): the external
+                      * reference is the torque reference */
     /* Workspace variables passed from the output to the update function */
     int enabled; /* Gate enable */
     ObserverOutputs fbk;
@@ -184,10 +186,12 @@ static void vector_control_system_init(VectorControlSystem *self,
                                        SynchronousMachinePars par,
                                        const FluxVectorControllerCfg *cfg,
                                        PIController speed_ctrl);
-/* Output of the control loop, with the gate enable at the sampling instant */
+/* Output of the control loop with the external reference (the speed reference,
+ * or the torque reference in torque-control mode) and the gate enable at the
+ * sampling instant */
 static void vector_control_system_compute_output(VectorControlSystem *self,
                                                  const Measurements *meas,
-                                                 double w_M_ref, int enabled);
+                                                 double ext_ref, int enabled);
 static void vector_control_system_update(VectorControlSystem *self);
 
 /* Observer-based V/Hz controller configuration (ObserverBasedVHzControllerCfg). As in

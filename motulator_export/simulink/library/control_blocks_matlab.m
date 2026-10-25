@@ -5,7 +5,7 @@ function [blocks, version, plant] = control_blocks_matlab()
 %   version of the data, and the parameters of the S-function of the GradNet
 %   machine. Written by motulator_export.simulink._library from the
 %   netlists of the control systems; do not edit.
-version = '613f9ddb0451dde0';
+version = '75a36e473c0ae8d7';
 plant.gradnet_params = {'double(machine.n_p)', 'double(machine.R_s)', 'double(machine.k)', 'double(machine.current_map.in_dim)', 'double(machine.current_map.mu_dim)', 'double(machine.current_map.W)', 'double(machine.current_map.b)', 'double(machine.current_map.mu_log)', 'double(machine.current_map.bias)', 'double(machine.current_map.activation)', 'double(machine.current_map.beta_log)', 'double(machine.current_map.p)', 'double(machine.current_map.in_base)', 'double(machine.current_map.out_base)'};
 blocks = cell(1, 8);
 

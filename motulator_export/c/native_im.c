@@ -24,17 +24,23 @@
 /* Signals logged at each step (the signal groups of ControlSystem.save), see
  * log_fields_width. The control systems have the feedback signals of the flux
  * observer. */
-#define IM_FIELDS                                                                      \
-    "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c ref.w_M "           \
+#define IM_FIELDS_REF "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c "
+#define IM_FIELDS IM_FIELDS_REF "ref.w_M " IM_FIELDS_REST
+/* In torque-control mode, the speed reference is None, which is not logged */
+#define IM_TORQUE_FIELDS IM_FIELDS_REF "ref.w_M:n " IM_FIELDS_REST
+#define IM_FIELDS_REST                                                                 \
     "ref.d_abc:3 ref.enabled:b fbk.u_dc fbk.i_s:c fbk.u_s:c fbk.u_s_zoh:c "            \
     "fbk.psi_s:c fbk.psi_R:c fbk.tau_M fbk.tau_L fbk.w_c fbk.w_s fbk.w_r fbk.w_m "     \
     "fbk.w_M fbk.theta_c fbk.e_o:c fbk.eps fbk.h"
 
-/* Vector control system or V/Hz control system with the speed reference */
+/* Vector control system or V/Hz control system with the speed reference (or the
+ * torque reference in torque-control mode) */
 typedef struct {
     ControlSystem base;
     int vhz; /* VHzControlSystem (else VectorControlSystem) */
     int fvc; /* Flux-vector control (else current-vector control) */
+    int torque_mode; /* Torque-control mode of VectorControlSystem (no speed
+                      * controller): w_M_ref is the torque reference */
     IMVectorControlSystem cvc;
     IMFVCControlSystem fvc_ctrl;
     IMVHzControlSystem vhz_ctrl;
@@ -87,7 +93,9 @@ static int im_save(IMControlSystem *self)
     log_put_complex(&p, i_s);
     log_put_complex(&p, u_s);
     log_put_complex(&p, u_s_lim);
-    log_put(&p, w_M);
+    if (!self->torque_mode) {
+        log_put(&p, w_M);
+    }
     for (int k = 0; k < 3; k++) {
         log_put(&p, d_abc[k]);
     }
@@ -127,7 +135,6 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
 {
     IMControlSystem *self = (IMControlSystem *)base;
     self->enabled = enabled;
-    (void)t;
     const Drive *drive = (const Drive *)mdl;
     double w_M_ref = signal_value(&self->w_M_ref, self->t);
     if (!isfinite(w_M_ref)) {
@@ -140,7 +147,7 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
         im_vhz_control_system_compute_output(&self->vhz_ctrl, &meas, w_M_ref, enabled);
     } else {
         /* The measured speed is used only in the sensored mode */
-        IMMeasurements meas = {i_c_ab, u_dc, drive_meas_speed(drive, x)};
+        IMMeasurements meas = {i_c_ab, u_dc, drive_meas_speed(drive, t, x)};
         if (self->fvc) {
             im_fvc_control_system_compute_output(&self->fvc_ctrl, &meas, w_M_ref,
                                                  enabled);
@@ -309,10 +316,22 @@ void set_pwm(System *self, int mme, double t_d, double u_th, double i_0,
                         single_update);
 }
 
-/* Speed reference, set by signal_steps or signal_function */
+/* Speed reference, or the torque reference in torque-control mode, set by
+ * signal_steps or signal_function */
 Signal *speed_reference(System *self)
 {
     return &self->ctrl.w_M_ref;
+}
+
+/* Torque-control mode of VectorControlSystem (speed_ctrl = None): the reference of
+ * speed_reference is the torque reference */
+void set_torque_control(System *self)
+{
+    IMControlSystem *ctrl = &self->ctrl;
+    ctrl->torque_mode = 1;
+    ctrl->base.fields = IM_TORQUE_FIELDS;
+    log_free(&ctrl->base.log);
+    log_init(&ctrl->base.log, log_fields_width(IM_TORQUE_FIELDS));
 }
 
 /* Gate enable of the control system (ControlSystem.set_enable), set by signal_steps
@@ -336,10 +355,12 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
     } else if (ctrl->fvc) {
         im_fvc_control_system_init(&ctrl->fvc_ctrl, self->par, &self->fvc_cfg,
                                    self->speed_ctrl);
+        ctrl->fvc_ctrl.torque_mode = ctrl->torque_mode;
         native_pwm_copy_settings(&ctrl->fvc_ctrl.pwm, &self->pwm);
     } else {
         im_vector_control_system_init(&ctrl->cvc, self->par, &self->cvc_cfg,
                                       self->speed_ctrl);
+        ctrl->cvc.torque_mode = ctrl->torque_mode;
         native_pwm_copy_settings(&ctrl->cvc.pwm, &self->pwm);
     }
     ctrl->t = t_ctrl;

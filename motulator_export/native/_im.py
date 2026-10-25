@@ -6,7 +6,8 @@ The system is simulated by the library `c/native_im.c`. Supported are the drive
 models of `motulator_export.native._drive` with an induction machine, and
 
 - current-vector control (`CurrentVectorController`) or flux-vector control
-  (`FluxVectorController`) in `VectorControlSystem` with a speed controller, or
+  (`FluxVectorController`) in `VectorControlSystem` with a speed controller, or in
+  the torque-control mode without it (`speed_ctrl=None`), or
 - observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
   including open-loop V/Hz control (`L_M = inf`),
 
@@ -18,7 +19,6 @@ constant or a `StepSignal`).
 
 from typing import Any, cast
 
-from motulator.common.control._controllers import PIController
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import CurrentVectorController
 from motulator.drive.control._im_flux_vector import FluxVectorController
@@ -28,8 +28,11 @@ from motulator_export.native._build import Signatures
 from motulator_export.native._drive import (
     DRIVE_API,
     check_supported_drive,
+    check_supported_speed_control,
     set_drive,
     set_mechanics_signals,
+    set_reference,
+    set_speed_control,
 )
 from motulator_export.native._system import (
     PWM_API,
@@ -64,9 +67,7 @@ API: Signatures = {
         None,
         [c_void_p] + [c_double] * 10 + [c_int, c_double],
     ),
-    "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 9),
-    "speed_reference": (c_void_p, [c_void_p]),
     **PWM_API,
 }
 
@@ -106,17 +107,15 @@ class InductionMachineDriveSystem(NativeSystem):
                 v = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
                 lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
                 lib.set_current_vector_controller(h, *c_args(v, CFG_FIELDS))
-            speed_ctrl = cast(PIController, ctrl.speed_ctrl)
-            lib.set_speed_controller(
-                h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
-            )
+            set_speed_control(self, ctrl)
         self.set_pwm(ctrl.pwm)
 
     def set_signals(self, mdl: Any, ctrl: Any) -> None:
-        """Set the speed reference and the load torque."""
-        if ctrl.ext_ref.w_M is None:
-            raise ValueError("The speed reference must be set")
-        self.set_signal(self.lib.speed_reference(self.handle), ctrl.ext_ref.w_M)
+        """
+        Set the speed reference (or the torque reference in the torque-control mode)
+        and the signals of the mechanics.
+        """
+        set_reference(self, ctrl)
         set_mechanics_signals(self, cast(Drive, mdl))
 
     @staticmethod
@@ -131,10 +130,7 @@ class InductionMachineDriveSystem(NativeSystem):
             check_supported_vhz_ctrl(ctrl.vhz_ctrl)
         elif type(ctrl) is VectorControlSystem:
             check_supported_vector_ctrl(ctrl.vector_ctrl)
-            if not isinstance(ctrl.speed_ctrl, PIController):
-                raise NotImplementedError(
-                    "Speed-control mode with a speed controller required"
-                )
+            check_supported_speed_control(ctrl)
         else:
             raise NotImplementedError(
                 "Only VectorControlSystem and VHzControlSystem supported"

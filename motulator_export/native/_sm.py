@@ -7,6 +7,7 @@ models of `motulator_export.native._drive` with a synchronous machine, and
 
 - flux-vector control (`FluxVectorController`) or current-vector control
   (`CurrentVectorController`) in `VectorControlSystem` with a speed controller, or
+  in the torque-control mode without it (`speed_ctrl=None`), or
 - observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
 
 with the features of the C port (see `motulator_export.plecs._sm`) and the
@@ -17,7 +18,6 @@ duty-ratio error model of the PWM, also with the gates blocked
 
 from typing import Any, cast
 
-from motulator.common.control._controllers import PIController
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._sm_current_vector import CurrentVectorController
 from motulator.drive.control._sm_flux_vector import FluxVectorController
@@ -27,8 +27,11 @@ from motulator_export.native._build import Signatures
 from motulator_export.native._drive import (
     DRIVE_API,
     check_supported_drive,
+    check_supported_speed_control,
     set_drive,
     set_mechanics_signals,
+    set_reference,
+    set_speed_control,
 )
 from motulator_export.native._system import (
     PWM_API,
@@ -65,9 +68,7 @@ API: Signatures = {
         None,
         [c_void_p] + [c_double] * 12 + [c_int, c_double, c_int],
     ),
-    "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 13),
-    "speed_reference": (c_void_p, [c_void_p]),
     **PWM_API,
 }
 
@@ -113,19 +114,16 @@ class SynchronousMachineDriveSystem(NativeSystem):
                 lib.set_current_vector_controller(h, *c_args(v, CVC_CFG_FIELDS))
             else:
                 lib.set_flux_vector_controller(h, *c_args(v, CFG_FIELDS))
-            speed_ctrl = cast(PIController, ctrl.speed_ctrl)
-            lib.set_speed_controller(
-                h, speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i, speed_ctrl.u_max
-            )
+            set_speed_control(self, ctrl)
         self.set_pwm(ctrl.pwm)
 
     def set_signals(self, mdl: Any, ctrl: Any) -> None:
-        """Set the speed reference and the load torque."""
-        mdl = cast(Drive, mdl)
-        if ctrl.ext_ref.w_M is None:
-            raise ValueError("The speed reference must be set")
-        self.set_signal(self.lib.speed_reference(self.handle), ctrl.ext_ref.w_M)
-        set_mechanics_signals(self, mdl)
+        """
+        Set the speed reference (or the torque reference in the torque-control mode)
+        and the signals of the mechanics.
+        """
+        set_reference(self, ctrl)
+        set_mechanics_signals(self, cast(Drive, mdl))
 
     @staticmethod
     def supports(mdl: Any, ctrl: Any) -> bool:
@@ -147,10 +145,7 @@ def _check_supported_control(ctrl: Any) -> None:
         check_supported_vhz_ctrl(ctrl.vhz_ctrl)
     elif type(ctrl) is VectorControlSystem:
         check_supported_vector_ctrl(ctrl.vector_ctrl)
-        if not isinstance(ctrl.speed_ctrl, PIController):
-            raise NotImplementedError(
-                "Speed-control mode with a speed controller required"
-            )
+        check_supported_speed_control(ctrl)
     else:
         raise NotImplementedError(
             "Only VectorControlSystem and VHzControlSystem supported"

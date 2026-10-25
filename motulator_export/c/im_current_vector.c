@@ -426,11 +426,12 @@ static void im_vector_control_system_init(IMVectorControlSystem *self,
     self->speed_ctrl.v = 0.0;
     self->enabled = 1;
     self->release_step = 0;
+    self->torque_mode = 0;
 }
 
 static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
                                                     const IMMeasurements *meas,
-                                                    double w_M_ref, int enabled)
+                                                    double ext_ref, int enabled)
 {
     IMObserverOutputs *fbk = &self->fbk;
     IMReferences *ref = &self->ref;
@@ -440,17 +441,20 @@ static void im_vector_control_system_compute_output(IMVectorControlSystem *self,
     im_vector_control_feedback(&self->vector_ctrl.observer, sensorless, &self->pwm,
                                meas, standby, fbk);
 
-    /* Speed controller and vector controller, or in standby, the vector controller
-     * with zero torque reference and the zero vector of a sensorless drive */
+    /* Speed controller (or in torque-control mode, the torque reference) and
+     * vector controller, or in standby, the vector controller with zero torque
+     * reference and the zero vector of a sensorless drive */
     double tau_M_ref = 0.0;
-    if (!standby) {
-        tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
+    if (!standby && self->torque_mode) {
+        tau_M_ref = ext_ref;
+    } else if (!standby) {
+        tau_M_ref = pi_compute_output(&self->speed_ctrl, ext_ref, fbk->w_M, 0.0);
     }
     im_current_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
     ref->u_s_lim = im_vector_control_modulate(&self->pwm, self->k_comp,
                                               sensorless && standby, ref->T_s,
                                               ref->u_s, meas, fbk, ref->d_abc);
-    ref->w_M = w_M_ref;
+    ref->w_M = self->torque_mode ? NAN : ext_ref; /* None in torque mode */
     ref->enabled = enabled;
 }
 
@@ -458,7 +462,7 @@ static void im_vector_control_system_update(IMVectorControlSystem *self)
 {
     pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
     im_current_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
-    if (self->enabled && !self->release_step) {
+    if (!self->torque_mode && self->enabled && !self->release_step) {
         pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
     }
     self->release_step = self->vector_ctrl.sensorless && !self->enabled;

@@ -69,6 +69,8 @@ typedef struct {
     double k_comp; /* Angle-advance factor of the voltage reference (k_comp) */
     SMCurrentVectorController vector_ctrl;
     PIController speed_ctrl;
+    int torque_mode; /* Torque-control mode (speed_ctrl = None): the external
+                      * reference is the torque reference */
     /* Workspace variables passed from the output to the update function */
     int enabled; /* Gate enable */
     ObserverOutputs fbk;
@@ -82,10 +84,12 @@ static void sm_cvc_control_system_init(SMCVCControlSystem *self,
                                        SynchronousMachinePars par,
                                        const SMCurrentVectorControllerCfg *cfg,
                                        PIController speed_ctrl);
-/* Output of the control loop, with the gate enable at the sampling instant */
+/* Output of the control loop with the external reference (the speed reference,
+ * or the torque reference in torque-control mode) and the gate enable at the
+ * sampling instant */
 static void sm_cvc_control_system_compute_output(SMCVCControlSystem *self,
                                                  const Measurements *meas,
-                                                 double w_M_ref, int enabled);
+                                                 double ext_ref, int enabled);
 static void sm_cvc_control_system_update(SMCVCControlSystem *self);
 
 /* Signal vector of the references of current-vector control (see the signal vectors

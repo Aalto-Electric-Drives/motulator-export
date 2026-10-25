@@ -56,9 +56,20 @@ static double complex drive_current(const Model *base, const double complex *x)
     return drive_machine_outputs(self, x_m, creal(x_m[DRIVE_theta_m]), &tau_M, NULL);
 }
 
+/* Mechanical rotor speed at the time t: the state of MechanicalSystem, or the
+ * external speed of ExternalRotorSpeed (ExternalRotorSpeed.set_outputs) */
+static double drive_speed(const Drive *self, double t, const double complex *x_m)
+{
+    if (self->mechanics.external) {
+        return signal_value(&self->mechanics.w_M, t);
+    }
+    return creal(x_m[DRIVE_w_M]);
+}
+
 /* State derivatives (DCBus.rhs, SynchronousMachine.rhs or InductionMachine.rhs, and
- * MechanicalSystem.rhs). The angle of the synchronous machine is wrapped, as
- * Subsystem.set_states does before the outputs are computed. */
+ * MechanicalSystem.rhs or ExternalRotorSpeed.rhs). The angle of the synchronous
+ * machine is wrapped, as Subsystem.set_states does before the outputs are computed.
+ */
 static void drive_rhs(const Model *base, double t, const double complex *x,
                       double complex *dx)
 {
@@ -68,7 +79,7 @@ static void drive_rhs(const Model *base, double t, const double complex *x,
     const double complex *x_m = x + k;
     double complex *dx_m = dx + k;
     double complex u_s_ab = model_converter_voltage(base, t, x, NULL);
-    double w_M = creal(x_m[DRIVE_w_M]);
+    double w_M = drive_speed(self, t, x_m);
 
     /* Machine */
     double tau_M;
@@ -95,10 +106,14 @@ static void drive_rhs(const Model *base, double t, const double complex *x,
     }
 
     /* Mechanics */
-    double tau_L_tot = signal_value(&mechanics->B_L, w_M) * w_M +
-                       signal_value(&mechanics->tau_L, t);
-    dx_m[DRIVE_theta_M] = x_m[DRIVE_w_M];
-    dx_m[DRIVE_w_M] = (tau_M - tau_L_tot) / mechanics->J;
+    if (mechanics->external) {
+        dx_m[DRIVE_theta_M] = w_M;
+    } else {
+        double tau_L_tot = signal_value(&mechanics->B_L, w_M) * w_M +
+                           signal_value(&mechanics->tau_L, t);
+        dx_m[DRIVE_theta_M] = x_m[DRIVE_w_M];
+        dx_m[DRIVE_w_M] = (tau_M - tau_L_tot) / mechanics->J;
+    }
 
     /* DC bus */
     dc_bus_rhs(&base->dc_bus, x, converter_dc_current(&base->converter, i_s_ab), dx);
@@ -160,10 +175,9 @@ static double complex drive_solve(const double J[2][2], double complex z)
 static void drive_ac_port(const Model *base, double t, const double complex *x,
                           ACPort *port)
 {
-    (void)t;
     const Drive *self = (const Drive *)base;
     const double complex *x_m = x + dc_bus_states(&base->dc_bus);
-    double w_M = creal(x_m[DRIVE_w_M]);
+    double w_M = drive_speed(self, t, x_m);
     if (self->induction) {
         const InductionMachine *im = &self->im;
         double tau_M;
@@ -218,8 +232,14 @@ static void drive_ac_port(const Model *base, double t, const double complex *x,
 static void drive_init_states(Model *base)
 {
     Drive *self = (Drive *)base;
-    base->n = dc_bus_states(&base->dc_bus) + 4;
-    const char *names = self->induction ? IM_DRIVE_STATES : SM_DRIVE_STATES;
+    const char *names;
+    if (self->mechanics.external) {
+        base->n = dc_bus_states(&base->dc_bus) + 3;
+        names = self->induction ? IM_DRIVE_STATES_EXT : SM_DRIVE_STATES_EXT;
+    } else {
+        base->n = dc_bus_states(&base->dc_bus) + 4;
+        names = self->induction ? IM_DRIVE_STATES : SM_DRIVE_STATES;
+    }
     model_state_names(base, names, self->state_names, (int)sizeof(self->state_names));
     base->states = self->state_names;
 }
@@ -235,9 +255,11 @@ static void drive_init(Drive *self)
     base->converter.enabled = 1;
     base->dc_bus.type = DC_BUS_NONE;
     self->induction = 0;
+    self->mechanics.external = 0;
     drive_init_states(base);
     signal_constant(&self->mechanics.B_L, 0.0);
     signal_constant(&self->mechanics.tau_L, 0.0);
+    signal_constant(&self->mechanics.w_M, 0.0);
 }
 
 static double complex drive_meas_current(const Drive *self, const double complex *x)
@@ -247,9 +269,9 @@ static double complex drive_meas_current(const Drive *self, const double complex
     return abc2complex(i_abc);
 }
 
-static double drive_meas_speed(const Drive *self, const double complex *x)
+static double drive_meas_speed(const Drive *self, double t, const double complex *x)
 {
-    return creal(x[dc_bus_states(&self->base.dc_bus) + DRIVE_w_M]);
+    return drive_speed(self, t, x + dc_bus_states(&self->base.dc_bus));
 }
 
 static double drive_meas_position(const Drive *self, const double complex *x)
@@ -351,7 +373,25 @@ void set_induction_machine(Simulation *self, double n_p, double R_s, double R_r,
 /* MechanicalSystem with the moment of inertia J */
 void set_mechanics(Simulation *self, double J)
 {
-    drive_of(self)->mechanics.J = J;
+    Drive *drive = drive_of(self);
+    drive->mechanics.J = J;
+    drive->mechanics.external = 0;
+    drive_init_states(&drive->base);
+}
+
+/* ExternalRotorSpeed, whose speed is set by signal_steps or signal_function on the
+ * signal of external_rotor_speed */
+void set_external_rotor_speed(Simulation *self)
+{
+    Drive *drive = drive_of(self);
+    drive->mechanics.external = 1;
+    drive_init_states(&drive->base);
+}
+
+/* External rotor speed of ExternalRotorSpeed, a function of time */
+Signal *external_rotor_speed(Simulation *self)
+{
+    return &drive_of(self)->mechanics.w_M;
 }
 
 /* Friction coefficient of the mechanics as a function of the speed, set by

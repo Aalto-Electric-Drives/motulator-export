@@ -18,9 +18,10 @@ Run from the repository root (requires gcc):
 
 # %%
 from functools import partial
-from math import inf, nan, pi
+from math import inf, nan, pi, sin
 from typing import Any, cast
 
+import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as control
 import motulator.drive.gradnet as gn
 import motulator.grid.control as grid_control
@@ -273,6 +274,89 @@ def test_sm_current_vector_control(build: Build) -> None:
     the PWM, also with the minimum pulses and the compensation of the duty-ratio
     error."""
     check(*simulate(build, 0.3), rtol=1e-9)
+
+
+def torque_drive(
+    method: str, sensorless: bool = True
+) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Drive in the torque-control mode (`speed_ctrl=None`) with the external rotor speed
+    (`ExternalRotorSpeed`): the 2.2-kW IPMSM with flux-vector or current-vector
+    control (`method` "fvc" or "cvc"), the speed ramping up after the start, or the
+    2.2-kW induction machine of plot_2kw_im_cvc_tq.py with current-vector or
+    flux-vector control ("im_cvc" or "im_fvc"), the speed varying sinusoidally.
+    """
+    mechanics = model.ExternalRotorSpeed()
+    if method.startswith("im"):
+        nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
+        base = utils.BaseValues.from_nominal(nom, n_p=2)
+        par = model.InductionMachineInvGammaPars(
+            n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
+        )
+        mdl = model.Drive(
+            model.InductionMachine(par),
+            mechanics,
+            model.VoltageSourceConverter(u_dc=540),
+        )
+        if method == "im_fvc":
+            vector_ctrl: Any = im_control.FluxVectorController(
+                par,
+                im_control.FluxVectorControllerCfg(
+                    psi_s_nom=base.psi, i_s_max=1.5 * base.i, sensorless=sensorless
+                ),
+            )
+        else:
+            vector_ctrl = im_control.CurrentVectorController(
+                par,
+                im_control.CurrentVectorControllerCfg(
+                    psi_s_nom=base.psi, i_s_max=1.5 * base.i, sensorless=sensorless
+                ),
+            )
+        ctrl = control.VectorControlSystem(vector_ctrl, speed_ctrl=None)
+        ctrl.set_torque_ref(lambda t: (t > 0.25) * nom.tau - (t > 1.25) * 2 * nom.tau)
+        mechanics.set_external_rotor_speed(lambda t: 0.5 * base.w_M * sin(2 * pi * t))
+        return mdl, ctrl
+    par = model.SynchronousMachinePars(
+        n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
+    )
+    mdl = model.Drive(
+        model.SynchronousMachine(par), mechanics, model.VoltageSourceConverter(u_dc=540)
+    )
+    if method == "fvc":
+        cfg: Any = control.FluxVectorControllerCfg(
+            i_s_max=1.5 * BASE.i, sensorless=sensorless
+        )
+        vector_ctrl = control.FluxVectorController(par, cfg)
+    else:
+        cfg = control.CurrentVectorControllerCfg(
+            i_s_max=1.5 * BASE.i, sensorless=sensorless
+        )
+        vector_ctrl = control.CurrentVectorController(par, cfg)
+    ctrl = control.VectorControlSystem(vector_ctrl)
+    ctrl.set_torque_ref(lambda t: (t > 0.1) * 0.5 * NOM.tau)
+    mechanics.set_external_rotor_speed(lambda t: BASE.w_M * min(t / 0.2, 0.8))
+    return mdl, ctrl
+
+
+@pytest.mark.parametrize(
+    ("method", "sensorless", "t_stop"),
+    [
+        ("fvc", True, 0.4),
+        ("fvc", False, 0.4),
+        ("cvc", True, 0.4),
+        ("im_cvc", True, 2.0),
+        ("im_fvc", True, 2.0),
+    ],
+    ids=["fvc", "fvc_sensored", "cvc", "im_cvc", "im_fvc"],
+)
+def test_torque_control(method: str, sensorless: bool, t_stop: float) -> None:
+    """
+    Torque-control mode (no speed controller) with the external rotor speed
+    (`ExternalRotorSpeed`), whose rotor angle is the only state of the mechanics.
+    """
+    res_py, res_c = simulate(partial(torque_drive, method, sensorless), t_stop)
+    assert np.all(res_c.ctrl.ref.w_M == None)  # noqa: E711, as in motulator
+    check(res_py, res_c, rtol=1e-9)
 
 
 def test_n_eval() -> None:
