@@ -6,6 +6,8 @@ EXAMPLES = [
     "plot_2kw_ipmsm_fvc.py",
     "plot_2kw_ipmsm_fvc_sweep.py",
     "plot_6kw_pmsyrm_gn_fvc.py",
+    "plot_2kw_ipmsm_ovhz.py",
+    "plot_2kw_im_cvc_discrete.py",
     "plot_2kw_im_diode_vhz.py",
     "plot_10kva_lcl_gfl.py",
     "plot_13kva_do_gfm_sag.py",

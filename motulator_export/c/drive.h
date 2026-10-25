@@ -5,7 +5,7 @@
  * Python counterparts:
  *   motulator/drive/model/_drive.py       Drive
  *   motulator/drive/model/_machine.py     SynchronousMachine, InductionMachine
- *   motulator/drive/model/_mechanics.py   MechanicalSystem
+ *   motulator/drive/model/_mechanics.py   MechanicalSystem, ExternalRotorSpeed
  *   motulator/drive/utils/_parameters.py  SynchronousMachinePars,
  *                                         SpatialSaturatedSynchronousMachinePars,
  *                                         InductionMachinePars
@@ -21,7 +21,9 @@
  * The states are those of motulator, in the same order: the states of the DC bus,
  * the stator flux linkage in rotor coordinates and the electrical rotor angle of the
  * synchronous machine (or the stator and rotor flux linkages in stator coordinates of
- * the induction machine), and the mechanical rotor angle and speed of the mechanics.
+ * the induction machine), and the mechanical rotor angle and speed of the mechanics
+ * (MechanicalSystem), or the mechanical rotor angle (ExternalRotorSpeed, whose speed
+ * is a function of time).
  */
 
 #ifndef MOTULATOR_DRIVE_H
@@ -39,6 +41,9 @@
 #define DRIVE_w_M 3
 #define SM_DRIVE_STATES "psi_s_dq theta_m theta_M w_M"
 #define IM_DRIVE_STATES "psi_s_ab psi_r_ab theta_M w_M"
+/* The states with the external rotor speed (ExternalRotorSpeed) */
+#define SM_DRIVE_STATES_EXT "psi_s_dq theta_m theta_M"
+#define IM_DRIVE_STATES_EXT "psi_s_ab psi_r_ab theta_M"
 
 typedef struct {
     double n_p;
@@ -61,13 +66,18 @@ typedef struct {
     double L_s;
 } InductionMachine;
 
+/* MechanicalSystem, or ExternalRotorSpeed (external nonzero), whose speed w_M is a
+ * function of time and whose only state is the rotor angle */
 typedef struct {
     double J;
     Signal B_L;   /* Friction coefficient (Nm/(rad/s)), a function of the speed */
     Signal tau_L; /* External load torque (Nm), a function of time */
+    int external; /* ExternalRotorSpeed (else MechanicalSystem) */
+    Signal w_M;   /* External rotor speed (rad/s), a function of time */
 } MechanicalSystem;
 
-/* Drive (Drive with SynchronousMachine or InductionMachine and MechanicalSystem) */
+/* Drive (Drive with SynchronousMachine or InductionMachine and MechanicalSystem or
+ * ExternalRotorSpeed) */
 typedef struct {
     Model base;
     int induction; /* InductionMachine (else SynchronousMachine) */
@@ -89,8 +99,8 @@ static void sm_magnetic_map(const SynchronousMachine *self, double complex psi_s
                             double theta_m, double complex *i_s_dq, double *tau_M);
 /* Measured converter current (abc2complex(machine.meas_currents())) */
 static double complex drive_meas_current(const Drive *self, const double complex *x);
-/* Measured mechanical rotor speed (mechanics.meas_speed()) */
-static double drive_meas_speed(const Drive *self, const double complex *x);
+/* Measured mechanical rotor speed (mechanics.meas_speed()) at the time t */
+static double drive_meas_speed(const Drive *self, double t, const double complex *x);
 /* Measured mechanical rotor angle (wrap(mechanics.meas_position())) */
 static double drive_meas_position(const Drive *self, const double complex *x);
 

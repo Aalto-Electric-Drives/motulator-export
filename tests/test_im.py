@@ -4,9 +4,10 @@ Test the C port of induction machine current-vector control against motulator.
 The 2.2-kW induction machine drive (see im_2kw_cvc.py) is simulated in closed loop
 with the control system of motulator and with the C port (in the sensorless and
 sensored modes, with the dead time and the threshold voltage of the converter and
-their compensation, also with single update, and with the gates blocked at the start
-and during the operation), and the controller signals are compared at the sampling
-instants.
+their compensation, also with single update, with the gates blocked at the start
+and during the operation, and with the direct discrete-time current controller, also
+at the bandwidth and the sampling period of plot_2kw_im_cvc_discrete.py of
+motulator), and the controller signals are compared at the sampling instants.
 The closed-loop test is used, since replaying recorded measurements to a sensorless
 flux observer is an open loop, which amplifies rounding differences. PLECS is not
 needed.
@@ -52,6 +53,7 @@ void init(const double *p, const double *c, const double *s)
     cfg.J = c[8];
     cfg.sensorless = (int)c[9];
     cfg.T_s = c[10];
+    cfg.discrete = (int)c[11];
     PIController speed_ctrl = speed_controller(s[0], s[1], s[2], s[3]);
     im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);
     pwm_set_nonlinearity(&ctrl.pwm, s[4], s[5], s[6], (int)s[7]);
@@ -103,11 +105,15 @@ def build_system(
     i_0: float = 0.0,
     single_update: bool = False,
     blocked: bool = False,
+    discrete: bool = False,
+    fast: bool = False,
 ) -> tuple[model.Drive, control.VectorControlSystem]:
     """
     Build the drive system of the 2.2-kW example, optionally with the dead time and
-    the threshold voltage, with single update, and with the gates blocked at the
-    start and during the operation (`blocked`).
+    the threshold voltage, with single update, with the gates blocked at the start
+    and during the operation (`blocked`), and with the direct discrete-time current
+    controller (`discrete`), also with the bandwidth and the sampling period of its
+    example (`fast`).
 
     The compensation uses `sign = tanh(i/i_0)`, or `np.sign` if `i_0` is zero.
 
@@ -121,8 +127,14 @@ def build_system(
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.3) * NOM.tau)
     cfg = control.CurrentVectorControllerCfg(
-        psi_s_nom=BASE.psi, i_s_max=1.5 * BASE.i, J=0.015, sensorless=sensorless
+        psi_s_nom=BASE.psi,
+        i_s_max=1.5 * BASE.i,
+        J=0.015,
+        sensorless=sensorless,
+        discrete=discrete,
     )
+    if fast:  # The bandwidth and the sampling period of the example
+        cfg.alpha_c, cfg.T_s = 2 * pi * 700, 200e-6
     sign = np.sign if i_0 == 0 else lambda i: np.tanh(i / i_0)
     d_err = None
     if t_d > 0 or u_th > 0:
@@ -159,7 +171,7 @@ class CControlSystem(control.VectorControlSystem):
         # alpha_o, k_fw, and the speed controller alpha_i
         c = [cfg.psi_s_nom, cfg.i_s_max, cfg.alpha_c, np.nan, np.nan]
         c += [cfg.w_s_nom, cfg.k_u, np.nan, cast(float, cfg.J), cfg.sensorless]
-        c += [cfg.T_s]
+        c += [cfg.T_s, cfg.discrete]
         p = [PAR.n_p, PAR.R_s, PAR.R_R, PAR.L_sgm, PAR.L_M]
         s = [*SPEED_CTRL.values(), np.nan, inf, t_d, u_th, i_0, ctrl.pwm.feedforward]
         s += [ctrl.pwm.single_update]
@@ -184,42 +196,48 @@ class CControlSystem(control.VectorControlSystem):
         return ControlSystem.post_process(self)  # Only the saved C outputs
 
 
-@pytest.mark.parametrize(
-    ("sensorless", "t_d", "u_th", "i_0", "single_update", "blocked"),
-    [
-        (True, 0.0, 0.0, 0.0, False, False),
-        (False, 0.0, 0.0, 0.0, False, False),
-        (True, T_D, 0.0, 0.0, False, False),
-        (True, T_D, 0.0, I_0, False, False),
-        (True, T_D, U_TH, I_0, True, False),
-        (True, 0.0, 0.0, 0.0, False, True),
-        # Without the dead time: after the currents have decayed through the diodes,
-        # the first blanking intervals depend on the sign of a zero current in the
-        # converter model, i.e., on the rounding errors
-        (False, 0.0, U_TH, I_0, False, True),
-    ],
-    ids=[
-        "sensorless",
-        "sensored",
-        "dead_time",
-        "dead_time_tanh",
-        "u_th_single",
-        "blocked",
-        "sensored_u_th_blocked",
-    ],
-)
-def test_control_system(
-    dll: ctypes.CDLL,
-    sensorless: bool,
-    t_d: float,
-    u_th: float,
-    i_0: float,
-    single_update: bool,
-    blocked: bool,
-) -> None:
+# Arguments of build_system
+CASES: dict[str, dict[str, Any]] = {
+    "sensorless": {"sensorless": True},
+    "sensored": {"sensorless": False},
+    "dead_time": {"sensorless": True, "t_d": T_D},
+    "dead_time_tanh": {"sensorless": True, "t_d": T_D, "i_0": I_0},
+    "u_th_single": {
+        "sensorless": True,
+        "t_d": T_D,
+        "u_th": U_TH,
+        "i_0": I_0,
+        "single_update": True,
+    },
+    "blocked": {"sensorless": True, "blocked": True},
+    # Without the dead time: after the currents have decayed through the diodes, the
+    # first blanking intervals depend on the sign of a zero current in the converter
+    # model, i.e., on the rounding errors
+    "sensored_u_th_blocked": {
+        "sensorless": False,
+        "u_th": U_TH,
+        "i_0": I_0,
+        "blocked": True,
+    },
+    "discrete": {"sensorless": True, "discrete": True},
+    "discrete_sensored": {"sensorless": False, "discrete": True},
+    "discrete_dead_time": {
+        "sensorless": True,
+        "t_d": T_D,
+        "i_0": I_0,
+        "discrete": True,
+    },
+    "discrete_blocked": {"sensorless": True, "blocked": True, "discrete": True},
+    "discrete_fast": {"sensorless": True, "discrete": True, "fast": True},
+}
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_control_system(dll: ctypes.CDLL, case: str) -> None:
     """Closed-loop simulation of the 2.2-kW drive with motulator and with the C port."""
-    args = (sensorless, t_d, u_th, i_0, single_update, blocked)
-    mdl, ctrl = build_system(*args)
+    args = CASES[case]
+    t_d, u_th, i_0 = (args.get(name, 0.0) for name in ("t_d", "u_th", "i_0"))
+    mdl, ctrl = build_system(**args)
     res_py = model.Simulation(mdl, ctrl).simulate(t_stop=0.5)
     fbk, ref = res_py.ctrl.fbk, res_py.ctrl.ref
     py = np.column_stack(
@@ -234,7 +252,7 @@ def test_control_system(
             ref.i_s.imag,
         ]
     )
-    mdl, ctrl = build_system(*args)
+    mdl, ctrl = build_system(**args)
     res_c = model.Simulation(mdl, CControlSystem(ctrl, dll, t_d, u_th, i_0)).simulate(
         t_stop=0.5
     )

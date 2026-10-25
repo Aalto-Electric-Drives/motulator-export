@@ -8,7 +8,6 @@ RPC interface is in `_rpc`.
 """
 
 import os
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import isinf, pi
@@ -39,6 +38,12 @@ from motulator_export.plecs._schematic import (
 # Placeholder of the directory of the C sources (C_SOURCES) in the C-Script code,
 # written into the models as a path relative to the model file
 C_DIR = "$(C_DIR)"
+
+# The library of the blocks of the control systems (see `_library`), and the
+# placeholder of its path in a model referring to it, written as a path relative to
+# the model file
+LIBRARY = Path(__file__).parent / "motulator_lib.plecs"
+LIBRARY_PATH = "$(LIBRARY)"
 
 
 # Array sizes of the GradNet structure of the C port
@@ -575,46 +580,27 @@ def _mask_parameter(m: MaskParam, value: Any) -> str:
     return _mask_param(m.variable, m.prompt, _fmt_mask(value), m.tab)
 
 
-# Prompts of the variables of the model initialization in the mask of the control
-# system
-WORKSPACE_PROMPTS = {
-    "par": "Machine model of the control system (struct)",
-    "cfg": "Configuration of the controller (struct)",
-    "speed_ctrl": "Arguments of SpeedController (struct)",
-    "slew_rate": "Slew rate of the speed reference (mechanical rad/s²)",
-    "pwm": "Arguments of the PWM (struct)",
-}
+def _control_frame(block: ControlBlock) -> str:
+    """Frame of the control-system block, the inputs inside it."""
+    h = max(30, 5 * len(block.inputs))  # Half of the height
+    return f"      Frame         [-50, -{h}; 50, {h}]\n"
 
 
-def workspace_variables(init: str) -> list[str]:
-    """
-    Variables of the control system in the model initialization (after the heading
-    "%% Control system"), which the mask of the control system passes to the blocks
-    inside it, since the components inside a masked subsystem of PLECS see only the
-    variables of its mask.
-    """
-    control = init.split("%% Control system", 1)[1]
-    return list(dict.fromkeys(re.findall(r"^(\w+)", control, re.M)))
-
-
-def _workspace_params(init: str, tab: str) -> str:
-    """Mask parameters of the variables of the control system (see
-    `workspace_variables`)."""
-    return "".join(
-        _mask_param(n, f"{n}: {WORKSPACE_PROMPTS[n]}", n, tab)
-        for n in workspace_variables(init)
+def _control_terminals(block: ControlBlock) -> str:
+    """Terminals of the control-system block: the inputs and the duty ratios."""
+    n_in = len(block.inputs)
+    return _terminals(
+        [
+            *[("Input", -50, 10 * k - 5 * (n_in - 1), "left") for k in range(n_in)],
+            ("Output", 54, 0, "right"),
+        ]
     )
 
 
-def _control_subsystem(
-    block: ControlBlock, values: dict[str, Any], init: str
-) -> tuple[str, str]:
+def _control_subsystem(block: ControlBlock, values: dict[str, Any]) -> tuple[str, str]:
     """Mask and contents of the control-system subsystem."""
-    n_in = len(block.inputs)
-    h = max(30, 5 * n_in)  # Half of the height, the inputs inside the frame
     header = (
-        f"      Frame         [-50, -{h}; 50, {h}]\n"
-        '      SampleTime    "-1"\n'
+        _control_frame(block) + '      SampleTime    "-1"\n'
         '      CodeGenDiscretizationMethod "2"\n'
         '      CodeGenTarget "Generic"\n'
         f"      MaskType      {_q(block.mask_type)}\n"
@@ -623,17 +609,9 @@ def _control_subsystem(
         + "      MaskIconFrame on\n"
         "      MaskIconOpaque off\n"
         "      MaskIconRotates on\n"
-        + _workspace_params(init, block.mask_params[0].tab)
         + "".join(_mask_parameter(m, values[m.variable]) for m in block.mask_params)
     )
     # The duty ratios are the only output; the monitored signals are mask probes
-    terminals = _terminals(
-        [
-            *[("Input", -50, 10 * k - 5 * (n_in - 1), "left") for k in range(n_in)],
-            ("Output", 54, 0, "right"),
-        ]
-    )
-
     inner, size = schematic(block.netlist())
     # The probe signal of the only output of a C-Script block is "Output", and those
     # of several outputs are "Output 1", "Output 2", ...
@@ -644,7 +622,7 @@ def _control_subsystem(
         for k, n in enumerate(block.outputs)
     ]
     return header, (
-        terminals
+        _control_terminals(block)
         + _inner_schematic(inner, size)
         + _mask_probes(probes, "PWM")
         + _mask_probes(monitored)
@@ -656,7 +634,7 @@ def _add_control_system(
     block: ControlBlock,
     sources: list[tuple[str, StepSignal | float | str]],
     values: dict[str, Any],
-    init: str,
+    library: bool = False,
 ) -> int:
     """
     Add the control system and its inputs (references and measurements).
@@ -664,9 +642,10 @@ def _add_control_system(
     Each source is a `(name, signal)` pair in the order of the block inputs, the
     signal being a `StepSignal`, a constant, or a probe definition (`_probe`). The
     steps of a `StepSignal` with several steps are summed by a Gain block. The mask
-    of the control system passes the variables of the control system in the model
-    initialization `init` to the blocks inside it. Returns the y-coordinate of the
-    last source.
+    values `values` are the structs of the model initialization. With `library`, the
+    control system is a reference to its block in the library (`LIBRARY`), which
+    PLECS copies when it loads the model. Returns the y-coordinate of the last
+    source.
 
     """
     n_in = len(sources)
@@ -694,11 +673,46 @@ def _add_control_system(
             sch.component("Goto", "Goto enable", (x_b + 40, y_tag), TAG, show=False)
             sch.trunk(out, "Signal", [(x_b, y_src[k])])
             sch.signal(out, ("Goto enable", 1), [(x_b, y_tag)])
-    header, trailer = _control_subsystem(block, values, init)
-    sch.component(
-        "Subsystem", block.name, CS, direction="up", extra=header, trailer=trailer
-    )
+    if library:
+        params = {m.variable: _fmt_mask(values[m.variable]) for m in block.mask_params}
+        frame, terminals = _control_frame(block), _control_terminals(block)
+        _add_reference(sch, block.name, block.name, CS, frame, terminals, params)
+    else:
+        header, trailer = _control_subsystem(block, values)
+        sch.component(
+            "Subsystem", block.name, CS, direction="up", extra=header, trailer=trailer
+        )
     return y_src[-1]
+
+
+def _add_reference(
+    sch: _Schematic,
+    src: str,
+    name: str,
+    pos: Point,
+    frame: str,
+    terminals: str,
+    params: dict[str, str] | None = None,
+    label: str = "south",
+) -> None:
+    """
+    Add a reference to the block `src` of the library (`LIBRARY`), with the frame
+    and the terminals of the block and its mask parameters `params` (a Model
+    Reference, which PLECS replaces with a copy of the block when it loads the
+    model).
+    """
+    sch.component(
+        "ModelReference",
+        name,
+        pos,
+        params,
+        direction="up",
+        label=label,
+        extra=frame,
+        src_component=f"./{src}",
+        src_model=LIBRARY_PATH,
+        trailer=terminals,
+    )
 
 
 def _add_ctrl_output(sch: _Schematic, block: ControlBlock) -> None:
@@ -717,7 +731,7 @@ OUTPUT_TERMINALS = "".join(
 )
 
 
-def _write_model(
+def _model_text(
     path: Path,
     init: str,
     t_stop: float,
@@ -725,10 +739,11 @@ def _write_model(
     sch: _Schematic,
     size: Point,
     outputs: bool,
-) -> Path:
+) -> str:
     """
-    Write the model file: the settings, the model initialization `init` (the
-    parameters), and the schematic.
+    Text of the model file `path`: the settings, the model initialization `init`
+    (the parameters), and the schematic, with the paths of the C sources and of the
+    library relative to the model file.
     """
     text = (
         "Plecs {\n"
@@ -751,9 +766,26 @@ def _write_model(
         "    ShowBrowser   off\n"
         "    BrowserWidth  100\n" + sch.render() + "  }\n}\n"
     )
-    try:
-        c_dir = Path(os.path.relpath(C_SOURCES, path.resolve().parent)).as_posix()
-    except ValueError:  # Different drives (Windows)
-        c_dir = C_SOURCES.as_posix()
-    path.write_text(text.replace(C_DIR, c_dir), encoding="utf-8")
+    for placeholder, target in ((C_DIR, C_SOURCES), (LIBRARY_PATH, LIBRARY)):
+        try:
+            rel = Path(os.path.relpath(target, path.resolve().parent)).as_posix()
+        except ValueError:  # Different drives (Windows)
+            rel = target.as_posix()
+        text = text.replace(placeholder, rel)
+    return text
+
+
+def _write_model(
+    path: Path,
+    init: str,
+    t_stop: float,
+    T_s: float | str,
+    sch: _Schematic,
+    size: Point,
+    outputs: bool,
+) -> Path:
+    """Write the model file, see `_model_text`."""
+    path.write_text(
+        _model_text(path, init, t_stop, T_s, sch, size, outputs), encoding="utf-8"
+    )
     return path

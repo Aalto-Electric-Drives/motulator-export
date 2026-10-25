@@ -14,8 +14,11 @@ dist/
 *.autosave
 *_tmp.plecs
 
-# Simulink models, compiled S-functions, and caches built by the generated scripts
+# Simulink models and libraries, compiled S-functions, and caches built by the
+# scripts
 examples/simulink/*.slx
+motulator_export/simulink/library/*.slx
+motulator_export/simulink/library/slblocks.m
 *.mex*
 *.slxc
 slprj/

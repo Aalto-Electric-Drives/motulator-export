@@ -7,6 +7,7 @@
 %   motulator/common/utils/_utils.py         abc2complex, complex2abc, line2complex,
 %                                            wrap, clip
 %   motulator/common/control/_controllers.py PIController, ComplexPIController,
+%                                            DiscreteComplexController,
 %                                            RateLimiter
 %   motulator/common/control/_pwm.py         PWM (MPE and MME overmodulation),
 %                                            InverterNonlinearity (with numpy.sign
@@ -215,6 +216,50 @@ function self = complex_pi_update(self, T_s, u, w_c)
 self.u_i = self.u_i + T_s*(self.alpha_i + 1i*w_c)*(u - self.v);
 end
 
+function self = discrete_complex_init(alpha_c, T_s)
+%DISCRETE_COMPLEX_INIT Direct discrete-time 2DOF complex-vector controller
+%   (DiscreteComplexController), whose design includes the computational delay, so
+%   that the angle of the output is not advanced (k_comp = 0 in the control system).
+self = struct('T_s', T_s, 'beta', exp(-alpha_c*T_s), 'u_i', complex(0), ...
+    'u_lim', complex(0), 'w_c', 0, 'e', complex(0), 'u', complex(0));
+end
+
+function k = discrete_complex_gains(self, w_c)
+%DISCRETE_COMPLEX_GAINS Gains [k_t k_i k_1 k_2] of the complex-vector design
+%   (_gains).
+T_s = self.T_s;
+beta = self.beta;
+Phi = exp(-1i*w_c*T_s); % Rotation of the coordinates over T_s
+Phi2 = Phi*Phi;
+k = [(1 - beta)/(Phi2*T_s), (1 - beta)*(1 - beta*Phi)/(Phi2*T_s*T_s), ...
+    (1 - beta)*(1 + (1 - beta)/Phi + 1/Phi2)/T_s, (1 - beta)*(1 + Phi)];
+end
+
+function [self, u] = discrete_complex_compute_output(self, i_ref, i)
+%DISCRETE_COMPLEX_COMPUTE_OUTPUT Controller output.
+k = discrete_complex_gains(self, self.w_c);
+self.e = i_ref - i;
+self.u = k(1)*i_ref - k(3)*i - k(4)*self.u_lim + self.u_i;
+u = self.u;
+end
+
+function self = discrete_complex_update(self, T_s, u, w_c)
+%DISCRETE_COMPLEX_UPDATE Update with the limited output u and the angular speed w_c
+%   of the coordinates.
+k = discrete_complex_gains(self, self.w_c);
+self.u_i = self.u_i + T_s*k(2)*(self.e - (self.u - u)/k(1));
+self.u_lim = complex(u);
+self.w_c = w_c;
+end
+
+function self = discrete_complex_preset(self, u, w_c)
+%DISCRETE_COMPLEX_PRESET Preset the integral state to the steady state of the
+%   output u (preset).
+self.w_c = w_c;
+k = discrete_complex_gains(self, w_c);
+self.u_i = (1 + k(4))*u;
+end
+
 function i = current_limiter(i_max, i)
 %CURRENT_LIMITER Limit the magnitude of a current vector to i_max (CurrentLimiter).
 if abs(i) > i_max
@@ -410,13 +455,17 @@ else
 end
 end
 
-function d_abc = pwm_limit_pulses(self, d_abc, d_ref, i_abc, use_i, u_dc, T_half)
+function [d_abc, d_realized] = pwm_limit_pulses(self, d_abc, d_ref, i_abc, use_i, ...
+    u_dc, T_half)
 %PWM_LIMIT_PULSES Limit the duty ratios of the switching legs to [d_min, 1 - d_min]
 %   (limit_pulses): a duty ratio in (0, d_min) is replaced by 0 or d_min, and in
 %   (1 - d_min, 1) by 1 - d_min or 1, whichever gives the realized duty ratio nearer
 %   to the reference d_ref (the leg switches if equally near). The realized duty
 %   ratios are corrected for the duty-ratio error at the currents i_abc, the DC-bus
-%   voltage u_dc, and the half carrier period T_half if use_i is true.
+%   voltage u_dc, and the half carrier period T_half if use_i is true. The output
+%   d_realized gives the realized duty ratios: d_ref for the legs not changed, and
+%   the realized duty ratios of the limited legs.
+d_realized = d_ref;
 candidates = zeros(1, 2); % The leg switching, the leg clamped
 for k = 1:3
     if d_abc(k) > 0 && d_abc(k) < self.d_min
@@ -426,22 +475,23 @@ for k = 1:3
     else
         continue
     end
-    errors = zeros(1, 2);
+    realized = zeros(1, 2);
     for j = 1:2
         d_abc(k) = candidates(j);
-        realized = candidates(j);
+        realized(j) = candidates(j);
         if use_i
             d_err = inverter_nonlinearity(self.t_d, self.u_th, self.i_0, i_abc, ...
                 d_abc, u_dc, T_half);
-            realized = realized - d_err(k);
+            realized(j) = realized(j) - d_err(k);
         end
-        errors(j) = abs(realized - d_ref(k));
     end
-    if errors(2) < errors(1)
-        d_abc(k) = candidates(2);
+    if abs(realized(2) - d_ref(k)) < abs(realized(1) - d_ref(k))
+        j = 2;
     else
-        d_abc(k) = candidates(1);
+        j = 1;
     end
+    d_abc(k) = candidates(j);
+    d_realized(k) = realized(j);
 end
 end
 
@@ -490,15 +540,19 @@ end
 d_abc = max(min(u_abc/u_dc + 0.5, 1), 0);
 end
 
-function [u_ab, d_abc] = pwm_compute_output(self, T_s, u_c_ref_ab, u_dc, w, i_c_ab)
-%PWM_COMPUTE_OUTPUT Duty ratios and the limited voltage reference.
-%   The measured current i_c_ab, predicted by the angle k_pred*T_s*w, is used in the
-%   feedforward compensation of the duty-ratio error. With a discharged DC bus
-%   (u_dc <= 0), the duty ratios are 0.5.
+function [u_ab, d_abc, u_lim_ab] = pwm_compute_output(self, T_s, u_c_ref_ab, u_dc, ...
+    w, i_c_ab)
+%PWM_COMPUTE_OUTPUT Duty ratios and the limited voltage reference u_ab, including
+%   the compensation of the duty-ratio error, and u_lim_ab, excluding it, i.e., the
+%   voltage of the realized duty ratios (limited_voltage). The measured current
+%   i_c_ab, predicted by the angle k_pred*T_s*w, is used in the feedforward
+%   compensation. With a discharged DC bus (u_dc <= 0), the duty ratios are 0.5 and
+%   the voltages zero.
 % A discharged DC bus, e.g., with blocked gates before the precharge
 if u_dc <= 0
     d_abc = 0.5*ones(3, 1);
     u_ab = complex(0);
+    u_lim_ab = complex(0);
     return
 end
 % Duty ratios
@@ -514,11 +568,14 @@ if compensate
         u_dc, T_half);
     d_abc = clip(d_abc + d_err, 0, 1);
 end
-% Minimum pulses
+% Minimum pulses and the duty ratios realized with them
+d_realized = d_ref;
 if self.d_min > 0
-    d_abc = pwm_limit_pulses(self, d_abc, d_ref, i_c_abc, compensate, u_dc, T_half);
+    [d_abc, d_realized] = pwm_limit_pulses(self, d_abc, d_ref, i_c_abc, compensate, ...
+        u_dc, T_half);
 end
-% Limited voltage reference, including the compensation
+% Limited voltage reference, excluding and including the compensation
+u_lim_ab = complex(abc2complex(d_realized)*u_dc);
 u_ab = abc2complex(d_abc)*u_dc;
 end
 

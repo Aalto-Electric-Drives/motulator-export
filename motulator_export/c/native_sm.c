@@ -1,15 +1,16 @@
 /*
- * Native simulation of synchronous machine drives with flux-vector control: the
- * translation unit of the shared library of motulator_export.native, with its API
- * for Python (ctypes).
+ * Native simulation of synchronous machine drives with flux-vector control,
+ * current-vector control, or observer-based V/Hz control: the translation unit of
+ * the shared library of motulator_export.native, with its API for Python (ctypes).
  *
  * The system (System) consists of the simulation (sim.h), the drive model (drive.h)
- * with a synchronous machine, and the control system: VectorControlSystem with
- * FluxVectorController and a speed controller (sm_flux_vector.h), with the speed
- * reference. The API functions mirror the constructors of motulator; those of the
- * model are in sim.c and drive.c. The control system is constructed from its
- * parameters when the simulation starts (start), after which sim_run of sim.c runs
- * the simulation.
+ * with a synchronous machine, and the control system with the speed reference:
+ * VectorControlSystem with FluxVectorController (sm_flux_vector.h) or
+ * CurrentVectorController (sm_current_vector.h) and a speed controller, or
+ * VHzControlSystem with ObserverBasedVHzController (sm_flux_vector.h). The API
+ * functions mirror the constructors of motulator; those of the model are in sim.c
+ * and drive.c. The control system is constructed from its parameters when the
+ * simulation starts (start), after which sim_run of sim.c runs the simulation.
  */
 
 #include "common.c"
@@ -17,32 +18,55 @@
 #include "sm_parameters.c"
 #include "sm_control_loci.c"
 #include "sm_flux_vector.c"
+#include "sm_current_vector.c"
 #include "sim.c"
 #include "drive.c"
 #include "native.c"
 
 /* Signals logged at each step (the signal groups of ControlSystem.save), see
- * log_fields_width */
-#define FVC_FIELDS                                                                     \
-    "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c ref.w_M "           \
+ * log_fields_width. Both control systems have the references and the feedback
+ * signals of flux-vector control. */
+#define FVC_FIELDS_REF "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c "
+#define FVC_FIELDS FVC_FIELDS_REF "ref.w_M " FVC_FIELDS_REST
+/* In torque-control mode, the speed reference is None, which is not logged */
+#define FVC_TORQUE_FIELDS FVC_FIELDS_REF "ref.w_M:n " FVC_FIELDS_REST
+#define FVC_FIELDS_REST                                                                \
     "ref.d_abc:3 ref.enabled:b fbk.u_dc fbk.i_s:c fbk.u_s:c fbk.u_s_zoh:c "            \
     "fbk.psi_s:c fbk.e_o:c fbk.eps fbk.eps_f fbk.psi_a:c fbk.tau_M fbk.tau_L fbk.w_c " \
     "fbk.w_m fbk.w_M fbk.theta_c fbk.theta_m fbk.psi_f fbk.h fbk.caught:b"
 
-/* Vector control system with the speed reference */
+/* Vector control system or V/Hz control system with the speed reference (or the
+ * torque reference in torque-control mode) */
 typedef struct {
     ControlSystem base;
+    int vhz; /* VHzControlSystem (else VectorControlSystem) */
+    int cvc; /* VectorControlSystem with CurrentVectorController */
+    int torque_mode; /* Torque-control mode of VectorControlSystem (no speed
+                      * controller): w_M_ref is the torque reference */
     VectorControlSystem ctrl;
+    SMVHzControlSystem vhz_ctrl;
+    SMCVCControlSystem cvc_ctrl;
     Signal w_M_ref;
     double t; /* Controller time */
+    Signal enable; /* Gate enable (ControlSystem.set_enable) */
+    int enabled;   /* Gate enable of the latest step */
 } FluxVectorControlSystem;
 
 /* Save the signals of the step (FVC_FIELDS) */
 static int fvc_save(FluxVectorControlSystem *self)
 {
-    const VectorControlSystem *ctrl = &self->ctrl;
-    const References *ref = &ctrl->ref;
-    const ObserverOutputs *fbk = &ctrl->fbk;
+    const References *ref;
+    const ObserverOutputs *fbk;
+    if (self->vhz) {
+        ref = &self->vhz_ctrl.ref;
+        fbk = &self->vhz_ctrl.fbk;
+    } else if (self->cvc) {
+        ref = &self->cvc_ctrl.ref;
+        fbk = &self->cvc_ctrl.fbk;
+    } else {
+        ref = &self->ctrl.ref;
+        fbk = &self->ctrl.fbk;
+    }
     double *p = log_append(&self->base.log);
     if (p == NULL) {
         return SIM_ERROR_MEMORY;
@@ -51,17 +75,16 @@ static int fvc_save(FluxVectorControlSystem *self)
     log_put(&p, ref->T_s);
     log_put(&p, ref->tau_M);
     log_put(&p, ref->psi_s);
-    log_put_complex(&p, 0.0); /* Current reference, not used */
+    log_put_complex(&p, ref->i_s); /* Zero except in current-vector control */
     log_put_complex(&p, ref->u_s);
-    double complex u_s_lim =
-        native_limited_voltage(&ctrl->pwm, ref->u_c_ab, ref->u_s, fbk->theta_c,
-                               ctrl->k_comp, ref->T_s, fbk->w_c, fbk->u_dc);
-    log_put_complex(&p, cexp(-I * fbk->theta_c) * u_s_lim);
-    log_put(&p, ref->w_M);
+    log_put_complex(&p, ref->u_s_lim);
+    if (!self->torque_mode) {
+        log_put(&p, ref->w_M);
+    }
     for (int k = 0; k < 3; k++) {
         log_put(&p, ref->d_abc[k]);
     }
-    log_put(&p, 1.0); /* Gate enable */
+    log_put(&p, self->enabled); /* Gate enable */
     log_put(&p, fbk->u_dc);
     log_put_complex(&p, fbk->i_s);
     log_put_complex(&p, fbk->u_s);
@@ -84,33 +107,61 @@ static int fvc_save(FluxVectorControlSystem *self)
     return SIM_OK;
 }
 
+/* Gate enable at the controller time (ControlSystem.get_enable) */
+static int fvc_get_enable(const ControlSystem *base)
+{
+    const FluxVectorControlSystem *self = (const FluxVectorControlSystem *)base;
+    return signal_value(&self->enable, self->t) != 0.0;
+}
+
 /* Control step (ControlSystem.run_control_loop with the measurements of
- * VectorControlSystem.get_measurement) */
+ * VectorControlSystem.get_measurement or VHzControlSystem.get_measurement) */
 static int fvc_run(ControlSystem *base, const Model *mdl, double t,
-                   const double complex *x, double *T_s, double d_abc[3])
+                   const double complex *x, int enabled, double *T_s,
+                   double d_abc[3])
 {
     FluxVectorControlSystem *self = (FluxVectorControlSystem *)base;
+    self->enabled = enabled;
     (void)t;
     const Drive *drive = (const Drive *)mdl;
-    VectorControlSystem *ctrl = &self->ctrl;
     Measurements meas;
     meas.i_c_ab = drive_meas_current(drive, x);
     meas.u_dc = model_dc_voltage(mdl, x);
-    meas.theta_M = drive_meas_position(drive, x);
     double w_M_ref = signal_value(&self->w_M_ref, self->t);
     if (!isfinite(w_M_ref)) {
         return SIM_ERROR_SIGNAL;
     }
-    vector_control_system_compute_output(ctrl, &meas, w_M_ref, 1);
+    if (self->vhz) {
+        meas.theta_M = 0.0; /* Not measured */
+        sm_vhz_control_system_compute_output(&self->vhz_ctrl, &meas, w_M_ref,
+                                             enabled);
+    } else if (self->cvc) {
+        meas.theta_M = drive_meas_position(drive, x);
+        sm_cvc_control_system_compute_output(&self->cvc_ctrl, &meas, w_M_ref,
+                                             enabled);
+    } else {
+        meas.theta_M = drive_meas_position(drive, x);
+        vector_control_system_compute_output(&self->ctrl, &meas, w_M_ref, enabled);
+    }
     int status = fvc_save(self);
     if (status != SIM_OK) {
         return status;
     }
-    vector_control_system_update(ctrl);
-    *T_s = ctrl->ref.T_s;
+    const References *ref;
+    if (self->vhz) {
+        sm_vhz_control_system_update(&self->vhz_ctrl);
+        ref = &self->vhz_ctrl.ref;
+    } else if (self->cvc) {
+        sm_cvc_control_system_update(&self->cvc_ctrl);
+        ref = &self->cvc_ctrl.ref;
+    } else {
+        vector_control_system_update(&self->ctrl);
+        ref = &self->ctrl.ref;
+    }
+    *T_s = ref->T_s;
     self->t = fmod(self->t + *T_s, 1e9); /* Avoid overflow, as ControlSystem.update */
     for (int k = 0; k < 3; k++) {
-        d_abc[k] = ctrl->ref.d_abc[k];
+        d_abc[k] = ref->d_abc[k];
     }
     return SIM_OK;
 }
@@ -125,6 +176,10 @@ typedef struct {
     SynchronousMachinePars est_par;
     FluxVectorControllerCfg cfg;
     PIController speed_ctrl;
+    double w_M0; /* Initial speed estimate of the observer */
+    SMCurrentVectorControllerCfg cvc_cfg;
+    SMVHzControllerCfg vhz_cfg;
+    double slew_rate;
     PWM pwm; /* Settings of the PWM */
 } System;
 
@@ -142,6 +197,8 @@ System *system_new(void)
     self->sim.ctrl = &self->ctrl.base;
     FluxVectorControlSystem *ctrl = &self->ctrl;
     ctrl->base.run = fvc_run;
+    ctrl->base.get_enable = fvc_get_enable;
+    signal_constant(&ctrl->enable, 1.0);
     ctrl->base.fields = FVC_FIELDS;
     log_init(&ctrl->base.log, log_fields_width(FVC_FIELDS));
     signal_constant(&ctrl->w_M_ref, 0.0);
@@ -202,6 +259,45 @@ void set_flux_vector_controller(System *self, double i_s_max, double alpha_tau,
     cfg->J = J;
     cfg->T_s = T_s;
     cfg->sensorless = sensorless;
+    self->ctrl.vhz = 0;
+    self->ctrl.cvc = 0;
+}
+
+/* CurrentVectorControllerCfg (of synchronous machines), NAN for None, in the order
+ * of CFG_FIELDS of plecs/_sm_cvc_control.py; the observer gain is k_o0 +
+ * k_o1*abs(w_m) */
+void set_current_vector_controller(System *self, double i_s_max, double alpha_c,
+                                   double alpha_i, double alpha_o, double alpha_ref,
+                                   double k_o0, double k_o1, double psi_s_min,
+                                   double psi_s_max, double k_u, double k_mtpv,
+                                   double J, int sensorless, double T_s,
+                                   int discrete)
+{
+    SMCurrentVectorControllerCfg *cfg = &self->cvc_cfg;
+    *cfg = sm_current_vector_controller_cfg(i_s_max);
+    cfg->alpha_c = alpha_c;
+    cfg->alpha_i = alpha_i;
+    cfg->alpha_o = alpha_o;
+    cfg->alpha_ref = alpha_ref;
+    cfg->k_o[0] = k_o0;
+    cfg->k_o[1] = k_o1;
+    cfg->psi_s_min = psi_s_min;
+    cfg->psi_s_max = psi_s_max;
+    cfg->k_u = k_u;
+    cfg->k_mtpv = k_mtpv;
+    cfg->J = J;
+    cfg->T_s = T_s;
+    cfg->sensorless = sensorless;
+    cfg->discrete = discrete;
+    self->ctrl.vhz = 0;
+    self->ctrl.cvc = 1;
+}
+
+/* Initial speed estimate of the observer of the vector controller
+ * (SpeedFluxObserver.w_M) */
+void set_observer_speed(System *self, double w_M)
+{
+    self->w_M0 = w_M;
 }
 
 /* Speed controller (PIController, e.g., SpeedController) by its gains */
@@ -209,6 +305,32 @@ void set_speed_controller(System *self, double k_p, double k_t, double alpha_i,
                           double u_max)
 {
     pi_init(&self->speed_ctrl, k_p, k_t, alpha_i, u_max);
+}
+
+/* ObserverBasedVHzControllerCfg in VHzControlSystem with the slew rate (mechanical
+ * rad/s^2), NAN for None, in the order of CFG_FIELDS of plecs/_sm_vhz_control.py;
+ * the observer gain is k_o0 + k_o1*abs(w_m) */
+void set_vhz_controller(System *self, double i_s_max, double alpha_psi,
+                        double alpha_tau, double alpha_f, double alpha_o, double k_o0,
+                        double k_o1, double k_u, double k_mtpv, double psi_s_min,
+                        double psi_s_max, double T_s, double slew_rate)
+{
+    SMVHzControllerCfg *cfg = &self->vhz_cfg;
+    *cfg = sm_vhz_controller_cfg(i_s_max);
+    cfg->alpha_psi = alpha_psi;
+    cfg->alpha_tau = alpha_tau;
+    cfg->alpha_f = alpha_f;
+    cfg->alpha_o = alpha_o;
+    cfg->k_o[0] = k_o0;
+    cfg->k_o[1] = k_o1;
+    cfg->k_u = k_u;
+    cfg->k_mtpv = k_mtpv;
+    cfg->psi_s_min = psi_s_min;
+    cfg->psi_s_max = psi_s_max;
+    cfg->T_s = T_s;
+    self->slew_rate = slew_rate;
+    self->ctrl.vhz = 1;
+    self->ctrl.cvc = 0;
 }
 
 /* PWM of the control system, see native_pwm_settings */
@@ -219,10 +341,29 @@ void set_pwm(System *self, int mme, double t_d, double u_th, double i_0,
                         single_update);
 }
 
-/* Speed reference, set by signal_steps or signal_function */
+/* Speed reference, or the torque reference in torque-control mode, set by
+ * signal_steps or signal_function */
 Signal *speed_reference(System *self)
 {
     return &self->ctrl.w_M_ref;
+}
+
+/* Torque-control mode of VectorControlSystem (speed_ctrl = None): the reference of
+ * speed_reference is the torque reference */
+void set_torque_control(System *self)
+{
+    FluxVectorControlSystem *ctrl = &self->ctrl;
+    ctrl->torque_mode = 1;
+    ctrl->base.fields = FVC_TORQUE_FIELDS;
+    log_free(&ctrl->base.log);
+    log_init(&ctrl->base.log, log_fields_width(FVC_TORQUE_FIELDS));
+}
+
+/* Gate enable of the control system (ControlSystem.set_enable), set by signal_steps
+ * or signal_function */
+Signal *enable_signal(System *self)
+{
+    return &self->ctrl.enable;
 }
 
 /* Construct the control system and start the simulation at the time t0 with the
@@ -232,9 +373,23 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
            double max_step, double rtol, double atol)
 {
     FluxVectorControlSystem *ctrl = &self->ctrl;
-    vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
-                               self->speed_ctrl);
-    native_pwm_copy_settings(&ctrl->ctrl.pwm, &self->pwm);
+    if (ctrl->vhz) {
+        sm_vhz_control_system_init(&ctrl->vhz_ctrl, self->est_par, &self->vhz_cfg,
+                                   self->slew_rate);
+        native_pwm_copy_settings(&ctrl->vhz_ctrl.pwm, &self->pwm);
+    } else if (ctrl->cvc) {
+        sm_cvc_control_system_init(&ctrl->cvc_ctrl, self->est_par, &self->cvc_cfg,
+                                   self->speed_ctrl);
+        ctrl->cvc_ctrl.torque_mode = ctrl->torque_mode;
+        ctrl->cvc_ctrl.vector_ctrl.observer.speed_observer.w_M = self->w_M0;
+        native_pwm_copy_settings(&ctrl->cvc_ctrl.pwm, &self->pwm);
+    } else {
+        vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
+                                   self->speed_ctrl);
+        ctrl->ctrl.torque_mode = ctrl->torque_mode;
+        ctrl->ctrl.vector_ctrl.observer.speed_observer.w_M = self->w_M0;
+        native_pwm_copy_settings(&ctrl->ctrl.pwm, &self->pwm);
+    }
     ctrl->t = t_ctrl;
 
     double complex x[SIM_MAX_STATES];

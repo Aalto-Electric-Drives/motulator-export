@@ -138,12 +138,14 @@ def compare(
     sfun: Callable[[Any], SFunctionControlSystem],
     signals: dict[str, Callable[[Any, Any], Any]],
     t_stop: float,
+    rtol: dict[str, float] | None = None,
 ) -> list[list[float]]:
     """
     Simulate with the control systems of motulator and of the S-function.
 
     The system is built twice by `build`, and `sfun` creates the control system of
-    the S-function from the control system of motulator (for its references).
+    the S-function from the control system of motulator (for its references). The
+    signals agree to 1e-8 relative to their magnitudes (at least 1), or to `rtol`.
     Returns the inputs of the S-function at each step.
 
     """
@@ -164,7 +166,7 @@ def compare(
         err = np.max(np.abs(getattr(res_sl.ctrl.out, name) - value))
         scale = np.max(np.abs(value))
         print(f"  {name}: max error {err:.3g} (max value {scale:.3g})")
-        assert err <= 1e-8 * max(scale, 1.0), name
+        assert err <= (rtol or {}).get(name, 1e-8) * max(scale, 1.0), name
     return sl.recorded
 
 
@@ -201,18 +203,21 @@ def check_dc_bus_limit(
 
 def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem]:
     """
-    S-function control system of a drive, with the measured angle or speed (not in
+    S-function control system of a drive, with the speed reference (or the torque
+    reference in the torque-control mode) and the measured angle or speed (not in
     V/Hz control).
     """
 
     def sfun(ctrl: VectorControlSystem | VHzControlSystem) -> SFunctionControlSystem:
+        torque = "tau_M_ref" in block.inputs
+        ref = ctrl.ext_ref.tau_M if torque else ctrl.ext_ref.w_M
+
         def inputs(mdl: model.Drive, t: float) -> list[float]:
             mech = mdl.mechanics
             i_s_abc = mdl.machine.meas_currents()
             u_dc = mdl.converter.meas_dc_voltage()
             enabled = float(bool(get_value(ctrl._enable, t)))  # The gate enable
-            w_M_ref = cast(Any, ctrl.ext_ref.w_M)(t)
-            u = [enabled, w_M_ref, *i_s_abc, u_dc]
+            u = [enabled, get_value(cast(Any, ref), t), *i_s_abc, u_dc]
             if "theta_M" in block.inputs:
                 u.append(wrap(mech.meas_position()))
             elif "w_M" in block.inputs:

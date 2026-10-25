@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Flux-vector controller (FluxVectorController)\nvector_ctrl.par = par;\nvector_ctrl.cfg = cfg;\n% Initial speed estimate of the observer (SpeedFluxObserver.w_M)\nvector_ctrl.observer.w_M = 0;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
     Location      [0, 0; 1000, 520]
     ZoomFactor    1
@@ -132,32 +132,24 @@ Plecs {
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
-      MaskType      "VectorControlSystem (motulator)"
-      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments. The top-level blocks refer to the variables of the model initialization, and the blocks inside them get their parameters as in the constructors of motulator. T_s is the sampling period of the measurements, and sensorless the mode of the vector controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskType      "Flux-vector control (motulator)"
+      MaskDescription "Speed control of a synchronous machine drive with flux-vector control (VectorControlSystem with FluxVectorController and SpeedController). Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VectorControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "T_s = vector_ctrl.cfg.T_s;\nsensorless = vector_ctrl.cfg.sensorless;\n% Angle-advance factor (k_comp of the vector controller), zero with the\n% direct discrete-time current controller\nk_comp = 1.5;\nif isfield(vector_ctrl.cfg, 'discrete') && vector_ctrl.cfg.discrete\n  k_comp = 0;\nend\n% Initial speed estimate of the observer, zero if not given (e.g., in a\n% model written before the initial state of the observer was exported)\nif ~isfield(vector_ctrl, 'observer') || ~isfield(vector_ctrl.observer, 'w_M')\n  vector_ctrl.observer.w_M = 0;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
-        Variable      "par"
-        Prompt        "par: Machine model of the control system (struct)"
+        Variable      "vector_ctrl"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg, observer"
         Type          FreeText
-        Value         "par"
-        Show          off
-        Tunable       on
-        TabName       "VectorControlSystem"
-      }
-      Parameter {
-        Variable      "cfg"
-        Prompt        "cfg: Configuration of the controller (struct)"
-        Type          FreeText
-        Value         "cfg"
+        Value         "vector_ctrl"
         Show          off
         Tunable       on
         TabName       "VectorControlSystem"
       }
       Parameter {
         Variable      "speed_ctrl"
-        Prompt        "speed_ctrl: Arguments of SpeedController (struct)"
+        Prompt        "speed_ctrl: Speed controller (SpeedController) as a struct"
         Type          FreeText
         Value         "speed_ctrl"
         Show          off
@@ -166,27 +158,9 @@ Plecs {
       }
       Parameter {
         Variable      "pwm"
-        Prompt        "pwm: Arguments of the PWM (struct)"
+        Prompt        "pwm: PWM as a struct"
         Type          FreeText
         Value         "pwm"
-        Show          off
-        Tunable       on
-        TabName       "VectorControlSystem"
-      }
-      Parameter {
-        Variable      "T_s"
-        Prompt        "T_s: Sampling period (s)"
-        Type          FreeText
-        Value         "cfg.T_s"
-        Show          off
-        Tunable       on
-        TabName       "VectorControlSystem"
-      }
-      Parameter {
-        Variable      "sensorless"
-        Prompt        "sensorless: Sensorless mode (1) or sensored mode (0)"
-        Type          FreeText
-        Value         "cfg.sensorless"
         Show          off
         Tunable       on
         TabName       "VectorControlSystem"
@@ -1454,7 +1428,7 @@ Plecs {
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
+        Value         "double meas_u[MEAS_WIDTH];\nfor (int k = 0; k < MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nMeasurements meas;\nmeasurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc, NULL);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -1731,7 +1705,7 @@ Plecs {
         Variable      "par"
         Prompt        "par: Machine model (SynchronousMachinePars, or SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn) as a struct"
         Type          FreeText
-        Value         "par"
+        Value         "vector_ctrl.par"
         Show          off
         Tunable       on
         TabName       ""
@@ -1740,7 +1714,16 @@ Plecs {
         Variable      "cfg"
         Prompt        "cfg: Configuration (FluxVectorControllerCfg) as a struct"
         Type          FreeText
-        Value         "cfg"
+        Value         "vector_ctrl.cfg"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
         Show          off
         Tunable       on
         TabName       ""
@@ -1968,6 +1951,15 @@ Plecs {
         TabName       ""
       }
       Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
         Variable      "T_s"
         Prompt        "T_s: Sampling period (s)"
         Type          FreeText
@@ -2091,7 +2083,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Flux observer in estimated rotor coordinates (FluxObserver). The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In standby, the voltages are unknown (NaN), and the observer runs on its open-circuit model. When the voltage is known again after the release of the gates, the estimates are initialized from the current response to the zero-voltage period (the flying start of SpeedFluxObserver), and the output init = [flag w_M] initializes the SpeedObserver. In the sensored mode (h = 1), the position error signal is computed from the measured rotor angle (compute_feedback). The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskDescription "Flux observer in estimated rotor coordinates (FluxObserver). The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In standby, the voltages are unknown (NaN), and the flux estimate follows the current model alone, with the open-circuit voltage of the model as the voltage. When the voltage is known again after the release of the gates, the estimates are initialized from the current response to the zero-voltage period (the flying start of SpeedFluxObserver), and the output init = [flag w_M] initializes the SpeedObserver. In the sensored mode (h = 1), the position error signal is computed from the measured rotor angle (compute_feedback). The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
       MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -2548,7 +2540,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -2575,6 +2567,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -2765,7 +2766,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -2790,7 +2791,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -3001,8 +3002,8 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ReferenceGenerator (motulator)"
-      MaskDescription "Flux and torque reference generator (ReferenceGenerator) with the lookup tables of the MTPA, MTPV, and current-limit loci, computed by the function sm_reference_luts.m next to the model in the mask initialization (Simulink) or by the block at the start (PLECS). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
-      MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n% Lookup tables of the loci: empty, so the block computes them at the start\nluts = [];\n"
+      MaskDescription "Flux and torque reference generator (ReferenceGenerator) with the lookup tables of the MTPA, MTPV, and current-limit loci, computed by the function sm_reference_luts.m of the library in the mask initialization (Simulink) or by the block at the start (PLECS). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n% Lookup tables of the loci, computed by the block at its start if empty\nluts = [];\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -3238,7 +3239,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"psi_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"k_u must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"k_mtpv must be a scalar.\");\n    return;\n}\n/* Machine model: SaturatedSynchronousMachinePars with a GradNet flux map,\n * or SynchronousMachinePars with constant inductances */\nSynchronousMachinePars par;\nif (PDIM(10) > 0) {\n    GradNet flux_map;\n    CHECK_GRADNET(10);\n    READ_GRADNET(flux_map, 10);\n    par = saturated_synchronous_machine_pars(P(5, 0), P(6, 0),\n                                             &flux_map);\n} else {\n    if (PDIM(7) != 1 || PDIM(8) != 1 || PDIM(9) != 1) {\n        SetErrorMessage(\"L_d, L_q, and psi_f needed without a flux map.\");\n        return;\n    }\n    par = synchronous_machine_pars(P(5, 0), P(6, 0), P(7, 0),\n                                   P(8, 0), P(9, 0));\n}\n/* Lookup tables of the loci: given (sm_reference_luts.m in Simulink), or\n * computed at the start if empty (PLECS) */\nReferenceLUTs luts_given;\nconst ReferenceLUTs *luts = NULL;\nif (PDIM(21) > 0) {\n    if (PDIM(21) != 6 * NUM_LOCUS) {\n        SetErrorMessage(\"luts must be a 16-by-6 matrix (sm_reference_luts.m) or empty.\");\n        return;\n    }\n    LUT *tables[3] = {&luts_given.psi_s_mtpa, &luts_given.tau_M_cl,\n                      &luts_given.tau_M_mtpv};\n    for (int t = 0; t < 3; t++) {\n        tables[t]->n = NUM_LOCUS;\n        for (int k = 0; k < NUM_LOCUS; k++) {\n            tables[t]->x[k] = P(21, 2 * t * NUM_LOCUS + k);\n            tables[t]->y[k] = P(21, (2 * t + 1) * NUM_LOCUS + k);\n        }\n    }\n    luts = &luts_given;\n}\nreference_gen_init(&self, &par, P(0, 0), PARAM(1),\n                   P(2, 0), P(3, 0), P(4, 0), luts);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"i_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"psi_s_max must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"k_u must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"k_mtpv must be a scalar.\");\n    return;\n}\n/* Machine model: SaturatedSynchronousMachinePars with a GradNet flux map,\n * or SynchronousMachinePars with constant inductances */\nSynchronousMachinePars par;\nif (PDIM(10) > 0) {\n    GradNet flux_map;\n    CHECK_GRADNET(10);\n    READ_GRADNET(flux_map, 10);\n    par = saturated_synchronous_machine_pars(P(5, 0), P(6, 0),\n                                             &flux_map);\n} else {\n    if (PDIM(7) != 1 || PDIM(8) != 1 || PDIM(9) != 1) {\n        SetErrorMessage(\"L_d, L_q, and psi_f needed without a flux map.\");\n        return;\n    }\n    par = synchronous_machine_pars(P(5, 0), P(6, 0), P(7, 0),\n                                   P(8, 0), P(9, 0));\n}\n/* Lookup tables of the loci: given (sm_reference_luts.m in Simulink), or\n * computed at the start if empty (PLECS) */\nReferenceLUTs luts_given;\nconst ReferenceLUTs *luts = NULL;\nif (PDIM(21) > 0) {\n    if (PDIM(21) != 6 * NUM_LOCUS) {\n        SetErrorMessage(\"luts must be a 16-by-6 matrix (sm_reference_luts.m) or empty.\");\n        return;\n    }\n    LUT *tables[3] = {&luts_given.psi_s_mtpa, &luts_given.tau_M_cl,\n                      &luts_given.tau_M_mtpv};\n    for (int t = 0; t < 3; t++) {\n        tables[t]->n = NUM_LOCUS;\n        for (int k = 0; k < NUM_LOCUS; k++) {\n            tables[t]->x[k] = P(21, 2 * t * NUM_LOCUS + k);\n            tables[t]->y[k] = P(21, (2 * t + 1) * NUM_LOCUS + k);\n        }\n    }\n    luts = &luts_given;\n}\nreference_gen_init(&self, &par, P(0, 0), PARAM(1),\n                   P(2, 0), P(3, 0), P(4, 0), luts);\n/* Errors of ReferenceGenerator of motulator */\nconst char *error = reference_gen_error(&self, &par);\nif (error != NULL) {\n    SetErrorMessage(error);\n    return;\n}\n"
         Show          off
       }
       Parameter {
@@ -3773,7 +3774,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "T_s, sensorless"
+        Value         "T_s, sensorless, k_comp"
         Show          off
       }
       Parameter {
@@ -3793,17 +3794,17 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gradnet.c\"\n#include \"../motulator_export/c/sm_parameters.c\"\n#include \"../motulator_export/c/sm_control_loci.c\"\n#include \"../motulator_export/c/sm_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n * in the arrays of the C port (in the start function only, returns on error) */\n#define CHECK_GRADNET(i0) \\\n    do { \\\n        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n            SetErrorMessage(\"GradNet too large: in_dim must be at most \" \\\n                            \"4 and embed_dim at most \" \\\n                            \"64.\"); \\\n            return; \\\n        } \\\n    } while (0)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\nstatic double T_s; /* Sampling period */\nstatic int sensorless;\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/gradnet.c\"\n#include \"../motulator_export/c/sm_parameters.c\"\n#include \"../motulator_export/c/sm_control_loci.c\"\n#include \"../motulator_export/c/sm_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Check that a GradNet in the parameters i0, i0 + 1, ... (GRADNET_FIELDS) fits\n * in the arrays of the C port (in the start function only, returns on error) */\n#define CHECK_GRADNET(i0) \\\n    do { \\\n        if ((int)P((i0), 0) > GRADNET_MAX_IN_DIM \\\n            || PDIM((i0) + 3) > GRADNET_MAX_EMBED_DIM) { \\\n            SetErrorMessage(\"GradNet too large: in_dim must be at most \" \\\n                            \"4 and embed_dim at most \" \\\n                            \"64.\"); \\\n            return; \\\n        } \\\n    } while (0)\n\n/* Read a GradNet from the parameters i0, i0 + 1, ... (GRADNET_FIELDS) */\n#define READ_GRADNET(net, i0) \\\n    do { \\\n        (net).in_dim = (int)P((i0), 0); \\\n        (net).mu_dim = (int)P((i0) + 1, 0); \\\n        (net).embed_dim = PDIM((i0) + 3); \\\n        for (int j_ = 0; j_ < (net).embed_dim; j_++) { \\\n            for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n                (net).W[j_][k_] = P((i0) + 2, j_ + (net).embed_dim * k_); \\\n            } \\\n            (net).b[j_] = P((i0) + 3, j_); \\\n        } \\\n        for (int k_ = 0; k_ < (net).in_dim; k_++) { \\\n            (net).mu_log[k_] = (k_ < (net).mu_dim) ? P((i0) + 4, k_) : 0.0; \\\n            (net).bias[k_] = P((i0) + 5, k_); \\\n        } \\\n        (net).activation = (GradNetActivation)(int)P((i0) + 6, 0); \\\n        (net).beta_log = P((i0) + 7, 0); \\\n        (net).p = (int)P((i0) + 8, 0); \\\n        (net).in_base = P((i0) + 9, 0); \\\n        (net).out_base = P((i0) + 10, 0); \\\n    } while (0)\n\nstatic double T_s; /* Sampling period */\nstatic int sensorless;\nstatic double k_comp; /* Angle-advance factor */\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "T_s = P(0, 0);\nsensorless = (int)P(1, 0);\n"
+        Value         "T_s = P(0, 0);\nsensorless = (int)P(1, 0);\nk_comp = P(2, 0);\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nObserverOutputs fbk;\nobserver_outputs_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates, its angle advanced by\n * k_comp*T_s*w_c (k_comp = 1.5 of the controller) */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nu_c_ref_ab *= cexp(I * 1.5 * T_s * fbk.w_c);\n/* The zero vector of a sensorless drive in standby */\nif (sensorless && InputSignal(2, 0) != 0.0) {\n    u_c_ref_ab = 0.0;\n}\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
+        Value         "double fbk_u[FBK_WIDTH];\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nObserverOutputs fbk;\nobserver_outputs_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates, its angle advanced by\n * k_comp*T_s*w_c (k_comp of the vector controller) */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nu_c_ref_ab *= cexp(I * k_comp * T_s * fbk.w_c);\n/* The zero vector of a sensorless drive in standby */\nif (sensorless && InputSignal(2, 0) != 0.0) {\n    u_c_ref_ab = 0.0;\n}\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
         Show          off
       }
       Parameter {

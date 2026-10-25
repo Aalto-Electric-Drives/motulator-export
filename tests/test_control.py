@@ -18,8 +18,9 @@ Run from the repository root:
 
 # %%
 import ctypes
+import re
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, cast
 
 import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
@@ -37,12 +38,14 @@ from motulator_export.plecs import (
     _grid_control,
     _im,
     _im_control,
+    _im_fvc_control,
     _im_vhz_control,
     _sm,
     _sm_control,
+    _sm_cvc_control,
+    _sm_vhz_control,
 )
 from motulator_export.plecs._common import ControlBlock
-from motulator_export.plecs._control import mask_values
 from motulator_export.plecs._netlist import PLECS, SIMULINK, Subsystem, layout, problems
 from tests import monolithic
 from tests.c_port import arr
@@ -65,27 +68,44 @@ from tests.sfunctions import (
 )
 from tests.systems import (
     BASE,
+    IM_FVC_RTOL,
     IM_PAR,
     IM_SPEED,
+    SM_CVC_D_MIN,
+    SM_KEYS,
     SM_PAR,
     SM_SPEED,
+    SM_VHZ_CASES,
+    SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
+    VHZ_RTOL,
     gfl_system,
     gfm_system,
     gradnet_control_system,
+    im_fvc_system,
     im_system,
+    sm_cvc_system,
     sm_system,
+    sm_vhz_system,
+    torque_system,
     vhz_system,
 )
 
 # Control systems: the block and its monolithic reference
 SYSTEMS: dict[str, tuple[ControlBlock, MonolithicBlock]] = {
     "fvc": (_sm_control.FVC_BLOCK, monolithic.FVC),
+    "smcvc": (_sm_cvc_control.CVC_BLOCK, monolithic.SM_CVC),
     "cvc": (_im_control.CVC_BLOCK, monolithic.CVC),
+    "imfvc": (_im_fvc_control.FVC_BLOCK, monolithic.IM_FVC),
     "vhz": (_im_vhz_control.VHZ_BLOCK, monolithic.VHZ),
+    "smvhz": (_sm_vhz_control.VHZ_BLOCK, monolithic.SM_VHZ),
     "gfl": (_grid_control.GFL_BLOCK, monolithic.GFL),
     "gfm": (_grid_control.GFM_BLOCK, monolithic.GFM),
+    "fvc_torque": (_sm_control.FVC_TORQUE_BLOCK, monolithic.FVC_TORQUE),
+    "smcvc_torque": (_sm_cvc_control.CVC_TORQUE_BLOCK, monolithic.SM_CVC_TORQUE),
+    "cvc_torque": (_im_control.CVC_TORQUE_BLOCK, monolithic.CVC_TORQUE),
+    "imfvc_torque": (_im_fvc_control.FVC_TORQUE_BLOCK, monolithic.IM_FVC_TORQUE),
 }
 
 
@@ -132,13 +152,19 @@ def compiled(tmp_path_factory: pytest.TempPathFactory) -> Compiled:
 
 def init_script(key: str, values: dict[str, Any], flux_map: Any = None) -> str:
     """Model initialization of the control system (without the system model)."""
-    if key == "fvc":
+    key = key.removesuffix("_torque")  # The same in the torque-control mode
+    if key in ("fvc", "smcvc", "smvhz"):
         variables = []
         if flux_map is not None:
             variables = [(f"est_flux_map.{f}", flux_map[f]) for f in _sm.GRADNET_FIELDS]
-        return _sm_control.init_script(variables, values, "")
+        module = {"fvc": _sm_control, "smcvc": _sm_cvc_control}.get(
+            key, _sm_vhz_control
+        )
+        return module.init_script(variables, values, "")
     if key == "cvc":
         return _im_control.init_script([], values, "")
+    if key == "imfvc":
+        return _im_fvc_control.init_script([], values, "")
     if key == "vhz":
         return _im_vhz_control.init_script([], values, "")
     return _grid_control.init_script([], values, "", gfl=key == "gfl")
@@ -164,9 +190,8 @@ def check(
     net, ref = compiled(key)
     block, mono = SYSTEMS[key]
     init = init_script(key, values, flux_map)
-    values_top = mask_values(block)
-    params = block_params(net.top, init, values_top)
-    np.testing.assert_equal(block_params(net.top, init, values_top, plecs=True), params)
+    params = block_params(net.top, init, block)
+    np.testing.assert_equal(block_params(net.top, init, block, plecs=True), params)
 
     def restart() -> None:
         assert net.start(params, start) is None
@@ -243,15 +268,25 @@ def test_gradnet_flux_vector_control(compiled: Compiled) -> None:
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked"),
+    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked", "discrete"),
     [
-        (True, 0.0, 0.0, 0.0, False, False),
-        (False, 0.0, 0.0, 0.0, False, False),
-        (True, 2e-6, 0.5, 0.0, False, False),
-        (True, 2e-6, 0.5, 1.0, True, False),
-        (True, 0.0, 0.5, 1.0, False, True),
+        (True, 0.0, 0.0, 0.0, False, False, False),
+        (False, 0.0, 0.0, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 1.0, True, False, False),
+        (True, 0.0, 0.5, 1.0, False, True, False),
+        (True, 2e-6, 0.5, 0.0, False, False, True),
+        (True, 0.0, 0.5, 1.0, False, True, True),
     ],
-    ids=["sensorless", "sensored", "dead_time_tanh", "u_th_single", "u_th_blocked"],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time_tanh",
+        "u_th_single",
+        "u_th_blocked",
+        "discrete_dead_time",
+        "discrete_blocked",
+    ],
 )
 def test_current_vector_control(
     compiled: Compiled,
@@ -261,11 +296,14 @@ def test_current_vector_control(
     u_th: float,
     single_update: bool,
     blocked: bool,
+    discrete: bool,
 ) -> None:
     """Current-vector control should agree with motulator, and exactly with the
-    monolithic control system, also with the threshold voltage, single update, and
-    the gates blocked."""
-    build, signals = im_system(sensorless, t_d, i_0, u_th, single_update, blocked)
+    monolithic control system, also with the threshold voltage, single update, the
+    gates blocked, and the direct discrete-time current controller."""
+    build, signals = im_system(
+        sensorless, t_d, i_0, u_th, single_update, blocked, discrete
+    )
     values = _im.export_values(build()[1])
 
     def run(net: Netlist) -> list[list[float]]:
@@ -273,6 +311,34 @@ def test_current_vector_control(
         return compare(build, model.Simulation, sfun, signals, 0.3)
 
     check(compiled, "cvc", values, run, IM_INPUTS)
+
+
+# Cases of flux-vector control of induction machines: the arguments of
+# `im_fvc_system` (sensorless, t_d, blocked, d_min, alpha_i)
+IM_FVC_CASES = {
+    "sensorless": (True, 0.0, False, 0.0, None),
+    "sensored": (False, 0.0, False, 0.0, None),
+    "no_integral": (True, 0.0, False, 0.0, 0.0),
+    "dead_time_min_pulse": (True, 2e-6, False, 0.2, None),
+    "blocked": (True, 0.0, True, 0.0, None),
+}
+
+
+@pytest.mark.parametrize("case", IM_FVC_CASES)
+def test_im_flux_vector_control(compiled: Compiled, case: str) -> None:
+    """Flux-vector control of an induction machine drive should agree with
+    motulator, and exactly with the monolithic control system, also with the dead
+    time and its compensation, the minimum pulses, and the gates blocked."""
+    args = IM_FVC_CASES[case]
+    build, signals = im_fvc_system(*args)
+    values = _im.export_values(build()[1])
+    rtol = IM_FVC_RTOL if args[2] else None  # With the gates blocked
+
+    def run(net: Netlist) -> list[list[float]]:
+        sfun = drive_sfun(net, _im_fvc_control.FVC_BLOCK)
+        return compare(build, model.Simulation, sfun, signals, 0.3, rtol)
+
+    check(compiled, "imfvc", values, run, IM_INPUTS)
 
 
 @pytest.mark.parametrize(
@@ -288,9 +354,122 @@ def test_vhz_control(
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, _im_vhz_control.VHZ_BLOCK)
-        return compare(build, model.Simulation, sfun, signals, 1.0)
+        return compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
 
     check(compiled, "vhz", values, run, VHZ_INPUTS)
+
+
+@pytest.mark.parametrize(
+    ("sensorless", "t_d", "blocked", "discrete", "d_min"),
+    [
+        (True, 0.0, False, False, 0.0),
+        (False, 0.0, False, False, 0.0),
+        (True, 2e-6, False, False, 0.0),
+        (True, 0.0, True, False, 0.0),
+        (True, 2e-6, False, True, 0.0),
+        (True, 0.0, False, True, SM_CVC_D_MIN),
+        (True, 0.0, True, True, 0.0),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time",
+        "blocked",
+        "discrete_dead_time",
+        "discrete_min_pulse",
+        "discrete_blocked",
+    ],
+)
+def test_sm_current_vector_control(
+    compiled: Compiled,
+    sensorless: bool,
+    t_d: float,
+    blocked: bool,
+    discrete: bool,
+    d_min: float,
+) -> None:
+    """Current-vector control of a synchronous machine drive, also with the direct
+    discrete-time current controller."""
+    build, signals = sm_cvc_system(sensorless, t_d, blocked, discrete, d_min)
+    values, _ = _sm.export_values(build()[1])
+
+    def run(net: Netlist) -> list[list[float]]:
+        sfun = drive_sfun(net, _sm_cvc_control.CVC_BLOCK)
+        return compare(build, model.Simulation, sfun, signals, 0.3)
+
+    check(compiled, "smcvc", values, run, SM_INPUTS)
+
+
+@pytest.mark.parametrize(
+    ("key", "sensorless"),
+    [
+        ("fvc", True),
+        ("fvc", False),
+        ("smcvc", True),
+        ("cvc", True),
+        ("cvc", False),
+        ("imfvc", True),
+    ],
+    ids=["fvc", "fvc_sensored", "smcvc", "cvc", "cvc_sensored", "imfvc"],
+)
+def test_torque_control(compiled: Compiled, key: str, sensorless: bool) -> None:
+    """The vector control systems in the torque-control mode (without the speed
+    controller), with the external rotor speed, should agree with motulator, and
+    exactly with the monolithic control systems."""
+    build, signals = torque_system(key, sensorless)
+    ctrl = build()[1]
+    values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
+    block = SYSTEMS[f"{key}_torque"][0]
+
+    def run(net: Netlist) -> list[list[float]]:
+        return compare(build, model.Simulation, drive_sfun(net, block), signals, 0.3)
+
+    check(
+        compiled,
+        f"{key}_torque",
+        values,
+        run,
+        SM_INPUTS if key in SM_KEYS else IM_INPUTS,
+    )
+
+
+@pytest.mark.parametrize("key", ["fvc", "smcvc", "cvc", "imfvc"])
+def test_vector_ctrl_without_observer(key: str) -> None:
+    """
+    Without the initial state of the observer in the struct vector_ctrl (e.g., in a
+    model written before it was exported), the parameters of the blocks should be
+    those of the zero initial speed estimate, with the scoping of PLECS and of
+    Simulink.
+    """
+    ctrl = torque_system(key, True)[0]()[1]
+    cast(Any, ctrl.vector_ctrl).observer.w_M = 0.0
+    values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
+    block = SYSTEMS[f"{key}_torque"][0]
+    init = init_script(key, values)
+    lines = init.splitlines(keepends=True)
+    legacy = "".join(line for line in lines if "vector_ctrl.observer" not in line)
+    assert legacy != init
+    top = block.netlist()
+    for plecs in (False, True):
+        np.testing.assert_equal(
+            block_params(top, legacy, block, plecs=plecs),
+            block_params(top, init, block, plecs=plecs),
+        )
+
+
+@pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)
+def test_sm_vhz_control(
+    compiled: Compiled, t_d: float, d_min: float, blocked: bool
+) -> None:
+    """Observer-based V/Hz control of a synchronous machine drive."""
+    build, signals = sm_vhz_system(t_d, d_min, blocked)
+    values, _ = _sm.export_vhz_values(build()[1])
+
+    def run(net: Netlist) -> list[list[float]]:
+        sfun = drive_sfun(net, _sm_vhz_control.VHZ_BLOCK)
+        return compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
+
+    check(compiled, "smvhz", values, run, VHZ_INPUTS)
 
 
 @pytest.mark.parametrize("blocked", [False, True], ids=["enabled", "blocked"])
@@ -339,9 +518,42 @@ def test_parameter_errors(compiled: Compiled) -> None:
         ("L_d", None, "L_d, L_q, and psi_f needed without a flux map."),
     ]:
         init = init_script("fvc", values | {name: value})
-        values_top = mask_values(_sm_control.FVC_BLOCK)
-        err = net.start(block_params(net.top, init, values_top), start)
+        err = net.start(block_params(net.top, init, _sm_control.FVC_BLOCK), start)
         assert err is not None and err.endswith(message), err
+    net.sfun_terminate()
+
+
+@pytest.mark.parametrize(
+    ("changed", "message"),
+    [
+        ({"psi_f": 0.0}, "psi_s_min must be positive for machines without PMs."),
+        (
+            {"L_d": SM_PAR["L_q"], "L_q": SM_PAR["L_d"]},
+            "No MTPA solution found. Check the alignment of the d axis",
+        ),
+    ],
+    ids=["psi_s_min", "mtpa"],
+)
+def test_reference_generator_errors(
+    compiled: Compiled, changed: dict[str, float], message: str
+) -> None:
+    """
+    The block ReferenceGenerator should report the errors that ReferenceGenerator of
+    motulator raises: a machine without PMs needs a positive psi_s_min (the default
+    psi_f being zero), and the MTPA locus needs a solution (here, the inductances of
+    a PM machine swapped).
+    """
+    net, _ = compiled("fvc")
+    build, _ = sm_system(True, 0.0)
+    values, _ = _sm.export_values(build()[1])
+    pars: dict[str, Any] = {**SM_PAR, **changed}
+    par = model.SynchronousMachinePars(**pars)
+    cfg = sm_control.FluxVectorControllerCfg(i_s_max=values["i_s_max"])
+    with pytest.raises(ValueError, match=re.escape(message)):
+        sm_control.FluxVectorController(par, cfg)
+    init = init_script("fvc", values | changed)
+    err = net.start(block_params(net.top, init, _sm_control.FVC_BLOCK), start)
+    assert err is not None and message in err, err
     net.sfun_terminate()
 
 
@@ -359,7 +571,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     params = block_params(
         _sm_control.FVC_BLOCK.netlist(),
         init_script("fvc", values),
-        mask_values(_sm_control.FVC_BLOCK),
+        _sm_control.FVC_BLOCK,
     )
     obs = fvc.observer
     path = "FluxVectorController/SpeedFluxObserver/"
@@ -382,7 +594,7 @@ def test_observer_gains(sensorless: bool, J: float | None) -> None:
     params = block_params(
         _im_control.CVC_BLOCK.netlist(),
         init_script("cvc", values),
-        mask_values(_im_control.CVC_BLOCK),
+        _im_control.CVC_BLOCK,
     )
     obs = cvc.observer
     k = params["CurrentVectorController/SpeedFluxObserver/SpeedObserver"][:2]
@@ -437,7 +649,7 @@ def test_gfm_configuration(k_v: float | None) -> None:
     params = block_params(
         _grid_control.GFM_BLOCK.netlist(),
         init_script("gfm", values),
-        mask_values(_grid_control.GFM_BLOCK),
+        _grid_control.GFM_BLOCK,
     )
     path = "ObserverBasedGridFormingController/Observer"
     u_nom, w_nom, L, alpha, T_s, R = params[path]

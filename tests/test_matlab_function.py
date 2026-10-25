@@ -1,5 +1,6 @@
 """
-Test the control systems with MATLAB Function blocks in Simulink.
+Test the Simulink export in MATLAB: the control systems with MATLAB Function blocks,
+the libraries, and the models of the examples.
 
 The blocks of the control systems run the MATLAB port of motulator in MATLAB Function
 blocks (`code` "matlab" of the Simulink export). Each control system is built alone
@@ -11,8 +12,15 @@ monitored signals, should agree with those of the S-functions of the blocks
 (`tests/netlist.py`), which agree with motulator, to the rounding errors (amplified
 by the replay in the vector control of the drives, see `test_matlab_function`).
 
-Needs MATLAB with the MATLAB Engine API for Python (skipped otherwise) and gcc. Run
-from the repository root:
+The libraries of both codes are built (`test_library`), and the systems of the
+examples are built by the scripts of `simulink.write_model` and simulated, and their
+signals compared with the native simulation (`test_example`), so that this module
+tests the whole Simulink export before a release. It takes several minutes, mostly
+for the build of the library with S-functions and the compilation of the models.
+
+Needs MATLAB with the MATLAB Engine API for Python (skipped otherwise) and gcc; the
+S-functions in MATLAB need a C compiler for mex (skipped otherwise). Run from the
+repository root:
 
     pytest tests/test_matlab_function.py
 
@@ -26,22 +34,28 @@ from typing import Any, cast
 
 import numpy as np
 import pytest
+from motulator.common.model import SolverCfg
 from motulator.drive import model
 from motulator.grid import model as grid_model
 
+from motulator_export import native, simulink
 from motulator_export.plecs import (
     _grid,
     _grid_control,
     _im,
     _im_control,
+    _im_fvc_control,
     _im_vhz_control,
     _sm,
     _sm_control,
+    _sm_cvc_control,
+    _sm_vhz_control,
 )
 from motulator_export.plecs._common import MONITOR, ControlBlock
-from motulator_export.plecs._control import VALUES, mask_values
+from motulator_export.plecs._control import T_S_EXPR
+from motulator_export.plecs._library import CONTROL_BLOCKS
 from motulator_export.plecs._netlist import SIMULINK, layout, leaves, problems
-from motulator_export.simulink._common import write_script
+from motulator_export.simulink._common import SIMULINK_SOURCES
 from motulator_export.simulink._mfunction import (
     block_mfunction,
     functions,
@@ -49,9 +63,10 @@ from motulator_export.simulink._mfunction import (
     library,
     reference_luts_mfunction,
 )
-from motulator_export.simulink._render import netlist_rows, with_signals, wrapper
+from motulator_export.simulink._render import CODES, netlist_rows, with_signals, wrapper
+from motulator_export.simulink._script import write_script
 from tests.c_port import arr
-from tests.matlab import block_params
+from tests.matlab import Struct, block_params, evaluate
 from tests.netlist import Netlist
 from tests.sfunctions import (
     GFL_INPUTS,
@@ -66,20 +81,43 @@ from tests.sfunctions import (
     start,
 )
 from tests.systems import (
+    EXAMPLE_SYSTEMS,
+    EXAMPLES,
+    IM_FVC_RTOL,
+    SM_CVC_D_MIN,
+    SM_KEYS,
+    SM_PAR,
+    SM_VHZ_CASES,
+    SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
+    VHZ_RTOL,
+    example_system,
     gfl_system,
     gfm_system,
     gradnet_control_system,
+    im_fvc_system,
     im_system,
+    sm_cvc_system,
     sm_system,
+    sm_vhz_system,
+    torque_system,
     vhz_system,
 )
-from tests.test_control import SYSTEMS, Compiled, init_script
+from tests.test_control import IM_FVC_CASES, SYSTEMS, Compiled, init_script
 
 TESTS = Path(__file__).parent
 # Tolerance of the outputs relative to their magnitudes (at least 1)
 RTOL = 1e-9
+# Tolerances of the control systems whose outputs depend on the square root of
+# rounding errors: in flux-vector control of induction machines, while the flux
+# reference is at its current limit, so is the current limit of the torque reference
+# (see IM_FVC_RTOL), so the rounding errors of the MATLAB code show at the square
+# root of their level, which the perturbations need not show
+KEY_RTOL = {"imfvc": 1e-6, "imfvc_torque": 1e-6}
+# The variables of the model initializations of the harnesses are cleared first, so
+# that the fields of a previous initialization (e.g., a flux map) are not left
+CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm\n"
 
 Run = Callable[[Netlist], list[list[float]]]
 
@@ -112,6 +150,29 @@ def test_functions() -> None:
             assert f"{f.name}(" in f.source.splitlines()[0]
 
 
+def test_reference_generator_check() -> None:
+    """
+    The check of the mask of the MATLAB Function block ReferenceGenerator should give
+    the error of motulator for psi_s_min with constant inductances (psi_s_min NaN
+    being psi_f); with a flux map (psi_f NaN), the start code checks it.
+    """
+    block = _sm_control.FVC_BLOCK
+    gen = dict(leaves(block.netlist()))["FluxVectorController/ReferenceGenerator"]
+    assert gen.mcode is not None
+    message = "psi_s_min must be positive for machines without PMs."
+    cond = next(c for c, m in gen.mcode.checks if m == message)
+    nan = float("nan")
+    for psi_f, psi_s_min, error in [
+        (0.0, nan, True),
+        (0.0, 0.0, True),
+        (0.0, 0.3, False),
+        (0.5, nan, False),
+        (nan, nan, False),
+    ]:
+        p = Struct(par_psi_f=psi_f, psi_s_min=psi_s_min)
+        assert bool(evaluate(cond, {"p": p})) == error, (psi_f, psi_s_min)
+
+
 def test_port_used() -> None:
     """
     Every function of the MATLAB port should be used by a block or by the machine
@@ -131,12 +192,18 @@ def test_port_used() -> None:
 Case = tuple[str, dict[str, Any], Any, Run, list[float]]
 
 
-def drive_run(build: Any, signals: Any, block: ControlBlock, t_stop: float) -> Run:
+def drive_run(
+    build: Any,
+    signals: Any,
+    block: ControlBlock,
+    t_stop: float,
+    rtol: dict[str, float] | None = None,
+) -> Run:
     """Closed-loop simulation of a drive."""
 
     def run(net: Netlist) -> list[list[float]]:
         sfun = drive_sfun(net, block)
-        return compare(build, model.Simulation, sfun, signals, t_stop)
+        return compare(build, model.Simulation, sfun, signals, t_stop, rtol)
 
     return run
 
@@ -151,8 +218,24 @@ def grid_run(build: Any, signals: Any, block: ControlBlock, t_stop: float) -> Ru
     return run
 
 
-def case(name: str) -> Case:
+def torque_case(key: str) -> Case:
+    """Case of a sensorless vector control system in the torque-control mode."""
+    method = key.removesuffix("_torque")
+    build, signals = torque_system(method, True)
+    ctrl = build()[1]
+    if method in SM_KEYS:
+        values, constant = _sm.export_values(ctrl)[0], SM_INPUTS
+    else:
+        values = _im.export_values(ctrl)
+        constant = IM_FVC_CONSTANT if method == "imfvc" else IM_INPUTS
+    run = drive_run(build, signals, SYSTEMS[key][0], 0.3)
+    return key, values, None, run, constant
+
+
+def case(name: str) -> Case:  # noqa: PLR0911
     """Case of a test, see `Case`."""
+    if name.endswith("_torque"):  # The key of the control system
+        return torque_case(name)
     if name.startswith("fvc_gradnet"):
         ctrl = gradnet_control_system()
         values, flux_map = _sm.export_values(ctrl)
@@ -180,21 +263,49 @@ def case(name: str) -> Case:
         # overmodulation, unless the current direction s is exactly +-1, as np.sign
         # gives (i_0 = 0)
         args = {
-            "cvc_sensorless": (True, 0.0, 0.0, 0.0, False, False),
-            "cvc_sensored": (False, 0.0, 0.0, 0.0, False, False),
-            "cvc_dead_time_tanh": (True, 2e-6, 0.5, 0.0, False, False),
-            "cvc_u_th_single": (True, 2e-6, 0.0, 1.0, True, False),
-            "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True),
+            "cvc_sensorless": (True, 0.0, 0.0, 0.0, False, False, False),
+            "cvc_sensored": (False, 0.0, 0.0, 0.0, False, False, False),
+            "cvc_dead_time_tanh": (True, 2e-6, 0.5, 0.0, False, False, False),
+            "cvc_u_th_single": (True, 2e-6, 0.0, 1.0, True, False, False),
+            "cvc_u_th_blocked": (True, 0.0, 0.5, 1.0, False, True, False),
+            "cvc_discrete_dead_time": (True, 2e-6, 0.5, 0.0, False, False, True),
+            "cvc_discrete_blocked": (True, 0.0, 0.5, 1.0, False, True, True),
         }[name]
         build, signals = im_system(*args)
         values = _im.export_values(build()[1])
         run = drive_run(build, signals, _im_control.CVC_BLOCK, 0.3)
         return "cvc", values, None, run, IM_INPUTS
+    if name.startswith("imfvc"):
+        imfvc_args = IM_FVC_CASES[name.removeprefix("imfvc_")]
+        build, signals = im_fvc_system(*imfvc_args)
+        values = _im.export_values(build()[1])
+        rtol = IM_FVC_RTOL if imfvc_args[2] else None  # With the gates blocked
+        run = drive_run(build, signals, _im_fvc_control.FVC_BLOCK, 0.3, rtol)
+        return "imfvc", values, None, run, IM_FVC_CONSTANT
+    if name.startswith("smcvc"):
+        sm_cvc_args = {
+            "smcvc_sensorless": (True, 0.0, False, False, 0.0),
+            "smcvc_sensored": (False, 0.0, False, False, 0.0),
+            "smcvc_dead_time": (True, 2e-6, False, False, 0.0),
+            "smcvc_blocked": (True, 0.0, True, False, 0.0),
+            "smcvc_discrete_dead_time": (True, 2e-6, False, True, 0.0),
+            "smcvc_discrete_min_pulse": (True, 0.0, False, True, SM_CVC_D_MIN),
+            "smcvc_discrete_blocked": (True, 0.0, True, True, 0.0),
+        }[name]
+        build, signals = sm_cvc_system(*sm_cvc_args)
+        values, _ = _sm.export_values(build()[1])
+        run = drive_run(build, signals, _sm_cvc_control.CVC_BLOCK, 0.3)
+        return "smcvc", values, None, run, SM_INPUTS
+    if name.startswith("smvhz"):
+        build, signals = sm_vhz_system(*SM_VHZ_CASES[SM_VHZ_IDS.index(name)])
+        values, _ = _sm.export_vhz_values(build()[1])
+        run = drive_run(build, signals, _sm_vhz_control.VHZ_BLOCK, 1.0, VHZ_RTOL)
+        return "smvhz", values, None, run, VHZ_INPUTS
     if name.startswith("vhz"):
         vhz_args = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
         build, signals = vhz_system(*vhz_args)
         values = _im.export_vhz_values(build()[1])
-        run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0)
+        run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0, VHZ_RTOL)
         return "vhz", values, None, run, VHZ_INPUTS
     if name.startswith("gfl"):
         build, signals = gfl_system(name == "gfl_blocked")
@@ -215,18 +326,40 @@ CASES = [
     "fvc_dead_time",
     "fvc_blocked",
     "fvc_gradnet",
+    "smcvc_sensorless",
+    "smcvc_sensored",
+    "smcvc_dead_time",
+    "smcvc_blocked",
+    "smcvc_discrete_dead_time",
+    "smcvc_discrete_min_pulse",
+    "smcvc_discrete_blocked",
     "cvc_sensorless",
     "cvc_sensored",
     "cvc_dead_time_tanh",
     "cvc_u_th_single",
     "cvc_u_th_blocked",
+    "cvc_discrete_dead_time",
+    "cvc_discrete_blocked",
+    *(f"imfvc_{v}" for v in IM_FVC_CASES),
     *(f"vhz_{v}" for v in VHZ_IDS),
+    *SM_VHZ_IDS,
     "gfl",
     "gfl_blocked",
     "gfm",
     "gfm_power_limitation",
     "gfm_power_limitation_blocked",
+    "fvc_torque",
+    "smcvc_torque",
+    "cvc_torque",
+    "imfvc_torque",
 ]
+
+
+# Constant inputs of flux-vector control of induction machines with the zero speed
+# reference: while the flux builds up from zero, the flux reference is at its current
+# limit, where the current limit of the torque reference is the square root of a
+# rounding error (see IM_FVC_RTOL), which the perturbations need not show
+IM_FVC_CONSTANT = [0.0, *IM_INPUTS[1:]]
 
 
 def constant_sequence(block: ControlBlock, inputs: list[float]) -> list[list[float]]:
@@ -257,22 +390,21 @@ class Harnesses:
     def build(self, key: str, init: str) -> Path:
         """The harness model of the control system, built with the initialization
         when needed."""
+        import matlab  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
         name = f"harness_{key}"
         if key not in self.models:
             folder = self.tmp.mktemp(key)
-            path = folder / f"{name}.slx"
-            (folder / f"init_{name}.m").write_text(init, encoding="utf-8")
+            (folder / f"init_{name}.m").write_text(CLEAR + init, encoding="utf-8")
             block, _ = SYSTEMS[key]
-            fields = [
-                ("init_script", f"init_{name}"),
-                ("input_widths", block.input_widths),
-            ]
-            script = write_script(
-                path, block, VALUES, fields, "build_harness", VALUES["T_s"], 1.0,
-                code="matlab",
+            self.eng.addpath(str(folder), nargout=0)
+            # Without the Engine API, pyright takes the module tests/matlab.py
+            widths = matlab.double([float(w) for w in block.input_widths])  # pyright: ignore[reportAttributeAccessIssue]
+            self.eng.build_harness(
+                name, str(folder), block.name, f"init_{name}", widths, T_S_EXPR,
+                nargout=0,
             )  # fmt: skip
-            self.eng.run(str(script), nargout=0)
-            self.models[key] = path
+            self.models[key] = folder / f"{name}.slx"
         return self.models[key]
 
     def lines(self, key: str) -> set[tuple[str, ...]]:
@@ -291,7 +423,7 @@ class Harnesses:
 
         name = f"harness_{key}"
         path = self.build(key, init)
-        path.with_name(f"init_{name}.m").write_text(init, encoding="utf-8")
+        path.with_name(f"init_{name}.m").write_text(CLEAR + init, encoding="utf-8")
         self.eng.eval(f"clear('init_{name}');", nargout=0)
         # The input of the sampling instant k at (k - 0.5)*T_s (k > 0), so that the
         # inputs are sampled at the instants regardless of the rounding of the time,
@@ -317,6 +449,7 @@ def harnesses(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Harnesses]:
     engine = pytest.importorskip("matlab.engine")
     eng = engine.start_matlab()
     eng.addpath(str(TESTS), nargout=0)
+    eng.addpath(str(SIMULINK_SOURCES), nargout=0)  # The package +motulator
     try:
         yield Harnesses(eng, tmp_path_factory)
     finally:
@@ -342,7 +475,21 @@ def replay(
 
 
 @pytest.mark.parametrize(
-    "name", ["fvc_sensorless", "cvc_sensorless", f"vhz_{VHZ_IDS[0]}", "gfl", "gfm"]
+    "name",
+    [
+        "fvc_sensorless",
+        "smcvc_sensorless",
+        "cvc_sensorless",
+        "imfvc_sensorless",
+        f"vhz_{VHZ_IDS[0]}",
+        SM_VHZ_IDS[0],
+        "gfl",
+        "gfm",
+        "fvc_torque",
+        "smcvc_torque",
+        "cvc_torque",
+        "imfvc_torque",
+    ],
 )
 def test_model_lines(harnesses: Harnesses, name: str) -> None:
     """
@@ -377,14 +524,14 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
     of them reaches 1e-6 relative to its magnitude, after which the replay is
     meaningless (an output that does not respond to the perturbation, e.g., the
     torque reference at its limit, does not show that the states still agree). The
-    tolerance is RTOL plus 100 times the sensitivity (the rounding errors of the
-    MATLAB code grow as the perturbation does).
+    tolerance is RTOL (or KEY_RTOL) plus 100 times the sensitivity (the rounding
+    errors of the MATLAB code grow as the perturbation does).
     """
     key, values, flux_map, run, constant = case(name)
     net, _ = compiled(key)
     block, _ = SYSTEMS[key]
     init = init_script(key, values, flux_map)
-    params = block_params(net.top, init, mask_values(block))
+    params = block_params(net.top, init, block)
     assert net.start(params, start) is None
     closed_loop = run(net)
     n_out = 3 + len(block.signals)
@@ -402,7 +549,7 @@ def test_matlab_function(harnesses: Harnesses, compiled: Compiled, name: str) ->
         compared = np.cumprod(conditioned).astype(bool)
         sensitivity = np.maximum.accumulate(sensitivity, axis=0)
         err = np.where(compared[:, None], np.abs(actual - expected), 0.0)
-        tol = RTOL * scale + 100 * sensitivity
+        tol = KEY_RTOL.get(key, RTOL) * scale + 100 * sensitivity
         print(f"  steps compared: {np.sum(compared)} of {len(inputs)}")
         for j, signal in enumerate(["d_a", "d_b", "d_c", *block.signals]):
             ratio = np.max(err[:, j] / tol[:, j])
@@ -446,3 +593,167 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
         err = np.max(np.abs(f(x) - y)) / np.max(np.abs(y))
         print(f"  {name}: max relative error {err:.3g}")
         assert err < (RTOL if gradnet else 1e-12)
+
+
+# %%
+# Libraries and models of the examples
+# Tolerance of the signals of the systems of the examples relative to the magnitudes,
+# compared with the native simulation (the differences from motulator are about 1e-6
+# relative, see the Simulink README)
+EXAMPLE_RTOL = 1e-4
+
+
+def require_compiler(eng: Any, code: str) -> None:
+    """Skip the S-functions (`code` "c") without a C compiler for mex."""
+    if code == "c" and not eng.eval(
+        "~isempty(mex.getCompilerConfigurations('C', 'Selected'))"
+    ):
+        pytest.skip("No C compiler for mex")
+
+
+def test_reference_luts_error(harnesses: Harnesses) -> None:
+    """
+    sm_reference_luts.m of the library should raise the error of ReferenceGenerator of
+    motulator if the MTPA locus has no solution (the inductances of a PM machine
+    swapped), and give the lookup tables otherwise.
+    """
+    import matlab.engine  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+    eng = harnesses.eng
+    eng.eval("motulator.setup();", nargout=0)
+    par = {k: float(v) for k, v in SM_PAR.items()}
+    luts = np.asarray(eng.sm_reference_luts(par, 6.5))
+    assert luts.shape == (16, 6) and not np.any(np.isnan(luts))
+    swapped = par | {"L_d": par["L_q"], "L_q": par["L_d"]}
+    # Without the Engine API, pyright takes the folder matlab (the MATLAB port)
+    error = matlab.engine.MatlabExecutionError  # pyright: ignore[reportAttributeAccessIssue]
+    with pytest.raises(error, match="No MTPA solution found"):
+        eng.sm_reference_luts(swapped, 6.5)
+
+
+@pytest.mark.parametrize("code", CODES)
+def test_library(harnesses: Harnesses, code: str) -> None:
+    """
+    The library should be built, and the lines of its control systems should connect
+    the ports of the netlists, also those of the S-functions, whose parameters are
+    set in the library after the lines (see add_control_system.m).
+    """
+    eng = harnesses.eng
+    require_compiler(eng, code)
+    lib = eng.eval(f"motulator.internal.library('{code}')")
+    for block in CONTROL_BLOCKS:
+        rows = netlist_rows(with_signals(block.netlist(), MONITOR), code=code)
+        expected = {(path, src, dst) for path, src, dst, _ in rows["lines"]}
+        lines = eng.model_lines(f"{lib}/{block.name}")
+        assert {tuple(row.split("|")) for row in lines} == expected, block.name
+
+
+def test_control_block(
+    harnesses: Harnesses, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A model should be built with the control-system block of another library
+    (`control_block` of `Simulation.build`), here a copy of the block of the library
+    with the further output status, which should be shown in a Display block.
+    """
+    eng = harnesses.eng
+    lib = eng.eval("motulator.internal.library('matlab')")
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system("im_2kw_vhz")
+    name = "Observer-based VHz control"
+    block = f"ctrl_lib/{name}"
+    eng.eval(
+        "; ".join(
+            [
+                "new_system('ctrl_lib', 'Library')",
+                f"add_block('{lib}/{name}', '{block}')",
+                f"set_param('{block}', 'LinkStatus', 'none')",
+                f"add_block('built-in/Constant', '{block}/one', 'Value', '1')",
+                f"add_block('built-in/Outport', '{block}/status')",
+                f"add_line('{block}', 'one/1', 'status/1')",
+                f"save_system('ctrl_lib', '{tmp_path / 'ctrl_lib.slx'}')",
+                "close_system('ctrl_lib')",
+                f"addpath('{tmp_path}')",
+            ]
+        ),
+        nargout=0,
+    )
+    try:
+        path = tmp_path / "vhz_block.slx"
+        script = write_script(path, mdl, ctrl, t_stop, "matlab", control_block=block)
+        eng.run(str(script), nargout=0)
+        assert eng.get_param(f"vhz_block/{name}", "ReferenceBlock") == block
+        assert eng.get_param("vhz_block/status", "BlockType") == "Display"
+        handles = eng.get_param("vhz_block/status", "PortConnectivity")
+        assert handles["SrcBlock"] == eng.get_param(f"vhz_block/{name}", "Handle")
+    finally:
+        eng.eval(
+            f"bdclose('vhz_block'); bdclose('ctrl_lib'); rmpath('{tmp_path}')",
+            nargout=0,
+        )
+
+
+def test_vector_ctrl_without_observer(
+    harnesses: Harnesses, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A model whose struct vector_ctrl has no initial state of the observer (e.g., a
+    model built before it was exported) should be updated with the library, the
+    mask of the control system giving the zero initial speed estimate.
+    """
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system("ipmsm_2kw_fvc")
+    path = tmp_path / "legacy_observer.slx"
+    script = simulink.write_model(path, mdl, ctrl, t_stop, code="matlab")
+    eng = harnesses.eng
+    eng.run(str(script), nargout=0)
+    eng.eval(
+        "ws = get_param('legacy_observer', 'ModelWorkspace');\n"
+        "ws.assignin('vector_ctrl', rmfield(ws.getVariable('vector_ctrl'), "
+        "'observer'));",
+        nargout=0,
+    )
+    eng.set_param("legacy_observer", "SimulationCommand", "update", nargout=0)
+    eng.close_system("legacy_observer", 0.0, nargout=0)
+
+
+@pytest.mark.parametrize("code", CODES)
+@pytest.mark.parametrize("name", EXAMPLE_SYSTEMS)
+def test_example(
+    harnesses: Harnesses,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    code: str,
+) -> None:
+    """
+    The system of the example should be built by the script of
+    `simulink.write_model` (with the MATLAB classes and the blocks of the library),
+    and the signals of its system model should agree with those of the native
+    simulation (motulator to the rounding errors) to EXAMPLE_RTOL relative to their
+    magnitudes. The scripts of the drives and the grid converters run in the same
+    MATLAB session, so their imports must not conflict.
+    """
+    require_compiler(harnesses.eng, code)
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system(name)
+    path = tmp_path / f"{name}_{code}.slx"
+    script = simulink.write_model(path, mdl, ctrl, t_stop, code=code)
+    # Simulated after the script is written, since the simulation changes the states
+    cfg = SolverCfg(rtol=1e-9, atol=1e-9)
+    res = native.Simulation(mdl, ctrl, cfg=cfg).simulate(t_stop)
+    t = res.mdl.t[res.mdl.t <= t_stop]
+    signals, _ = simulink.simulate(script, t, mdl, ctrl, eng=harnesses.eng)
+    if isinstance(mdl, model.Drive):
+        machine = res.mdl.machine
+        expected = {"w_M": res.mdl.mechanics.w_M, "tau_M": machine.tau_M}
+        expected["i_s_ab"] = machine.i_s_ab
+    else:
+        expected = {"i_c_ab": res.mdl.ac_filter.i_c_ab}
+        if "i_g_ab" in signals:  # LCL filter
+            expected["i_g_ab"] = res.mdl.ac_filter.i_g_ab
+    for key, value in expected.items():
+        err = np.max(np.abs(signals[key] - value[: len(t)]))
+        scale = np.max(np.abs(value))
+        print(f"  {key}: max difference {err:.3g} (scale {scale:.3g})")
+        assert err <= EXAMPLE_RTOL * scale

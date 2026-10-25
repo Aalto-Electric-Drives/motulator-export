@@ -1,5 +1,6 @@
 """
-Building blocks shared by the drive systems: the mechanics, the speed controller,
+Building blocks shared by the drive systems: the mechanics (`MechanicalSystem` or
+`ExternalRotorSpeed`), the speed controller (or the torque-control mode without it),
 and the scope.
 
 """
@@ -13,10 +14,15 @@ from motulator.common.model._converter import (
     VoltageSourceConverter,
 )
 from motulator.common.model._pwm import CarrierComparison
-from motulator.common.utils._utils import wrap
+from motulator.common.utils._utils import get_value, wrap
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._common import SpeedController
-from motulator.drive.model import Drive, MechanicalSystem, SynchronousMachine
+from motulator.drive.model import (
+    Drive,
+    ExternalRotorSpeed,
+    MechanicalSystem,
+    SynchronousMachine,
+)
 
 from motulator_export._common import (
     StepSignal,
@@ -50,8 +56,13 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
     or `delay=2` with `single_update`).
 
     """
-    if not isinstance(mdl.mechanics, MechanicalSystem) or mdl.mechanics.B_L != 0:
-        raise NotImplementedError("Only MechanicalSystem without friction supported")
+    mechanics = mdl.mechanics
+    if not isinstance(mechanics, ExternalRotorSpeed) and (
+        not isinstance(mechanics, MechanicalSystem) or mechanics.B_L != 0
+    ):
+        raise NotImplementedError(
+            "Only MechanicalSystem without friction and ExternalRotorSpeed supported"
+        )
     if mdl.lc_filter is not None:
         raise NotImplementedError("LC filter not supported")
     if type(mdl.converter) is not VoltageSourceConverter:
@@ -86,11 +97,10 @@ def _check_initial_drive_states(mdl: Drive) -> None:
     times that of the mechanics (modulo 2*pi), as in the exported models.
     """
     machine = mdl.machine
-    mech = cast(MechanicalSystem, mdl.mechanics).state
-    exported = [
-        ("mechanics.state.w_M", mech.w_M),
-        ("mechanics.state.theta_M", mech.theta_M),
-    ]
+    mech = mdl.mechanics.state
+    exported = [("mechanics.state.theta_M", mech.theta_M)]
+    if isinstance(mdl.mechanics, MechanicalSystem):  # The speed is a state
+        exported.append(("mechanics.state.w_M", mdl.mechanics.state.w_M))
     states: list[tuple[str, complex, complex]]
     if isinstance(machine, SynchronousMachine):
         # The angle n_p*theta_M closest to the angle of the machine model
@@ -123,17 +133,28 @@ def _check_supported_speed_control(
     ctrl: VectorControlSystem, dead_time: bool = False
 ) -> None:
     """
-    Raise an error if the speed controller or the PWM is not supported.
+    Raise an error if the speed controller (SpeedController, or none in the
+    torque-control mode) or the PWM is not supported.
 
     The duty-ratio error model `d_err` of the PWM is supported only if `dead_time` is
     True (see `_control.pwm_values`).
 
     """
-    if not isinstance(ctrl.speed_ctrl, SpeedController):
-        raise NotImplementedError("Speed-control mode with SpeedController required")
+    if ctrl.speed_ctrl is not None and not isinstance(ctrl.speed_ctrl, SpeedController):
+        raise NotImplementedError("Only SpeedController (or none) supported")
     if type(ctrl).modulate is not VectorControlSystem.modulate:
         raise NotImplementedError("Overridden modulate method not supported")
     check_supported_pwm(ctrl, d_err=dead_time)
+
+
+def _check_supported_vhz_control(ctrl: VHzControlSystem) -> None:
+    """
+    Raise an error if the V/Hz control system (its methods or its PWM) is not
+    supported, the duty-ratio error model `d_err` of the PWM included.
+    """
+    if type(ctrl).modulate is not VHzControlSystem.modulate:
+        raise NotImplementedError("Overridden modulate method not supported")
+    check_supported_pwm(ctrl, d_err=True)
 
 
 def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
@@ -145,9 +166,12 @@ def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     The controller stores the integral action bandwidth as the ratio of its gains,
     which may differ from the argument by a rounding error. The default (None, i.e.,
     `alpha_s`) is exported as None if it gives the gains of the controller, so that
-    the exported controller computes the same gains as motulator.
+    the exported controller computes the same gains as motulator. In the
+    torque-control mode (without the speed controller), there are no values.
 
     """
+    if ctrl.speed_ctrl is None:
+        return {}
     speed_ctrl = cast(SpeedController, ctrl.speed_ctrl)
     J, alpha_s, u_max = speed_ctrl.J, speed_ctrl.alpha_s, speed_ctrl.u_max
     gains = (speed_ctrl.k_p, speed_ctrl.k_t, speed_ctrl.alpha_i)
@@ -169,32 +193,56 @@ def speed_ctrl_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     }
 
 
+def external_speed(mdl: Drive) -> bool:
+    """Whether the mechanics is the external rotor speed (ExternalRotorSpeed)."""
+    return isinstance(mdl.mechanics, ExternalRotorSpeed)
+
+
+def torque_control(ctrl: VectorControlSystem | VHzControlSystem) -> bool:
+    """Whether the control system is a vector control system in torque-control mode."""
+    return isinstance(ctrl, VectorControlSystem) and ctrl.speed_ctrl is None
+
+
 def drive_references(
     mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem, T_s: float
 ) -> tuple[StepSignal | float, StepSignal | float]:
     """
-    Speed reference and load torque of the drive, read from the control system
-    (`set_speed_ref`) and the mechanics (`set_external_load_torque`): constants or
-    `StepSignal` objects, the speed reference sampled to switch at the same sampling
-    instant as in motulator (the load torque acts in continuous time).
+    Speed reference (`set_speed_ref`), or the torque reference in the torque-control
+    mode (`set_torque_ref`), and the load torque of the mechanics
+    (`set_external_load_torque`), or the external rotor speed of `ExternalRotorSpeed`
+    (`set_external_rotor_speed`): constants or `StepSignal` objects, the reference
+    sampled to switch at the same sampling instant as in motulator (the signal of
+    the mechanics acts in continuous time).
     """
-    w_M_ref = reference(ctrl.ext_ref.w_M, "speed reference", T_s)
-    tau_L = reference(cast(MechanicalSystem, mdl.mechanics).inp.tau_L, "load torque")
-    return w_M_ref, tau_L
+    if torque_control(ctrl):
+        ref = reference(ctrl.ext_ref.tau_M, "torque reference", T_s)
+    else:
+        ref = reference(ctrl.ext_ref.w_M, "speed reference", T_s)
+    mechanics = mdl.mechanics
+    if isinstance(mechanics, ExternalRotorSpeed):
+        return ref, reference(mechanics.w_M, "external rotor speed")
+    return ref, reference(cast(MechanicalSystem, mechanics).inp.tau_L, "load torque")
 
 
 def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     """
     Get the workspace variables of the mechanics (with the initial speed and angle
-    of its state), the converter, and the DC bus (with the initial voltage of its
+    of its state, or of ExternalRotorSpeed the initial angle and the external speed
+    at the start), the converter, and the DC bus (with the initial voltage of its
     state).
     """
-    mech = cast(MechanicalSystem, mdl.mechanics)
-    variables: list[tuple[str, Any]] = [
-        ("mechanics.J", mech.J),
-        ("mechanics.w_M0", float(mech.state.w_M.real)),
-        ("mechanics.theta_M0", float(wrap(mech.state.theta_M.real))),
-    ]
+    mech = mdl.mechanics
+    if isinstance(mech, ExternalRotorSpeed):
+        variables: list[tuple[str, Any]] = [
+            ("mechanics.w_M0", float(get_value(mech.w_M, 0.0)))
+        ]
+    else:
+        mech = cast(MechanicalSystem, mech)
+        variables = [
+            ("mechanics.J", mech.J),
+            ("mechanics.w_M0", float(mech.state.w_M.real)),
+        ]
+    variables += [("mechanics.theta_M0", float(wrap(mech.state.theta_M.real)))]
     dc_bus = mdl.dc_bus
     if dc_bus is None:
         variables += [("converter.u_dc", mdl.converter.u_dc)]
@@ -227,9 +275,22 @@ MACHINE_TERMINALS = [
 ]
 
 
-def _add_mechanics(sch: _Schematic, tau_L: StepSignal | float, inertia: bool) -> None:
-    """Add the load torque (and the inertia, if not included in the machine)."""
+# Moment of inertia of the PLECS machines with the external rotor speed: zero, since
+# the speed source imposes the speed (PLECS rejects an inertia whose state the source
+# determines)
+EXTERNAL_SPEED_J = "0"
+
+
+def _add_mechanics(
+    sch: _Schematic, signal: StepSignal | float, inertia: bool, external: bool = False
+) -> None:
+    """
+    Add the load torque `signal` (and the inertia, if not included in the machine),
+    or with the external rotor speed (`external`), the speed source of the speed
+    `signal`.
+    """
     x_f, y_f = MACH[0] + 30, MACH[1] + 30  # Flange of the machine
+    inertia = inertia and not external  # The speed source imposes the speed
     y_load = y_f + 90 if inertia else y_f + 50
     if inertia:
         sch.component(
@@ -245,28 +306,36 @@ def _add_mechanics(sch: _Schematic, tau_L: StepSignal | float, inertia: bool) ->
         )
         sch.connect(("Machine", 4), ("Inertia", 1), "Rotational")
         sch.connect(("Inertia", 2), ("Load", 3), "Rotational")
+    elif external:  # The speed source of one flange imposes the speed of the machine
+        sch.connect(("Machine", 4), ("Load", 1), "Rotational")
     else:
         sch.connect(("Machine", 4), ("Load", 3), "Rotational")
-    if isinstance(tau_L, StepSignal):
+    source = "w_M ext." if external else "tau_L"
+    if isinstance(signal, StepSignal):
         # Several steps are summed by a Gain block in front of the load
-        x_step = x_f - 70 if np.isscalar(tau_L.time) else x_f - 120
-        load_torque = _add_step(sch, "tau_L", tau_L, (x_step, y_load))
+        x_step = x_f - 70 if np.isscalar(signal.time) else x_f - 120
+        load_input = _add_step(sch, source, signal, (x_step, y_load))
     else:
-        sch.component("Constant", "tau_L", (x_f - 70, y_load), {"Value": _fmt(tau_L)})
-        load_torque = ("tau_L", 1)
+        sch.component("Constant", source, (x_f - 70, y_load), {"Value": _fmt(signal)})
+        load_input = (source, 1)
     sch.component(
-        "ControlledTorque",
+        "ControlledRotationalSpeed" if external else "ControlledTorque",
         "Load",
         (x_f, y_load),
-        {"SecondFlange": "2", "StateSpaceInlining": "2"},
+        {"SecondFlange": "1" if external else "2", "StateSpaceInlining": "2"},
         direction="left",
         label="east",
     )
-    sch.component(
-        "RotationalReference", "Frame", (x_f, y_load + 45), direction="up", show=False
-    )
-    sch.connect(("Frame", 1), ("Load", 1), "Rotational")
-    sch.signal(load_torque, ("Load", 2))
+    if not external:
+        sch.component(
+            "RotationalReference",
+            "Frame",
+            (x_f, y_load + 45),
+            direction="up",
+            show=False,
+        )
+        sch.connect(("Frame", 1), ("Load", 1), "Rotational")
+    sch.signal(load_input, ("Load", 2))
 
 
 # Probe signals of the PLECS machines: (current, speed, angle, torque)
@@ -308,9 +377,11 @@ def _add_drive_outputs(
     for k, (name, comp, signals) in enumerate(probes):
         extra = _probe(comp, signals)
         sch.component("PlecsProbe", name, (x, y + 40 * k), extra=extra)
-    mux = {"Width": "[2 1]"}
-    sch.component("SignalMux", "Mux speed", (x + 100, y + 40), mux, show=False)
-    sch.component("SignalMux", "Mux torque", (x + 100, y + 60), mux, show=False)
+    # The controller signals (also without the speed reference in torque control)
+    # with the machine signal
+    for name, group, y_mux in [("speed", speed, y + 40), ("torque", torque, y + 60)]:
+        mux = {"Width": f"[{len(block.outputs[group])} 1]"}
+        sch.component("SignalMux", f"Mux {name}", (x + 100, y_mux), mux, show=False)
     sch.signal(("Speed (ctrl)", 1), ("Mux speed", 2), [(x + 40, y), (x + 40, y + 35)])
     sch.signal(("Speed", 1), ("Mux speed", 3), [(x + 50, y + 40), (x + 50, y + 45)])
     sch.signal(

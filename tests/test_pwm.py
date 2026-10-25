@@ -3,10 +3,10 @@ Test the C port of the PWM with the duty-ratio error model against motulator.
 
 The PWM of motulator with `d_err = InverterNonlinearity(...)` and the C port are fed
 with the same sequence of voltage references and measured currents, and the duty
-ratios and the realized voltages are compared, with the dead time and the threshold
-voltage, the current-direction functions `np.sign` and `tanh(i/i_0)`, and the double
-and single update. The identification of the current scale from `d_err` in the
-writers is also tested.
+ratios, the limited voltages, and the realized voltages are compared, with the dead
+time and the threshold voltage, the current-direction functions `np.sign` and
+`tanh(i/i_0)`, the minimum pulses, and the double and single update. The
+identification of the current scale from `d_err` in the writers is also tested.
 
 Run from the repository root (requires gcc):
 
@@ -53,12 +53,14 @@ void step(double T_s, const double *u_ref, const double *i, double u_dc, double 
     double complex u = pwm_realized_voltage(&pwm, i_c_ab, u_dc, 1);
     double complex u_zoh = pwm_realized_voltage(&pwm, i_c_ab, u_dc, 0);
     double d_abc[3];
-    double complex u_lim =
-        pwm_compute_output(&pwm, T_s, u_ref[0] + I * u_ref[1], u_dc, w, i_c_ab, d_abc);
+    double complex u_lim_ab;
+    double complex u_lim = pwm_compute_output(&pwm, T_s, u_ref[0] + I * u_ref[1], u_dc,
+                                              w, i_c_ab, d_abc, &u_lim_ab);
     pwm_update(&pwm, T_s, d_abc);
-    double o[9] = {creal(u),  cimag(u),  creal(u_zoh), cimag(u_zoh), d_abc[0],
-                   d_abc[1], d_abc[2], creal(u_lim),  cimag(u_lim)};
-    for (int k = 0; k < 9; k++) {
+    double o[11] = {creal(u),     cimag(u),     creal(u_zoh), cimag(u_zoh),
+                    d_abc[0],     d_abc[1],     d_abc[2],     creal(u_lim),
+                    cimag(u_lim), creal(u_lim_ab), cimag(u_lim_ab)};
+    for (int k = 0; k < 11; k++) {
         out[k] = o[k];
     }
 }
@@ -138,8 +140,9 @@ def test_pwm(
     feedforward: bool,
     single_update: bool,
 ) -> None:
-    """The duty ratios and the realized voltages (the average of two sampling periods
-    and that of the ongoing period) equal those of motulator, also in overmodulation,
+    """The duty ratios, the limited voltages (including and excluding the
+    compensation), and the realized voltages (the average of two sampling periods and
+    that of the ongoing period) equal those of motulator, also in overmodulation,
     where the error depends on the duty ratios, and with a varying DC-bus voltage."""
     d_err = None
     if t_d > 0 or u_th > 0:
@@ -148,7 +151,7 @@ def test_pwm(
         d_err=d_err, feedforward=feedforward, d_min=d_min, single_update=single_update
     )
     dll.init(d(t_d), d(u_th), d(i_0), d(feedforward), d(d_min), d(single_update))
-    out = (ctypes.c_double * 9)()
+    out = (ctypes.c_double * 11)()
     rng = np.random.default_rng(2)
     for k in range(200):
         # Rotating voltage reference, reaching the overmodulation range
@@ -173,6 +176,7 @@ def test_pwm(
         assert out[2] + 1j * out[3] == pytest.approx(u_zoh_py, abs=1e-9)
         assert np.array(out[4:7]) == pytest.approx(d_py, abs=1e-12)
         assert out[7] + 1j * out[8] == pytest.approx(u_lim_py, abs=1e-9)
+        assert out[9] + 1j * out[10] == pytest.approx(pwm.limited_voltage, abs=1e-9)
 
 
 @pytest.mark.parametrize("u_dc", [0.0, -1.0], ids=["zero", "negative"])
@@ -181,15 +185,16 @@ def test_pwm_discharged(dll: ctypes.CDLL, u_dc: float) -> None:
     realized voltages zero, as in motulator, also with the duty-ratio error model."""
     pwm = PWM(d_err=InverterNonlinearity(T_D, U_TH))
     dll.init(d(T_D), d(U_TH), d(0.0), d(1.0), d(0.0), d(0.0))
-    out = (ctypes.c_double * 9)()
+    out = (ctypes.c_double * 11)()
     u_py = pwm.get_realized_voltage(5.0 + 0j, u_dc)
     u_zoh_py = pwm.get_realized_voltage(5.0 + 0j, u_dc, average=False)
     d_py, u_lim_py = pwm.compute_output(T_S, 100.0 + 0j, u_dc, 2 * pi * 50)
     dll.step(d(T_S), arr([100.0, 0.0]), arr([5.0, 0.0]), d(u_dc), d(2 * pi * 50), out)
     assert d_py == [0.5, 0.5, 0.5]
     py = [u_py.real, u_py.imag, u_zoh_py.real, u_zoh_py.imag, *d_py]
-    assert list(out) == [*py, u_lim_py.real, u_lim_py.imag]
+    assert list(out) == [*py, u_lim_py.real, u_lim_py.imag, 0.0, 0.0]
     assert np.all(np.array(out)[[0, 1, 2, 3, 7, 8]] == 0)
+    assert pwm.limited_voltage == 0
 
 
 def test_pwm_values() -> None:

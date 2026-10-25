@@ -9,6 +9,8 @@
  *   motulator/common/utils/_dead_time.py   averaged_gate_signals
  *   motulator/common/model/_converter.py   VoltageSourceConverter, DCBus,
  *                                          DiodeBridgeDCBus
+ *   motulator/common/model/_ac_port.py     ACPort, leg_voltages, diode_margin,
+ *                                          update_diodes
  *   motulator_export/plecs/_common.py      StepSignal
  *   scipy/integrate/_ivp/rk.py             RK45 (used by solve_ivp in Simulation)
  *
@@ -22,9 +24,15 @@
  * scipy (RK45). As in motulator, the states are complex, the real-valued states
  * having zero imaginary parts.
  *
- * Supported: a single model with a single control system, the gates enabled (no
- * gate blocking), and a constant DC-bus voltage or a DC-bus model feeding only the
- * converter, without an external DC current.
+ * The control system can block the gates of the converter (its gate enable), in
+ * which case the diodes of the converter conduct according to the currents, and the
+ * converter voltage is given by the AC port of its load. The transitions of the
+ * diode states are located as the events of solve_ivp, at which the integration is
+ * restarted, as in motulator.
+ *
+ * Supported: a single model with a single control system, and a constant DC-bus
+ * voltage or a DC-bus model feeding only the converter, without an external DC
+ * current.
  */
 
 #ifndef MOTULATOR_SIM_H
@@ -37,6 +45,9 @@
 #define DELAY_MAX_LENGTH 8
 /* Maximum number of switching intervals in a sampling period */
 #define SIM_MAX_SWITCHING 32
+/* Maximum number of the transitions of the diode states in an integration interval
+ * (_MAX_TRANSITIONS of motulator) */
+#define SIM_MAX_TRANSITIONS 100
 
 /* Status codes of the simulation */
 #define SIM_OK 0
@@ -46,6 +57,7 @@
 #define SIM_ERROR_MEMORY 4     /* The memory for the logs could not be allocated */
 #define SIM_ERROR_SWITCHING 5  /* Too many switching intervals in a sampling period */
 #define SIM_ERROR_SIGNAL 6     /* A signal is not finite (e.g., a failed function) */
+#define SIM_ERROR_TRANSITIONS 7 /* Too many diode transitions in an interval */
 
 /* Signals ------------------------------------------------------------------ */
 
@@ -149,13 +161,26 @@ static int modulator_modulate(Modulator *self, double T_s, const double d_abc[3]
 
 /* Converter ---------------------------------------------------------------- */
 
+/* AC port of the load of a converter (ACPort): the current derivative of the load at
+ * the converter terminals is Y (u - e) in stationary coordinates, where u is the
+ * converter voltage and Y acts on the real and imaginary parts */
+typedef struct {
+    double complex i; /* Current (A) */
+    double complex e; /* Voltage (V) at which the current derivative is zero */
+    double Y[2][2];   /* Inverse differential inductance matrix (1/H) */
+} ACPort;
+
 /* Three-phase voltage-source converter with a constant DC-bus voltage, the dead time
- * resolved by the current directions given by the signum function */
+ * resolved by the current directions given by the signum function. With the gates
+ * blocked, the diode state of each leg is 1 if its lower diode conducts, -1 if its
+ * upper diode conducts, and 0 if the leg floats (see leg_voltages). */
 typedef struct {
     double u_dc;           /* DC-bus voltage (V) */
     double u_th;           /* Threshold voltage (V) of the power devices */
     double complex q_c_ab; /* Switching state */
     double complex s_c_ab; /* Current-direction vector at the latest switching */
+    int enabled;           /* Gate enable (else the gates are blocked) */
+    double diodes[3];      /* Diode states of the legs with blocked gates */
 } VoltageSourceConverter;
 
 /* Set the switching state from the gate and blanking signals and the converter
@@ -167,9 +192,22 @@ static void converter_set_gate_signals(VoltageSourceConverter *self,
 static double complex converter_voltage(const VoltageSourceConverter *self,
                                         double u_dc);
 /* Internal DC current (A) with the converter current i_c_ab
- * (VoltageSourceConverter.compute_internal_dc_current) */
+ * (VoltageSourceConverter.compute_internal_dc_current), rectified by the diodes with
+ * the gates blocked */
 static double converter_dc_current(const VoltageSourceConverter *self,
                                    double complex i_c_ab);
+/* Leg voltages (V) with respect to the negative rail of a converter with blocked
+ * gates, the rail voltage u_dc, and the diode states (leg_voltages). The voltage of a
+ * floating leg keeps its current at zero, i.e., it drives the residual current to
+ * zero. */
+static void leg_voltages(const ACPort *port, double u_dc, const double diodes[3],
+                         double u_abc[3]);
+/* Margin of the diode states (diode_margin), zero at their transition */
+static double diode_margin(const ACPort *port, double u_dc, const double diodes[3],
+                           const double u_abc[3]);
+/* Update the diode states at a transition, or latch them from the directions of the
+ * currents if latch is nonzero (update_diodes with diodes None) */
+static void update_diodes(const ACPort *port, double u_dc, double diodes[3], int latch);
 
 /* DC bus ------------------------------------------------------------------- */
 
@@ -237,10 +275,24 @@ struct Model {
     /* Set the states at the start of an integration interval (e.g., keep the angles
      * within [-pi, pi), as Subsystem.set_states) */
     void (*set_states)(const Model *self, double complex *x);
+    /* AC port of the load of the converter at the time t and the states x
+     * (compute_ac_port of the load) */
+    void (*ac_port)(const Model *self, double t, const double complex *x,
+                    ACPort *port);
 };
 
 /* DC-bus voltage (V) of the converter at the states x */
 static double model_dc_voltage(const Model *self, const double complex *x);
+/* Converter voltage (V) at the time t and the states x (VoltageSourceConverter
+ * .set_outputs), given by the AC port of the load with the gates blocked, and the
+ * margin of the diode states (if margin is not NULL; infinite with the gates
+ * enabled) */
+static double complex model_converter_voltage(const Model *self, double t,
+                                              const double complex *x, double *margin);
+/* Set the gate enable at the time t and the states x, latching the diode states when
+ * the gates are blocked (VoltageSourceConverter.set_enable) */
+static void model_set_enable(Model *self, double t, const double complex *x,
+                             int enabled);
 /* Names of the states of the DC bus followed by `names`, written into `buffer` of
  * the given size */
 static void model_state_names(const Model *self, const char *names, char *buffer,
@@ -252,10 +304,14 @@ typedef struct ControlSystem ControlSystem;
  * first member and set the function run, which logs the signals of the step into
  * log: the controller time followed by the fields (see log_fields_width). */
 struct ControlSystem {
-    /* Control step at the sampling instant t, with the model states x: gives the
-     * sampling period T_s and the duty ratios, and returns the status */
+    /* Gate enable at the controller time (ControlSystem.get_enable), which takes
+     * effect at the sampling instant before the control step */
+    int (*get_enable)(const ControlSystem *self);
+    /* Control step at the sampling instant t, with the model states x and the gate
+     * enable: gives the sampling period T_s and the duty ratios, and returns the
+     * status */
     int (*run)(ControlSystem *self, const Model *mdl, double t,
-               const double complex *x, double *T_s, double d_abc[3]);
+               const double complex *x, int enabled, double *T_s, double d_abc[3]);
     const char *fields; /* Logged fields */
     Log log;
 };
@@ -275,9 +331,9 @@ typedef struct {
     double t_event[SIM_MAX_SWITCHING];
     double q_abc[SIM_MAX_SWITCHING][3];
     double b_abc[SIM_MAX_SWITCHING][3];
-    /* Solution points: the time, the states, and the switching state and the
-     * current-direction vector of the converter, complex values as their real and
-     * imaginary parts */
+    /* Solution points: the time, the states, the switching state and the
+     * current-direction vector of the converter, its gate enable, and its voltage with
+     * the gates blocked (else NaN), complex values as their real and imaginary parts */
     Log log;
 } Simulation;
 

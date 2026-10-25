@@ -20,13 +20,17 @@ def write_model(
     ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the system.
 
-    The references of the control system (e.g., `set_speed_ref`), the external load
-    torque (`set_external_load_torque`), and the gate enable (`set_enable`) are read
-    from `ctrl` and `mdl`, each a constant or a `StepSignal`. The model starts from
+    The references of the control system (e.g., `set_speed_ref`, or `set_torque_ref`
+    in the torque-control mode without the speed controller), the external load
+    torque (`set_external_load_torque`) or the external rotor speed of
+    `ExternalRotorSpeed` (`set_external_rotor_speed`), and the gate enable
+    (`set_enable`) are read from `ctrl` and `mdl`, each a constant or a
+    `StepSignal`. The model starts from
     the state of `mdl`, e.g., its initial speed. A system that is not supported
     raises `NotImplementedError`, and an invalid argument `ValueError`, before any
     file is written.
@@ -44,6 +48,12 @@ def write_model(
         Simulation stop time (s).
     outputs : bool, optional
         Add the output ports "mdl" and "ctrl" for `simulate`, defaults to False.
+    library : bool, optional
+        Refer to the blocks of the library of the package (`motulator_lib.plecs`),
+        the control system and the GradNet machine, instead of copying them into the
+        model, defaults to False. The model refers to the library by a path relative
+        to the model file, and PLECS copies the blocks from it when it loads the
+        model.
 
     Returns
     -------
@@ -52,7 +62,7 @@ def write_model(
 
     """
     return _MODULES[system_type(mdl, ctrl)].write_model(
-        path, mdl, ctrl, t_stop, outputs
+        path, mdl, ctrl, t_stop, outputs, library
     )
 
 
@@ -104,15 +114,25 @@ def simulate(
 
     - Flux-vector control: `w_M_ref`, `w_M`, `tau_M_ref`, `tau_M`, `psi_s_ref`,
       `psi_s`, `theta_m`, `i_d`, and `i_q`.
+    - Current-vector control of a synchronous machine: `w_M_ref`, `w_M`,
+      `tau_M_ref`, `tau_M`, `psi_s_ref`, `psi_s`, `i_d_ref`, `i_d`, `i_q_ref`, and
+      `i_q`.
     - Current-vector control: `w_M_ref`, `w_M`, `tau_M_ref`, `tau_M`, `psi_s`,
       `psi_R`, `i_sd_ref`, `i_sd`, `i_sq_ref`, and `i_sq`.
-    - Observer-based V/Hz control: `w_M_ref`, `w_s`, `tau_M_ref`, `tau_M`,
-      `psi_s_ref`, `psi_s`, `psi_R`, `i_sd`, and `i_sq`.
+    - Flux-vector control of an induction machine: `w_M_ref`, `w_M`, `tau_M_ref`,
+      `tau_M`, `psi_s_ref`, `psi_s`, `psi_R`, `i_sd`, and `i_sq`.
+    - Observer-based V/Hz control of an induction machine: `w_M_ref`, `w_s`,
+      `tau_M_ref`, `tau_M`, `psi_s_ref`, `psi_s`, `psi_R`, `i_sd`, and `i_sq`.
+    - Observer-based V/Hz control of a synchronous machine: `w_M_ref`, `w_c`,
+      `tau_M_ref`, `tau_M`, `psi_s_ref`, `psi_s`, `theta_m`, `i_d`, and `i_q`.
     - Grid-following control: `p_g_ref`, `p_g`, `q_g_ref`, `q_g`, `i_c_d_ref`,
       `i_c_d`, `i_c_q_ref`, `i_c_q`, `u_g`, `w_g`, and `theta_c`.
     - Grid-forming control: `p_g_ref`, `p_g`, `q_g`, `v_c_ref`, `v_c`, `i_c_d_ref`,
       `i_c_d`, `i_c_q_ref`, `i_c_q`, and `theta_c` (the angle of the converter
       voltage).
+
+    In the torque-control mode (a vector control system without the speed
+    controller), the signals are those of the vector control without `w_M_ref`.
 
     """
     signals = _MODULES[system_type(mdl, ctrl)].simulate(path, t_eval, mdl, ctrl)

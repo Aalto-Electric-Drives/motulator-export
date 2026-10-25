@@ -76,8 +76,12 @@ static void flux_observer_compute_output(const FluxObserver *self,
     out->i_s = cexp(-I * out->theta_c) * i_s_ab;
     out->u_s = 0.0;
 
-    /* Flux estimation error */
+    /* Flux estimation error. If the voltage is unknown (NAN), the flux estimate
+     * follows the current model alone, so the error is zero. */
     double complex psi_s_model = psi_s_dq(par, out->i_s);
+    if (isnan(creal(u_s_ab))) {
+        out->psi_s = psi_s_model;
+    }
     out->e_o = psi_s_model - out->psi_s;
 
     /* Auxiliary flux */
@@ -239,6 +243,35 @@ static void speed_flux_observer_update(SpeedFluxObserver *self, double T_s,
     flux_observer_update(&self->flux_observer, T_s, out);
 }
 
+/* SpeedFluxObserver with the defaults of create_speed_flux_observer, NAN meaning None
+ * (the PM-flux estimation gain k_f is zero) */
+static void create_speed_flux_observer(SpeedFluxObserver *self,
+                                       SynchronousMachinePars par, double alpha_o,
+                                       double T_s, const double k_o_cfg[2],
+                                       int sensorless, double J)
+{
+    J = isnan(J) ? 0.0 : J; /* Zero means None */
+    if (isnan(alpha_o)) {
+        /* Default speed estimation poles (default_alpha_o). With J, the triple pole
+         * at alpha_o/sqrt(3) keeps the speed gain about the same. */
+        alpha_o = sensorless ? 2.0 * M_PI * 50.0 : 2.0 * M_PI * 400.0;
+        alpha_o = (J > 0.0) ? alpha_o / sqrt(3.0) : alpha_o;
+    }
+    /* Default observer gain (default_sensorless_k_o in the sensorless mode) */
+    double k_o[2] = {k_o_cfg[0], k_o_cfg[1]};
+    if (isnan(k_o[0]) || isnan(k_o[1])) {
+        if (sensorless) {
+            IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);
+            k_o[0] = 0.25 * par.R_s * (1.0 / L_s0.L_dd + 1.0 / L_s0.L_qq);
+            k_o[1] = 0.2;
+        } else {
+            k_o[0] = 2.0 * M_PI * 15.0;
+            k_o[1] = 0.0;
+        }
+    }
+    speed_flux_observer_init(self, par, alpha_o, T_s, k_o, J);
+}
+
 /* ReferenceGenerator ------------------------------------------------------- */
 
 static void reference_gen_init(ReferenceGenerator *self,
@@ -246,10 +279,20 @@ static void reference_gen_init(ReferenceGenerator *self,
                                double psi_s_min, double psi_s_max, double k_u,
                                double k_mtpv, const ReferenceLUTs *luts)
 {
+    self->par = *par;
     self->k_u = k_u;
     self->k_mtpv = k_mtpv;
+    self->alpha = 0.0; /* The current reference not tracked, see reference_gen_update */
     self->psi_s_min = isnan(psi_s_min) ? par->psi_f : psi_s_min;
     self->psi_s_max = psi_s_max;
+    /* Current-reference state, initialized at the zero-torque operating point of the
+     * minimum flux (zero current with PMs, the first point of the MTPA locus) */
+    self->i_s_ref = 0.0;
+    if (par->psi_f == 0.0) {
+        self->i_s_ref = self->psi_s_min / incr_ind_mat(par, 0.0).L_dd;
+    }
+    self->tau_M_ref = 0.0;
+    self->psi_s_ref = self->psi_s_min;
     ReferenceLUTs computed;
     if (luts == NULL) {
         compute_reference_luts(par, i_s_max, &computed);
@@ -258,6 +301,22 @@ static void reference_gen_init(ReferenceGenerator *self,
     self->psi_s_mtpa = luts->psi_s_mtpa;
     self->tau_M_cl = luts->tau_M_cl;
     self->tau_M_mtpv = luts->tau_M_mtpv;
+}
+
+/* Error of the initialization, as raised by ReferenceGenerator of motulator (the
+ * MTPA locus is NaN without a solution, see compute_mtpa_current_angle), or NULL */
+static const char *reference_gen_error(const ReferenceGenerator *self,
+                                       const SynchronousMachinePars *par)
+{
+    if (par->psi_f == 0.0 && self->psi_s_min <= 0.0) {
+        return "psi_s_min must be positive for machines without PMs.";
+    }
+    for (int k = 0; k < self->psi_s_mtpa.n; k++) {
+        if (isnan(self->psi_s_mtpa.x[k]) || isnan(self->psi_s_mtpa.y[k])) {
+            return "No MTPA solution found. Check the alignment of the d axis.";
+        }
+    }
+    return NULL;
 }
 
 static double reference_gen_max_flux(const ReferenceGenerator *self, double w_m,
@@ -291,6 +350,40 @@ static void reference_gen_compute_flux_and_torque_refs(const ReferenceGenerator 
 
     *psi_s_ref = psi_s_abs_ref;
     *tau_M_ref_lim = tau_M_ref;
+}
+
+/* Current reference of current-vector control (compute_current_ref): the state,
+ * conjugated for a negative torque reference. The flux and torque references (of
+ * compute_flux_and_torque_refs) are stored for the tracking. */
+static double complex reference_gen_compute_current_ref(ReferenceGenerator *self,
+                                                        double psi_s_ref,
+                                                        double tau_M_ref)
+{
+    self->psi_s_ref = psi_s_ref;
+    self->tau_M_ref = tau_M_ref;
+    return (tau_M_ref >= 0.0) ? self->i_s_ref : conj(self->i_s_ref);
+}
+
+/* Update the current-reference state (_update_current_tracking): the state is driven
+ * toward the stored flux and torque references by the tracking law */
+static void reference_gen_update(ReferenceGenerator *self, double T_s)
+{
+    const SynchronousMachinePars *par = &self->par;
+    double complex psi_s = psi_s_dq(par, self->i_s_ref);
+    double tau_M = 1.5 * par->n_p * cimag(self->i_s_ref * conj(psi_s));
+    double psi_s_abs = cabs(psi_s);
+    if (psi_s_abs > 0.0) {
+        IncrIndMat L_s = incr_ind_mat(par, self->i_s_ref);
+        double complex psi_a = aux_flux(&L_s, self->i_s_ref, psi_s);
+        double complex ell = mat_vec(&L_s, psi_s) / psi_s_abs;
+        double den = creal(psi_a * conj(ell));
+        if (den != 0.0) {
+            double err_tau = (fabs(self->tau_M_ref) - tau_M) / (1.5 * par->n_p);
+            double err_psi = self->psi_s_ref - psi_s_abs;
+            double complex err = (I * ell * err_tau + psi_a * err_psi) / den;
+            self->i_s_ref += T_s * self->alpha * err;
+        }
+    }
 }
 
 /* FluxTorqueController ----------------------------------------------------- */
@@ -379,39 +472,17 @@ static void flux_vector_ctrl_init(FluxVectorController *self,
                                   SynchronousMachinePars par,
                                   const FluxVectorControllerCfg *cfg)
 {
-    /* Resolve the defaults, as in FluxVectorController.__init__ and
-     * create_speed_flux_observer */
+    /* Resolve the defaults, as in FluxVectorController.__init__ */
     double alpha_psi = isnan(cfg->alpha_psi) ? cfg->alpha_tau : cfg->alpha_psi;
     double alpha_i = isnan(cfg->alpha_i) ? cfg->alpha_tau : cfg->alpha_i;
-    double J = isnan(cfg->J) ? 0.0 : cfg->J; /* Zero means None */
-    double alpha_o = cfg->alpha_o;
-    if (isnan(alpha_o)) {
-        /* Default speed estimation poles (default_alpha_o). With J, the triple pole
-         * at alpha_o/sqrt(3) keeps the speed gain about the same. */
-        alpha_o = cfg->sensorless ? 2.0 * M_PI * 50.0 : 2.0 * M_PI * 400.0;
-        alpha_o = (J > 0.0) ? alpha_o / sqrt(3.0) : alpha_o;
-    }
-    /* Default observer gain of create_speed_flux_observer (default_sensorless_k_o in
-     * the sensorless mode) */
-    double k_o[2] = {cfg->k_o[0], cfg->k_o[1]};
-    if (isnan(k_o[0]) || isnan(k_o[1])) {
-        if (cfg->sensorless) {
-            IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);
-            k_o[0] = 0.25 * par.R_s * (1.0 / L_s0.L_dd + 1.0 / L_s0.L_qq);
-            k_o[1] = 0.2;
-        } else {
-            k_o[0] = 2.0 * M_PI * 15.0;
-            k_o[1] = 0.0;
-        }
-    }
-
     self->T_s = cfg->T_s;
     self->sensorless = cfg->sensorless;
     reference_gen_init(&self->reference_gen, &par, cfg->i_s_max, cfg->psi_s_min,
                        cfg->psi_s_max, cfg->k_u, cfg->k_mtpv, NULL);
     flux_torque_ctrl_init(&self->flux_torque_ctrl, par, alpha_psi, cfg->alpha_tau,
                           alpha_i);
-    speed_flux_observer_init(&self->observer, par, alpha_o, cfg->T_s, k_o, J);
+    create_speed_flux_observer(&self->observer, par, cfg->alpha_o, cfg->T_s, cfg->k_o,
+                               cfg->sensorless, cfg->J);
 }
 
 static void flux_vector_ctrl_compute_output(FluxVectorController *self,
@@ -436,6 +507,57 @@ static void flux_vector_ctrl_update(FluxVectorController *self, const References
 
 /* VectorControlSystem ------------------------------------------------------ */
 
+/* Feedback signals of a vector control system (DriveControlSystem.get_feedback with
+ * compute_feedback). The observer uses the voltage of the ongoing sampling period,
+ * while the control laws use the voltage averaged over the previous and ongoing
+ * periods. In standby (with blocked gates, and at the first sampling instant after
+ * the release of a sensorless drive, VectorControlSystem._standby), the voltage is
+ * unknown (NAN), and the observer runs on its open-circuit model, whose voltage is
+ * used for the control laws too. When the voltage is known again, the observer
+ * catches the machine. */
+static void vector_control_feedback(SpeedFluxObserver *observer, int sensorless,
+                                    const PWM *pwm, const Measurements *meas,
+                                    int standby, ObserverOutputs *fbk)
+{
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
+    if (!standby) {
+        u_c_ab_zoh = pwm_realized_voltage(pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
+    if (sensorless) {
+        speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, 0.0,
+                                           0.0, fbk);
+    } else {
+        /* Position error from the measured rotor angle (compute_feedback) */
+        double n_p = observer->flux_observer.par.n_p;
+        double theta_m = observer->flux_observer.theta_m;
+        double eps = wrap(n_p * meas->theta_M - theta_m) / n_p;
+        speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
+                                           1.0, fbk);
+    }
+    fbk->u_s = standby ? fbk->u_s_zoh : cexp(-I * fbk->theta_c) * u_c_ab;
+    fbk->u_dc = meas->u_dc;
+}
+
+/* Duty ratios for the PWM (modulate), the angle of the voltage reference advanced
+ * by k_comp*T_s*w_c, or the zero vector (zero_vector, of a sensorless drive in
+ * standby) */
+static void vector_control_modulate(PWM *pwm, double k_comp, int zero_vector,
+                                    const Measurements *meas, const ObserverOutputs *fbk,
+                                    References *ref)
+{
+    double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
+    u_s_ab_ref *= cexp(I * k_comp * ref->T_s * fbk->w_c);
+    if (zero_vector) {
+        u_s_ab_ref = 0.0;
+    }
+    double complex u_lim_ab;
+    pwm_compute_output(pwm, ref->T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
+                       ref->d_abc, &u_lim_ab);
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+}
+
 static void vector_control_system_init(VectorControlSystem *self,
                                        SynchronousMachinePars par,
                                        const FluxVectorControllerCfg *cfg,
@@ -449,73 +571,166 @@ static void vector_control_system_init(VectorControlSystem *self,
     self->speed_ctrl.v = 0.0;
     self->enabled = 1;
     self->release_step = 0;
+    self->torque_mode = 0;
 }
 
 static void vector_control_system_compute_output(VectorControlSystem *self,
                                                  const Measurements *meas,
-                                                 double w_M_ref, int enabled)
+                                                 double ext_ref, int enabled)
 {
     ObserverOutputs *fbk = &self->fbk;
     References *ref = &self->ref;
     self->enabled = enabled;
-
-    /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
-     * voltage of the ongoing sampling period, while the control laws use the voltage
-     * averaged over the previous and ongoing periods. In standby (with blocked gates,
-     * and at the first sampling instant after the release of a sensorless drive,
-     * VectorControlSystem._standby), the voltage is unknown (NAN), and the observer
-     * runs on its open-circuit model, whose voltage is used for the control laws too.
-     * When the voltage is known again, the observer catches the machine. */
     int standby = !enabled || self->release_step;
-    double complex u_c_ab_zoh = NAN;
-    double complex u_c_ab = NAN;
-    if (!standby) {
-        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
-        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
-    }
-    SpeedFluxObserver *observer = &self->vector_ctrl.observer;
-    if (self->vector_ctrl.sensorless) {
-        speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, 0.0,
-                                           0.0, fbk);
-    } else {
-        /* Position error from the measured rotor angle (compute_feedback) */
-        double n_p = observer->flux_observer.par.n_p;
-        double theta_m = observer->flux_observer.theta_m;
-        double eps = wrap(n_p * meas->theta_M - theta_m) / n_p;
-        speed_flux_observer_compute_output(observer, u_c_ab_zoh, meas->i_c_ab, eps,
-                                           1.0, fbk);
-    }
-    fbk->u_s = standby ? fbk->u_s_zoh : cexp(-I * fbk->theta_c) * u_c_ab;
-    fbk->u_dc = meas->u_dc;
+    int sensorless = self->vector_ctrl.sensorless;
+    vector_control_feedback(&self->vector_ctrl.observer, sensorless, &self->pwm, meas,
+                            standby, fbk);
 
-    /* Speed controller and vector controller, or in standby, the vector controller
-     * with zero torque reference and the zero vector of a sensorless drive */
+    /* Speed controller (or in torque-control mode, the torque reference) and
+     * vector controller, or in standby, the vector controller with zero torque
+     * reference and the zero vector of a sensorless drive */
     double tau_M_ref = 0.0;
-    if (!standby) {
-        tau_M_ref = pi_compute_output(&self->speed_ctrl, w_M_ref, fbk->w_M, 0.0);
+    if (!standby && self->torque_mode) {
+        tau_M_ref = ext_ref;
+    } else if (!standby) {
+        tau_M_ref = pi_compute_output(&self->speed_ctrl, ext_ref, fbk->w_M, 0.0);
     }
     flux_vector_ctrl_compute_output(&self->vector_ctrl, tau_M_ref, fbk, ref);
-
-    /* Duty ratios for the PWM (modulate), the angle of the voltage reference advanced
-     * by k_comp*T_s*w_c, or the zero vector of a sensorless drive in standby */
-    double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
-    u_s_ab_ref *= cexp(I * self->k_comp * ref->T_s * fbk->w_c);
-    if (self->vector_ctrl.sensorless && standby) {
-        u_s_ab_ref = 0.0;
-    }
-    ref->u_c_ab = pwm_compute_output(&self->pwm, ref->T_s, u_s_ab_ref, fbk->u_dc,
-                                     fbk->w_c, meas->i_c_ab, ref->d_abc);
-    ref->w_M = w_M_ref;
+    vector_control_modulate(&self->pwm, self->k_comp, sensorless && standby, meas, fbk,
+                            ref);
+    ref->w_M = self->torque_mode ? NAN : ext_ref; /* None in torque mode */
 }
 
 static void vector_control_system_update(VectorControlSystem *self)
 {
     pwm_update(&self->pwm, self->ref.T_s, self->ref.d_abc);
     flux_vector_ctrl_update(&self->vector_ctrl, &self->ref, &self->fbk);
-    if (self->enabled && !self->release_step) {
+    if (!self->torque_mode && self->enabled && !self->release_step) {
         pi_update(&self->speed_ctrl, self->ref.T_s, self->ref.tau_M);
     }
     self->release_step = self->vector_ctrl.sensorless && !self->enabled;
+}
+
+/* SMVHzController -------------------------------------------------------- */
+
+static SMVHzControllerCfg sm_vhz_controller_cfg(double i_s_max)
+{
+    SMVHzControllerCfg cfg;
+    cfg.i_s_max = i_s_max;
+    cfg.alpha_psi = 2.0 * M_PI * 100.0;
+    cfg.alpha_tau = 2.0 * M_PI * 20.0;
+    cfg.alpha_f = 2.0 * M_PI * 1.0;
+    cfg.alpha_o = 2.0 * M_PI * 200.0;
+    cfg.k_o[0] = NAN;
+    cfg.k_o[1] = NAN;
+    cfg.k_u = 0.9;
+    cfg.k_mtpv = 0.9;
+    cfg.psi_s_min = NAN;
+    cfg.psi_s_max = INFINITY;
+    cfg.T_s = 250e-6;
+    return cfg;
+}
+
+static void sm_vhz_ctrl_init(SMVHzController *self, SynchronousMachinePars par,
+                             const SMVHzControllerCfg *cfg)
+{
+    /* Default observer gain of create_vhz_observer (default_sensorless_k_o) */
+    double k_o[2] = {cfg->k_o[0], cfg->k_o[1]};
+    if (isnan(k_o[0]) || isnan(k_o[1])) {
+        IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);
+        k_o[0] = 0.25 * par.R_s * (1.0 / L_s0.L_dd + 1.0 / L_s0.L_qq);
+        k_o[1] = 0.2;
+    }
+    self->T_s = cfg->T_s;
+    self->alpha_f = cfg->alpha_f;
+    self->tau_M_lpf = 0.0;
+    /* The current reference is not used, so its tracking is not ported */
+    reference_gen_init(&self->reference_gen, &par, cfg->i_s_max, cfg->psi_s_min,
+                       cfg->psi_s_max, cfg->k_u, cfg->k_mtpv, NULL);
+    flux_torque_ctrl_init(&self->flux_torque_ctrl, par, cfg->alpha_psi, cfg->alpha_tau,
+                          0.0);
+    /* First-order angle estimation */
+    flux_observer_init(&self->observer, par, matched_pole(cfg->alpha_o, cfg->T_s),
+                       k_o);
+}
+
+/* SMVHzControlSystem ----------------------------------------------------- */
+
+static void sm_vhz_control_system_init(SMVHzControlSystem *self,
+                                       SynchronousMachinePars par,
+                                       const SMVHzControllerCfg *cfg, double slew_rate)
+{
+    pwm_init(&self->pwm, 1.5);
+    pwm_set_overmodulation(&self->pwm, 1); /* Default of VHzControlSystem: MME */
+    self->k_comp = 1.5; /* k_comp of ObserverBasedVHzController */
+    sm_vhz_ctrl_init(&self->vhz_ctrl, par, cfg);
+    rate_limiter_init(&self->rate_limiter, slew_rate);
+}
+
+static void sm_vhz_control_system_compute_output(SMVHzControlSystem *self,
+                                                 const Measurements *meas,
+                                                 double w_M_ref, int enabled)
+{
+    SMVHzController *ctrl = &self->vhz_ctrl;
+    ObserverOutputs *fbk = &self->fbk;
+    References *ref = &self->ref;
+    double T_s = ctrl->T_s;
+
+    /* Feedback signals (DriveControlSystem.get_feedback). The observer uses the
+     * voltage of the ongoing sampling period, while the control laws use the voltage
+     * averaged over the previous and ongoing periods. With blocked gates, the
+     * voltage is unknown (NAN), and the observer runs on its open-circuit model,
+     * whose voltage is used for the control laws too. */
+    double complex u_c_ab_zoh = NAN;
+    double complex u_c_ab = NAN;
+    if (enabled) {
+        u_c_ab_zoh = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 0);
+        u_c_ab = pwm_realized_voltage(&self->pwm, meas->i_c_ab, meas->u_dc, 1);
+    }
+
+    /* Rate-limited speed reference (RateLimiter), stored in the update function */
+    w_M_ref = rate_limiter_compute_output(&self->rate_limiter, T_s, w_M_ref);
+
+    /* The rotor speed of the observer is the speed reference (sensorless) */
+    flux_observer_compute_output(&ctrl->observer, u_c_ab_zoh, meas->i_c_ab, w_M_ref,
+                                 0.0, 0.0, fbk);
+    fbk->u_s = enabled ? cexp(-I * fbk->theta_c) * u_c_ab : fbk->u_s_zoh;
+    fbk->u_dc = meas->u_dc;
+
+    /* References from the filtered torque estimate, or with blocked gates, the
+     * standby references: the flux and torque controller tracks the estimated flux
+     * and torque */
+    ref->T_s = T_s;
+    if (enabled) {
+        reference_gen_compute_flux_and_torque_refs(&ctrl->reference_gen,
+                                                   ctrl->tau_M_lpf, fbk->w_m,
+                                                   fbk->u_dc, &ref->psi_s, &ref->tau_M);
+    } else {
+        ref->tau_M = fbk->tau_M;
+        ref->psi_s = cabs(fbk->psi_s);
+    }
+    ref->u_s = flux_torque_ctrl_compute_output(&ctrl->flux_torque_ctrl, ref->psi_s,
+                                               ref->tau_M, fbk);
+
+    /* Duty ratios for the PWM, the angle of the voltage reference advanced by
+     * k_comp*T_s*w_c */
+    double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
+    u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
+    double complex u_lim_ab;
+    pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
+                       ref->d_abc, &u_lim_ab);
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+    ref->w_M = w_M_ref;
+}
+
+static void sm_vhz_control_system_update(SMVHzControlSystem *self)
+{
+    SMVHzController *ctrl = &self->vhz_ctrl;
+    double T_s = self->ref.T_s;
+    pwm_update(&self->pwm, T_s, self->ref.d_abc);
+    rate_limiter_update(&self->rate_limiter, self->ref.w_M);
+    ctrl->tau_M_lpf += T_s * ctrl->alpha_f * (self->fbk.tau_M - ctrl->tau_M_lpf);
+    flux_observer_update(&ctrl->observer, T_s, &self->fbk);
 }
 
 /* Signal vectors of the modular control system ---------------------------- */

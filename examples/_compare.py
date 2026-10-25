@@ -54,9 +54,9 @@ def simulate_plecs(
 
 def write_simulink_model(name: str, mdl: Any, ctrl: Any, t_stop: float) -> Path:
     """
-    Write the scripts of the Simulink model `simulink/<name>.slx`, or with --matlab
-    those of `simulink/<name>_matlab.slx` with MATLAB Function blocks, returning the
-    path of the model.
+    Write the build script of the Simulink model `simulink/<name>.slx`, or with
+    --matlab that of `simulink/<name>_matlab.slx` with MATLAB Function blocks,
+    returning the path of the model.
     """
     code = "matlab" if "--matlab" in sys.argv else "c"
     suffix = "_matlab" if code == "matlab" else ""

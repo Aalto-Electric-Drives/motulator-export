@@ -14,17 +14,25 @@ with a mask of the arguments of its class (see `_control`):
 The mask initialization of the CurrentVectorController resolves the defaults of
 `CurrentController`, and that of the SpeedFluxObserver resolves the defaults of
 `create_speed_flux_observer` and computes the gains of `SpeedFluxObserver.__init__`.
-The masks of the top-level classes refer to the variables of the model
-initialization (`init_script`): the machine model `par`, the configuration `cfg`,
-the speed controller `speed_ctrl`, and the PWM `pwm`. The signal vectors are defined
-in `im_current_vector.h`.
+The mask of the VectorControlSystem has its arguments, structs of the model
+initialization (`init_script`): the vector controller `vector_ctrl` (the machine
+model `par` and the configuration `cfg`), the speed controller `speed_ctrl`, and the
+PWM `pwm`. The signal vectors are defined in `im_current_vector.h`.
 
 """
 
+from functools import partial
 from typing import Any
 
 from motulator_export.plecs._common import ENABLE
 from motulator_export.plecs._control import (
+    CURRENT_CTRL_UPDATE,
+    M_CURRENT_CTRL_OUTPUT,
+    M_CURRENT_CTRL_START,
+    M_CURRENT_CTRL_UPDATE,
+    OBSERVER,
+    OBSERVER_W_M,
+    PAR_CFG,
     SAMPLING,
     T_S,
     Signals,
@@ -34,13 +42,17 @@ from motulator_export.plecs._control import (
     complex_in,
     complex_out,
     control_block,
+    drive_monitor,
     get_measurement,
     init_header,
+    inner_ctrl_init,
     mask_params,
-    monitor,
+    observer_init,
     pwm_init,
     speed_ctrl_init,
     speed_observer,
+    torque_inputs,
+    torque_outputs,
     vector_control_system,
 )
 from motulator_export.plecs._netlist import (
@@ -70,6 +82,7 @@ SIGNALS = Signals(
 # Name of the control-system block, its inputs, and the monitored signals (mask
 # probes)
 NAME = "Current-vector control"
+TORQUE_NAME = "Current-vector control (torque)"
 CTRL_INPUTS = [
     Port(ENABLE, 1),
     Port("w_M_ref", 1),
@@ -102,7 +115,7 @@ PAR_PROMPT = "par: Machine model (InductionMachineInvGammaPars) as a struct"
 # Fields of the configuration of current-vector control (CurrentVectorControllerCfg),
 # in the order of the model initialization and of the native library
 CFG_FIELDS = ["psi_s_nom", "i_s_max", "alpha_c", "alpha_i", "alpha_o", "w_s_nom"]
-CFG_FIELDS += ["k_u", "k_fw", "J", "sensorless", "T_s"]
+CFG_FIELDS += ["k_u", "k_fw", "J", "sensorless", "T_s", "discrete"]
 PAR_DESCRIPTION = (
     " The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and "
     "L_M of InductionMachineInvGammaPars."
@@ -132,7 +145,7 @@ M_PAR_CHECKS = required(*PAR["par"])
 
 # %%
 # Blocks of the classes
-def _flux_observer() -> CBlock:
+def _flux_observer(sig: Signals = SIGNALS) -> CBlock:
     """Flux observer (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
@@ -140,10 +153,10 @@ def _flux_observer() -> CBlock:
         "observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the "
         "output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing "
         "periods (DriveControlSystem.get_feedback). While the gates are blocked, the "
-        "voltages are unknown (NaN), and the observer runs on its open-circuit model. "
-        "In the sensored mode (h = 1), the "
-        "speed error signal is computed from the measured rotor speed "
-        "(compute_feedback)." + PAR_DESCRIPTION,
+        "voltages are unknown (NaN), and the flux estimate follows the current model "
+        "alone, with the open-circuit voltage of the model as the voltage. In the "
+        "sensored mode (h = 1), the speed error signal is computed from the measured "
+        "rotor speed (compute_feedback)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -171,7 +184,7 @@ def _flux_observer() -> CBlock:
         f"h = P({i['h']}, 0);\n"
     )
     output = (
-        SIGNALS.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
+        sig.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
         "double w_M = InputSignal(3, 0);\n"
         "/* Speed error from the measured rotor speed in the sensored mode */\n"
         "double eps = (h == 0.0) ? 0.0 : meas.w_M - w_M;\n"
@@ -182,18 +195,13 @@ def _flux_observer() -> CBlock:
         f"double complex u_s_ab = {complex_in(1)};\n"
         "out.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n"
         "                               : cexp(-I * out.theta_c) * u_s_ab;\n"
-        + SIGNALS.write(0, "fbk", "out")
+        + sig.write(0, "fbk", "out")
     )
     return CBlock(
         "FluxObserver",
-        [
-            SIGNALS.port("meas"),
-            Port("u_s_ab", 2),
-            Port("u_s_zoh_ab", 2),
-            Port("w_M", 1),
-        ],
-        [Port("out", SIGNALS.width("fbk"))],
-        SIGNALS.class_code(
+        [sig.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2), Port("w_M", 1)],
+        [Port("out", sig.width("fbk"))],
+        sig.class_code(
             "IMFluxObserver",
             start,
             output,
@@ -201,7 +209,7 @@ def _flux_observer() -> CBlock:
             workspace=SAMPLING + "static double h;\nstatic IMObserverOutputs out;\n",
         ),
         params,
-        SIGNALS.sfunction("flux_observer"),
+        sig.sfunction("flux_observer"),
         mask=mask,
         mcode=MCode(
             start=M_PAR + "self = im_flux_observer_init(par, p.k_o);\n",
@@ -223,11 +231,11 @@ def _flux_observer() -> CBlock:
             "end\n",
             update="self = im_flux_observer_update(self, p.T_s, out);\n",
             inputs={
-                "meas": SIGNALS.vector("meas"),
+                "meas": sig.vector("meas"),
                 "u_s_ab": COMPLEX,
                 "u_s_zoh_ab": COMPLEX,
             },
-            outputs={"out": SIGNALS.vector("fbk")},
+            outputs={"out": sig.vector("fbk")},
             checks=(*required("k_o", "h", "T_s"), *M_PAR_CHECKS),
         ),
     )
@@ -266,7 +274,7 @@ SFO_INIT = (
 )
 
 
-def _speed_flux_observer() -> Subsystem:
+def _speed_flux_observer(sig: Signals = SIGNALS) -> Subsystem:
     """Speed and flux observer (SpeedFluxObserver)."""
     mask = Mask(
         "SpeedFluxObserver (motulator)",
@@ -288,19 +296,20 @@ def _speed_flux_observer() -> Subsystem:
                 "cfg.sensorless",
             ),
             Param("J", "J: Inertia (kgm²), [] = the model not used", "cfg.J"),
+            OBSERVER_W_M,
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
         ],
         init=SFO_INIT,
     )
     return Subsystem(
         "SpeedFluxObserver",
-        [SIGNALS.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
-        [Port("out", SIGNALS.width("fbk"))],
+        [sig.port("meas"), Port("u_s_ab", 2), Port("u_s_zoh_ab", 2)],
+        [Port("out", sig.width("fbk"))],
         [
-            _flux_observer(),
-            SIGNALS.selector("fbk", "eps"),
-            SIGNALS.selector("fbk", "tau_M"),
-            speed_observer(SIGNALS),
+            _flux_observer(sig),
+            sig.selector("fbk", "eps"),
+            sig.selector("fbk", "tau_M"),
+            speed_observer(sig),
         ],
         [
             ("meas", "FluxObserver:meas"),
@@ -421,13 +430,22 @@ def _current_reference_generator() -> CBlock:
 
 
 def _current_controller() -> CBlock:
-    """Current controller (CurrentController)."""
+    """
+    Current controller (CurrentController, or DiscreteCurrentController with the
+    parameter `discrete`).
+    """
     mask = Mask(
         "CurrentController (motulator)",
-        "2DOF PI current controller (CurrentController). The inputs are the current "
-        "reference and the feedback signals fbk (the current fbk.i_s, and the realized "
+        "Current controller: the 2DOF PI controller (CurrentController) or, if "
+        "discrete = 1, the direct discrete-time controller of the leakage flux "
+        "linkages L_sgm*i (DiscreteCurrentController). The inputs are the current "
+        "reference, the feedback signals fbk (the current fbk.i_s, and the realized "
         "voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the "
-        "integral state), and the output is the voltage reference." + PAR_DESCRIPTION,
+        "update), and for the update of the discrete-time controller, the limited "
+        "voltage reference u_c_lim_ab of the PWM in stationary coordinates, used "
+        "while the gates are enabled (the input enable nonzero), as in "
+        "CurrentVectorController.update. The output is the voltage reference."
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -435,7 +453,16 @@ def _current_controller() -> CBlock:
                 "alpha_c: Reference-tracking bandwidth (rad/s)",
                 "cfg.alpha_c",
             ),
-            Param("alpha_i", "alpha_i: Integral-action bandwidth (rad/s)", "alpha_i"),
+            Param(
+                "alpha_i",
+                "alpha_i: Integral-action bandwidth (rad/s), not used if discrete",
+                "alpha_i",
+            ),
+            Param(
+                "discrete",
+                "discrete: Direct discrete-time current controller (1) or not (0)",
+                "cfg.discrete",
+            ),
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
         ],
         init=PAR_INIT,
@@ -443,39 +470,53 @@ def _current_controller() -> CBlock:
     params = mask_params(mask, PAR)
     i = {p: k for k, p in enumerate(params)}
     start = (
-        checks(params, ["alpha_c", "alpha_i", "T_s"])
+        checks(params, ["alpha_c", "alpha_i", "discrete", "T_s"])
         + _par_code(params)
-        + f"self = im_current_controller(&par, P({i['alpha_c']}, 0), "
-        f"P({i['alpha_i']}, 0));\n"
+        + f"im_current_ctrl_init(&self, &par, P({i['alpha_c']}, 0), "
+        f"P({i['alpha_i']}, 0),\n"
+        f"                     (int)P({i['discrete']}, 0), P({i['T_s']}, 0));\n"
         f"T_s = P({i['T_s']}, 0);\n"
     )
     output = (
         SIGNALS.read(1, "fbk", declare=False) + "double complex u_s_ref =\n"
-        f"    complex_pi_compute_output(&self, {complex_in(0)}, fbk.i_s, 0.0);\n"
+        f"    im_current_ctrl_compute_output(&self, {complex_in(0)}, fbk.i_s);\n"
         + complex_out(0, "u_s_ref")
     )
     return CBlock(
         "CurrentController",
-        [Port("i_s_ref", 2), SIGNALS.port("fbk")],
+        [
+            Port("i_s_ref", 2),
+            SIGNALS.port("fbk"),
+            Port("u_c_lim_ab", 2),
+            Port(ENABLE, 1),
+        ],
         [Port("u_s", 2)],
         SIGNALS.class_code(
-            "ComplexPIController",
+            "IMCurrentController",
             start,
             output,
-            "complex_pi_update(&self, T_s, fbk.u_s, fbk.w_c);\n",
+            CURRENT_CTRL_UPDATE + "im_current_ctrl_update(&self, T_s, u, fbk.w_c);\n",
             workspace=SAMPLING + "static IMObserverOutputs fbk;\n",
         ),
         params,
         SIGNALS.sfunction("current_controller"),
+        feedthrough=[1, 1, 0, 0],
         mask=mask,
         mcode=MCode(
-            start=M_PAR + "self = im_current_controller(par, p.alpha_c, p.alpha_i);\n",
-            output="[self, u_s] = complex_pi_compute_output(self, i_s_ref, fbk.i_s, "
-            "0);\n",
-            update="self = complex_pi_update(self, p.T_s, fbk.u_s, fbk.w_c);\n",
-            inputs={"i_s_ref": COMPLEX, "fbk": SIGNALS.vector("fbk")},
+            start=M_PAR
+            + "self = im_current_ctrl_init(par, p.alpha_c, p.alpha_i, p.discrete, "
+            "p.T_s);\n" + M_CURRENT_CTRL_START,
+            output="[self, u_s] = im_current_ctrl_compute_output(self, i_s_ref, "
+            "fbk.i_s);\n" + M_CURRENT_CTRL_OUTPUT,
+            update=M_CURRENT_CTRL_UPDATE
+            + "self = im_current_ctrl_update(self, p.T_s, u, self.fbk_w_c);\n",
+            inputs={
+                "i_s_ref": COMPLEX,
+                "fbk": SIGNALS.vector("fbk"),
+                "u_c_lim_ab": COMPLEX,
+            },
             outputs={"u_s": COMPLEX},
-            checks=(*required("alpha_c", "alpha_i", "T_s"), *M_PAR_CHECKS),
+            checks=(*required("alpha_c", "alpha_i", "discrete", "T_s"), *M_PAR_CHECKS),
         ),
     )
 
@@ -499,17 +540,19 @@ def _current_vector_controller() -> Subsystem:
         "CurrentVectorController (motulator)",
         "Current-vector controller (CurrentVectorController). The configuration cfg is "
         "a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the "
-        "default; the default observer gain k_o and the continuous-time current "
-        "controller only). The mask initialization resolves the defaults and passes "
-        "the parameters to the blocks inside it, as CurrentVectorController."
-        + PAR_DESCRIPTION,
+        "default; the default observer gain k_o only). The mask initialization "
+        "resolves the defaults and passes the parameters to the blocks inside it, as "
+        "CurrentVectorController. The inputs u_c_lim_ab (the limited voltage "
+        "reference of the PWM) and enable (the gate enable) are used by the direct "
+        "discrete-time current controller." + PAR_DESCRIPTION,
         [
-            Param("par", PAR_PROMPT, "par"),
+            Param("par", PAR_PROMPT, "vector_ctrl.par"),
             Param(
                 "cfg",
                 "cfg: Configuration (CurrentVectorControllerCfg) as a struct",
-                "cfg",
+                "vector_ctrl.cfg",
             ),
+            OBSERVER,
         ],
         init=CVC_INIT,
     )
@@ -521,6 +564,8 @@ def _current_vector_controller() -> Subsystem:
             SIGNALS.port("meas"),
             Port("u_c_ab", 2),
             Port("u_c_zoh_ab", 2),
+            Port("u_c_lim_ab", 2),
+            Port(ENABLE, 1),
         ],
         [SIGNALS.port("fbk"), SIGNALS.port("ref")],
         [
@@ -546,6 +591,8 @@ def _current_vector_controller() -> Subsystem:
             ("From u_s", f"{crg}:u_s"),
             ("meas.u_dc:y", f"{crg}:u_dc"),
             (f"{crg}:i_s", "CurrentController:i_s_ref"),
+            ("u_c_lim_ab", "CurrentController:u_c_lim_ab"),
+            (ENABLE, f"CurrentController:{ENABLE}"),
             (f"{crg}:tau_M", "Mux ref:tau_M"),
             (f"{crg}:i_s", "Mux ref:i_s"),
             ("CurrentController:u_s", "Mux ref:u_s"),
@@ -553,7 +600,7 @@ def _current_vector_controller() -> Subsystem:
             ("Mux ref:y", "ref"),
         ],
         columns=[
-            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab"],
+            ["tau_M_ref", "meas", "u_c_ab", "u_c_zoh_ab", "u_c_lim_ab", ENABLE],
             ["SpeedFluxObserver"],
             ["From u_s", "meas.u_dc", "fbk.psi_R"],
             [crg],
@@ -578,6 +625,7 @@ def _current_vector_controller() -> Subsystem:
             "Mux ref:i_s": "over:CurrentController:0",
             "meas.u_dc:u": "early",
         },
+        tags=["u_c_lim_ab", ENABLE],
         mask=mask,
     )
 
@@ -597,8 +645,11 @@ MONITORED = {
 }
 
 
-def control_system() -> Subsystem:
-    """Contents of the control-system block (VectorControlSystem)."""
+def control_system(torque: bool = False) -> Subsystem:
+    """
+    Contents of the control-system block (VectorControlSystem), also in the
+    torque-control mode without the speed controller (`torque`).
+    """
     measurement = get_measurement(
         SIGNALS,
         CTRL_INPUTS[2:],
@@ -609,16 +660,22 @@ def control_system() -> Subsystem:
         ],
         abc_input("i_s_abc", 0),
     )
-    signals = monitor(
+    signals = drive_monitor(
         SIGNALS,
         CTRL_OUTPUTS,
         MONITORED,
-        [Port("w_M_ref", 1)],
+        torque,
         "/* The currents in estimated rotor flux coordinates */\n"
         "double complex rot = cexp(-I * carg(fbk.psi_R));\n",
     )
     return vector_control_system(
-        SIGNALS, NAME, CTRL_INPUTS, measurement, _current_vector_controller(), signals
+        SIGNALS,
+        TORQUE_NAME if torque else NAME,
+        torque_inputs(CTRL_INPUTS) if torque else CTRL_INPUTS,
+        measurement,
+        _current_vector_controller(),
+        signals,
+        torque,
     )
 
 
@@ -629,6 +686,17 @@ CVC_BLOCK = control_block(
     CTRL_INPUTS,
     CTRL_OUTPUTS,
     control_system,
+    "CurrentVectorController",
+)
+CVC_TORQUE_BLOCK = control_block(
+    TORQUE_NAME,
+    "Torque control of an induction machine drive with current-vector control "
+    "(VectorControlSystem with CurrentVectorController, without the speed controller).",
+    torque_inputs(CTRL_INPUTS),
+    torque_outputs(CTRL_OUTPUTS),
+    partial(control_system, True),
+    "CurrentVectorController",
+    torque=True,
 )
 
 
@@ -638,8 +706,8 @@ def init_script(
 ) -> str:
     """
     Model initialization: the variables of the system model, and the structs of the
-    control system (par, cfg, speed_ctrl, and pwm) from the parameter values of the
-    control system (`_im.export_values`).
+    control system (par, cfg, vector_ctrl, speed_ctrl, and pwm) from the parameter
+    values of the control system (`_im.export_values`).
     """
     return (
         init_header(variables, comment)
@@ -647,6 +715,13 @@ def init_script(
         + "".join(assign(f"par.{n}", values[n]) for n in PAR_FIELDS)
         + "% Current-vector control (CurrentVectorControllerCfg)\n"
         + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS)
+        + inner_ctrl_init(
+            "vector_ctrl",
+            "CurrentVectorController",
+            "Current-vector controller",
+            PAR_CFG,
+        )
+        + observer_init(values)
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

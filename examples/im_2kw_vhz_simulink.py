@@ -2,14 +2,13 @@
 2.2-kW IM, observer-based or open-loop V/Hz control: motulator vs. Simulink
 ===========================================================================
 
-This script builds the drive system of `im_2kw_vhz.py` in motulator and writes the
-MATLAB scripts (simulink/build_im_2kw_vhz.m and simulink/init_im_2kw_vhz.m) that
-build and parametrize the Simulink model. If the MATLAB Engine API for Python is
-installed, it runs the build script, simulates the model and motulator, and compares
-the results. With --open-loop, the control system is pure open-loop V/Hz control
-(simulink/build_im_2kw_vhz_open_loop.m), see `im_2kw_vhz.py`. With --matlab, the
-blocks of the control system are MATLAB Function blocks instead of S-functions
-(simulink/build_im_2kw_vhz_matlab.m).
+This script builds the drive system of `im_2kw_vhz.py` in motulator and writes a
+MATLAB script (simulink/build_im_2kw_vhz.m) that builds the Simulink model. If the
+MATLAB Engine API for Python is installed, it runs the script, simulates the model
+and motulator, and compares the results. With --open-loop, the control system is
+pure open-loop V/Hz control (simulink/build_im_2kw_vhz_open_loop.m), see
+`im_2kw_vhz.py`. With --matlab, the blocks of the control system are MATLAB Function
+blocks instead of S-functions (simulink/build_im_2kw_vhz_matlab.m).
 
 Run from the repository root:
 

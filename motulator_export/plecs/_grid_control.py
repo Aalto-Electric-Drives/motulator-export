@@ -17,8 +17,9 @@ with a mask of the arguments of its class (see `_control`):
   from the limited active-power reference and the voltage reference
 
 The mask initializations of the inner controllers resolve the defaults of their
-configurations. The masks of the top-level classes refer to the variables of the
-model initialization (`init_script`): the configuration `cfg` and the PWM `pwm`.
+configurations. The mask of the GridConverterControlSystem has its arguments,
+structs of the model initialization (`init_script`): the inner controller
+`inner_ctrl` (the configuration `cfg`) and the PWM `pwm`.
 The signal vectors are defined in `gfl_current_vector.h` and `gfm_observer.h`.
 
 """
@@ -41,6 +42,7 @@ from motulator_export.plecs._control import (
     get_measurement,
     grid_converter_control_system,
     init_header,
+    inner_ctrl_init,
     mask_params,
     monitor,
     pcc_voltage_input,
@@ -318,7 +320,7 @@ def _gfl_current_vector_controller() -> Subsystem:
             Param(
                 "cfg",
                 "cfg: Configuration (CurrentVectorControllerCfg) as a struct",
-                "cfg",
+                "inner_ctrl.cfg",
             )
         ],
     )
@@ -456,6 +458,7 @@ GFL_BLOCK = control_block(
     GFL_INPUTS,
     GFL_OUTPUTS,
     gfl_control_system,
+    "CurrentVectorController",
     cls="GridConverterControlSystem",
 )
 
@@ -729,7 +732,7 @@ def _gfm_controller() -> Subsystem:
                 "cfg",
                 "cfg: Configuration (ObserverBasedGridFormingControllerCfg) as a "
                 "struct",
-                "cfg",
+                "inner_ctrl.cfg",
             )
         ],
         init=GFM_INIT,
@@ -885,6 +888,7 @@ GFM_BLOCK = control_block(
     GFM_INPUTS,
     GFM_OUTPUTS,
     gfm_control_system,
+    "ObserverBasedGridFormingController",
     cls="GridConverterControlSystem",
 )
 
@@ -904,19 +908,22 @@ def init_script(
 ) -> str:
     """
     Model initialization: the variables of the system model, and the structs of the
-    control system (cfg and pwm) from the parameter values of the control system
-    (`_grid.export_values`), of grid-following control (`gfl`) or grid-forming
-    control.
+    control system (cfg, inner_ctrl, and pwm) from the parameter values of the
+    control system (`_grid.export_values`), of grid-following control (`gfl`) or
+    grid-forming control.
     """
     if gfl:
         cfg = GFL_CFG_FIELDS
+        inner = "CurrentVectorController"
         title = "% Grid-following control (CurrentVectorControllerCfg)\n"
     else:
         cfg = GFM_CFG_FIELDS
+        inner = "ObserverBasedGridFormingController"
         title = "% Grid-forming control (ObserverBasedGridFormingControllerCfg)\n"
     return (
         init_header(variables, comment)
         + title
         + "".join(assign(f"cfg.{n}", values[n]) for n in cfg)
+        + inner_ctrl_init("inner_ctrl", inner, "Inner controller", ["cfg"])
         + pwm_init(values)
     )

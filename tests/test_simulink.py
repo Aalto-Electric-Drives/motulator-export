@@ -17,6 +17,7 @@ Run from the repository root:
 # %%
 import ctypes
 from math import pi
+from pathlib import Path
 from typing import Any, cast
 
 import motulator.drive.gradnet as gn
@@ -48,14 +49,23 @@ from tests.sfunctions import (
 )
 from tests.systems import (
     CURRENT_MAP,
+    SM_CVC_D_MIN,
+    SM_KEYS,
     SM_PAR,
+    SM_VHZ_CASES,
+    SM_VHZ_IDS,
     VHZ_CASES,
     VHZ_IDS,
+    VHZ_RTOL,
     gfl_system,
     gfm_system,
     gradnet_control_system,
+    im_fvc_system,
     im_system,
+    sm_cvc_system,
     sm_system,
+    sm_vhz_system,
+    torque_system,
     vhz_system,
 )
 
@@ -71,8 +81,23 @@ def cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 @pytest.fixture(scope="module")
+def im_fvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(monolithic.IM_FVC, tmp_path_factory.mktemp("im_fvc"))
+
+
+@pytest.fixture(scope="module")
 def vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(monolithic.VHZ, tmp_path_factory.mktemp("vhz"))
+
+
+@pytest.fixture(scope="module")
+def sm_cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(monolithic.SM_CVC, tmp_path_factory.mktemp("sm_cvc"))
+
+
+@pytest.fixture(scope="module")
+def sm_vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(monolithic.SM_VHZ, tmp_path_factory.mktemp("sm_vhz"))
 
 
 @pytest.fixture(scope="module")
@@ -93,6 +118,7 @@ def test_parameter_errors(fvc: ctypes.CDLL) -> None:
     assert start(fvc, sfunction_params(block, values)) is not None
     values |= SM_PAR | {"i_s_max": 6.5, "T_s": 125e-6}
     values |= {"speed_J": 0.015, "speed_alpha_s": 25.0, "k_o": [1.0, 2.0, 3.0]}
+    values["observer_w_M"] = 0.0
     assert start(fvc, sfunction_params(block, values)) == "pwm_t_d must be a scalar."
     values |= {"pwm_t_d": 0.0, "pwm_u_th": 0.0, "pwm_i_0": 0.0, "pwm_feedforward": 1}
     values |= {"pwm_d_min": 0.0, "pwm_single_update": 0}
@@ -130,14 +156,15 @@ def test_flux_vector_control(
 
 
 @pytest.mark.parametrize(
-    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked"),
+    ("sensorless", "t_d", "i_0", "u_th", "single_update", "blocked", "discrete"),
     [
-        (True, 0.0, 0.0, 0.0, False, False),
-        (False, 0.0, 0.0, 0.0, False, False),
-        (True, 2e-6, 0.0, 0.0, False, False),
-        (True, 2e-6, 0.5, 0.0, False, False),
-        (True, 2e-6, 0.5, 1.0, True, False),
-        (True, 0.0, 0.5, 1.0, False, True),
+        (True, 0.0, 0.0, 0.0, False, False, False),
+        (False, 0.0, 0.0, 0.0, False, False, False),
+        (True, 2e-6, 0.0, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 0.0, False, False, False),
+        (True, 2e-6, 0.5, 1.0, True, False, False),
+        (True, 0.0, 0.5, 1.0, False, True, False),
+        (True, 2e-6, 0.5, 0.0, False, False, True),
     ],
     ids=[
         "sensorless",
@@ -146,6 +173,7 @@ def test_flux_vector_control(
         "dead_time_tanh",
         "u_th_single",
         "u_th_blocked",
+        "discrete_dead_time",
     ],
 )
 def test_current_vector_control(
@@ -156,12 +184,14 @@ def test_current_vector_control(
     u_th: float,
     single_update: bool,
     blocked: bool,
+    discrete: bool,
 ) -> None:
     """The S-function of current-vector control should agree with motulator, also
     with the dead time and the threshold voltage of the converter and their
     compensation, with the current-direction function np.sign or tanh(i/i_0), with
-    single update, and with the gates blocked."""
-    args = (sensorless, t_d, i_0, u_th, single_update, blocked)
+    single update, with the gates blocked, and with the direct discrete-time current
+    controller."""
+    args = (sensorless, t_d, i_0, u_th, single_update, blocked, discrete)
     build, signals = im_system(*args)
     values = _im.export_values(build()[1])
     params = sfunction_params(monolithic.CVC, values)
@@ -169,6 +199,26 @@ def test_current_vector_control(
     compare(build, model.Simulation, drive_sfun(cvc, monolithic.CVC), signals, 0.3)
     check_dc_bus_limit(cvc, monolithic.CVC, IM_INPUTS, restarter(cvc, params))
     cvc.sfun_terminate()
+
+
+@pytest.mark.parametrize(
+    ("sensorless", "t_d", "blocked", "d_min"),
+    [(True, 0.0, False, 0.0), (False, 0.0, False, 0.0), (True, 2e-6, False, 0.2)],
+    ids=["sensorless", "sensored", "dead_time_min_pulse"],
+)
+def test_im_flux_vector_control(
+    im_fvc: ctypes.CDLL, sensorless: bool, t_d: float, blocked: bool, d_min: float
+) -> None:
+    """The S-function of flux-vector control of an induction machine should agree
+    with motulator, also with the dead-time compensation and the minimum pulses."""
+    build, signals = im_fvc_system(sensorless, t_d, blocked, d_min)
+    values = _im.export_values(build()[1])
+    params = sfunction_params(monolithic.IM_FVC, values)
+    assert start(im_fvc, params) is None
+    sfun = drive_sfun(im_fvc, monolithic.IM_FVC)
+    compare(build, model.Simulation, sfun, signals, 0.3)
+    check_dc_bus_limit(im_fvc, monolithic.IM_FVC, IM_INPUTS, restarter(im_fvc, params))
+    im_fvc.sfun_terminate()
 
 
 @pytest.mark.parametrize(
@@ -184,9 +234,101 @@ def test_vhz_control(
     values = _im.export_vhz_values(build()[1])
     params = sfunction_params(monolithic.VHZ, values)
     assert start(vhz, params) is None
-    compare(build, model.Simulation, drive_sfun(vhz, monolithic.VHZ), signals, 1.0)
+    sfun = drive_sfun(vhz, monolithic.VHZ)
+    compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
     check_dc_bus_limit(vhz, monolithic.VHZ, VHZ_INPUTS, restarter(vhz, params))
     vhz.sfun_terminate()
+
+
+@pytest.mark.parametrize(
+    ("sensorless", "t_d", "blocked", "discrete", "d_min"),
+    [
+        (True, 0.0, False, False, 0.0),
+        (False, 0.0, False, False, 0.0),
+        (True, 2e-6, False, False, 0.0),
+        (True, 0.0, True, False, 0.0),
+        (True, 0.0, False, True, SM_CVC_D_MIN),
+        (True, 0.0, True, True, 0.0),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "dead_time",
+        "blocked",
+        "discrete_min_pulse",
+        "discrete_blocked",
+    ],
+)
+def test_sm_current_vector_control(
+    sm_cvc: ctypes.CDLL,
+    sensorless: bool,
+    t_d: float,
+    blocked: bool,
+    discrete: bool,
+    d_min: float,
+) -> None:
+    """The S-function of current-vector control of a synchronous machine should agree
+    with motulator, also with the dead-time compensation, the gates blocked (the
+    flying start), and the direct discrete-time current controller with the minimum
+    pulses."""
+    build, signals = sm_cvc_system(sensorless, t_d, blocked, discrete, d_min)
+    values, _ = _sm.export_values(build()[1])
+    params = sfunction_params(monolithic.SM_CVC, values)
+    assert start(sm_cvc, params) is None
+    compare(
+        build, model.Simulation, drive_sfun(sm_cvc, monolithic.SM_CVC), signals, 0.3
+    )
+    check_dc_bus_limit(sm_cvc, monolithic.SM_CVC, SM_INPUTS, restarter(sm_cvc, params))
+    sm_cvc.sfun_terminate()
+
+
+# Monolithic vector control systems in the torque-control mode, by the keys of
+# `torque_system`
+TORQUE_BLOCKS = {
+    "fvc": monolithic.FVC_TORQUE,
+    "smcvc": monolithic.SM_CVC_TORQUE,
+    "cvc": monolithic.CVC_TORQUE,
+    "imfvc": monolithic.IM_FVC_TORQUE,
+}
+
+
+@pytest.mark.parametrize(
+    ("key", "sensorless"),
+    [("fvc", True), ("smcvc", False), ("cvc", True), ("imfvc", False)],
+    ids=["fvc", "smcvc_sensored", "cvc", "imfvc_sensored"],
+)
+def test_torque_control(tmp_path: Path, key: str, sensorless: bool) -> None:
+    """The S-functions of the vector control systems in the torque-control mode
+    (without the speed controller) should agree with motulator, with the external
+    rotor speed."""
+    block = TORQUE_BLOCKS[key]
+    sfun = compile_sfunction(block, tmp_path)
+    build, signals = torque_system(key, sensorless)
+    ctrl = build()[1]
+    values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
+    params = sfunction_params(block, values)
+    assert start(sfun, params) is None
+    compare(build, model.Simulation, drive_sfun(sfun, block), signals, 0.3)
+    inputs = SM_INPUTS if key in SM_KEYS else IM_INPUTS
+    check_dc_bus_limit(sfun, block, inputs, restarter(sfun, params))
+    sfun.sfun_terminate()
+
+
+@pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)
+def test_sm_vhz_control(
+    sm_vhz: ctypes.CDLL, t_d: float, d_min: float, blocked: bool
+) -> None:
+    """The S-function of observer-based V/Hz control of a synchronous machine should
+    agree with motulator, also with the dead-time compensation, the minimum pulses,
+    and the gates blocked."""
+    build, signals = sm_vhz_system(t_d, d_min, blocked)
+    values, _ = _sm.export_vhz_values(build()[1])
+    params = sfunction_params(monolithic.SM_VHZ, values)
+    assert start(sm_vhz, params) is None
+    sfun = drive_sfun(sm_vhz, monolithic.SM_VHZ)
+    compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
+    check_dc_bus_limit(sm_vhz, monolithic.SM_VHZ, VHZ_INPUTS, restarter(sm_vhz, params))
+    sm_vhz.sfun_terminate()
 
 
 @pytest.mark.parametrize("blocked", [False, True], ids=["enabled", "blocked"])

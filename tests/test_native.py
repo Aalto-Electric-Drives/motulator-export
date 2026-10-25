@@ -4,10 +4,11 @@ Test the native simulation against the simulation of motulator.
 The drive systems and the grid converter systems are simulated in motulator and
 natively, and the results are compared. With the zero-order hold (ZOH), the native
 simulation takes the same steps as motulator, so the results agree to the rounding
-errors. With the carrier comparison, a change of the quantized duty ratios at the
-rounding error changes the switching instants, so a fine quantization is used. With
-the diode bridge, the clamping of the inductor current at zero makes the step sizes
-sensitive to the rounding errors, so the control signals are compared.
+errors, also with the gates blocked, when the transitions of the diode states are
+located as events. With the carrier comparison, a change of the quantized duty ratios
+at the rounding error changes the switching instants, so a fine quantization is used.
+With the diode bridge, the clamping of the inductor current at zero makes the step
+sizes sensitive to the rounding errors, so the control signals are compared.
 
 Run from the repository root (requires gcc):
 
@@ -16,9 +17,11 @@ Run from the repository root (requires gcc):
 """
 
 # %%
-from math import inf, nan, pi
-from typing import Any
+from functools import partial
+from math import inf, nan, pi, sin
+from typing import Any, cast
 
+import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as control
 import motulator.drive.gradnet as gn
 import motulator.grid.control as grid_control
@@ -34,11 +37,16 @@ from tests.systems import BASE as GRID_BASE
 from tests.systems import (
     CURRENT_MAP,
     FLUX_MAP,
+    SM_CVC_D_MIN,
     Build,
+    blocked_drive,
     gfl_system,
     gfm_system,
+    im_fvc_system,
     im_system,
+    sm_cvc_system,
     sm_system,
+    sm_vhz_system,
     vhz_system,
 )
 from tests.systems import NOM as GRID_NOM
@@ -113,6 +121,48 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
     return mdl, ctrl
 
 
+def gradnet_cvc_drive(
+    discrete: bool = False,
+) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Drive of `gradnet_drive` with sensored current-vector control, whose machine
+    model is the GradNet flux map, optionally with the direct discrete-time current
+    controller (`discrete`).
+    """
+    mdl, fvc = gradnet_drive()
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
+    par = control.SaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
+    )
+    cfg = control.CurrentVectorControllerCfg(
+        i_s_max=17.6, alpha_o=2 * pi * 8, J=0.05, sensorless=False, discrete=discrete
+    )
+    ctrl = control.VectorControlSystem(
+        control.CurrentVectorController(par, cfg),
+        control.SpeedController(J=0.05, alpha_s=2 * pi * 4),
+    )
+    ctrl.set_speed_ref(cast(Any, fvc.ext_ref.w_M))
+    return mdl, ctrl
+
+
+def gradnet_vhz_drive() -> tuple[model.Drive, control.VHzControlSystem]:
+    """
+    Drive of `gradnet_drive` with observer-based V/Hz control, whose machine model is
+    the GradNet flux map.
+    """
+    mdl, _ = gradnet_drive()
+    flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
+    par = control.SaturatedSynchronousMachinePars(
+        n_p=2, R_s=0.63, psi_s_dq_fcn=flux_map
+    )
+    cfg = control.ObserverBasedVHzControllerCfg(i_s_max=17.6)
+    ctrl = control.VHzControlSystem(
+        control.ObserverBasedVHzController(par, cfg), slew_rate=2 * pi * 60
+    )
+    ctrl.set_speed_ref(StepSignal(time=0.05, after=100.0))
+    return mdl, ctrl
+
+
 def simulate(build: Any, t_stop: float, **kwargs: Any) -> tuple[Any, Any]:
     """Simulate the system in motulator and natively."""
     res_py = model.Simulation(*build(), show_progress=False).simulate(t_stop, **kwargs)
@@ -183,6 +233,185 @@ def test_gradnet() -> None:
     check(*simulate(gradnet_drive, 0.3), rtol=1e-9)
 
 
+@pytest.mark.parametrize(
+    "build",
+    [
+        sm_vhz_system(t_d=0.0, d_min=0.0)[0],
+        sm_vhz_system(t_d=0.0, d_min=0.2)[0],
+        gradnet_vhz_drive,
+    ],
+    ids=["smvhz", "smvhz_d_min", "smvhz_gradnet"],
+)
+def test_sm_vhz(build: Build) -> None:
+    """Observer-based V/Hz control, also with a GradNet flux map."""
+    check(*simulate(build, 0.3), rtol=1e-9)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        sm_cvc_system(sensorless=True, t_d=0.0)[0],
+        sm_cvc_system(sensorless=False, t_d=0.0)[0],
+        gradnet_cvc_drive,
+        sm_cvc_system(sensorless=True, t_d=0.0, discrete=True)[0],
+        sm_cvc_system(sensorless=True, t_d=0.0, discrete=True, d_min=SM_CVC_D_MIN)[0],
+        sm_cvc_system(sensorless=True, t_d=2e-6, discrete=True, d_min=SM_CVC_D_MIN)[0],
+        partial(gradnet_cvc_drive, discrete=True),
+    ],
+    ids=[
+        "sensorless",
+        "sensored",
+        "gradnet",
+        "discrete",
+        "discrete_d_min",
+        "discrete_d_err_d_min",
+        "discrete_gradnet",
+    ],
+)
+def test_sm_current_vector_control(build: Build) -> None:
+    """Current-vector control, also with a GradNet flux map and with the direct
+    discrete-time current controller, which takes the limited voltage reference of
+    the PWM, also with the minimum pulses and the compensation of the duty-ratio
+    error."""
+    check(*simulate(build, 0.3), rtol=1e-9)
+
+
+def torque_drive(
+    method: str, sensorless: bool = True
+) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    Drive in the torque-control mode (`speed_ctrl=None`) with the external rotor speed
+    (`ExternalRotorSpeed`): the 2.2-kW IPMSM with flux-vector or current-vector
+    control (`method` "fvc" or "cvc"), the speed ramping up after the start, or the
+    2.2-kW induction machine of plot_2kw_im_cvc_tq.py with current-vector or
+    flux-vector control ("im_cvc" or "im_fvc"), the speed varying sinusoidally.
+    """
+    mechanics = model.ExternalRotorSpeed()
+    if method.startswith("im"):
+        nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
+        base = utils.BaseValues.from_nominal(nom, n_p=2)
+        par = model.InductionMachineInvGammaPars(
+            n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
+        )
+        mdl = model.Drive(
+            model.InductionMachine(par),
+            mechanics,
+            model.VoltageSourceConverter(u_dc=540),
+        )
+        if method == "im_fvc":
+            vector_ctrl: Any = im_control.FluxVectorController(
+                par,
+                im_control.FluxVectorControllerCfg(
+                    psi_s_nom=base.psi, i_s_max=1.5 * base.i, sensorless=sensorless
+                ),
+            )
+        else:
+            vector_ctrl = im_control.CurrentVectorController(
+                par,
+                im_control.CurrentVectorControllerCfg(
+                    psi_s_nom=base.psi, i_s_max=1.5 * base.i, sensorless=sensorless
+                ),
+            )
+        ctrl = control.VectorControlSystem(vector_ctrl, speed_ctrl=None)
+        ctrl.set_torque_ref(lambda t: (t > 0.25) * nom.tau - (t > 1.25) * 2 * nom.tau)
+        mechanics.set_external_rotor_speed(lambda t: 0.5 * base.w_M * sin(2 * pi * t))
+        return mdl, ctrl
+    par = model.SynchronousMachinePars(
+        n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
+    )
+    mdl = model.Drive(
+        model.SynchronousMachine(par), mechanics, model.VoltageSourceConverter(u_dc=540)
+    )
+    if method == "fvc":
+        cfg: Any = control.FluxVectorControllerCfg(
+            i_s_max=1.5 * BASE.i, sensorless=sensorless
+        )
+        vector_ctrl = control.FluxVectorController(par, cfg)
+    else:
+        cfg = control.CurrentVectorControllerCfg(
+            i_s_max=1.5 * BASE.i, sensorless=sensorless
+        )
+        vector_ctrl = control.CurrentVectorController(par, cfg)
+    ctrl = control.VectorControlSystem(vector_ctrl)
+    ctrl.set_torque_ref(lambda t: (t > 0.1) * 0.5 * NOM.tau)
+    mechanics.set_external_rotor_speed(lambda t: BASE.w_M * min(t / 0.2, 0.8))
+    return mdl, ctrl
+
+
+@pytest.mark.parametrize(
+    ("method", "sensorless", "t_stop"),
+    [
+        ("fvc", True, 0.4),
+        ("fvc", False, 0.4),
+        ("cvc", True, 0.4),
+        ("im_cvc", True, 2.0),
+        ("im_fvc", True, 2.0),
+    ],
+    ids=["fvc", "fvc_sensored", "cvc", "im_cvc", "im_fvc"],
+)
+def test_torque_control(method: str, sensorless: bool, t_stop: float) -> None:
+    """
+    Torque-control mode (no speed controller) with the external rotor speed
+    (`ExternalRotorSpeed`), whose rotor angle is the only state of the mechanics.
+    """
+    res_py, res_c = simulate(partial(torque_drive, method, sensorless), t_stop)
+    assert np.all(res_c.ctrl.ref.w_M == None)  # noqa: E711, as in motulator
+    check(res_py, res_c, rtol=1e-9)
+
+
+def im_cvc_discrete_drive(
+    discrete: bool,
+) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    The induction machine drive of plot_2kw_im_cvc_discrete.py in the torque-control
+    mode at the constant external speed of 0.5 p.u., with the continuous-time or the
+    direct discrete-time current controller (`discrete`) and the initial speed
+    estimate of the observer.
+    """
+    nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
+    base = utils.BaseValues.from_nominal(nom, n_p=2)
+    par = model.InductionMachineInvGammaPars(
+        n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
+    )
+    mdl = model.Drive(
+        model.InductionMachine(par),
+        model.ExternalRotorSpeed(),
+        model.VoltageSourceConverter(u_dc=540),
+        pwm=True,
+    )
+    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization
+    cast(Any, mdl.mechanics).set_external_rotor_speed(lambda t: 0.5 * base.w_M)
+    cfg = im_control.CurrentVectorControllerCfg(
+        psi_s_nom=base.psi,
+        i_s_max=2 * base.i,
+        alpha_c=2 * pi * 700,
+        T_s=200e-6,
+        discrete=discrete,
+    )
+    vector_ctrl = im_control.CurrentVectorController(par, cfg)
+    vector_ctrl.observer.w_M = 0.5 * base.w_M  # Initial speed estimate
+    ctrl = control.VectorControlSystem(vector_ctrl)
+    ctrl.set_torque_ref(
+        lambda t: nom.tau * (0.3 * (t > 0.3) + 0.2 * (t > 0.32) - 0.8 * (t > 0.34))
+    )
+    return mdl, ctrl
+
+
+@pytest.mark.parametrize("discrete", [False, True], ids=["continuous", "discrete"])
+def test_initial_speed_estimate(discrete: bool) -> None:
+    """
+    The initial speed estimate of the observer (`vector_ctrl.observer.w_M`) in the drive
+    of plot_2kw_im_cvc_discrete.py, with the carrier comparison (with fine quantization,
+    whose switching instants may differ by a quantum, see `test_ipmsm_pwm`). The stop
+    time 0.37 s of the example is a sampling instant (1850*T_s), at which the sampling
+    instants accumulated from the switching intervals may differ by a rounding error,
+    which decides whether the sampling instant is simulated, so the stop time is just
+    before it.
+    """
+    res_py, res_c = simulate(partial(im_cvc_discrete_drive, discrete), 0.3699)
+    check(res_py, res_c, rtol=1e-4, same_steps=False)
+
+
 def test_n_eval() -> None:
     """Evenly spaced points of the solver (N_eval)."""
     check(*simulate(ipmsm_drive, 0.06, N_eval=4), rtol=1e-9)
@@ -221,9 +450,6 @@ def test_interface() -> None:
     mdl, ctrl = ipmsm_drive()
     with pytest.raises(NotImplementedError, match="RK45"):
         native.Simulation(mdl, ctrl, cfg=SolverCfg(method="DOP853"))
-    ctrl.set_enable(False)
-    with pytest.raises(NotImplementedError, match="Gate blocking"):
-        native.Simulation(mdl, ctrl)
 
 
 @pytest.mark.parametrize("case", ["sm", "im_nonlinearity", "sm_dc_bus"])
@@ -255,6 +481,22 @@ def test_final_state(case: str) -> None:
     assert np.isclose(mdl_c.converter.out.u_dc, mdl_py.converter.out.u_dc)
     assert np.isclose(mdl_c.converter.out.u_c_ab, mdl_py.converter.out.u_c_ab)
     assert np.isclose(mdl_c.machine.inp.u_s_ab, mdl_py.machine.inp.u_s_ab)
+
+
+def test_final_state_blocked() -> None:
+    """
+    The model ends with the gate enable and the diode states of the converter of the
+    simulation, here with the gates blocked, as in motulator.
+    """
+    build = sm_system(sensorless=True, t_d=0.0, blocked=True)[0]
+    mdl_py, ctrl_py = build()
+    model.Simulation(mdl_py, ctrl_py, show_progress=False).simulate(0.16)
+    mdl_c, ctrl_c = build()
+    native.Simulation(mdl_c, ctrl_c, show_progress=False).simulate(0.16)
+    assert mdl_c.t0 == mdl_py.t0
+    assert not mdl_py.converter.inp.enabled and not mdl_c.converter.inp.enabled
+    assert np.array_equal(mdl_c.converter._diodes, mdl_py.converter._diodes)
+    assert np.isclose(mdl_c.converter.out.u_c_ab, mdl_py.converter.out.u_c_ab)
 
 
 @pytest.mark.parametrize("N_eval", [0, 4])
@@ -295,6 +537,12 @@ def test_failed_interval(N_eval: int) -> None:
         im_system(sensorless=True, t_d=0.0, i_0=0.0)[0],
         im_system(sensorless=False, t_d=0.0, i_0=0.0)[0],
         im_system(sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.5, discrete=True)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.5, d_min=0.2)[0],
+        im_system(sensorless=True, t_d=2e-6, i_0=0.5, discrete=True, d_min=0.2)[0],
+        im_fvc_system(sensorless=True)[0],
+        im_fvc_system(sensorless=False, alpha_i=0.0)[0],
+        im_fvc_system(sensorless=True, t_d=2e-6, d_min=0.2)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.1)[0],
@@ -303,13 +551,20 @@ def test_failed_interval(N_eval: int) -> None:
         "cvc_sensorless",
         "cvc_sensored",
         "cvc_u_th_single",
+        "cvc_discrete",
+        "cvc_d_err_d_min",
+        "cvc_discrete_d_err_d_min",
+        "fvc",
+        "fvc_sensored_no_integral",
+        "fvc_d_err_d_min",
         "vhz",
         "vhz_open_loop",
         "vhz_d_min",
     ],
 )
 def test_induction_machine(build: Build) -> None:
-    """Current-vector control and observer-based V/Hz control."""
+    """Current-vector control, flux-vector control, and observer-based V/Hz control,
+    also with the minimum pulses and the compensation of the duty-ratio error."""
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
@@ -511,12 +766,86 @@ def test_grid_pwm() -> None:
     check(res_py, res_c, rtol=1e-6, same_steps=False)
 
 
+# %%
+# Gate blocking
+@pytest.mark.parametrize(
+    ("build", "t_stop"),
+    [
+        (sm_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
+        (sm_system(sensorless=False, t_d=0.0, blocked=True)[0], 0.3),
+        (sm_cvc_system(sensorless=True, t_d=0.0, blocked=True)[0], 0.3),
+        (sm_cvc_system(True, 0.0, blocked=True, discrete=True)[0], 0.3),
+        (im_system(sensorless=True, t_d=0.0, i_0=0.0, blocked=True)[0], 0.3),
+        (im_system(True, 0.0, 0.0, blocked=True, discrete=True)[0], 0.3),
+        (vhz_system(open_loop=False, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
+        (vhz_system(open_loop=True, t_d=0.0, d_min=0.0, blocked=True)[0], 0.3),
+        (sm_vhz_system(t_d=0.0, d_min=0.0, blocked=True)[0], 0.8),
+        (gfl_system(blocked=True)[0], 0.06),
+        (gfm_system(power_limitation=False, blocked=True)[0], 0.15),
+    ],
+    ids=[
+        "fvc",
+        "fvc_sensored",
+        "smcvc",
+        "smcvc_discrete",
+        "cvc",
+        "cvc_discrete",
+        "vhz",
+        "vhz_open_loop",
+        "smvhz",
+        "gfl",
+        "gfm",
+    ],
+)
+def test_gate_blocking(build: Build, t_stop: float) -> None:
+    """
+    With the gates blocked at the start and during the operation (see tests/systems.py),
+    the diodes of the converter conduct according to the currents, and the native
+    simulation takes the same steps as motulator, also at the events of the diode
+    transitions.
+    """
+    res_py, res_c = simulate(build, t_stop)
+    assert not np.all(res_c.mdl.converter.enabled)
+    check(res_py, res_c, rtol=1e-9)
+
+
+def test_gate_blocking_im_fvc() -> None:
+    """
+    Gate blocking in flux-vector control of an induction machine, as in
+    `test_gate_blocking`, to the tolerance of the torque reference limited by the
+    current while the rotor flux builds up after the release (see IM_FVC_RTOL).
+    """
+    res_py, res_c = simulate(im_fvc_system(sensorless=True, blocked=True)[0], 0.3)
+    assert not np.all(res_c.mdl.converter.enabled)
+    check(res_py, res_c, rtol=1e-6)
+
+
+def test_gate_blocking_gradnet() -> None:
+    """
+    The gates blocked with the GradNet current map with spatial harmonics, whose AC
+    port includes the current derivative due to the harmonics.
+    """
+
+    def build() -> tuple[model.Drive, control.VectorControlSystem]:
+        mdl, ctrl = gradnet_drive()
+        ctrl.set_enable(blocked_drive)
+        return mdl, ctrl
+
+    check(*simulate(build, 0.2), rtol=1e-9)
+
+
+def test_gate_blocking_n_eval() -> None:
+    """The events of the diode transitions with the evenly spaced points (N_eval)."""
+    build = sm_system(sensorless=True, t_d=0.0, blocked=True)[0]
+    check(*simulate(build, 0.2, N_eval=4), rtol=1e-9)
+
+
 def test_unsupported() -> None:
     """Unsupported systems raise errors."""
-    # Gate blocking
+    # Gate enable other than 0 and 1
     mdl, ctrl = gfl_system()[0]()
-    ctrl.set_enable(False)
-    with pytest.raises(NotImplementedError, match="Gate blocking"):
+    ctrl.set_enable(StepSignal(time=0.01, after=0.5))
+    with pytest.raises(ValueError, match="gate enable"):
         native.Simulation(mdl, ctrl)
     # DC-bus voltage control
     mdl, ctrl = gfl_system()[0]()

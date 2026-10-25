@@ -90,11 +90,17 @@ class _Schematic:
         label: str = "south",
         src_component: str | None = None,
         trailer: str = "",
+        src_model: str | None = None,
     ) -> None:
-        """Add a component."""
+        """
+        Add a component. A library component has its source `src_component`, and a
+        model reference also its model `src_model`.
+        """
         s = f"    Component {{\n      Type          {typ}\n"
         if src_component is not None:
             s += f"      SrcComponent  {_q(src_component)}\n"
+        if src_model is not None:
+            s += f"      SrcModel      {_q(src_model)}\n"
         s += (
             f"      Name          {_q(name)}\n"
             f"      Show          {'on' if show else 'off'}\n"

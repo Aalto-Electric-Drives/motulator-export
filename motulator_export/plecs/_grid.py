@@ -71,7 +71,7 @@ from motulator_export.plecs._common import (
     _check_initial_states,
     _write_model,
 )
-from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
+from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
 from motulator_export.plecs._grid_control import (
     GFL_BLOCK,
     GFL_CFG_FIELDS,
@@ -395,6 +395,7 @@ def write_model(
     ctrl: GridConverterControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the grid converter system, see `plecs.write_model`.
@@ -410,7 +411,7 @@ def write_model(
     init = init_script(
         export_plant_variables(mdl), values, INIT_COMMENT, gfl=block is GFL_BLOCK
     )
-    T_s = VALUES["T_s"]  # The model refers to cfg.T_s
+    T_s = T_S_EXPR
     lcl = isinstance(mdl.ac_filter, LCLFilter)
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
@@ -422,7 +423,7 @@ def write_model(
     voltages += _probe("u_gbc", ["Measured voltage"])
     sources += [("u_g_line", voltages)]
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
-    _add_control_system(sch, block, sources, VALUES, init)
+    _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     sch.dx = DC_DX + GATE_DX  # Space for the gate enable and the DC bus

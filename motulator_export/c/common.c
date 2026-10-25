@@ -81,8 +81,12 @@ static double lut_interp(const LUT *lut, double x)
  * bracket ends must have opposite signs (or be zero). */
 static double brentq(ScalarFunction f, double xa, double xb, void *data)
 {
-    const double xtol = 2e-12;
-    const double rtol = 8.881784197001252e-16;
+    return brentq_tol(f, xa, xb, data, 2e-12, 8.881784197001252e-16);
+}
+
+static double brentq_tol(ScalarFunction f, double xa, double xb, void *data,
+                         double xtol, double rtol)
+{
     const int iter = 100;
     double xpre = xa, xcur = xb;
     double xblk = 0.0, fblk = 0.0, spre = 0.0, scur = 0.0;
@@ -208,6 +212,64 @@ static void complex_pi_update(ComplexPIController *self, double T_s,
                               double complex u, double w_c)
 {
     self->u_i += T_s * (self->alpha_i + I * w_c) * (u - self->v);
+}
+
+/* DiscreteComplexController ------------------------------------------------ */
+
+static void discrete_complex_init(DiscreteComplexController *self, double alpha_c,
+                                  double T_s)
+{
+    self->T_s = T_s;
+    self->beta = exp(-alpha_c * T_s);
+    self->u_i = 0.0;
+    self->u_lim = 0.0;
+    self->w_c = 0.0;
+    self->e = 0.0;
+    self->u = 0.0;
+}
+
+/* Gains of the complex-vector design (_gains) */
+static void discrete_complex_gains(const DiscreteComplexController *self, double w_c,
+                                   double complex k[4])
+{
+    double T_s = self->T_s;
+    double beta = self->beta;
+    double complex Phi = cexp(-I * w_c * T_s); /* Rotation of the coordinates */
+    double complex Phi2 = Phi * Phi;
+    k[0] = (1.0 - beta) / (Phi2 * T_s);                                /* k_t */
+    k[1] = (1.0 - beta) * (1.0 - beta * Phi) / (Phi2 * T_s * T_s);     /* k_i */
+    k[2] = (1.0 - beta) * (1.0 + (1.0 - beta) / Phi + 1.0 / Phi2) / T_s; /* k_1 */
+    k[3] = (1.0 - beta) * (1.0 + Phi);                                 /* k_2 */
+}
+
+static double complex discrete_complex_compute_output(DiscreteComplexController *self,
+                                                      double complex i_ref,
+                                                      double complex i)
+{
+    double complex k[4];
+    discrete_complex_gains(self, self->w_c, k);
+    self->e = i_ref - i;
+    self->u = k[0] * i_ref - k[2] * i - k[3] * self->u_lim + self->u_i;
+    return self->u;
+}
+
+static void discrete_complex_update(DiscreteComplexController *self, double T_s,
+                                    double complex u, double w_c)
+{
+    double complex k[4];
+    discrete_complex_gains(self, self->w_c, k);
+    self->u_i += T_s * k[1] * (self->e - (self->u - u) / k[0]);
+    self->u_lim = u;
+    self->w_c = w_c;
+}
+
+static void discrete_complex_preset(DiscreteComplexController *self, double complex u,
+                                    double w_c)
+{
+    double complex k[4];
+    self->w_c = w_c;
+    discrete_complex_gains(self, w_c, k);
+    self->u_i = (1.0 + k[3]) * u;
 }
 
 /* CurrentLimiter ----------------------------------------------------------- */
@@ -412,8 +474,12 @@ static double pwm_half_period(const PWM *self, double T_s)
 }
 
 static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_ref[3],
-                             const double *i_abc, double u_dc, double T_half)
+                             const double *i_abc, double u_dc, double T_half,
+                             double d_realized[3])
 {
+    for (int k = 0; k < 3; k++) {
+        d_realized[k] = d_ref[k];
+    }
     for (int k = 0; k < 3; k++) {
         double candidates[2]; /* The leg switching, the leg clamped */
         if (d_abc[k] > 0.0 && d_abc[k] < self->d_min) {
@@ -425,19 +491,20 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
         } else {
             continue;
         }
-        double errors[2];
+        double realized[2];
         for (int j = 0; j < 2; j++) {
             d_abc[k] = candidates[j];
-            double realized = candidates[j];
+            realized[j] = candidates[j];
             if (i_abc != NULL) {
                 double d_err[3];
                 inverter_nonlinearity(self->t_d, self->u_th, self->i_0, i_abc, d_abc,
                                       u_dc, T_half, d_err);
-                realized -= d_err[k];
+                realized[j] -= d_err[k];
             }
-            errors[j] = fabs(realized - d_ref[k]);
         }
-        d_abc[k] = (errors[1] < errors[0]) ? candidates[1] : candidates[0];
+        int j = (fabs(realized[1] - d_ref[k]) < fabs(realized[0] - d_ref[k])) ? 1 : 0;
+        d_abc[k] = candidates[j];
+        d_realized[k] = realized[j];
     }
 }
 
@@ -498,12 +565,15 @@ static void pwm_duty_ratios(double complex u_c_ref_ab, double u_dc, int mme,
 static double complex pwm_compute_output(const PWM *self, double T_s,
                                          double complex u_c_ref_ab, double u_dc,
                                          double w, double complex i_c_ab,
-                                         double d_abc[3])
+                                         double d_abc[3], double complex *u_lim_ab)
 {
     /* A discharged DC bus, e.g., with blocked gates before the precharge */
     if (u_dc <= 0.0) {
         for (int k = 0; k < 3; k++) {
             d_abc[k] = 0.5;
+        }
+        if (u_lim_ab != NULL) {
+            *u_lim_ab = 0.0;
         }
         return 0.0;
     }
@@ -526,13 +596,17 @@ static double complex pwm_compute_output(const PWM *self, double T_s,
         }
     }
 
-    /* Minimum pulses */
+    /* Minimum pulses and the duty ratios realized with them */
+    double d_realized[3] = {d_ref[0], d_ref[1], d_ref[2]};
     if (self->d_min > 0.0) {
-        pwm_limit_pulses(self, d_abc, d_ref, compensate ? i_c_abc : NULL, u_dc,
-                         T_half);
+        pwm_limit_pulses(self, d_abc, d_ref, compensate ? i_c_abc : NULL, u_dc, T_half,
+                         d_realized);
     }
 
-    /* Limited voltage reference, including the compensation */
+    /* Limited voltage reference, excluding and including the compensation */
+    if (u_lim_ab != NULL) {
+        *u_lim_ab = abc2complex(d_realized) * u_dc;
+    }
     return abc2complex(d_abc) * u_dc;
 }
 

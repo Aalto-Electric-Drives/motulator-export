@@ -51,13 +51,17 @@ typedef struct {
 #define mxGetPr(p) ((double *)(p)->pr)
 #define mxIsDouble(p) ((void)(p), 1)
 #define mxIsComplex(p) ((void)(p), 0)
+#define mxIsEmpty(p) (mxGetNumberOfElements(p) == 0)
 
+#define SS_SIMMODE_NORMAL 0
+#define SS_SIMMODE_SIZES_CALL_ONLY 1
 #define SS_PRM_NOT_TUNABLE 0
 #define SS_OPTION_EXCEPTION_FREE_CODE 0
 #define UNUSED_ARG(x) (void)(x)
 #define CONTINUOUS_SAMPLE_TIME 0.0
 #define INHERITED_SAMPLE_TIME (-1.0)
 
+#define ssGetSimMode(S) ((void)(S), SS_SIMMODE_NORMAL) /* Always simulating */
 #define ssSetNumSFcnParams(S, n) ((S)->num_params = (n))
 #define ssGetNumSFcnParams(S) ((S)->num_params)
 #define ssGetSFcnParamsCount(S) ((S)->params_count)

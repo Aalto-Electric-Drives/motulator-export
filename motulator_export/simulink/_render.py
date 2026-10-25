@@ -4,11 +4,11 @@ Simulink export of the netlists of the control systems (see `plecs._netlist`).
 The C blocks are S-functions (`code` "c") or MATLAB Function blocks (`code`
 "matlab", see `_mfunction`), and the subsystems, the selectors, the multiplexers,
 and the tags are the corresponding Simulink blocks. The netlist is laid out in the
-geometry of Simulink, and the builder `blocks.add_netlist` adds the blocks at their
-positions, aligns them with the ports given by the alignments of the layout (since
-Simulink places the ports itself), and draws the lines through the corners of the
-wires. The contents of all subsystems are given as rows with the paths of the
-blocks relative to the control-system subsystem.
+geometry of Simulink, and the builder `motulator.internal.add_netlist` adds the
+blocks at their positions, aligns them with the ports given by the alignments of the
+layout (since Simulink places the ports itself), and draws the lines through the
+corners of the wires. The contents of all subsystems are given as rows with the
+paths of the blocks relative to the control-system subsystem.
 
 A MATLAB Function block has the mask of its C block, or a mask of its parameters,
 whose initialization collects the parameters into the struct p of the function. A
@@ -23,6 +23,7 @@ from typing import Any
 from motulator_export.plecs._netlist import (
     SIMULINK,
     CBlock,
+    Constant,
     Delay,
     Layout,
     Mask,
@@ -185,9 +186,9 @@ def _port(lay: Layout, ref: str, out: bool) -> str:
 
 def _corners(points: list[Point]) -> list[Any]:
     """
-    Corners of a wire as the arguments of `blocks.route`: 'x', x for a horizontal
-    and 'y', y for a vertical segment, except the last vertical one, which the route
-    adds to the destination.
+    Corners of a wire as the arguments of `motulator.internal.route`: 'x', x for a
+    horizontal and 'y', y for a vertical segment, except the last vertical one, which
+    the route adds to the destination.
     """
     out: list[Any] = []
     for a, b in zip(points[:-2], points[1:-1], strict=True):
@@ -205,8 +206,9 @@ def netlist_rows(
 ) -> dict[str, list[list[Any]]]:
     """
     Rows of the blocks, the alignments, the lines, and the masks of a subsystem and
-    its subsystems (see `blocks.add_netlist`), the paths relative to the subsystem.
-    The C blocks are S-functions (`code` "c") or MATLAB Function blocks ("matlab").
+    its subsystems (see `motulator.internal.add_netlist`), the paths relative to the
+    subsystem. The C blocks are S-functions (`code` "c") or MATLAB Function blocks
+    ("matlab").
     """
     if code not in CODES:
         raise ValueError(f"Unknown code {code}, not in {CODES}")
@@ -277,7 +279,7 @@ def _mfunction_block(
     Type, parameters, and mask of the MATLAB Function block of a C block, or of its
     subsystem with the unit delays, which is added to `children`. The parameters of
     a MATLAB Function block are its function, its sample time, and the widths of
-    its outputs (see `blocks.add_mfunction`).
+    its outputs (see `motulator.internal.add_mfunction`).
     """
     if isinstance(b, Wrapped):
         assert b.block is not None
@@ -291,7 +293,8 @@ def _mfunction_block(
             return "Subsystem", ["ContentPreviewEnabled", "off"], mask
     sample_time = "" if fun.sample_time is None else f"p.{fun.sample_time}"
     widths = [float(w) for w in fun.output_widths]
-    return "MATLAB Function", [fun.name, sample_time, widths], mask
+    param = [] if fun.param == "p" else [fun.param]
+    return "MATLAB Function", [fun.name, sample_time, widths, *param], mask
 
 
 def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
@@ -313,10 +316,10 @@ def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
     return [path, mask.type, mask.description, init, params, display]
 
 
-def _block(b: Any) -> tuple[str, list[str]]:
+def _block(b: Any) -> tuple[str, list[str]]:  # noqa: PLR0911
     """Type and parameters of a block of the netlist."""
     if isinstance(b, CBlock):
-        # Dummy parameters until the mask exists (see blocks.add_netlist)
+        # Dummy parameters until the lines exist (see motulator.internal.add_netlist)
         dummy = ", ".join(["1"] * len(b.params))
         return "S-Function", ["FunctionName", b.sfunction, "Parameters", dummy]
     if isinstance(b, Subsystem):
@@ -336,7 +339,19 @@ def _block(b: Any) -> tuple[str, list[str]]:
     if isinstance(b, Delay):
         sample_time = "-1" if b.sample_time is None else b.sample_time
         return "UnitDelay", ["SampleTime", sample_time]
-    # The names of the tags and the multiplexers are not shown
+    # The names of the tags, the multiplexers, and the constants are not shown (the
+    # value of a constant is)
+    if isinstance(b, Constant):
+        return "Constant", [
+            "Value",
+            b.value,
+            "SampleTime",
+            b.sample_time,
+            "OutDataTypeStr",
+            "double",
+            "ShowName",
+            "off",
+        ]
     if isinstance(b, Tag):
         params = ["GotoTag", b.tag, "ShowName", "off"]
         visibility = ["TagVisibility", "local"] if b.goto else []

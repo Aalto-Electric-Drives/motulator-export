@@ -1,14 +1,15 @@
 """
 Export motulator induction machine drives to PLECS.
 
-This module converts an induction machine drive with current-vector control or
-observer-based V/Hz control into a PLECS Standalone model, in the same way as
-`motulator_export.plecs._sm` does for synchronous machine drives. In the control
-system, each class of motulator is a block with a mask of its arguments (see
-`_im_control` and `_im_vhz_control`), with the C port in `c/im_current_vector.c`
-and `c/im_flux_vector.c`. The parameters are defined in the initialization commands
-of the PLECS model as the structs par (`InductionMachineInvGammaPars`), cfg
-(`CurrentVectorControllerCfg` or `ObserverBasedVHzControllerCfg`), speed_ctrl
+This module converts an induction machine drive with current-vector control,
+flux-vector control, or observer-based V/Hz control into a PLECS Standalone model, in
+the same way as `motulator_export.plecs._sm` does for synchronous machine drives. In
+the control system, each class of motulator is a block with a mask of its arguments
+(see `_im_control`, `_im_fvc_control`, and `_im_vhz_control`), with the C port in
+`c/im_current_vector.c` and `c/im_flux_vector.c`. The parameters are defined in the
+initialization commands of the PLECS model as the structs par
+(`InductionMachineInvGammaPars`), cfg (`CurrentVectorControllerCfg`,
+`FluxVectorControllerCfg`, or `ObserverBasedVHzControllerCfg`), speed_ctrl
 (`SpeedController`) or slew_rate (of `VHzControlSystem`), and pwm (`PWM`).
 The machine is the PLECS squirrel-cage induction machine, parametrized as the T
 model equivalent to the inverse-Γ model of motulator.
@@ -19,9 +20,10 @@ Currently supported:
   `InductionMachinePars` with a constant `L_s`) without core losses
 - Mechanical system (`MechanicalSystem` without friction), the converter, and the DC
   bus as in `motulator_export.plecs._sm`
-- Current-vector control (`CurrentVectorController`) in the sensorless or sensored
-  mode with the default observer gain `k_o`, and a speed controller
-  (`SpeedController`) in `VectorControlSystem`
+- Current-vector control (`CurrentVectorController`, also with the direct
+  discrete-time current controller) or flux-vector control (`FluxVectorController`)
+  in the sensorless or sensored mode with the default observer gain `k_o`, and a
+  speed controller (`SpeedController`) in `VectorControlSystem`
 - Observer-based V/Hz control (`ObserverBasedVHzController`) with the default
   observer gain `k_o` in `VHzControlSystem`, including pure open-loop V/Hz control
   as its special case (`L_M = inf` in the machine model of the control system)
@@ -47,14 +49,17 @@ from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import CurrentVectorController
-from motulator.drive.control._im_flux_vector import ObserverBasedVHzController
+from motulator.drive.control._im_flux_vector import (
+    FluxVectorController,
+    ObserverBasedVHzController,
+)
 from motulator.drive.model import Drive, InductionMachine
 from motulator.drive.utils._parameters import (
     InductionMachineInvGammaPars,
     InductionMachinePars,
 )
 
-from motulator_export._common import StepSignal, check_supported_pwm, gate_enable
+from motulator_export._common import StepSignal, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
     DC_DX,
@@ -70,8 +75,9 @@ from motulator_export.plecs._common import (
     _add_pwm,
     _write_model,
 )
-from motulator_export.plecs._control import INIT_COMMENT, VALUES, pwm_values
+from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
 from motulator_export.plecs._drive import (
+    EXTERNAL_SPEED_J,
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
@@ -81,16 +87,23 @@ from motulator_export.plecs._drive import (
     _add_phase_lines,
     _check_supported_plant,
     _check_supported_speed_control,
+    _check_supported_vhz_control,
     drive_references,
+    external_speed,
     mechanics_and_converter_variables,
     speed_ctrl_values,
+    torque_control,
 )
 from motulator_export.plecs._im_control import (
     CFG_FIELDS,
     CVC_BLOCK,
+    CVC_TORQUE_BLOCK,
     PAR_FIELDS,
     init_script,
 )
+from motulator_export.plecs._im_fvc_control import CFG_FIELDS as FVC_CFG_FIELDS
+from motulator_export.plecs._im_fvc_control import FVC_BLOCK, FVC_TORQUE_BLOCK
+from motulator_export.plecs._im_fvc_control import init_script as fvc_init_script
 from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._im_vhz_control import VHZ_BLOCK
 from motulator_export.plecs._im_vhz_control import init_script as vhz_init_script
@@ -118,10 +131,32 @@ def check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) ->
 def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the control system is not supported."""
     if isinstance(ctrl, VHzControlSystem):
-        _check_supported_vhz(ctrl)
+        check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        _check_supported_vhz_control(ctrl)
         return
-    check_supported_cvc(ctrl.vector_ctrl)
+    check_supported_vector_ctrl(ctrl.vector_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
+
+
+def check_supported_vector_ctrl(vector_ctrl: Any) -> None:
+    """
+    Raise an error if the vector controller (current-vector or flux-vector control)
+    is not supported.
+    """
+    if isinstance(vector_ctrl, FluxVectorController):
+        check_supported_fvc(vector_ctrl)
+    else:
+        check_supported_cvc(vector_ctrl)
+
+
+def check_supported_fvc(fvc: Any) -> None:
+    """Raise an error if the flux-vector controller is not supported."""
+    if not isinstance(fvc, FluxVectorController):
+        raise NotImplementedError("Only FluxVectorController supported")
+    if fvc.cfg.k_o is not None:
+        raise NotImplementedError("Only the default observer gain k_o supported")
+    if not isinstance(fvc.reference_gen.par, InductionMachineInvGammaPars):
+        raise NotImplementedError("Only InductionMachineInvGammaPars supported")
 
 
 def check_supported_cvc(cvc: Any) -> None:
@@ -130,18 +165,8 @@ def check_supported_cvc(cvc: Any) -> None:
         raise NotImplementedError("Only CurrentVectorController supported")
     if cvc.cfg.k_o is not None:
         raise NotImplementedError("Only the default observer gain k_o supported")
-    if cvc.cfg.discrete:
-        raise NotImplementedError("Direct discrete-time current control not supported")
     if not isinstance(cvc.reference_gen.par, InductionMachineInvGammaPars):
         raise NotImplementedError("Only InductionMachineInvGammaPars supported")
-
-
-def _check_supported_vhz(ctrl: VHzControlSystem) -> None:
-    """Raise an error if the V/Hz control system is not supported."""
-    check_supported_vhz_ctrl(ctrl.vhz_ctrl)
-    if type(ctrl).modulate is not VHzControlSystem.modulate:
-        raise NotImplementedError("Overridden modulate method not supported")
-    check_supported_pwm(ctrl, d_err=True)
 
 
 def check_supported_vhz_ctrl(vhz: Any) -> None:
@@ -155,8 +180,16 @@ def check_supported_vhz_ctrl(vhz: Any) -> None:
 
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
-    """Control-system block of current-vector control or V/Hz control."""
-    return VHZ_BLOCK if isinstance(ctrl, VHzControlSystem) else CVC_BLOCK
+    """
+    Control-system block of current-vector or flux-vector control (also in the
+    torque-control mode), or V/Hz control.
+    """
+    if isinstance(ctrl, VHzControlSystem):
+        return VHZ_BLOCK
+    torque = torque_control(ctrl)
+    if isinstance(ctrl.vector_ctrl, FluxVectorController):
+        return FVC_TORQUE_BLOCK if torque else FVC_BLOCK
+    return CVC_TORQUE_BLOCK if torque else CVC_BLOCK
 
 
 def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
@@ -174,19 +207,38 @@ def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
 def export_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     """
     Get the parameter values of the control system in the motulator API, None for
-    the defaults (see `_im_control.init_script`).
+    the defaults (see `_im_control.init_script` and `_im_fvc_control.init_script`).
     """
-    cvc = cast(CurrentVectorController, ctrl.vector_ctrl)
-    return cvc_values(cvc) | speed_ctrl_values(ctrl) | pwm_values(ctrl.pwm)
+    if isinstance(ctrl.vector_ctrl, FluxVectorController):
+        values = fvc_values(ctrl.vector_ctrl)
+    else:
+        values = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
+    return values | speed_ctrl_values(ctrl) | pwm_values(ctrl.pwm)
+
+
+def fvc_values(fvc: FluxVectorController) -> dict[str, Any]:
+    """
+    Get the parameter values of the flux-vector controller (see `export_values`):
+    its machine model (`PAR_FIELDS`), its configuration (`FVC_CFG_FIELDS`), and the
+    initial speed estimate of its observer (`observer_w_M`).
+    """
+    values = _fields(fvc.reference_gen.par, PAR_FIELDS)
+    values |= _fields(fvc.cfg, FVC_CFG_FIELDS)
+    values["sensorless"] = int(fvc.cfg.sensorless)
+    values["observer_w_M"] = float(fvc.observer.w_M)
+    return values
 
 
 def cvc_values(cvc: CurrentVectorController) -> dict[str, Any]:
     """
     Get the parameter values of the current-vector controller (see `export_values`):
-    its machine model (`PAR_FIELDS`) and its configuration (`CFG_FIELDS`).
+    its machine model (`PAR_FIELDS`), its configuration (`CFG_FIELDS`), and the
+    initial speed estimate of its observer (`observer_w_M`).
     """
     values = _fields(cvc.reference_gen.par, PAR_FIELDS) | _fields(cvc.cfg, CFG_FIELDS)
     values["sensorless"] = int(cvc.cfg.sensorless)
+    values["discrete"] = int(cvc.cfg.discrete)
+    values["observer_w_M"] = float(cvc.observer.w_M)
     return values
 
 
@@ -204,9 +256,10 @@ def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
     return variables + mechanics_and_converter_variables(mdl)
 
 
-def _add_im(sch: _Schematic) -> None:
+def _add_im(sch: _Schematic, J: str = "mechanics.J") -> None:
     """
-    Add the PLECS squirrel-cage induction machine (including the inertia).
+    Add the PLECS squirrel-cage induction machine (including the inertia J, see
+    EXTERNAL_SPEED_J).
 
     The inverse-Γ model of motulator corresponds to the T model of PLECS with zero
     rotor leakage inductance.
@@ -218,7 +271,7 @@ def _add_im(sch: _Schematic) -> None:
         "Rr": "machine.R_R",
         "Llr": "0",
         "Lm": "machine.L_M",
-        "J": "mechanics.J",
+        "J": J,
         "F": "0",
         "p": "machine.n_p",
         "wm0": "mechanics.w_M0",
@@ -245,14 +298,16 @@ def write_model(
     ctrl: VectorControlSystem | VHzControlSystem,
     t_stop: float,
     outputs: bool = False,
+    library: bool = False,
 ) -> Path:
     """
     Write a PLECS model of the induction machine drive, see `plecs.write_model`.
 
-    The control system is current-vector control (`VectorControlSystem`) or
-    observer-based V/Hz control (`VHzControlSystem`), whose inputs are `enable` (the
-    gate enable of `ctrl`), the speed reference, the phase currents, the DC-bus
-    voltage, and the converter voltages.
+    The control system is current-vector or flux-vector control
+    (`VectorControlSystem`) or observer-based V/Hz control (`VHzControlSystem`),
+    whose inputs are `enable` (the gate enable of `ctrl`), the speed reference, the
+    phase currents, the DC-bus voltage, and in vector control the measured rotor
+    speed.
 
     """
     path = Path(path)
@@ -262,21 +317,24 @@ def write_model(
     if isinstance(ctrl, VHzControlSystem):
         values = export_vhz_values(ctrl)
         init = vhz_init_script(variables, values, INIT_COMMENT)
+    elif isinstance(ctrl.vector_ctrl, FluxVectorController):
+        values = export_values(ctrl)
+        init = fvc_init_script(variables, values, INIT_COMMENT)
     else:
         values = export_values(ctrl)
         init = init_script(variables, values, INIT_COMMENT)
-    w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
-    T_s = VALUES["T_s"]  # The model refers to cfg.T_s
+    ref, mech_signal = drive_references(mdl, ctrl, values["T_s"])
+    T_s = T_S_EXPR
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
         (ENABLE, gate_enable(ctrl, values["T_s"])),
-        ("w_M_ref", w_M_ref),
+        ("tau_M_ref" if torque_control(ctrl) else "w_M_ref", ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
     ]
-    if block is CVC_BLOCK:
+    if block is not VHZ_BLOCK:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
-    y_sources = _add_control_system(sch, block, sources, VALUES, init)
+    y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.single_update)
     t_d = cast(CarrierComparison, mdl.pwm).t_d
@@ -289,9 +347,10 @@ def write_model(
     sch.dx += DC_DX + GATE_DX
     _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
-    _add_im(sch)
+    external = external_speed(mdl)
+    _add_im(sch, EXTERNAL_SPEED_J if external else "mechanics.J")
     _add_phase_lines(sch)
-    _add_mechanics(sch, tau_L, inertia=False)
+    _add_mechanics(sch, mech_signal, inertia=False, external=external)
     y_probes = _add_drive_outputs(sch, block, outputs, y_sources)
     size = (880 + sch.dx, max(520, y_probes + 50))
     return _write_model(path, init, t_stop, T_s, sch, size, outputs)

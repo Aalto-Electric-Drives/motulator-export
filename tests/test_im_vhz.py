@@ -30,6 +30,7 @@ from motulator.common.utils import complex2abc
 from motulator.drive import model, utils
 
 from tests.c_port import arr, compile_library, d
+from tests.systems import VHZ_RTOL
 
 CAPI = r"""
 #include "common.c"
@@ -231,7 +232,8 @@ def test_control_system(
     scale = np.max(np.abs(py), axis=0)
     for name, e, s in zip(NAMES, err, scale, strict=True):
         print(f"  {name}: max error {e:.3g} (max value {s:.3g})")
-    assert np.all(err <= 1e-8 * np.maximum(scale, 1.0))
+    rtol = np.array([VHZ_RTOL.get(name, 1e-8) for name in NAMES])
+    assert np.all(err <= rtol * np.maximum(scale, 1.0))
     # The drive runs at the speed reference
     w_M = res_c.mdl.mechanics.w_M[res_c.mdl.t > 0.5]
     assert np.all(np.abs(w_M - 0.8 * BASE.w_M) < 0.1 * BASE.w_M)
