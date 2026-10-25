@@ -203,18 +203,21 @@ def check_dc_bus_limit(
 
 def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem]:
     """
-    S-function control system of a drive, with the measured angle or speed (not in
+    S-function control system of a drive, with the speed reference (or the torque
+    reference in the torque-control mode) and the measured angle or speed (not in
     V/Hz control).
     """
 
     def sfun(ctrl: VectorControlSystem | VHzControlSystem) -> SFunctionControlSystem:
+        torque = "tau_M_ref" in block.inputs
+        ref = ctrl.ext_ref.tau_M if torque else ctrl.ext_ref.w_M
+
         def inputs(mdl: model.Drive, t: float) -> list[float]:
             mech = mdl.mechanics
             i_s_abc = mdl.machine.meas_currents()
             u_dc = mdl.converter.meas_dc_voltage()
             enabled = float(bool(get_value(ctrl._enable, t)))  # The gate enable
-            w_M_ref = cast(Any, ctrl.ext_ref.w_M)(t)
-            u = [enabled, w_M_ref, *i_s_abc, u_dc]
+            u = [enabled, get_value(cast(Any, ref), t), *i_s_abc, u_dc]
             if "theta_M" in block.inputs:
                 u.append(wrap(mech.meas_position()))
             elif "w_M" in block.inputs:

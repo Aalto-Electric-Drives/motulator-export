@@ -39,6 +39,10 @@ CONTROL_BLOCKS = [
     _sm_vhz_control.VHZ_BLOCK,
     _grid_control.GFL_BLOCK,
     _grid_control.GFM_BLOCK,
+    _sm_control.FVC_TORQUE_BLOCK,
+    _sm_cvc_control.CVC_TORQUE_BLOCK,
+    _im_control.CVC_TORQUE_BLOCK,
+    _im_fvc_control.FVC_TORQUE_BLOCK,
 ]
 
 

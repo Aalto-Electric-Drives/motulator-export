@@ -722,6 +722,36 @@ def speed_observer(sig: Signals, init: bool = False) -> CBlock:
     )
 
 
+def torque_reference(sig: Signals) -> CBlock:
+    """
+    Torque reference in the torque-control mode of a vector control system (without
+    the speed controller, VectorControlSystem._compute_inner_output): the external
+    torque reference at the sampling instants, or zero in standby
+    (_compute_inner_standby_output).
+    """
+    output = (
+        "/* The external torque reference, zero in standby */\n"
+        "OutputSignal(0, 0) = (InputSignal(0, 0) != 0.0) ? 0.0 : InputSignal(1, 0);\n"
+    )
+    mcode = MCode(
+        output="% The external torque reference, zero in standby\n"
+        "tau_M_ref = tau_M_ref_in;\n"
+        "if standby ~= 0\n"
+        "    tau_M_ref = 0;\n"
+        "end\n",
+        checks=required("T_s"),
+    )
+    return CBlock(
+        "torque_reference",
+        [Port("standby", 1), Port("tau_M_ref_in", 1)],
+        [Port("tau_M_ref", 1)],
+        sig.function_code(output, "T_s = P(0, 0);\n", SAMPLING),
+        ["T_s"],
+        sig.sfunction("torque_reference"),
+        mcode=mcode,
+    )
+
+
 def standby(sig: Signals) -> CBlock:
     """
     Standby of a vector control system (VectorControlSystem._standby): while the
@@ -1134,10 +1164,12 @@ def monitor(
     monitored: dict[str, str],
     inputs: list[Port],
     prelude: str = "",
+    function: str = "monitored_signals",
 ) -> CBlock:
     """
     Monitored signals: the groups `outputs` of the expressions `monitored` of the
-    feedback signals fbk, the references ref, and the other `inputs`.
+    feedback signals fbk, the references ref, and the other `inputs`, computed by
+    the function `function` of the S-function and the MATLAB function.
     """
     code = sig.function_code(
         sig.read(0, "fbk")
@@ -1161,9 +1193,27 @@ def monitor(
         [Port(name, len(signals)) for name, signals in outputs.items()],
         code,
         ["T_s"],
-        sig.sfunction("monitored_signals"),
+        sig.sfunction(function),
         mcode=mcode,
     )
+
+
+def drive_monitor(
+    sig: Signals,
+    outputs: dict[str, list[str]],
+    monitored: dict[str, str],
+    torque: bool,
+    prelude: str = "",
+) -> CBlock:
+    """
+    Monitored signals of a vector control system of a drive (see `monitor`), with
+    the speed reference as an input, or in the torque-control mode (`torque`)
+    without it, by its own function.
+    """
+    if torque:
+        groups = torque_outputs(outputs)
+        return monitor(sig, groups, monitored, [], prelude, "torque_monitored_signals")
+    return monitor(sig, outputs, monitored, [Port("w_M_ref", 1)], prelude)
 
 
 # %%
@@ -1175,6 +1225,7 @@ def vector_control_system(
     measurement: CBlock,
     vector_ctrl: Subsystem,
     signals: CBlock,
+    torque: bool = False,
 ) -> Subsystem:
     """
     Vector control system of a drive (VectorControlSystem): the contents of the
@@ -1182,12 +1233,15 @@ def vector_control_system(
     and the sensorless mode of the vector controller.
 
     The block `standby` gives the standby of the control system to the speed
-    controller, the PWM, and `modulate`. The vector controller has the inputs
-    `tau_M_ref`, `meas`, `u_c_ab`, and optionally `u_c_zoh_ab`, and the outputs
-    `fbk` and `ref`. A vector controller with the direct discrete-time current
-    controller also has the inputs `u_c_lim_ab` (the limited voltage reference of the
-    PWM) and `enable` (the gate enable, by tags). The inputs of the monitored signals
-    are `fbk`, `ref`, and `w_M_ref`.
+    controller, the PWM, and `modulate`. In the torque-control mode (`torque`,
+    without the speed controller), the second input is the torque reference, which
+    the block `torque_reference` gives to the vector controller (zero in standby).
+    The vector controller has the inputs `tau_M_ref`, `meas`, `u_c_ab`, and
+    optionally `u_c_zoh_ab`, and the outputs `fbk` and `ref`. A vector controller
+    with the direct discrete-time current controller also has the inputs
+    `u_c_lim_ab` (the limited voltage reference of the PWM) and `enable` (the gate
+    enable, by tags). The inputs of the monitored signals are `fbk`, `ref`, and
+    `w_M_ref` (not in the torque-control mode).
 
     """
     vc = vector_ctrl.name
@@ -1201,14 +1255,67 @@ def vector_control_system(
         Tag("Goto fbk", "fbk", fbk, goto=True),
         Tag("Goto ref", "ref", ref, goto=True),
         Tag("Goto standby", "standby", 1, goto=True),
-        Tag("From fbk", "fbk", fbk, goto=False),
-        Tag("From ref", "ref", ref, goto=False),
+        *(
+            []
+            if torque
+            else [
+                Tag("From fbk", "fbk", fbk, goto=False),
+                Tag("From ref", "ref", ref, goto=False),
+            ]
+        ),
         Tag("From standby", "standby", 1, goto=False),
         Tag("From standby 2", "standby", 1, goto=False),
         Tag("From fbk 2", "fbk", fbk, goto=False),
         Tag("From ref 2", "ref", ref, goto=False),
     ]
     meas = [(p.name, f"get_measurement:{p.name}") for p in measurement.inputs]
+    # The torque reference: the external one, or that of the speed controller
+    if torque:
+        reference: list[Any] = [torque_reference(sig)]
+        # Connections of the standby, the input, and the feedback and the output
+        ref_standby = [("standby:standby", "torque_reference:standby")]
+        ref_input = [("tau_M_ref", "torque_reference:tau_M_ref_in")]
+        ref_output = [("torque_reference:tau_M_ref", f"{vc}:tau_M_ref")]
+        reference_columns = [
+            ["standby", "get_measurement"],
+            ["Goto standby", "From standby"],
+            ["torque_reference", "PWM"],
+        ]
+        reference_align = {
+            "torque_reference:standby": "standby:standby",
+            "tau_M_ref": "torque_reference:tau_M_ref_in",
+            "get_measurement:meas": "torque_reference:tau_M_ref+2",
+            "Goto standby": "standby:standby-1",  # Above the torque reference
+        }
+    else:
+        reference = [
+            sig.selector("fbk", "w_M"),
+            sig.selector("ref", "tau_M"),
+            speed_controller(sig),
+        ]
+        ref_standby = [("standby:standby", "SpeedController:standby")]
+        ref_input = [
+            ("w_M_ref", "SpeedController:w_M_ref"),
+            ("w_M_ref", f"{MONITOR}:w_M_ref"),
+        ]
+        ref_output = [
+            ("From fbk", "fbk.w_M:u"),
+            ("From ref", "ref.tau_M:u"),
+            ("fbk.w_M:y", "SpeedController:w_M"),
+            ("ref.tau_M:y", "SpeedController:tau_M"),
+            ("SpeedController:tau_M_ref", f"{vc}:tau_M_ref"),
+        ]
+        reference_columns = [
+            ["standby", "From fbk", "From ref", "get_measurement"],
+            ["Goto standby", "fbk.w_M", "ref.tau_M", "From standby"],
+            ["SpeedController", "PWM"],
+        ]
+        reference_align = {
+            "fbk.w_M:u": "From fbk",
+            "ref.tau_M:u": "From ref",
+            "SpeedController:w_M": "fbk.w_M:y",
+            "get_measurement:meas": "SpeedController:tau_M_ref+1",
+        }
     return Subsystem(
         name,
         inputs,
@@ -1217,9 +1324,7 @@ def vector_control_system(
             measurement,
             *tags,
             standby(sig),
-            sig.selector("fbk", "w_M"),
-            sig.selector("ref", "tau_M"),
-            speed_controller(sig),
+            *reference,
             pwm(sig, standby_input=True, limited=lim),
             vector_ctrl,
             sig.selector("ref", "u_s", complex_=True),
@@ -1228,20 +1333,15 @@ def vector_control_system(
         ],
         [
             (ENABLE, "standby:enable"),
-            ("standby:standby", "SpeedController:standby"),
+            *ref_standby,
             ("standby:standby", "Goto standby"),
             ("From standby", "PWM:standby"),
             ("From standby 2", "modulate:standby"),
-            ("w_M_ref", "SpeedController:w_M_ref"),
-            ("w_M_ref", f"{MONITOR}:w_M_ref"),
+            *ref_input,
             *meas,
             ("get_measurement:meas", "PWM:meas"),
             ("get_measurement:meas", f"{vc}:meas"),
-            ("From fbk", "fbk.w_M:u"),
-            ("From ref", "ref.tau_M:u"),
-            ("fbk.w_M:y", "SpeedController:w_M"),
-            ("ref.tau_M:y", "SpeedController:tau_M"),
-            ("SpeedController:tau_M_ref", f"{vc}:tau_M_ref"),
+            *ref_output,
             ("PWM:u_c_ab", f"{vc}:u_c_ab"),
             *([("PWM:u_c_zoh_ab", f"{vc}:u_c_zoh_ab")] if zoh else []),
             *(
@@ -1262,9 +1362,7 @@ def vector_control_system(
         ],
         columns=[
             [p.name for p in inputs],
-            ["standby", "From fbk", "From ref", "get_measurement"],
-            ["Goto standby", "fbk.w_M", "ref.tau_M", "From standby"],
-            ["SpeedController", "PWM"],
+            *reference_columns,
             [vc, "d_abc"],
             [
                 "Goto fbk",
@@ -1279,10 +1377,7 @@ def vector_control_system(
         align={
             "standby:enable": ENABLE,
             "Goto standby": "standby:standby+1",
-            "fbk.w_M:u": "From fbk",
-            "ref.tau_M:u": "From ref",
-            "SpeedController:w_M": "fbk.w_M:y",
-            "get_measurement:meas": "SpeedController:tau_M_ref+1",
+            **reference_align,
             "PWM:meas": "get_measurement:meas+2",
             "From standby": "PWM:standby",
             f"{vc}:meas": "get_measurement:meas",
@@ -1294,7 +1389,7 @@ def vector_control_system(
             f"{MONITOR}:fbk": "From fbk 2",
         },
         lanes={"PWM:u_c_ref_ab": "below:1", "PWM:w": "below:0"},
-        tags=["w_M_ref", *([ENABLE] if lim else [])],
+        tags=[*([] if torque else ["w_M_ref"]), *([ENABLE] if lim else [])],
     )
 
 
@@ -1536,15 +1631,20 @@ def control_block(
     netlist: Callable[[], Subsystem],
     inner: str,
     cls: str = "VectorControlSystem",
+    torque: bool = False,
 ) -> ControlBlock:
     """
     Control-system block of a control system of the class `cls` (e.g.,
     VectorControlSystem) with the inner controller of the class `inner` (e.g.,
     FluxVectorController), whose contents are `netlist`. The mask has the arguments
-    of `cls` (`TOP_ARGS`). The mask type is the name of the block, which the Library
-    Browser of PLECS shows, and the description names the classes.
+    of `cls` (`TOP_ARGS`), without the speed controller in the torque-control mode
+    of a vector control system (`torque`). The mask type is the name of the block,
+    which the Library Browser of PLECS shows, and the description names the
+    classes.
     """
     args, init = TOP_ARGS[cls]
+    if torque:
+        args = [(v, p) for v, p in args if v != "speed_ctrl"]
     params = [MaskParam(v, p.format(inner), cls, "", True) for v, p in args]
     return ControlBlock(
         name=name,
@@ -1562,6 +1662,26 @@ def control_block(
         netlist=netlist,
         mask_init=init,
     )
+
+
+def torque_inputs(inputs: list[Port]) -> list[Port]:
+    """
+    Inputs of a vector control system in the torque-control mode: the torque
+    reference instead of the speed reference (the second input).
+    """
+    return [inputs[0], Port("tau_M_ref", 1), *inputs[2:]]
+
+
+def torque_outputs(outputs: dict[str, list[str]]) -> dict[str, list[str]]:
+    """
+    Groups of the monitored signals of a vector control system in the torque-control
+    mode, without the speed reference.
+    """
+    groups = {}
+    for name, signals in outputs.items():
+        kept = [n for n in signals if n != "w_M_ref"]
+        groups[f"{name.split(' (')[0]} ({', '.join(kept)})"] = kept
+    return groups
 
 
 # Mask values of the control systems: the structs of the arguments of the top-level
@@ -1617,7 +1737,12 @@ def inner_ctrl_init(name: str, cls: str, title: str, fields: list[str]) -> str:
 
 
 def speed_ctrl_init(values: dict[str, Any]) -> str:
-    """The struct speed_ctrl of the model initialization."""
+    """
+    The struct speed_ctrl of the model initialization, none in the torque-control
+    mode (without the values of the speed controller).
+    """
+    if "speed_J" not in values:
+        return ""
     return "% Speed controller (SpeedController)\n" + "".join(
         assign(f"speed_ctrl.{n}", values[f"speed_{n}"])
         for n in ("J", "alpha_s", "alpha_i", "tau_M_max")

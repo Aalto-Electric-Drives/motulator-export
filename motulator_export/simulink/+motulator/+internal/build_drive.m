@@ -4,7 +4,8 @@ function scope = build_drive(sys, mdl, c, lib, info)
 %   library LIB: the control system C (see control_system), whose block INFO is
 %   described by the data of the library (see block_info), the computational delay
 %   of one sampling period, the carrier comparison, the converter, the machine,
-%   and the mechanics of the drive MDL, with the references and the load torque.
+%   and the mechanics of the drive MDL, with the references and the load torque
+%   (or the external rotor speed of ExternalRotorSpeed).
 %   The masks of the blocks refer to the parameters of the model. The root-level
 %   output ports 'mdl' and 'ctrl' give the machine signals [i_a i_b i_c w_M
 %   theta_M tau_M] and the monitored signals of the control system, which are also
@@ -31,16 +32,22 @@ else
     pos = [680 0 780 120];
 end
 add_block([lib '/' mdl.machine.block()], [sys '/Machine'], 'Position', pos);
-add_block([lib '/MechanicalSystem'], [sys '/Mechanics'], 'Position', [890 0 990 80]);
+external = isa(mdl.mechanics, 'motulator.drive.model.ExternalRotorSpeed');
+if external
+    mechanics = 'ExternalRotorSpeed';
+else
+    mechanics = 'MechanicalSystem';
+end
+add_block([lib '/' mechanics], [sys '/Mechanics'], 'Position', [890 0 990 80]);
 y = port_y(sys, cs, 'Outport', 1);
 for blk = {'Delay', 'PWM', 'Converter', 'Machine'}
     align(sys, blk{1}, 'Inport', 1, y);
 end
 align(sys, 'Mechanics', 'Inport', 1, port_y(sys, 'Machine', 'Outport', 2));
 
-% Sources: the gate enable (the converter does not block its gates), the speed
-% reference sampled at the sampling instants as in motulator, the measured DC-bus
-% voltage, and the load torque
+% Sources: the gate enable (the converter does not block its gates), the speed or
+% torque reference sampled at the sampling instants as in motulator, the measured
+% DC-bus voltage, and the load torque (or the external rotor speed)
 sources = [{'enable', 1}; c.refs];
 for k = 1:size(sources, 1)
     [name, src] = sources{k, :};
@@ -50,8 +57,13 @@ for k = 1:size(sources, 1)
 end
 add([sys '/u_dc'], 'built-in/Constant', [80 0 130 20], 'Value', 'converter.u_dc');
 align(sys, 'u_dc', 'Outport', 1, port_y(sys, cs, 'Inport', in('u_dc')));
-add_source([sys '/tau_L'], mdl.mechanics.tau_L, [835 0 865 30]);
-align(sys, 'tau_L', 'Outport', 1, port_y(sys, 'Mechanics', 'Inport', 2));
+if external
+    add_source([sys '/w_M'], mdl.mechanics.w_M, [835 0 865 30]);
+    align(sys, 'w_M', 'Outport', 1, port_y(sys, 'Mechanics', 'Inport', 1));
+else
+    add_source([sys '/tau_L'], mdl.mechanics.tau_L, [835 0 865 30]);
+    align(sys, 'tau_L', 'Outport', 1, port_y(sys, 'Mechanics', 'Inport', 2));
+end
 
 % Machine signals [i_a i_b i_c w_M theta_M tau_M] for the output port 'mdl'
 add([sys '/Mux mdl'], 'built-in/Mux', [1060 0 1065 160], 'Inputs', '4');
@@ -70,8 +82,12 @@ connect(sys, [cs '/1'], 'Delay/1');
 connect(sys, 'Delay/1', 'PWM/1');
 connect(sys, 'PWM/1', 'Converter/1');
 connect(sys, 'Converter/1', 'Machine/1');
-connect(sys, 'Machine/2', 'Mechanics/1');
-connect(sys, 'tau_L/1', 'Mechanics/2');
+if external
+    connect(sys, 'w_M/1', 'Mechanics/1');
+else
+    connect(sys, 'Machine/2', 'Mechanics/1');
+    connect(sys, 'tau_L/1', 'Mechanics/2');
+end
 connect(sys, 'Mechanics/1', 'Mux mdl/2');
 connect(sys, 'Mechanics/2', 'Mux mdl/3');
 route(sys, 'Machine/1', 'Mux mdl/1', 'x', 1045);

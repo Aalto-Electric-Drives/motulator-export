@@ -11,28 +11,39 @@ function c = control_system(ctrl, mdl)
 %     refs       References {name of the input, constant or StepSignal}
 import motulator.internal.*
 if isa(ctrl, 'motulator.drive.control.VectorControlSystem')
+    % The blocks of the speed-control and the torque-control mode (without the
+    % speed controller)
     vc = ctrl.vector_ctrl;
     if isa(vc, 'motulator.drive.control.sm.FluxVectorController')
-        c.name = 'Flux-vector control';
+        names = {'Flux-vector control', 'Flux-vector control (torque)'};
         plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
     elseif isa(vc, 'motulator.drive.control.sm.CurrentVectorController')
-        c.name = 'Current-vector control (SM)';
+        names = {'Current-vector control (SM)', 'Current-vector control (SM, torque)'};
         plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
     elseif isa(vc, 'motulator.drive.control.im.CurrentVectorController')
-        c.name = 'Current-vector control';
+        names = {'Current-vector control', 'Current-vector control (torque)'};
         plant = {'machine', 'motulator.drive.model.InductionMachine'};
     elseif isa(vc, 'motulator.drive.control.im.FluxVectorController')
-        c.name = 'Flux-vector control (IM)';
+        names = {'Flux-vector control (IM)', 'Flux-vector control (IM, torque)'};
         plant = {'machine', 'motulator.drive.model.InductionMachine'};
     else
         error('motulator:unsupported', ['Only FluxVectorController and ' ...
             'CurrentVectorController supported in VectorControlSystem.']);
     end
-    c.variables = struct('vector_ctrl', vc.params(), ...
-        'speed_ctrl', ctrl.speed_ctrl.params(), 'pwm', ctrl.pwm.params());
+    if isempty(ctrl.speed_ctrl)
+        c.name = names{2};
+        c.variables = struct('vector_ctrl', vc.params(), 'pwm', ctrl.pwm.params());
+        c.refs = {'tau_M_ref', ...
+            required(ctrl.tau_M_ref, 'torque reference', 'set_torque_ref')};
+    else
+        c.name = names{1};
+        c.variables = struct('vector_ctrl', vc.params(), ...
+            'speed_ctrl', ctrl.speed_ctrl.params(), 'pwm', ctrl.pwm.params());
+        c.refs = {'w_M_ref', ...
+            required(ctrl.w_M_ref, 'speed reference', 'set_speed_ref')};
+    end
     c.T_s = vc.cfg.T_s;
     c.T_s_expr = 'vector_ctrl.cfg.T_s';
-    c.refs = {'w_M_ref', required(ctrl.w_M_ref, 'speed reference', 'set_speed_ref')};
 elseif isa(ctrl, 'motulator.drive.control.VHzControlSystem')
     vhz = ctrl.vhz_ctrl;
     if isa(vhz, 'motulator.drive.control.sm.ObserverBasedVHzController')

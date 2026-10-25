@@ -21,6 +21,7 @@ control (`im_flux_vector.h`).
 
 """
 
+from functools import partial
 from typing import Any
 
 from motulator_export.plecs._control import (
@@ -29,12 +30,14 @@ from motulator_export.plecs._control import (
     abc_input,
     assign,
     control_block,
+    drive_monitor,
     get_measurement,
     init_header,
     inner_ctrl_init,
-    monitor,
     pwm_init,
     speed_ctrl_init,
+    torque_inputs,
+    torque_outputs,
     vector_control_system,
 )
 from motulator_export.plecs._im_control import CTRL_INPUTS as CVC_INPUTS
@@ -66,6 +69,7 @@ SIGNALS = Signals(
 # Name of the control-system block, its inputs, and the monitored signals (mask
 # probes)
 NAME = "Flux-vector control (IM)"
+TORQUE_NAME = "Flux-vector control (IM, torque)"
 CTRL_INPUTS = CVC_INPUTS
 CTRL_OUTPUTS = {
     "Speed (w_M_ref, w_M)": ["w_M_ref", "w_M"],
@@ -184,8 +188,11 @@ MONITORED = {
 }
 
 
-def control_system() -> Subsystem:
-    """Contents of the control-system block (VectorControlSystem)."""
+def control_system(torque: bool = False) -> Subsystem:
+    """
+    Contents of the control-system block (VectorControlSystem), also in the
+    torque-control mode without the speed controller (`torque`).
+    """
     measurement = get_measurement(
         SIGNALS,
         CTRL_INPUTS[2:],
@@ -196,16 +203,22 @@ def control_system() -> Subsystem:
         ],
         abc_input("i_s_abc", 0),
     )
-    signals = monitor(
+    signals = drive_monitor(
         SIGNALS,
         CTRL_OUTPUTS,
         MONITORED,
-        [Port("w_M_ref", 1)],
+        torque,
         "/* The current in estimated rotor flux coordinates */\n"
         "double complex rot = cexp(-I * carg(fbk.psi_R));\n",
     )
     return vector_control_system(
-        SIGNALS, NAME, CTRL_INPUTS, measurement, _flux_vector_controller(), signals
+        SIGNALS,
+        TORQUE_NAME if torque else NAME,
+        torque_inputs(CTRL_INPUTS) if torque else CTRL_INPUTS,
+        measurement,
+        _flux_vector_controller(),
+        signals,
+        torque,
     )
 
 
@@ -217,6 +230,16 @@ FVC_BLOCK = control_block(
     CTRL_OUTPUTS,
     control_system,
     "FluxVectorController",
+)
+FVC_TORQUE_BLOCK = control_block(
+    TORQUE_NAME,
+    "Torque control of an induction machine drive with flux-vector control "
+    "(VectorControlSystem with FluxVectorController, without the speed controller).",
+    torque_inputs(CTRL_INPUTS),
+    torque_outputs(CTRL_OUTPUTS),
+    partial(control_system, True),
+    "FluxVectorController",
+    torque=True,
 )
 
 

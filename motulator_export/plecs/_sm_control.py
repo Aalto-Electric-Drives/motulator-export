@@ -22,6 +22,7 @@ speed controller `speed_ctrl`, and the PWM `pwm`. The signal vectors are defined
 
 """
 
+from functools import partial
 from typing import Any
 
 from motulator_export.plecs._common import ENABLE, GRADNET_FIELDS
@@ -36,14 +37,16 @@ from motulator_export.plecs._control import (
     complex_in,
     complex_out,
     control_block,
+    drive_monitor,
     get_measurement,
     init_header,
     inner_ctrl_init,
     mask_params,
-    monitor,
     pwm_init,
     speed_ctrl_init,
     speed_observer,
+    torque_inputs,
+    torque_outputs,
     vector_control_system,
 )
 from motulator_export.plecs._netlist import (
@@ -79,6 +82,7 @@ SIGNALS = Signals(
 # Name of the control-system block, its inputs, and the monitored signals (mask
 # probes)
 NAME = "Flux-vector control"
+TORQUE_NAME = "Flux-vector control (torque)"
 CTRL_INPUTS = [
     Port(ENABLE, 1),
     Port("w_M_ref", 1),
@@ -796,8 +800,11 @@ MONITORED = {
 }
 
 
-def control_system() -> Subsystem:
-    """Contents of the control-system block (VectorControlSystem)."""
+def control_system(torque: bool = False) -> Subsystem:
+    """
+    Contents of the control-system block (VectorControlSystem), also in the
+    torque-control mode without the speed controller (`torque`).
+    """
     measurement = get_measurement(
         SIGNALS,
         CTRL_INPUTS[2:],
@@ -808,9 +815,15 @@ def control_system() -> Subsystem:
         ],
         abc_input("i_s_abc", 0),
     )
-    signals = monitor(SIGNALS, CTRL_OUTPUTS, MONITORED, [Port("w_M_ref", 1)])
+    signals = drive_monitor(SIGNALS, CTRL_OUTPUTS, MONITORED, torque)
     return vector_control_system(
-        SIGNALS, NAME, CTRL_INPUTS, measurement, _flux_vector_controller(), signals
+        SIGNALS,
+        TORQUE_NAME if torque else NAME,
+        torque_inputs(CTRL_INPUTS) if torque else CTRL_INPUTS,
+        measurement,
+        _flux_vector_controller(),
+        signals,
+        torque,
     )
 
 
@@ -822,6 +835,16 @@ FVC_BLOCK = control_block(
     CTRL_OUTPUTS,
     control_system,
     "FluxVectorController",
+)
+FVC_TORQUE_BLOCK = control_block(
+    TORQUE_NAME,
+    "Torque control of a synchronous machine drive with flux-vector control "
+    "(VectorControlSystem with FluxVectorController, without the speed controller).",
+    torque_inputs(CTRL_INPUTS),
+    torque_outputs(CTRL_OUTPUTS),
+    partial(control_system, True),
+    "FluxVectorController",
+    torque=True,
 )
 
 

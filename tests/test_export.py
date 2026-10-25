@@ -14,7 +14,7 @@ import os
 import re
 from math import inf, pi
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import motulator.drive.control.sm as sm_control
 import motulator.drive.gradnet as gn
@@ -40,6 +40,7 @@ from tests.systems import (
     example_system,
     im_system,
     sm_system,
+    torque_system,
 )
 
 TOOLS = [(plecs, "model.plecs"), (simulink, "model.slx")]
@@ -325,6 +326,53 @@ def test_initial_mechanics(tmp_path: Path) -> None:
     script = (tmp_path / "build_drive.m").read_text(encoding="utf-8")
     assert "mechanics.state.w_M = 50;" in script
     assert "mechanics.state.theta_M = 0.25;" in script
+
+
+@pytest.mark.parametrize("sm", [True, False], ids=["sm", "im"])
+def test_torque_control(tmp_path: Path, sm: bool) -> None:
+    """
+    In the torque-control mode (without the speed controller), the control system is
+    the block of the torque-control mode, whose torque reference is sampled as the
+    speed reference. The external rotor speed (ExternalRotorSpeed, whose initial
+    angle is exported) is the input of a speed source in PLECS; a function of time
+    is not supported, and nothing is written.
+    """
+    mdl, ctrl = torque_system("fvc" if sm else "cvc", True)[0]()
+    mdl = model.Drive(mdl.machine, mdl.mechanics, mdl.converter, pwm=True)
+    ctrl.set_torque_ref(StepSignal(0.1, 5.0))  # T_s = 125 us
+    mech = mdl.mechanics
+    assert isinstance(mech, model.ExternalRotorSpeed)
+    mech.set_external_rotor_speed(StepSignal(0.05, 50.0))
+    mech.state.theta_M = 0.25 + 0j
+    if sm:  # The rotor angle of the machine model, that of the mechanics
+        cast(Any, mdl.machine.state).theta_m = complex(0.25 * mdl.machine.par.n_p)
+    plecs.write_model(tmp_path / "model.plecs", mdl, ctrl, T_STOP)
+    simulink.write_model(tmp_path / "model.slx", mdl, ctrl, T_STOP)
+    text = (tmp_path / "model.plecs").read_text(encoding="utf-8")
+    name = "Flux-vector control (torque)" if sm else "Current-vector control (torque)"
+    assert f'Name          "{name}"' in text
+    assert "speed_ctrl" not in text
+    step = r'Type\s+Step\s+Name\s+"%s"[^}]*"Time"\s+Value\s+"%s"'
+    assert re.search(step % ("tau_M_ref", r"0\.0999375"), text)
+    assert re.search(step % ("w_M ext\\.", r"0\.05"), text)
+    assert re.search(r'Type\s+ControlledRotationalSpeed\s+Name\s+"Load"', text)
+    assert "mechanics.theta_M0 = 0.25;" in text
+    script = (tmp_path / "build_model.m").read_text(encoding="utf-8")
+    assert "speed_ctrl" not in script
+    assert "ctrl = VectorControlSystem(vector_ctrl);" in script
+    assert "ctrl.set_torque_ref(StepSignal(time=0.1, after=5));" in script
+    assert "mechanics = ExternalRotorSpeed();" in script
+    assert "mechanics.state.theta_M = 0.25;" in script
+    assert (
+        "mdl.mechanics.set_external_rotor_speed(StepSignal(time=0.05, after=50));"
+        in script
+    )
+    files = set(tmp_path.iterdir())
+    mech.set_external_rotor_speed(lambda t: 50.0)
+    for tool, path in TOOLS:
+        with pytest.raises(NotImplementedError, match="StepSignal"):
+            tool.write_model(tmp_path / f"other_{path}", mdl, ctrl, T_STOP)
+    assert set(tmp_path.iterdir()) == files  # Nothing is written
 
 
 def test_modified_speed_controller(tmp_path: Path) -> None:

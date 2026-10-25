@@ -72,6 +72,7 @@ from tests.systems import (
     IM_PAR,
     IM_SPEED,
     SM_CVC_D_MIN,
+    SM_KEYS,
     SM_PAR,
     SM_SPEED,
     SM_VHZ_CASES,
@@ -87,6 +88,7 @@ from tests.systems import (
     sm_cvc_system,
     sm_system,
     sm_vhz_system,
+    torque_system,
     vhz_system,
 )
 
@@ -100,6 +102,10 @@ SYSTEMS: dict[str, tuple[ControlBlock, MonolithicBlock]] = {
     "smvhz": (_sm_vhz_control.VHZ_BLOCK, monolithic.SM_VHZ),
     "gfl": (_grid_control.GFL_BLOCK, monolithic.GFL),
     "gfm": (_grid_control.GFM_BLOCK, monolithic.GFM),
+    "fvc_torque": (_sm_control.FVC_TORQUE_BLOCK, monolithic.FVC_TORQUE),
+    "smcvc_torque": (_sm_cvc_control.CVC_TORQUE_BLOCK, monolithic.SM_CVC_TORQUE),
+    "cvc_torque": (_im_control.CVC_TORQUE_BLOCK, monolithic.CVC_TORQUE),
+    "imfvc_torque": (_im_fvc_control.FVC_TORQUE_BLOCK, monolithic.IM_FVC_TORQUE),
 }
 
 
@@ -146,6 +152,7 @@ def compiled(tmp_path_factory: pytest.TempPathFactory) -> Compiled:
 
 def init_script(key: str, values: dict[str, Any], flux_map: Any = None) -> str:
     """Model initialization of the control system (without the system model)."""
+    key = key.removesuffix("_torque")  # The same in the torque-control mode
     if key in ("fvc", "smcvc", "smvhz"):
         variables = []
         if flux_map is not None:
@@ -391,6 +398,39 @@ def test_sm_current_vector_control(
         return compare(build, model.Simulation, sfun, signals, 0.3)
 
     check(compiled, "smcvc", values, run, SM_INPUTS)
+
+
+@pytest.mark.parametrize(
+    ("key", "sensorless"),
+    [
+        ("fvc", True),
+        ("fvc", False),
+        ("smcvc", True),
+        ("cvc", True),
+        ("cvc", False),
+        ("imfvc", True),
+    ],
+    ids=["fvc", "fvc_sensored", "smcvc", "cvc", "cvc_sensored", "imfvc"],
+)
+def test_torque_control(compiled: Compiled, key: str, sensorless: bool) -> None:
+    """The vector control systems in the torque-control mode (without the speed
+    controller), with the external rotor speed, should agree with motulator, and
+    exactly with the monolithic control systems."""
+    build, signals = torque_system(key, sensorless)
+    ctrl = build()[1]
+    values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
+    block = SYSTEMS[f"{key}_torque"][0]
+
+    def run(net: Netlist) -> list[list[float]]:
+        return compare(build, model.Simulation, drive_sfun(net, block), signals, 0.3)
+
+    check(
+        compiled,
+        f"{key}_torque",
+        values,
+        run,
+        SM_INPUTS if key in SM_KEYS else IM_INPUTS,
+    )
 
 
 @pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)

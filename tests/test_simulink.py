@@ -17,6 +17,7 @@ Run from the repository root:
 # %%
 import ctypes
 from math import pi
+from pathlib import Path
 from typing import Any, cast
 
 import motulator.drive.gradnet as gn
@@ -49,6 +50,7 @@ from tests.sfunctions import (
 from tests.systems import (
     CURRENT_MAP,
     SM_CVC_D_MIN,
+    SM_KEYS,
     SM_PAR,
     SM_VHZ_CASES,
     SM_VHZ_IDS,
@@ -63,6 +65,7 @@ from tests.systems import (
     sm_cvc_system,
     sm_system,
     sm_vhz_system,
+    torque_system,
     vhz_system,
 )
 
@@ -276,6 +279,38 @@ def test_sm_current_vector_control(
     )
     check_dc_bus_limit(sm_cvc, monolithic.SM_CVC, SM_INPUTS, restarter(sm_cvc, params))
     sm_cvc.sfun_terminate()
+
+
+# Monolithic vector control systems in the torque-control mode, by the keys of
+# `torque_system`
+TORQUE_BLOCKS = {
+    "fvc": monolithic.FVC_TORQUE,
+    "smcvc": monolithic.SM_CVC_TORQUE,
+    "cvc": monolithic.CVC_TORQUE,
+    "imfvc": monolithic.IM_FVC_TORQUE,
+}
+
+
+@pytest.mark.parametrize(
+    ("key", "sensorless"),
+    [("fvc", True), ("smcvc", False), ("cvc", True), ("imfvc", False)],
+    ids=["fvc", "smcvc_sensored", "cvc", "imfvc_sensored"],
+)
+def test_torque_control(tmp_path: Path, key: str, sensorless: bool) -> None:
+    """The S-functions of the vector control systems in the torque-control mode
+    (without the speed controller) should agree with motulator, with the external
+    rotor speed."""
+    block = TORQUE_BLOCKS[key]
+    sfun = compile_sfunction(block, tmp_path)
+    build, signals = torque_system(key, sensorless)
+    ctrl = build()[1]
+    values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
+    params = sfunction_params(block, values)
+    assert start(sfun, params) is None
+    compare(build, model.Simulation, drive_sfun(sfun, block), signals, 0.3)
+    inputs = SM_INPUTS if key in SM_KEYS else IM_INPUTS
+    check_dc_bus_limit(sfun, block, inputs, restarter(sfun, params))
+    sfun.sfun_terminate()
 
 
 @pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)

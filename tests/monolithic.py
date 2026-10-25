@@ -14,6 +14,7 @@ of the motulator API. Its S-function is compared with motulator in
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import Any
 
 from motulator_export.plecs import (
@@ -34,6 +35,7 @@ from motulator_export.plecs._common import (
     MaskParam,
     monitored_code,
 )
+from motulator_export.plecs._control import torque_outputs
 from motulator_export.simulink._sfunction import SFunction
 
 
@@ -123,7 +125,14 @@ PWM_MASK_PARAMS = [
 
 
 def speed_controller_code(i: dict[str, int]) -> str:
-    """C code creating the speed controller from the mask parameters."""
+    """
+    C code creating the speed controller from the mask parameters (none in the
+    torque-control mode, without its mask parameters).
+    """
+    if "speed_J" not in i:
+        return "/* No speed controller in the torque-control mode */\n" + (
+            "PIController speed_ctrl = {0};\n"
+        )
     tau_M_max = i["speed_tau_M_max"]
     return (
         "/* Speed controller (SpeedController) */\n"
@@ -132,6 +141,21 @@ def speed_controller_code(i: dict[str, int]) -> str:
         f"PARAM({i['speed_alpha_i']}),\n"
         f"    PDIM({tau_M_max}) > 0 ? P({tau_M_max}, 0) : INFINITY);\n"
     )
+
+
+def torque_mode_code(i: dict[str, int]) -> str:
+    """C code setting the torque-control mode without the speed controller."""
+    if "speed_J" in i:
+        return ""
+    return "ctrl.torque_mode = 1; /* The torque reference is the input */\n"
+
+
+def drive_mask_params(mask_params: list[MaskParam], torque: bool) -> list[MaskParam]:
+    """
+    Mask parameters of a drive, without those of the speed controller in the
+    torque-control mode (`torque`).
+    """
+    return [m for m in mask_params if not (torque and m.tab == TAB_SPEED)]
 
 
 def pwm_code(i: dict[str, int]) -> str:
@@ -153,18 +177,22 @@ def pwm_code(i: dict[str, int]) -> str:
     )
 
 
-def _drive_output(meas_type: str, compute: str) -> str:
-    """C code of the measurements and the control algorithm of a drive."""
+def _drive_output(meas_type: str, compute: str, torque: bool = False) -> str:
+    """
+    C code of the measurements and the control algorithm of a drive, with the speed
+    reference or, in the torque-control mode (`torque`), the torque reference.
+    """
+    ref = "tau_M_ref" if torque else "w_M_ref"
     return (
         "/* Measurements */\n"
-        "double w_M_ref = InputSignal(1, 0);\n"
+        f"double {ref} = InputSignal(1, 0);\n"
         "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
         "                     InputSignal(2, 2)};\n"
         "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
         f"{meas_type} meas = {{abc2complex(i_s_abc), u_dc, InputSignal(4, 0)}};\n"
         "\n"
         "/* The gate enable */\n"
-        f"{compute}(&ctrl, &meas, w_M_ref, InputSignal(0, 0) > 0.0);\n"
+        f"{compute}(&ctrl, &meas, {ref}, InputSignal(0, 0) > 0.0);\n"
         "\n" + DUTY_RATIO_CODE
     )
 
@@ -242,19 +270,25 @@ def k_o_code(k: int) -> str:
     )
 
 
-def _sm_code() -> dict[str, str]:
-    """Code sections of the C-Script of flux-vector control."""
+def _sm_code(torque: bool = False) -> dict[str, str]:
+    """
+    Code sections of the C-Script of flux-vector control, also in the torque-control
+    mode (`torque`).
+    """
     sources = ["common.c", "gradnet.c", "sm_parameters.c", "sm_control_loci.c"]
     declarations = _declarations([*sources, "sm_flux_vector.c"], "VectorControlSystem")
-    i = {m.variable: k for k, m in enumerate(SM_MASK_PARAMS)}
+    mask_params = drive_mask_params(SM_MASK_PARAMS, torque)
+    i = {m.variable: k for k, m in enumerate(mask_params)}
     start = (
-        sm_par_code(SM_MASK_PARAMS) + "FluxVectorControllerCfg cfg = "
+        sm_par_code(mask_params) + "FluxVectorControllerCfg cfg = "
         f"flux_vector_controller_cfg(P({i['i_s_max']}, 0));\n"
-        + cfg_assignments(SM_MASK_PARAMS)
+        + cfg_assignments(mask_params)
         + k_o_code(i["k_o"])
         + speed_controller_code(i)
         + "\n"
-        "vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n" + pwm_code(i)
+        "vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + torque_mode_code(i)
+        + pwm_code(i)
     )
     monitored = {
         "w_M_ref": "ctrl.ref.w_M",
@@ -268,8 +302,13 @@ def _sm_code() -> dict[str, str]:
         "i_q": "cimag(ctrl.fbk.i_s)",
     }
     output = _drive_output(
-        "Measurements", "vector_control_system_compute_output"
-    ) + monitored_code(_sm_control.CTRL_OUTPUTS, monitored)
+        "Measurements", "vector_control_system_compute_output", torque
+    ) + monitored_code(
+        torque_outputs(_sm_control.CTRL_OUTPUTS)
+        if torque
+        else _sm_control.CTRL_OUTPUTS,
+        monitored,
+    )
     code = {
         "Declarations": declarations,
         "StartFcn": start,
@@ -330,20 +369,26 @@ SM_CVC_MASK_PARAMS = [
 ]
 
 
-def _sm_cvc_code() -> dict[str, str]:
-    """Code sections of the C-Script of current-vector control of an SM."""
+def _sm_cvc_code(torque: bool = False) -> dict[str, str]:
+    """
+    Code sections of the C-Script of current-vector control of an SM, also in the
+    torque-control mode (`torque`).
+    """
     sources = ["common.c", "gradnet.c", "sm_parameters.c", "sm_control_loci.c"]
     sources += ["sm_flux_vector.c", "sm_current_vector.c"]
     declarations = _declarations(sources, "SMCVCControlSystem")
-    i = {m.variable: k for k, m in enumerate(SM_CVC_MASK_PARAMS)}
+    mask_params = drive_mask_params(SM_CVC_MASK_PARAMS, torque)
+    i = {m.variable: k for k, m in enumerate(mask_params)}
     start = (
-        sm_par_code(SM_CVC_MASK_PARAMS) + "SMCurrentVectorControllerCfg cfg = "
+        sm_par_code(mask_params) + "SMCurrentVectorControllerCfg cfg = "
         f"sm_current_vector_controller_cfg(P({i['i_s_max']}, 0));\n"
-        + cfg_assignments(SM_CVC_MASK_PARAMS)
+        + cfg_assignments(mask_params)
         + k_o_code(i["k_o"])
         + speed_controller_code(i)
         + "\n"
-        "sm_cvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n" + pwm_code(i)
+        "sm_cvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + torque_mode_code(i)
+        + pwm_code(i)
     )
     monitored = {
         "w_M_ref": "ctrl.ref.w_M",
@@ -358,8 +403,13 @@ def _sm_cvc_code() -> dict[str, str]:
         "i_q": "cimag(ctrl.fbk.i_s)",
     }
     output = _drive_output(
-        "Measurements", "sm_cvc_control_system_compute_output"
-    ) + monitored_code(_sm_cvc_control.CTRL_OUTPUTS, monitored)
+        "Measurements", "sm_cvc_control_system_compute_output", torque
+    ) + monitored_code(
+        torque_outputs(_sm_cvc_control.CTRL_OUTPUTS)
+        if torque
+        else _sm_cvc_control.CTRL_OUTPUTS,
+        monitored,
+    )
     return {
         "Declarations": declarations,
         "StartFcn": start,
@@ -480,21 +530,26 @@ IM_MASK_PARAMS = [
 ]
 
 
-def _im_code() -> dict[str, str]:
-    """Code sections of the C-Script of current-vector control."""
+def _im_code(torque: bool = False) -> dict[str, str]:
+    """
+    Code sections of the C-Script of current-vector control, also in the torque-control
+    mode (`torque`).
+    """
     declarations = _declarations(
         ["common.c", "im_current_vector.c"], "IMVectorControlSystem"
     )
-    i = {m.variable: k for k, m in enumerate(IM_MASK_PARAMS)}
+    mask_params = drive_mask_params(IM_MASK_PARAMS, torque)
+    i = {m.variable: k for k, m in enumerate(mask_params)}
     start = (
-        parameter_checks(IM_MASK_PARAMS) + "InductionMachineInvGammaPars par = {\n"
+        parameter_checks(mask_params) + "InductionMachineInvGammaPars par = {\n"
         f"    P({i['n_p']}, 0), P({i['R_s']}, 0), P({i['R_R']}, 0), "
         f"P({i['L_sgm']}, 0), P({i['L_M']}, 0)}};\n"
         "IMCurrentVectorControllerCfg cfg = im_current_vector_controller_cfg(\n"
         f"    P({i['psi_s_nom']}, 0), P({i['i_s_max']}, 0));\n"
-        + cfg_assignments(IM_MASK_PARAMS)
+        + cfg_assignments(mask_params)
         + speed_controller_code(i)
         + "im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + torque_mode_code(i)
         + pwm_code(i)
     )
     monitored = {
@@ -510,9 +565,11 @@ def _im_code() -> dict[str, str]:
         "i_sq": "cimag(rot * ctrl.fbk.i_s)",
     }
     output = _drive_output(
-        "IMMeasurements", "im_vector_control_system_compute_output"
+        "IMMeasurements", "im_vector_control_system_compute_output", torque
     ) + monitored_code(
-        _im_control.CTRL_OUTPUTS,
+        torque_outputs(_im_control.CTRL_OUTPUTS)
+        if torque
+        else _im_control.CTRL_OUTPUTS,
         monitored,
         prelude="double complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\n",
     )
@@ -555,21 +612,26 @@ IM_FVC_MASK_PARAMS = [
 ]
 
 
-def _im_fvc_code() -> dict[str, str]:
-    """Code sections of the C-Script of flux-vector control of an IM."""
+def _im_fvc_code(torque: bool = False) -> dict[str, str]:
+    """
+    Code sections of the C-Script of flux-vector control of an IM, also in the
+    torque-control mode (`torque`).
+    """
     declarations = _declarations(
         ["common.c", "im_current_vector.c", "im_flux_vector.c"], "IMFVCControlSystem"
     )
-    i = {m.variable: k for k, m in enumerate(IM_FVC_MASK_PARAMS)}
+    mask_params = drive_mask_params(IM_FVC_MASK_PARAMS, torque)
+    i = {m.variable: k for k, m in enumerate(mask_params)}
     start = (
-        parameter_checks(IM_FVC_MASK_PARAMS) + "InductionMachineInvGammaPars par = {\n"
+        parameter_checks(mask_params) + "InductionMachineInvGammaPars par = {\n"
         f"    P({i['n_p']}, 0), P({i['R_s']}, 0), P({i['R_R']}, 0), "
         f"P({i['L_sgm']}, 0), P({i['L_M']}, 0)}};\n"
         "IMFluxVectorControllerCfg cfg = im_flux_vector_controller_cfg(\n"
         f"    P({i['psi_s_nom']}, 0), P({i['i_s_max']}, 0));\n"
-        + cfg_assignments(IM_FVC_MASK_PARAMS)
+        + cfg_assignments(mask_params)
         + speed_controller_code(i)
         + "im_fvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + torque_mode_code(i)
         + pwm_code(i)
     )
     monitored = {
@@ -584,9 +646,11 @@ def _im_fvc_code() -> dict[str, str]:
         "i_sq": "cimag(rot * ctrl.fbk.i_s)",
     }
     output = _drive_output(
-        "IMMeasurements", "im_fvc_control_system_compute_output"
+        "IMMeasurements", "im_fvc_control_system_compute_output", torque
     ) + monitored_code(
-        _im_fvc_control.CTRL_OUTPUTS,
+        torque_outputs(_im_fvc_control.CTRL_OUTPUTS)
+        if torque
+        else _im_fvc_control.CTRL_OUTPUTS,
         monitored,
         prelude="double complex rot = cexp(-I * carg(ctrl.fbk.psi_R));\n",
     )
@@ -837,6 +901,35 @@ GFM = MonolithicBlock(
     mask_params=GFM_MASK_PARAMS,
     code=_gfm_code,
 )
+
+
+# %%
+# Torque-control mode of the vector control systems
+def torque_block(
+    block: MonolithicBlock, name: str, code: Callable[..., dict[str, str]]
+) -> MonolithicBlock:
+    """
+    Vector control system `block` in the torque-control mode, without the speed
+    controller: the torque reference is the second input, and the monitored signals
+    are without the speed reference. The code sections are given by `code` with the
+    argument torque.
+    """
+    params = block.cscript_params
+    return replace(
+        block,
+        name=name,
+        inputs=[block.inputs[0], "tau_M_ref", *block.inputs[2:]],
+        outputs=torque_outputs(block.outputs),
+        mask_params=drive_mask_params(block.mask_params, True),
+        code=partial(code, True),
+        cscript_params=params and [p for p in params if not p.startswith("speed_")],
+    )
+
+
+FVC_TORQUE = torque_block(FVC, _sm_control.TORQUE_NAME, _sm_code)
+SM_CVC_TORQUE = torque_block(SM_CVC, _sm_cvc_control.TORQUE_NAME, _sm_cvc_code)
+CVC_TORQUE = torque_block(CVC, _im_control.TORQUE_NAME, _im_code)
+IM_FVC_TORQUE = torque_block(IM_FVC, _im_fvc_control.TORQUE_NAME, _im_fvc_code)
 
 
 # %%

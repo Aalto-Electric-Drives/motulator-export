@@ -9,7 +9,7 @@ import importlib
 from collections.abc import Callable
 from math import inf, pi
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
@@ -39,27 +39,54 @@ IM_PAR = {"n_p": 2, "R_s": 3.7, "R_R": 2.1, "L_sgm": 0.021, "L_M": 0.224}
 IM_SPEED = {"J": 0.015, "alpha_s": 2 * pi * 4}
 
 
+def mechanics(torque: bool) -> model.MechanicalSystem | model.ExternalRotorSpeed:
+    """
+    Mechanics of the drives: the inertia, or the external rotor speed in the
+    torque-control mode (`torque`).
+    """
+    return model.ExternalRotorSpeed() if torque else model.MechanicalSystem(J=0.015)
+
+
+def set_references(
+    mdl: model.Drive, ctrl: VectorControlSystem, tau_M: float, t_ref: float
+) -> None:
+    """
+    Set the references of a drive: the speed reference stepping to 2*pi*20 rad/s at
+    `t_ref` and the load torque stepping to `tau_M` at 0.2 s, or in the
+    torque-control mode (without the speed controller), the external rotor speed
+    ramping up to 2*pi*20 rad/s in 0.1 s and the torque reference stepping to
+    `tau_M` at `t_ref` and reversing at 0.2 s.
+    """
+    if ctrl.speed_ctrl is None:
+        ext = cast(model.ExternalRotorSpeed, mdl.mechanics)
+        ext.set_external_rotor_speed(lambda t: 2 * pi * 20 * min(t / 0.1, 1.0))
+        ctrl.set_torque_ref(lambda t: (t > t_ref) * tau_M - (t > 0.2) * 2 * tau_M)
+    else:
+        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * tau_M)
+        ctrl.set_speed_ref(lambda t: (t > t_ref) * 2 * pi * 20)
+
+
 def smooth_sign(x: np.ndarray) -> np.ndarray:
     """Smooth current-direction function of the dead-time error model."""
     return np.tanh(x / 0.2)
 
 
 def sm_system(
-    sensorless: bool, t_d: float, blocked: bool = False
+    sensorless: bool, t_d: float, blocked: bool = False, torque: bool = False
 ) -> tuple[Build, Signals]:
     """
     Synchronous machine drive with flux-vector control, optionally with the gates
     blocked at the start and during the operation (`blocked`).
+    Also in the torque-control mode (`torque`, see `set_references`).
     """
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
         par = model.SynchronousMachinePars(**SM_PAR)
         mdl = model.Drive(
             model.SynchronousMachine(par),
-            model.MechanicalSystem(J=0.015),
+            mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, t_d=t_d),
         )
-        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 10.0)
         cfg = sm_control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=sensorless)
         pwm = sm_control.PWM()
         if t_d > 0:
@@ -68,10 +95,10 @@ def sm_system(
             )
         ctrl = VectorControlSystem(
             sm_control.FluxVectorController(par, cfg),
-            sm_control.SpeedController(**SM_SPEED),
+            None if torque else sm_control.SpeedController(**SM_SPEED),
             pwm,
         )
-        ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
+        set_references(mdl, ctrl, 10.0, 0.05)
         if blocked:
             ctrl.set_enable(blocked_drive)
         return mdl, ctrl
@@ -96,22 +123,23 @@ def sm_cvc_system(
     blocked: bool = False,
     discrete: bool = False,
     d_min: float = 0.0,
+    torque: bool = False,
 ) -> tuple[Build, Signals]:
     """
     Synchronous machine drive of `sm_system` with current-vector control, optionally
     with the gates blocked at the start and during the operation (`blocked`), with
     the direct discrete-time current controller (`discrete`), and with the minimum
     duty ratio `d_min`.
+    Also in the torque-control mode (`torque`, see `set_references`).
     """
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
         par = model.SynchronousMachinePars(**SM_PAR)
         mdl = model.Drive(
             model.SynchronousMachine(par),
-            model.MechanicalSystem(J=0.015),
+            mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, t_d=t_d),
         )
-        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 10.0)
         cfg = sm_control.CurrentVectorControllerCfg(
             i_s_max=6.5, sensorless=sensorless, discrete=discrete
         )
@@ -120,10 +148,10 @@ def sm_cvc_system(
             d_err = sm_control.InverterNonlinearity(t_d, sign=smooth_sign)
         ctrl = VectorControlSystem(
             sm_control.CurrentVectorController(par, cfg),
-            sm_control.SpeedController(**SM_SPEED),
+            None if torque else sm_control.SpeedController(**SM_SPEED),
             sm_control.PWM(d_err=d_err, d_min=d_min),
         )
-        ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
+        set_references(mdl, ctrl, 10.0, 0.05)
         if blocked:
             ctrl.set_enable(blocked_drive)
         return mdl, ctrl
@@ -147,23 +175,24 @@ def im_system(
     blocked: bool = False,
     discrete: bool = False,
     d_min: float = 0.0,
+    torque: bool = False,
 ) -> tuple[Build, Signals]:
     """
     Induction machine drive with current-vector control, see `sm_system`, optionally
     with the direct discrete-time current controller (`discrete`) and the minimum
     duty ratio `d_min`.
+    Also in the torque-control mode (`torque`, see `set_references`).
     """
     par = model.InductionMachineInvGammaPars(**IM_PAR)
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
         mdl = model.Drive(
             model.InductionMachine(par),
-            model.MechanicalSystem(J=0.015),
+            mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
             delay=2 if single_update else 1,  # One sampling period
             single_update=single_update,
         )
-        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 14.6)
         cfg = im_control.CurrentVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless, discrete=discrete
         )
@@ -173,10 +202,10 @@ def im_system(
             d_err = im_control.InverterNonlinearity(t_d, u_th, sign)
         ctrl = VectorControlSystem(
             im_control.CurrentVectorController(par, cfg),
-            im_control.SpeedController(**IM_SPEED),
+            None if torque else im_control.SpeedController(**IM_SPEED),
             im_control.PWM(d_err=d_err, d_min=d_min, single_update=single_update),
         )
-        ctrl.set_speed_ref(lambda t: (t > 0.05) * 2 * pi * 20)
+        set_references(mdl, ctrl, 14.6, 0.05)
         if blocked:
             ctrl.set_enable(blocked_drive)
         return mdl, ctrl
@@ -195,22 +224,23 @@ def im_fvc_system(
     blocked: bool = False,
     d_min: float = 0.0,
     alpha_i: float | None = None,
+    torque: bool = False,
 ) -> tuple[Build, Signals]:
     """
     Induction machine drive of `im_system` with flux-vector control, optionally with
     the dead time and its compensation (`smooth_sign`), the gates blocked at the
     start and during the operation (`blocked`), the minimum duty ratio `d_min`, and
     the integral action (`alpha_i`, None for its default).
+    Also in the torque-control mode (`torque`, see `set_references`).
     """
     par = model.InductionMachineInvGammaPars(**IM_PAR)
 
     def build() -> tuple[model.Drive, VectorControlSystem]:
         mdl = model.Drive(
             model.InductionMachine(par),
-            model.MechanicalSystem(J=0.015),
+            mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, t_d=t_d),
         )
-        mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * 14.6)
         cfg = im_control.FluxVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, alpha_i=alpha_i, sensorless=sensorless
         )
@@ -219,11 +249,11 @@ def im_fvc_system(
             d_err = im_control.InverterNonlinearity(t_d, sign=smooth_sign)
         ctrl = VectorControlSystem(
             im_control.FluxVectorController(par, cfg),
-            im_control.SpeedController(**IM_SPEED),
+            None if torque else im_control.SpeedController(**IM_SPEED),
             im_control.PWM(d_err=d_err, d_min=d_min),
         )
         # After the rotor flux has built up, see IM_FVC_RTOL
-        ctrl.set_speed_ref(lambda t: (t > 0.1) * 2 * pi * 20)
+        set_references(mdl, ctrl, 14.6, 0.1)
         if blocked:
             ctrl.set_enable(blocked_drive)
         return mdl, ctrl
@@ -235,6 +265,25 @@ def im_fvc_system(
         "psi_R": lambda fbk, _: np.abs(fbk.psi_R),
     }
     return build, signals
+
+
+def torque_system(key: str, sensorless: bool) -> tuple[Build, Signals]:
+    """
+    Drive with flux-vector or current-vector control of a synchronous machine
+    (`key` "fvc" or "smcvc") or of an induction machine ("cvc" or "imfvc") in the
+    torque-control mode, see `set_references`.
+    """
+    if key == "fvc":
+        return sm_system(sensorless, 0.0, torque=True)
+    if key == "smcvc":
+        return sm_cvc_system(sensorless, 0.0, torque=True)
+    if key == "cvc":
+        return im_system(sensorless, 0.0, 0.0, torque=True)
+    return im_fvc_system(sensorless, torque=True)
+
+
+# Keys of `torque_system` of the synchronous machine drives
+SM_KEYS = ("fvc", "smcvc")
 
 
 # Tolerances of flux-vector control of induction machines relative to the signal

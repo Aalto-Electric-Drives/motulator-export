@@ -105,6 +105,7 @@ from motulator_export.plecs._common import (
 )
 from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
 from motulator_export.plecs._drive import (
+    EXTERNAL_SPEED_J,
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
@@ -116,8 +117,10 @@ from motulator_export.plecs._drive import (
     _check_supported_speed_control,
     _check_supported_vhz_control,
     drive_references,
+    external_speed,
     mechanics_and_converter_variables,
     speed_ctrl_values,
+    torque_control,
 )
 from motulator_export.plecs._rpc import simulate_plecs
 from motulator_export.plecs._schematic import (
@@ -133,11 +136,12 @@ from motulator_export.plecs._schematic import (
 from motulator_export.plecs._sm_control import (
     CFG_FIELDS,
     FVC_BLOCK,
+    FVC_TORQUE_BLOCK,
     PAR_FIELDS,
     init_script,
 )
 from motulator_export.plecs._sm_cvc_control import CFG_FIELDS as CVC_CFG_FIELDS
-from motulator_export.plecs._sm_cvc_control import CVC_BLOCK
+from motulator_export.plecs._sm_cvc_control import CVC_BLOCK, CVC_TORQUE_BLOCK
 from motulator_export.plecs._sm_cvc_control import init_script as cvc_init_script
 from motulator_export.plecs._sm_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._sm_vhz_control import VHZ_BLOCK
@@ -309,14 +313,15 @@ def _check_supported_par(par: Any) -> None:
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
     """
-    Control-system block of flux-vector control, current-vector control, or V/Hz
-    control.
+    Control-system block of flux-vector control, current-vector control (also in
+    the torque-control mode), or V/Hz control.
     """
     if isinstance(ctrl, VHzControlSystem):
         return VHZ_BLOCK
+    torque = torque_control(ctrl)
     if isinstance(ctrl.vector_ctrl, CurrentVectorController):
-        return CVC_BLOCK
-    return FVC_BLOCK
+        return CVC_TORQUE_BLOCK if torque else CVC_BLOCK
+    return FVC_TORQUE_BLOCK if torque else FVC_BLOCK
 
 
 def export_values(
@@ -529,14 +534,17 @@ PMSM_ICON = (
 )
 
 
-def _add_pmsm(sch: _Schematic) -> None:
-    """Add the PLECS permanent-magnet synchronous machine (including the inertia)."""
+def _add_pmsm(sch: _Schematic, J: str = "mechanics.J") -> None:
+    """
+    Add the PLECS permanent-magnet synchronous machine (including the inertia J, see
+    EXTERNAL_SPEED_J).
+    """
     machine = {
         "configuration": "2",
         "R": "machine.R_s",
         "L": "[machine.L_d machine.L_q]",
         "phi": "machine.psi_f",
-        "J": "mechanics.J",
+        "J": J,
         "F": "0",
         "p": "machine.n_p",
         "wm0": "mechanics.w_M0",
@@ -708,8 +716,9 @@ def write_model(
         script = vhz_init_script
     else:
         values, flux_map = export_values(ctrl)
-        script = cvc_init_script if control_block(ctrl) is CVC_BLOCK else init_script
-    w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
+        cvc = isinstance(ctrl.vector_ctrl, CurrentVectorController)
+        script = cvc_init_script if cvc else init_script
+    ref, mech_signal = drive_references(mdl, ctrl, values["T_s"])
     variables = export_plant_variables(mdl)
     if flux_map is not None:
         variables += [(f"est_flux_map.{f}", flux_map[f]) for f in GRADNET_FIELDS]
@@ -719,7 +728,7 @@ def write_model(
     gradnet_plant = has_gradnet_plant(mdl)
     sources: list[tuple[str, StepSignal | float | str]] = [
         (ENABLE, gate_enable(ctrl, values["T_s"])),
-        ("w_M_ref", w_M_ref),
+        ("tau_M_ref" if torque_control(ctrl) else "w_M_ref", ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
     ]
@@ -738,12 +747,13 @@ def write_model(
     sch.dx += DC_DX + GATE_DX
     _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
+    external = external_speed(mdl)
     if gradnet_plant:
         _add_gradnet_machine(sch, library)
     else:
-        _add_pmsm(sch)
+        _add_pmsm(sch, EXTERNAL_SPEED_J if external else "mechanics.J")
     _add_phase_lines(sch)
-    _add_mechanics(sch, tau_L, inertia=gradnet_plant)
+    _add_mechanics(sch, mech_signal, inertia=gradnet_plant, external=external)
     y_probes = _add_drive_outputs(sch, block, outputs, y_sources)
     size = (880 + sch.dx, max(520, y_probes + 50))
     return _write_model(path, init, t_stop, T_s, sch, size, outputs)

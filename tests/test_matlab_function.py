@@ -85,6 +85,7 @@ from tests.systems import (
     EXAMPLES,
     IM_FVC_RTOL,
     SM_CVC_D_MIN,
+    SM_KEYS,
     SM_PAR,
     SM_VHZ_CASES,
     SM_VHZ_IDS,
@@ -100,6 +101,7 @@ from tests.systems import (
     sm_cvc_system,
     sm_system,
     sm_vhz_system,
+    torque_system,
     vhz_system,
 )
 from tests.test_control import IM_FVC_CASES, SYSTEMS, Compiled, init_script
@@ -112,7 +114,7 @@ RTOL = 1e-9
 # reference is at its current limit, so is the current limit of the torque reference
 # (see IM_FVC_RTOL), so the rounding errors of the MATLAB code show at the square
 # root of their level, which the perturbations need not show
-KEY_RTOL = {"imfvc": 1e-6}
+KEY_RTOL = {"imfvc": 1e-6, "imfvc_torque": 1e-6}
 # The variables of the model initializations of the harnesses are cleared first, so
 # that the fields of a previous initialization (e.g., a flux map) are not left
 CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm\n"
@@ -216,8 +218,24 @@ def grid_run(build: Any, signals: Any, block: ControlBlock, t_stop: float) -> Ru
     return run
 
 
+def torque_case(key: str) -> Case:
+    """Case of a sensorless vector control system in the torque-control mode."""
+    method = key.removesuffix("_torque")
+    build, signals = torque_system(method, True)
+    ctrl = build()[1]
+    if method in SM_KEYS:
+        values, constant = _sm.export_values(ctrl)[0], SM_INPUTS
+    else:
+        values = _im.export_values(ctrl)
+        constant = IM_FVC_CONSTANT if method == "imfvc" else IM_INPUTS
+    run = drive_run(build, signals, SYSTEMS[key][0], 0.3)
+    return key, values, None, run, constant
+
+
 def case(name: str) -> Case:  # noqa: PLR0911
     """Case of a test, see `Case`."""
+    if name.endswith("_torque"):  # The key of the control system
+        return torque_case(name)
     if name.startswith("fvc_gradnet"):
         ctrl = gradnet_control_system()
         values, flux_map = _sm.export_values(ctrl)
@@ -330,6 +348,10 @@ CASES = [
     "gfm",
     "gfm_power_limitation",
     "gfm_power_limitation_blocked",
+    "fvc_torque",
+    "smcvc_torque",
+    "cvc_torque",
+    "imfvc_torque",
 ]
 
 
@@ -463,6 +485,10 @@ def replay(
         SM_VHZ_IDS[0],
         "gfl",
         "gfm",
+        "fvc_torque",
+        "smcvc_torque",
+        "cvc_torque",
+        "imfvc_torque",
     ],
 )
 def test_model_lines(harnesses: Harnesses, name: str) -> None:

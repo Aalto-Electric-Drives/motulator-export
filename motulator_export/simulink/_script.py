@@ -26,7 +26,7 @@ from motulator.drive.control import im as im_control
 from motulator.drive.control import sm as sm_control
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._common import SpeedController
-from motulator.drive.model import Drive, MechanicalSystem
+from motulator.drive.model import Drive, ExternalRotorSpeed, MechanicalSystem
 from motulator.drive.utils._parameters import (
     InductionMachineInvGammaPars,
     InductionMachinePars,
@@ -42,6 +42,7 @@ from motulator_export._common import StepSignal, reference, system_type
 from motulator_export.plecs import _grid, _im, _sm
 from motulator_export.plecs._common import GRADNET_FIELDS, _fmt_mask
 from motulator_export.plecs._control import assign
+from motulator_export.plecs._drive import torque_control
 from motulator_export.plecs._grid_control import GFL_CFG_FIELDS, GFM_CFG_FIELDS
 from motulator_export.plecs._im_control import CFG_FIELDS as CVC_CFG_FIELDS
 from motulator_export.plecs._im_control import PAR_FIELDS as IM_PAR_FIELDS
@@ -196,11 +197,15 @@ def _speed_ctrl(values: dict[str, Any]) -> str:
 
 def _drive_model(mdl: Drive, machine: list[str]) -> list[str]:
     """The system model of a drive, after the lines of the machine."""
-    mech = cast(MechanicalSystem, mdl.mechanics)
-    lines = [*machine, f"mechanics = MechanicalSystem(J={_value(mech.J)});"]
-    w_M0, theta_M0 = float(mech.state.w_M.real), float(wrap(mech.state.theta_M.real))
-    if w_M0 != 0:
-        lines.append(f"mechanics.state.w_M = {_value(w_M0)};")
+    if isinstance(mdl.mechanics, ExternalRotorSpeed):
+        lines = [*machine, "mechanics = ExternalRotorSpeed();"]
+    else:
+        mech = cast(MechanicalSystem, mdl.mechanics)
+        lines = [*machine, f"mechanics = MechanicalSystem(J={_value(mech.J)});"]
+        w_M0 = float(mech.state.w_M.real)
+        if w_M0 != 0:
+            lines.append(f"mechanics.state.w_M = {_value(w_M0)};")
+    theta_M0 = float(wrap(mdl.mechanics.state.theta_M.real))
     if theta_M0 != 0:
         lines.append(f"mechanics.state.theta_M = {_value(theta_M0)};")
     return [
@@ -213,13 +218,42 @@ def _drive_model(mdl: Drive, machine: list[str]) -> list[str]:
 def _drive_references(
     mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem
 ) -> list[str]:
-    """The speed reference and the load torque of a drive."""
-    w_M_ref = reference(ctrl.ext_ref.w_M, "speed reference")
+    """
+    The speed or the torque reference, and the load torque or the external rotor
+    speed of a drive.
+    """
+    if torque_control(ctrl):
+        tau_M_ref = reference(ctrl.ext_ref.tau_M, "torque reference")
+        lines = [f"ctrl.set_torque_ref({_value(tau_M_ref)});"]
+    else:
+        w_M_ref = reference(ctrl.ext_ref.w_M, "speed reference")
+        lines = [f"ctrl.set_speed_ref({_value(w_M_ref)});"]
+    if isinstance(mdl.mechanics, ExternalRotorSpeed):
+        w_M = reference(mdl.mechanics.w_M, "external rotor speed")
+        if not _equal(w_M, 0.0):
+            lines.append(f"mdl.mechanics.set_external_rotor_speed({_value(w_M)});")
+        return lines
     tau_L = reference(cast(MechanicalSystem, mdl.mechanics).inp.tau_L, "load torque")
-    lines = [f"ctrl.set_speed_ref({_value(w_M_ref)});"]
     if not _equal(tau_L, 0.0):
         lines.append(f"mdl.mechanics.set_external_load_torque({_value(tau_L)});")
     return lines
+
+
+def _vector_control_system(
+    ctrl: VectorControlSystem, est: str, values: dict[str, Any]
+) -> list[str]:
+    """
+    The vector control system of the vector controller of the machine model `est`,
+    with the speed controller or in the torque-control mode.
+    """
+    lines = [f"vector_ctrl = {type(ctrl.vector_ctrl).__name__}({est}, cfg);"]
+    if torque_control(ctrl):
+        return [*lines, _control_system("VectorControlSystem", VECTOR_ARGS[:1], values)]
+    return [
+        *lines,
+        f"speed_ctrl = {_speed_ctrl(values)};",
+        _control_system("VectorControlSystem", VECTOR_ARGS, values),
+    ]
 
 
 def _par_call(cls: str, par: Any, fields: Sequence[str]) -> str:
@@ -292,12 +326,7 @@ def _sm_script(
             _vhz_control_system(values),
         ]
     else:
-        vector_ctrl = type(ctrl.vector_ctrl).__name__
-        control += [
-            f"vector_ctrl = {vector_ctrl}({est}, cfg);",
-            f"speed_ctrl = {_speed_ctrl(values)};",
-            _control_system("VectorControlSystem", VECTOR_ARGS, values),
-        ]
+        control += _vector_control_system(ctrl, est, values)
     return model, [*control, *_drive_references(mdl, ctrl)]
 
 
@@ -343,12 +372,7 @@ def _im_script(
             _vhz_control_system(values),
         ]
     else:
-        vector_ctrl = type(ctrl.vector_ctrl).__name__
-        control += [
-            f"vector_ctrl = {vector_ctrl}({est}, cfg);",
-            f"speed_ctrl = {_speed_ctrl(values)};",
-            _control_system("VectorControlSystem", VECTOR_ARGS, values),
-        ]
+        control += _vector_control_system(ctrl, est, values)
     return model, [*control, *_drive_references(mdl, ctrl)]
 
 

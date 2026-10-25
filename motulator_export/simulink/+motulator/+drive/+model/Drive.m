@@ -6,7 +6,7 @@ classdef Drive < motulator.internal.Object
 
     properties
         machine    % Machine model (SynchronousMachine or InductionMachine)
-        mechanics  % Mechanical system model (MechanicalSystem)
+        mechanics  % Mechanical system model (MechanicalSystem or ExternalRotorSpeed)
         converter  % Converter model (VoltageSourceConverter)
     end
 

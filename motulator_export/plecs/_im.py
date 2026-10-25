@@ -77,6 +77,7 @@ from motulator_export.plecs._common import (
 )
 from motulator_export.plecs._control import INIT_COMMENT, T_S_EXPR, VALUES, pwm_values
 from motulator_export.plecs._drive import (
+    EXTERNAL_SPEED_J,
     MACHINE_FRAME,
     MACHINE_PROBES,
     MACHINE_TERMINALS,
@@ -88,17 +89,20 @@ from motulator_export.plecs._drive import (
     _check_supported_speed_control,
     _check_supported_vhz_control,
     drive_references,
+    external_speed,
     mechanics_and_converter_variables,
     speed_ctrl_values,
+    torque_control,
 )
 from motulator_export.plecs._im_control import (
     CFG_FIELDS,
     CVC_BLOCK,
+    CVC_TORQUE_BLOCK,
     PAR_FIELDS,
     init_script,
 )
 from motulator_export.plecs._im_fvc_control import CFG_FIELDS as FVC_CFG_FIELDS
-from motulator_export.plecs._im_fvc_control import FVC_BLOCK
+from motulator_export.plecs._im_fvc_control import FVC_BLOCK, FVC_TORQUE_BLOCK
 from motulator_export.plecs._im_fvc_control import init_script as fvc_init_script
 from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 from motulator_export.plecs._im_vhz_control import VHZ_BLOCK
@@ -176,12 +180,16 @@ def check_supported_vhz_ctrl(vhz: Any) -> None:
 
 
 def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
-    """Control-system block of current-vector, flux-vector, or V/Hz control."""
+    """
+    Control-system block of current-vector or flux-vector control (also in the
+    torque-control mode), or V/Hz control.
+    """
     if isinstance(ctrl, VHzControlSystem):
         return VHZ_BLOCK
+    torque = torque_control(ctrl)
     if isinstance(ctrl.vector_ctrl, FluxVectorController):
-        return FVC_BLOCK
-    return CVC_BLOCK
+        return FVC_TORQUE_BLOCK if torque else FVC_BLOCK
+    return CVC_TORQUE_BLOCK if torque else CVC_BLOCK
 
 
 def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
@@ -244,9 +252,10 @@ def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
     return variables + mechanics_and_converter_variables(mdl)
 
 
-def _add_im(sch: _Schematic) -> None:
+def _add_im(sch: _Schematic, J: str = "mechanics.J") -> None:
     """
-    Add the PLECS squirrel-cage induction machine (including the inertia).
+    Add the PLECS squirrel-cage induction machine (including the inertia J, see
+    EXTERNAL_SPEED_J).
 
     The inverse-Γ model of motulator corresponds to the T model of PLECS with zero
     rotor leakage inductance.
@@ -258,7 +267,7 @@ def _add_im(sch: _Schematic) -> None:
         "Rr": "machine.R_R",
         "Llr": "0",
         "Lm": "machine.L_M",
-        "J": "mechanics.J",
+        "J": J,
         "F": "0",
         "p": "machine.n_p",
         "wm0": "mechanics.w_M0",
@@ -304,18 +313,18 @@ def write_model(
     if isinstance(ctrl, VHzControlSystem):
         values = export_vhz_values(ctrl)
         init = vhz_init_script(variables, values, INIT_COMMENT)
-    elif block is FVC_BLOCK:
+    elif isinstance(ctrl.vector_ctrl, FluxVectorController):
         values = export_values(ctrl)
         init = fvc_init_script(variables, values, INIT_COMMENT)
     else:
         values = export_values(ctrl)
         init = init_script(variables, values, INIT_COMMENT)
-    w_M_ref, tau_L = drive_references(mdl, ctrl, values["T_s"])
+    ref, mech_signal = drive_references(mdl, ctrl, values["T_s"])
     T_s = T_S_EXPR
     sch = _Schematic()
     sources: list[tuple[str, StepSignal | float | str]] = [
         (ENABLE, gate_enable(ctrl, values["T_s"])),
-        ("w_M_ref", w_M_ref),
+        ("tau_M_ref" if torque_control(ctrl) else "w_M_ref", ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
         ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
     ]
@@ -334,9 +343,10 @@ def write_model(
     sch.dx += DC_DX + GATE_DX
     _add_converter(sch, T_s, t_d, mdl.converter.u_th)
     _add_dc_bus(sch, mdl.dc_bus)
-    _add_im(sch)
+    external = external_speed(mdl)
+    _add_im(sch, EXTERNAL_SPEED_J if external else "mechanics.J")
     _add_phase_lines(sch)
-    _add_mechanics(sch, tau_L, inertia=False)
+    _add_mechanics(sch, mech_signal, inertia=False, external=external)
     y_probes = _add_drive_outputs(sch, block, outputs, y_sources)
     size = (880 + sch.dx, max(520, y_probes + 50))
     return _write_model(path, init, t_stop, T_s, sch, size, outputs)
