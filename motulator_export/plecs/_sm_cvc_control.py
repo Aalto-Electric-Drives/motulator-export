@@ -32,6 +32,7 @@ from motulator_export.plecs._control import (
     M_CURRENT_CTRL_OUTPUT,
     M_CURRENT_CTRL_START,
     M_CURRENT_CTRL_UPDATE,
+    OBSERVER,
     PAR_CFG,
     SAMPLING,
     Signals,
@@ -46,6 +47,7 @@ from motulator_export.plecs._control import (
     init_header,
     inner_ctrl_init,
     mask_params,
+    observer_init,
     pwm_init,
     speed_ctrl_init,
     torque_inputs,
@@ -339,6 +341,7 @@ def _current_vector_controller() -> Subsystem:
                 "cfg: Configuration (CurrentVectorControllerCfg) as a struct",
                 "vector_ctrl.cfg",
             ),
+            OBSERVER,
         ],
     )
     return Subsystem(
@@ -505,6 +508,7 @@ def init_script(
             "Current-vector controller",
             PAR_CFG,
         )
+        + observer_init(values)
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

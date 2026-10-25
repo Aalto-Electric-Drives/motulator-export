@@ -60,6 +60,7 @@ DRIVE_API: Signatures = {
     "external_rotor_speed": (c_void_p, [c_void_p]),
     "friction": (c_void_p, [c_void_p]),
     "load_torque": (c_void_p, [c_void_p]),
+    "set_observer_speed": (None, [c_void_p, c_double]),
     "set_speed_controller": (None, [c_void_p] + [c_double] * 4),
     "set_torque_control": (None, [c_void_p]),
     "speed_reference": (c_void_p, [c_void_p]),

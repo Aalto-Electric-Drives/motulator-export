@@ -107,6 +107,7 @@ class InductionMachineDriveSystem(NativeSystem):
                 v = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
                 lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
                 lib.set_current_vector_controller(h, *c_args(v, CFG_FIELDS))
+            lib.set_observer_speed(h, v["observer_w_M"])
             set_speed_control(self, ctrl)
         self.set_pwm(ctrl.pwm)
 

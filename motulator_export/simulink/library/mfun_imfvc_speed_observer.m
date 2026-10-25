@@ -15,6 +15,7 @@ if isempty(self)
         J = 0;
     end
     self = speed_observer_init(p.k_w, p.k_tau, J);
+    self.w_M = p.w_M; % The initial speed estimate
     pending = false;
 end
 % Update of the previous sampling period with its inputs (the inputs

@@ -84,7 +84,7 @@ static const int FEEDTHROUGH[] = {0, 0, 0};
 static const int OUTPUT_WIDTHS[] = {1, 1};
 #define NUM_INPUTS 3
 #define NUM_OUTPUTS 2
-#define NUM_PARAMS 4
+#define NUM_PARAMS 5
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -121,11 +121,11 @@ static void mdlInitializeSizes(SimStruct *S)
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
     if (ssGetSimMode(S) == SS_SIMMODE_SIZES_CALL_ONLY
-        && mxIsEmpty(ssGetSFcnParam(S, 3))) {
+        && mxIsEmpty(ssGetSFcnParam(S, 4))) {
         return; /* Not evaluated yet, e.g., in a library */
     }
-    if (ParamDim(3, 0) * ParamDim(3, 1) != 1
-        || !(ParamRealData(3, 0) > 0.0)) {
+    if (ParamDim(4, 0) * ParamDim(4, 1) != 1
+        || !(ParamRealData(4, 0) > 0.0)) {
         SetErrorMessage("The sampling period must be a positive scalar.");
         return;
     }
@@ -134,7 +134,7 @@ static void mdlInitializeSizes(SimStruct *S)
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, ParamRealData(3, 0));
+    ssSetSampleTime(S, 0, ParamRealData(4, 0));
     ssSetOffsetTime(S, 0, 0.0);
 }
 
@@ -150,11 +150,16 @@ static void mdlStart(SimStruct *S)
         return;
     }
     if (PDIM(3) != 1) {
+        SetErrorMessage("w_M must be a scalar.");
+        return;
+    }
+    if (PDIM(4) != 1) {
         SetErrorMessage("T_s must be a scalar.");
         return;
     }
     speed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);
-    T_s = P(3, 0);
+    self.w_M = P(3, 0); /* The initial speed estimate */
+    T_s = P(4, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)

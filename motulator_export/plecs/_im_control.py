@@ -30,6 +30,8 @@ from motulator_export.plecs._control import (
     M_CURRENT_CTRL_OUTPUT,
     M_CURRENT_CTRL_START,
     M_CURRENT_CTRL_UPDATE,
+    OBSERVER,
+    OBSERVER_W_M,
     PAR_CFG,
     SAMPLING,
     T_S,
@@ -45,6 +47,7 @@ from motulator_export.plecs._control import (
     init_header,
     inner_ctrl_init,
     mask_params,
+    observer_init,
     pwm_init,
     speed_ctrl_init,
     speed_observer,
@@ -293,6 +296,7 @@ def _speed_flux_observer(sig: Signals = SIGNALS) -> Subsystem:
                 "cfg.sensorless",
             ),
             Param("J", "J: Inertia (kgm²), [] = the model not used", "cfg.J"),
+            OBSERVER_W_M,
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
         ],
         init=SFO_INIT,
@@ -548,6 +552,7 @@ def _current_vector_controller() -> Subsystem:
                 "cfg: Configuration (CurrentVectorControllerCfg) as a struct",
                 "vector_ctrl.cfg",
             ),
+            OBSERVER,
         ],
         init=CVC_INIT,
     )
@@ -716,6 +721,7 @@ def init_script(
             "Current-vector controller",
             PAR_CFG,
         )
+        + observer_init(values)
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

@@ -25,6 +25,7 @@ from functools import partial
 from typing import Any
 
 from motulator_export.plecs._control import (
+    OBSERVER,
     PAR_CFG,
     Signals,
     abc_input,
@@ -34,6 +35,7 @@ from motulator_export.plecs._control import (
     get_measurement,
     init_header,
     inner_ctrl_init,
+    observer_init,
     pwm_init,
     speed_ctrl_init,
     torque_inputs,
@@ -114,6 +116,7 @@ def _flux_vector_controller() -> Subsystem:
                 "cfg: Configuration (FluxVectorControllerCfg) as a struct",
                 "vector_ctrl.cfg",
             ),
+            OBSERVER,
         ],
         init=FVC_INIT,
     )
@@ -267,6 +270,7 @@ def init_script(
         + inner_ctrl_init(
             "vector_ctrl", "FluxVectorController", "Flux-vector controller", PAR_CFG
         )
+        + observer_init(values)
         + speed_ctrl_init(values)
         + pwm_init(values)
     )

@@ -359,6 +359,59 @@ def test_torque_control(method: str, sensorless: bool, t_stop: float) -> None:
     check(res_py, res_c, rtol=1e-9)
 
 
+def im_cvc_discrete_drive(
+    discrete: bool,
+) -> tuple[model.Drive, control.VectorControlSystem]:
+    """
+    The induction machine drive of plot_2kw_im_cvc_discrete.py in the torque-control
+    mode at the constant external speed of 0.5 p.u., with the continuous-time or the
+    direct discrete-time current controller (`discrete`) and the initial speed
+    estimate of the observer.
+    """
+    nom = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
+    base = utils.BaseValues.from_nominal(nom, n_p=2)
+    par = model.InductionMachineInvGammaPars(
+        n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
+    )
+    mdl = model.Drive(
+        model.InductionMachine(par),
+        model.ExternalRotorSpeed(),
+        model.VoltageSourceConverter(u_dc=540),
+        pwm=True,
+    )
+    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization
+    cast(Any, mdl.mechanics).set_external_rotor_speed(lambda t: 0.5 * base.w_M)
+    cfg = im_control.CurrentVectorControllerCfg(
+        psi_s_nom=base.psi,
+        i_s_max=2 * base.i,
+        alpha_c=2 * pi * 700,
+        T_s=200e-6,
+        discrete=discrete,
+    )
+    vector_ctrl = im_control.CurrentVectorController(par, cfg)
+    vector_ctrl.observer.w_M = 0.5 * base.w_M  # Initial speed estimate
+    ctrl = control.VectorControlSystem(vector_ctrl)
+    ctrl.set_torque_ref(
+        lambda t: nom.tau * (0.3 * (t > 0.3) + 0.2 * (t > 0.32) - 0.8 * (t > 0.34))
+    )
+    return mdl, ctrl
+
+
+@pytest.mark.parametrize("discrete", [False, True], ids=["continuous", "discrete"])
+def test_initial_speed_estimate(discrete: bool) -> None:
+    """
+    The initial speed estimate of the observer (`vector_ctrl.observer.w_M`) in the drive
+    of plot_2kw_im_cvc_discrete.py, with the carrier comparison (with fine quantization,
+    whose switching instants may differ by a quantum, see `test_ipmsm_pwm`). The stop
+    time 0.37 s of the example is a sampling instant (1850*T_s), at which the sampling
+    instants accumulated from the switching intervals may differ by a rounding error,
+    which decides whether the sampling instant is simulated, so the stop time is just
+    before it.
+    """
+    res_py, res_c = simulate(partial(im_cvc_discrete_drive, discrete), 0.3699)
+    check(res_py, res_c, rtol=1e-4, same_steps=False)
+
+
 def test_n_eval() -> None:
     """Evenly spaced points of the solver (N_eval)."""
     check(*simulate(ipmsm_drive, 0.06, N_eval=4), rtol=1e-9)

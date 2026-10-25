@@ -10,6 +10,7 @@
 | Direct discrete-time current control (`discrete=True`)                     |  yes   |   yes    |  yes   |
 | Torque-control mode (`VectorControlSystem` without `speed_ctrl`)           |  yes   |   yes    |  yes   |
 | External rotor speed (`ExternalRotorSpeed`)                                |  yes   |   yes    |  yes   |
+| Initial speed estimate of the observer (`vector_ctrl.observer.w_M`)        |  yes   |   yes    |  yes   |
 | Induction machine drives: observer-based and open-loop V/Hz control        |  yes   |   yes    |  yes   |
 | Grid-following control                                                     |  yes   |   yes    |  yes   |
 | Grid-forming control (disturbance observer)                                |  yes   |   yes    |  yes   |

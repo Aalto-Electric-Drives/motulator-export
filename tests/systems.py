@@ -54,12 +54,14 @@ def set_references(
     Set the references of a drive: the speed reference stepping to 2*pi*20 rad/s at
     `t_ref` and the load torque stepping to `tau_M` at 0.2 s, or in the
     torque-control mode (without the speed controller), the external rotor speed
-    ramping up to 2*pi*20 rad/s in 0.1 s and the torque reference stepping to
-    `tau_M` at `t_ref` and reversing at 0.2 s.
+    ramping from 2*pi*10 rad/s, the initial speed estimate of the observer, to
+    2*pi*20 rad/s in 0.1 s and the torque reference stepping to `tau_M` at `t_ref`
+    and reversing at 0.2 s.
     """
     if ctrl.speed_ctrl is None:
         ext = cast(model.ExternalRotorSpeed, mdl.mechanics)
-        ext.set_external_rotor_speed(lambda t: 2 * pi * 20 * min(t / 0.1, 1.0))
+        ext.set_external_rotor_speed(lambda t: 2 * pi * (10 + 10 * min(t / 0.1, 1)))
+        cast(Any, ctrl.vector_ctrl).observer.w_M = 2 * pi * 10
         ctrl.set_torque_ref(lambda t: (t > t_ref) * tau_M - (t > 0.2) * 2 * tau_M)
     else:
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * tau_M)
@@ -534,6 +536,7 @@ EXAMPLE_SYSTEMS = [
     "ipmsm_2kw_cvc_discrete",
     "pmsyrm_6kw_gn_fvc",
     "im_2kw_cvc",
+    "im_2kw_cvc_discrete",
     "im_2kw_fvc",
     "im_2kw_vhz",
     "im_2kw_vhz_open_loop",
@@ -546,15 +549,21 @@ def example_system(name: str) -> tuple[Any, Any, float]:
     """
     The system of an example with its references (as the script sets them), and its
     stop time. The folder `EXAMPLES` must be on the path, since the scripts import
-    their helpers. The suffix _open_loop or _discrete of the name selects the option
-    of the script (e.g., --open-loop), the argument of its `build_system`.
+    their helpers. Unless the example is a script of its own, the suffix _open_loop
+    or _discrete of the name selects the option of the script (e.g., --open-loop),
+    the argument of its `build_system`.
     """
     suffix = next((s for s in ("_open_loop", "_discrete") if name.endswith(s)), "")
+    if (EXAMPLES / f"{name}.py").exists():
+        suffix = ""
     ex = importlib.import_module(name.removesuffix(suffix))
     mdl, ctrl = ex.build_system(True) if suffix else ex.build_system()
     if hasattr(ex, "W_M_REF"):
         ctrl.set_speed_ref(ex.W_M_REF)
         mdl.mechanics.set_external_load_torque(ex.TAU_L)
+    elif hasattr(ex, "TAU_M_REF"):  # The torque-control mode
+        ctrl.set_torque_ref(ex.TAU_M_REF)
+        mdl.mechanics.set_external_rotor_speed(ex.W_M_EXT)
     elif hasattr(ex, "Q_G_REF"):
         ctrl.set_power_ref(ex.P_G_REF)
         ctrl.set_reactive_power_ref(ex.Q_G_REF)

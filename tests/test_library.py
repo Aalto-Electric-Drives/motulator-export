@@ -140,9 +140,10 @@ CLASSES = {
 }
 # Properties of the MATLAB classes that are not arguments of motulator: the current
 # scale of the sign function (motulator has the function), the state, the load
-# torque, and the external rotor speed of the mechanics, and the references
-EXTRA = {"i_0", "state", "tau_L", "w_M", "w_M_ref", "tau_M_ref", "p_g_ref"}
-EXTRA |= {"q_g_ref", "v_c_ref"}
+# torque, and the external rotor speed of the mechanics, the initial state of the
+# observer of a vector controller, and the references
+EXTRA = {"i_0", "state", "tau_L", "w_M", "observer", "w_M_ref", "tau_M_ref"}
+EXTRA |= {"p_g_ref", "q_g_ref", "v_c_ref"}
 
 
 def _defaults(cls: Any) -> dict[str, Any]:

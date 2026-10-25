@@ -36,7 +36,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -1615,6 +1615,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -30]
@@ -1833,6 +1842,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -2418,7 +2436,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -2445,6 +2463,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -2635,7 +2662,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -2660,7 +2687,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -4159,7 +4186,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -5813,6 +5840,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -50]
@@ -6079,6 +6115,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -6664,7 +6709,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -6691,6 +6736,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -6881,7 +6935,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -6906,7 +6960,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -8684,7 +8738,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -10339,6 +10393,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -50]
@@ -10587,6 +10650,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -11084,7 +11156,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -11111,6 +11183,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -11277,7 +11358,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -11302,7 +11383,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -13160,7 +13241,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -14739,6 +14820,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -30]
@@ -14939,6 +15029,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -15436,7 +15535,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -15463,6 +15562,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -15629,7 +15737,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -15654,7 +15762,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -30080,7 +30188,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -31345,6 +31453,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -30]
@@ -31563,6 +31680,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -32148,7 +32274,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -32175,6 +32301,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -32365,7 +32500,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -32390,7 +32525,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -33788,7 +33923,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -35128,6 +35263,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -50]
@@ -35394,6 +35538,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -35979,7 +36132,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given. The input init = [flag w_M] initializes the speed estimate to w_M at the flying start after the release of the gates (SpeedFluxObserver.catch)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -36006,6 +36159,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -36196,7 +36358,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -36221,7 +36383,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -37898,7 +38060,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (CurrentVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -39239,6 +39401,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -50]
@@ -39487,6 +39658,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -39984,7 +40164,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -40011,6 +40191,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -40177,7 +40366,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -40202,7 +40391,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
@@ -41959,7 +42148,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -43224,6 +43413,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -30]
@@ -43424,6 +43622,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -43921,7 +44128,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -43948,6 +44155,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -44114,7 +44330,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -44139,7 +44355,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {

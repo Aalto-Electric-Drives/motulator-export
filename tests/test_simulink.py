@@ -118,6 +118,7 @@ def test_parameter_errors(fvc: ctypes.CDLL) -> None:
     assert start(fvc, sfunction_params(block, values)) is not None
     values |= SM_PAR | {"i_s_max": 6.5, "T_s": 125e-6}
     values |= {"speed_J": 0.015, "speed_alpha_s": 25.0, "k_o": [1.0, 2.0, 3.0]}
+    values["observer_w_M"] = 0.0
     assert start(fvc, sfunction_params(block, values)) == "pwm_t_d must be a scalar."
     values |= {"pwm_t_d": 0.0, "pwm_u_th": 0.0, "pwm_i_0": 0.0, "pwm_feedforward": 1}
     values |= {"pwm_d_min": 0.0, "pwm_single_update": 0}

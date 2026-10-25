@@ -274,6 +274,15 @@ class Signals:
 # %%
 # Blocks of the common classes
 T_S = Param("T_s", "T_s: Sampling period (s)", "T_s")
+# The initial state of the observer of a vector controller (the attribute observer
+# of motulator) as a struct in the model initialization, and the initial speed
+# estimate of its SpeedFluxObserver (SpeedFluxObserver.w_M)
+OBSERVER = Param(
+    "observer",
+    "observer: Initial state of the observer as a struct: w_M, the speed estimate",
+    "vector_ctrl.observer",
+)
+OBSERVER_W_M = Param("w_M", "w_M: Initial speed estimate (rad/s)", "observer.w_M")
 SAMPLING = "static double T_s; /* Sampling period */\n"
 
 # Update of the current controllers of current-vector control
@@ -647,14 +656,16 @@ def pwm(
 
 def speed_observer(sig: Signals, init: bool = False) -> CBlock:
     """
-    Speed observer (SpeedObserver). With `init`, the block has the input `init` of
-    the flying start, [flag w_M]: the speed estimate is initialized to w_M before
-    the update if the flag is set (SpeedFluxObserver.catch).
+    Speed observer (SpeedObserver), starting from the initial speed estimate w_M
+    (SpeedFluxObserver.w_M). With `init`, the block has the input `init` of the
+    flying start, [flag w_M]: the speed estimate is initialized to w_M before the
+    update if the flag is set (SpeedFluxObserver.catch).
     """
     mask = Mask(
         "SpeedObserver (motulator)",
         "Speed observer (SpeedObserver), driven by the speed error signal eps and the "
-        "torque estimate tau_M. The mechanical system model is used if J is given."
+        "torque estimate tau_M, starting from the speed estimate w_M. The mechanical "
+        "system model is used if J is given."
         + (
             " The input init = [flag w_M] initializes the speed estimate to w_M at "
             "the flying start after the release of the gates (SpeedFluxObserver.catch)."
@@ -665,14 +676,16 @@ def speed_observer(sig: Signals, init: bool = False) -> CBlock:
             Param("k_w", "k_w: Speed estimation gain", "k_w"),
             Param("k_tau", "k_tau: Load torque estimation gain", "k_tau"),
             Param("J", "J: Inertia (kgm²), [] = the model not used", "J"),
+            Param("w_M", "w_M: Initial speed estimate (rad/s)", "w_M"),
             T_S,
         ],
     )
     params = mask_params(mask)
     start = (
-        checks(params, ["k_w", "k_tau", "T_s"])
+        checks(params, ["k_w", "k_tau", "w_M", "T_s"])
         + "speed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\n"
-        "T_s = P(3, 0);\n"
+        "self.w_M = P(3, 0); /* The initial speed estimate */\n"
+        "T_s = P(4, 0);\n"
     )
     initialize = (
         "/* The speed estimate initialized at the flying start */\n"
@@ -713,11 +726,12 @@ def speed_observer(sig: Signals, init: bool = False) -> CBlock:
             "if isnan(J)\n"
             "    J = 0;\n"
             "end\n"
-            "self = speed_observer_init(p.k_w, p.k_tau, J);\n",
+            "self = speed_observer_init(p.k_w, p.k_tau, J);\n"
+            "self.w_M = p.w_M; % The initial speed estimate\n",
             output="w_M = self.w_M;\ntau_L = self.tau_L;\n",
             update=m_initialize
             + "self = speed_observer_update(self, p.T_s, eps, tau_M);\n",
-            checks=required("k_w", "k_tau", "T_s"),
+            checks=required("k_w", "k_tau", "w_M", "T_s"),
         ),
     )
 
@@ -1586,7 +1600,7 @@ TOP_ARGS = {
         [
             (
                 "vector_ctrl",
-                "vector_ctrl: Vector controller ({}) as a struct: par, cfg",
+                "vector_ctrl: Vector controller ({}) as a struct: par, cfg, observer",
             ),
             (
                 "speed_ctrl",
@@ -1734,6 +1748,16 @@ def inner_ctrl_init(name: str, cls: str, title: str, fields: list[str]) -> str:
     initialization, composed of the structs `fields` above it (e.g., par and cfg).
     """
     return f"% {title} ({cls})\n" + "".join(f"{name}.{f} = {f};\n" for f in fields)
+
+
+def observer_init(values: dict[str, Any]) -> str:
+    """
+    The initial speed estimate of the observer of the vector controller in the model
+    initialization (`vector_ctrl.observer.w_M`, as in motulator).
+    """
+    return "% Initial speed estimate of the observer (SpeedFluxObserver.w_M)\n" + (
+        assign("vector_ctrl.observer.w_M", values["observer_w_M"])
+    )
 
 
 def speed_ctrl_init(values: dict[str, Any]) -> str:

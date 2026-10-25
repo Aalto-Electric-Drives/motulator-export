@@ -103,6 +103,7 @@ Maximum differences (Simulink − *motulator*) printed by the comparison scripts
 | `ipmsm_2kw_cvc_simulink.py --discrete` | w_M 1.8e-5, tau_M 1.3e-5, i_s_ab 5.5e-6    | w_M 1.5e-5, tau_M 1.3e-5, tau_M_ref 1.3e-5, i_q_ref 5.2e-6   |
 | `ipmsm_2kw_vhz_simulink.py`            | w_M 2.1e-5, tau_M 1.1e-5, i_s_ab 1.0e-5    | w_c 6.6e-5, tau_M 1.1e-5, tau_M_ref 1.8e-6, psi_s 1.2e-8     |
 | `im_2kw_cvc_simulink.py`               | w_M 6.5e-7, tau_M 2.4e-6, i_s_ab 9.7e-7    | w_M 4.3e-6, tau_M 3.1e-6, tau_M_ref 3.3e-6, psi_R 3.2e-8     |
+| `im_2kw_cvc_discrete_simulink.py`      | w_M 0, tau_M 1.4e-6, i_s_ab 2.1e-6         | w_M 7.1e-5, tau_M 1.2e-6, tau_M_ref 1.8e-15, psi_R 3.2e-8    |
 | `im_2kw_fvc_simulink.py`               | w_M 4.2e-5, tau_M 3.3e-5, i_s_ab 3.3e-5    | w_M 4.4e-5, tau_M 3.2e-5, tau_M_ref 3.5e-5, psi_s_ref 5.0e-8 |
 | `im_2kw_vhz_simulink.py`               | w_M 2.2e-5, tau_M 2.0e-5, i_s_ab 8.1e-6    | w_s 2.4e-5, tau_M 2.0e-5, tau_M_ref 2.1e-6, psi_s 6.6e-8     |
 | `im_2kw_vhz_simulink.py --open-loop`   | w_M 2.3e-5, tau_M 2.5e-5, i_s_ab 8.9e-6    | w_s 0, tau_M 0, tau_M_ref 0, psi_s 2.2e-16                   |

@@ -114,6 +114,7 @@ class SynchronousMachineDriveSystem(NativeSystem):
                 lib.set_current_vector_controller(h, *c_args(v, CVC_CFG_FIELDS))
             else:
                 lib.set_flux_vector_controller(h, *c_args(v, CFG_FIELDS))
+            lib.set_observer_speed(h, v["observer_w_M"])
             set_speed_control(self, ctrl)
         self.set_pwm(ctrl.pwm)
 

@@ -243,10 +243,13 @@ def _vector_control_system(
     ctrl: VectorControlSystem, est: str, values: dict[str, Any]
 ) -> list[str]:
     """
-    The vector control system of the vector controller of the machine model `est`,
-    with the speed controller or in the torque-control mode.
+    The vector control system of the vector controller of the machine model `est`
+    (with the initial speed estimate of its observer, if not zero), with the speed
+    controller or in the torque-control mode.
     """
     lines = [f"vector_ctrl = {type(ctrl.vector_ctrl).__name__}({est}, cfg);"]
+    if values["observer_w_M"] != 0:
+        lines.append(f"vector_ctrl.observer.w_M = {_value(values['observer_w_M'])};")
     if torque_control(ctrl):
         return [*lines, _control_system("VectorControlSystem", VECTOR_ARGS[:1], values)]
     return [

@@ -219,22 +219,26 @@ def export_values(ctrl: VectorControlSystem) -> dict[str, Any]:
 def fvc_values(fvc: FluxVectorController) -> dict[str, Any]:
     """
     Get the parameter values of the flux-vector controller (see `export_values`):
-    its machine model (`PAR_FIELDS`) and its configuration (`FVC_CFG_FIELDS`).
+    its machine model (`PAR_FIELDS`), its configuration (`FVC_CFG_FIELDS`), and the
+    initial speed estimate of its observer (`observer_w_M`).
     """
     values = _fields(fvc.reference_gen.par, PAR_FIELDS)
     values |= _fields(fvc.cfg, FVC_CFG_FIELDS)
     values["sensorless"] = int(fvc.cfg.sensorless)
+    values["observer_w_M"] = float(fvc.observer.w_M)
     return values
 
 
 def cvc_values(cvc: CurrentVectorController) -> dict[str, Any]:
     """
     Get the parameter values of the current-vector controller (see `export_values`):
-    its machine model (`PAR_FIELDS`) and its configuration (`CFG_FIELDS`).
+    its machine model (`PAR_FIELDS`), its configuration (`CFG_FIELDS`), and the
+    initial speed estimate of its observer (`observer_w_M`).
     """
     values = _fields(cvc.reference_gen.par, PAR_FIELDS) | _fields(cvc.cfg, CFG_FIELDS)
     values["sensorless"] = int(cvc.cfg.sensorless)
     values["discrete"] = int(cvc.cfg.discrete)
+    values["observer_w_M"] = float(cvc.observer.w_M)
     return values
 
 

@@ -83,6 +83,8 @@ cfg.alpha_psi = [];
 % Flux-vector controller (FluxVectorController)
 vector_ctrl.par = par;
 vector_ctrl.cfg = cfg;
+% Initial speed estimate of the observer (SpeedFluxObserver.w_M)
+vector_ctrl.observer.w_M = 0;
 % Speed controller (SpeedController)
 speed_ctrl.J = 0.015;
 speed_ctrl.alpha_s = 25;

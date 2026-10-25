@@ -358,8 +358,9 @@ def fvc_values(
     """
     Get the parameter values of the flux-vector controller (see `export_values`):
     its machine model (`PAR_FIELDS` and `psi_s_dq_fcn`, the name of the struct of a
-    flux map) and its configuration (`CFG_FIELDS`, with `k_o` as [k0, k1]), with the
-    GradNet flux map.
+    flux map), its configuration (`CFG_FIELDS`, with `k_o` as [k0, k1]), and the
+    initial speed estimate of its observer (`observer_w_M`), with the GradNet flux
+    map.
     """
     cfg: FluxVectorControllerCfg = fvc.cfg
     values, flux_map = _par_values(fvc.par)
@@ -368,6 +369,7 @@ def fvc_values(
         None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")
     )
     values["sensorless"] = int(cfg.sensorless)
+    values["observer_w_M"] = float(fvc.observer.w_M)  # The initial speed estimate
     return values, flux_map
 
 
@@ -376,8 +378,9 @@ def cvc_values(
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """
     Get the parameter values of the current-vector controller (see `export_values`):
-    its machine model (`_par_values`) and its configuration (`CVC_CFG_FIELDS`, with
-    `k_o` as [k0, k1]), with the GradNet flux map.
+    its machine model (`_par_values`), its configuration (`CVC_CFG_FIELDS`, with
+    `k_o` as [k0, k1]), and the initial speed estimate of its observer
+    (`observer_w_M`), with the GradNet flux map.
     """
     cfg: CurrentVectorControllerCfg = cvc.cfg
     values, flux_map = _par_values(cvc.par)
@@ -387,6 +390,7 @@ def cvc_values(
     )
     values["sensorless"] = int(cfg.sensorless)
     values["discrete"] = int(cfg.discrete)
+    values["observer_w_M"] = float(cvc.observer.w_M)  # The initial speed estimate
     return values, flux_map
 
 

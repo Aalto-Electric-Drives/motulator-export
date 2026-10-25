@@ -176,6 +176,7 @@ typedef struct {
     SynchronousMachinePars est_par;
     FluxVectorControllerCfg cfg;
     PIController speed_ctrl;
+    double w_M0; /* Initial speed estimate of the observer */
     SMCurrentVectorControllerCfg cvc_cfg;
     SMVHzControllerCfg vhz_cfg;
     double slew_rate;
@@ -292,6 +293,13 @@ void set_current_vector_controller(System *self, double i_s_max, double alpha_c,
     self->ctrl.cvc = 1;
 }
 
+/* Initial speed estimate of the observer of the vector controller
+ * (SpeedFluxObserver.w_M) */
+void set_observer_speed(System *self, double w_M)
+{
+    self->w_M0 = w_M;
+}
+
 /* Speed controller (PIController, e.g., SpeedController) by its gains */
 void set_speed_controller(System *self, double k_p, double k_t, double alpha_i,
                           double u_max)
@@ -373,11 +381,13 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
         sm_cvc_control_system_init(&ctrl->cvc_ctrl, self->est_par, &self->cvc_cfg,
                                    self->speed_ctrl);
         ctrl->cvc_ctrl.torque_mode = ctrl->torque_mode;
+        ctrl->cvc_ctrl.vector_ctrl.observer.speed_observer.w_M = self->w_M0;
         native_pwm_copy_settings(&ctrl->cvc_ctrl.pwm, &self->pwm);
     } else {
         vector_control_system_init(&ctrl->ctrl, self->est_par, &self->cfg,
                                    self->speed_ctrl);
         ctrl->ctrl.torque_mode = ctrl->torque_mode;
+        ctrl->ctrl.vector_ctrl.observer.speed_observer.w_M = self->w_M0;
         native_pwm_copy_settings(&ctrl->ctrl.pwm, &self->pwm);
     }
     ctrl->t = t_ctrl;

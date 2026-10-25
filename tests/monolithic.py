@@ -143,6 +143,17 @@ def speed_controller_code(i: dict[str, int]) -> str:
     )
 
 
+def observer_code(i: dict[str, int]) -> str:
+    """
+    C code setting the initial speed estimate of the observer of the vector
+    controller (SpeedFluxObserver.w_M).
+    """
+    return (
+        "/* Initial speed estimate of the observer */\n"
+        f"ctrl.vector_ctrl.observer.speed_observer.w_M = P({i['observer_w_M']}, 0);\n"
+    )
+
+
 def torque_mode_code(i: dict[str, int]) -> str:
     """C code setting the torque-control mode without the speed controller."""
     if "speed_J" in i:
@@ -220,6 +231,7 @@ SM_MASK_PARAMS = [
     MaskParam("J", "J", TAB, "cfg.J"),
     MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
     MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    MaskParam("observer_w_M", "observer.w_M", TAB, "", True),
     *SPEED_MASK_PARAMS,
     *PWM_MASK_PARAMS,
 ]
@@ -287,6 +299,7 @@ def _sm_code(torque: bool = False) -> dict[str, str]:
         + speed_controller_code(i)
         + "\n"
         "vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + observer_code(i)
         + torque_mode_code(i)
         + pwm_code(i)
     )
@@ -364,6 +377,7 @@ SM_CVC_MASK_PARAMS = [
     MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
     MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
     MaskParam("discrete", "discrete", TAB, "cfg.discrete"),
+    MaskParam("observer_w_M", "observer.w_M", TAB, "", True),
     *SPEED_MASK_PARAMS,
     *PWM_MASK_PARAMS,
 ]
@@ -387,6 +401,7 @@ def _sm_cvc_code(torque: bool = False) -> dict[str, str]:
         + speed_controller_code(i)
         + "\n"
         "sm_cvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + observer_code(i)
         + torque_mode_code(i)
         + pwm_code(i)
     )
@@ -525,6 +540,7 @@ IM_MASK_PARAMS = [
     MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
     MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
     MaskParam("discrete", "discrete", TAB, "cfg.discrete"),
+    MaskParam("observer_w_M", "observer.w_M", TAB, "", True),
     *SPEED_MASK_PARAMS,
     *PWM_MASK_PARAMS,
 ]
@@ -549,6 +565,7 @@ def _im_code(torque: bool = False) -> dict[str, str]:
         + cfg_assignments(mask_params)
         + speed_controller_code(i)
         + "im_vector_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + observer_code(i)
         + torque_mode_code(i)
         + pwm_code(i)
     )
@@ -607,6 +624,7 @@ IM_FVC_MASK_PARAMS = [
     MaskParam("J", "J", TAB, "cfg.J"),
     MaskParam("sensorless", "sensorless", TAB, "cfg.sensorless"),
     MaskParam("T_s", "T_s", TAB, "cfg.T_s", True),
+    MaskParam("observer_w_M", "observer.w_M", TAB, "", True),
     *SPEED_MASK_PARAMS,
     *PWM_MASK_PARAMS,
 ]
@@ -631,6 +649,7 @@ def _im_fvc_code(torque: bool = False) -> dict[str, str]:
         + cfg_assignments(mask_params)
         + speed_controller_code(i)
         + "im_fvc_control_system_init(&ctrl, par, &cfg, speed_ctrl);\n"
+        + observer_code(i)
         + torque_mode_code(i)
         + pwm_code(i)
     )

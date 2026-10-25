@@ -9,7 +9,7 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.psi_s_nom = 0.987615948229323;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = 0;\ncfg.alpha_o = [];\ncfg.tau_M_max = inf;\ncfg.k_u = 0.9;\ncfg.k_b = 0.9;\ncfg.J = 0.015;\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Flux-vector controller (FluxVectorController)\nvector_ctrl.par = par;\nvector_ctrl.cfg = cfg;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 2*pi*4;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 2;\nmachine.R_s = 3.7;\nmachine.R_R = 2.1;\nmachine.L_sgm = 0.021;\nmachine.L_M = 0.224;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\nconverter.u_dc = 540;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (InductionMachineInvGammaPars)\npar.n_p = 2;\npar.R_s = 3.7;\npar.R_R = 2.1;\npar.L_sgm = 0.021;\npar.L_M = 0.224;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.psi_s_nom = 0.987615948229323;\ncfg.i_s_max = 10.606601717798213;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = 0;\ncfg.alpha_o = [];\ncfg.tau_M_max = inf;\ncfg.k_u = 0.9;\ncfg.k_b = 0.9;\ncfg.J = 0.015;\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Flux-vector controller (FluxVectorController)\nvector_ctrl.par = par;\nvector_ctrl.cfg = cfg;\n% Initial speed estimate of the observer (SpeedFluxObserver.w_M)\nvector_ctrl.observer.w_M = 0;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 2*pi*4;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
     Location      [0, 0; 1000, 520]
     ZoomFactor    1
@@ -140,7 +140,7 @@ Plecs {
       MaskIconRotates on
       Parameter {
         Variable      "vector_ctrl"
-        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg"
+        Prompt        "vector_ctrl: Vector controller (FluxVectorController) as a struct: par, cfg, observer"
         Type          FreeText
         Value         "vector_ctrl"
         Show          off
@@ -1719,6 +1719,15 @@ Plecs {
         Tunable       on
         TabName       ""
       }
+      Parameter {
+        Variable      "observer"
+        Prompt        "observer: Initial state of the observer as a struct: w_M, the speed estimate"
+        Type          FreeText
+        Value         "vector_ctrl.observer"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
       Terminal {
         Type          Input
         Position      [-50, -30]
@@ -1919,6 +1928,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "cfg.J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "observer.w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -2416,7 +2434,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "SpeedObserver (motulator)"
-      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M. The mechanical system model is used if J is given."
+      MaskDescription "Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -2443,6 +2461,15 @@ Plecs {
         Prompt        base64 "SjogSW5lcnRpYSAoa2dtwrIpLCBbXSA9IHRoZSBtb2RlbCBub3QgdXNlZA=="
         Type          FreeText
         Value         "J"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "w_M"
+        Prompt        "w_M: Initial speed estimate (rad/s)"
+        Type          FreeText
+        Value         "w_M"
         Show          off
         Tunable       on
         TabName       ""
@@ -2609,7 +2636,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_w, k_tau, J, T_s"
+        Value         "k_w, k_tau, J, w_M, T_s"
         Show          off
       }
       Parameter {
@@ -2634,7 +2661,7 @@ Plecs {
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nT_s = P(3, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"k_w must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"k_tau must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"w_M must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nspeed_observer_init(&self, P(0, 0), P(1, 0), PDIM(2) > 0 ? P(2, 0) : 0.0);\nself.w_M = P(3, 0); /* The initial speed estimate */\nT_s = P(4, 0);\n"
         Show          off
       }
       Parameter {
