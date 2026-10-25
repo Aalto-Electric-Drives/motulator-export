@@ -693,6 +693,30 @@ def test_control_block(
         )
 
 
+def test_vector_ctrl_without_observer(
+    harnesses: Harnesses, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    A model whose struct vector_ctrl has no initial state of the observer (e.g., a
+    model built before it was exported) should be updated with the library, the
+    mask of the control system giving the zero initial speed estimate.
+    """
+    monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
+    mdl, ctrl, t_stop = example_system("ipmsm_2kw_fvc")
+    path = tmp_path / "legacy_observer.slx"
+    script = simulink.write_model(path, mdl, ctrl, t_stop, code="matlab")
+    eng = harnesses.eng
+    eng.run(str(script), nargout=0)
+    eng.eval(
+        "ws = get_param('legacy_observer', 'ModelWorkspace');\n"
+        "ws.assignin('vector_ctrl', rmfield(ws.getVariable('vector_ctrl'), "
+        "'observer'));",
+        nargout=0,
+    )
+    eng.set_param("legacy_observer", "SimulationCommand", "update", nargout=0)
+    eng.close_system("legacy_observer", 0.0, nargout=0)
+
+
 @pytest.mark.parametrize("code", CODES)
 @pytest.mark.parametrize("name", EXAMPLE_SYSTEMS)
 def test_example(

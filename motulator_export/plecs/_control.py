@@ -1614,6 +1614,12 @@ TOP_ARGS = {
         "k_comp = 1.5;\n"
         "if isfield(vector_ctrl.cfg, 'discrete') && vector_ctrl.cfg.discrete\n"
         "  k_comp = 0;\n"
+        "end\n"
+        "% Initial speed estimate of the observer, zero if not given (e.g., in a\n"
+        "% model written before the initial state of the observer was exported)\n"
+        "if ~isfield(vector_ctrl, 'observer') || "
+        "~isfield(vector_ctrl.observer, 'w_M')\n"
+        "  vector_ctrl.observer.w_M = 0;\n"
         "end\n",
     ),
     "VHzControlSystem": (

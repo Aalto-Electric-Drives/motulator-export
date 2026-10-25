@@ -20,7 +20,7 @@ Run from the repository root:
 import ctypes
 import re
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, cast
 
 import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
@@ -431,6 +431,30 @@ def test_torque_control(compiled: Compiled, key: str, sensorless: bool) -> None:
         run,
         SM_INPUTS if key in SM_KEYS else IM_INPUTS,
     )
+
+
+@pytest.mark.parametrize("key", ["fvc", "smcvc", "cvc", "imfvc"])
+def test_vector_ctrl_without_observer(key: str) -> None:
+    """
+    Without the initial state of the observer in the struct vector_ctrl (e.g., in a
+    model written before it was exported), the parameters of the blocks should be
+    those of the zero initial speed estimate, with the scoping of PLECS and of
+    Simulink.
+    """
+    ctrl = torque_system(key, True)[0]()[1]
+    cast(Any, ctrl.vector_ctrl).observer.w_M = 0.0
+    values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
+    block = SYSTEMS[f"{key}_torque"][0]
+    init = init_script(key, values)
+    lines = init.splitlines(keepends=True)
+    legacy = "".join(line for line in lines if "vector_ctrl.observer" not in line)
+    assert legacy != init
+    top = block.netlist()
+    for plecs in (False, True):
+        np.testing.assert_equal(
+            block_params(top, legacy, block, plecs=plecs),
+            block_params(top, init, block, plecs=plecs),
+        )
 
 
 @pytest.mark.parametrize(("t_d", "d_min", "blocked"), SM_VHZ_CASES, ids=SM_VHZ_IDS)
