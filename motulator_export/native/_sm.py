@@ -12,7 +12,7 @@ models of `motulator_export.native._drive` with a synchronous machine, and
 
 with the features of the C port (see `motulator_export.plecs._sm`) and the
 duty-ratio error model of the PWM, also with the gates blocked
-(`ControlSystem.set_enable`, a constant or a `StepSignal`).
+(`ControlSystem.set_enable`, a constant, a `StepSignal`, or a function of time).
 
 """
 

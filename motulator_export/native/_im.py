@@ -13,7 +13,7 @@ models of `motulator_export.native._drive` with an induction machine, and
 
 with the features of the C port (see `motulator_export.plecs._im`) and the duty-ratio
 error model of the PWM, also with the gates blocked (`ControlSystem.set_enable`, a
-constant or a `StepSignal`).
+constant, a `StepSignal`, or a function of time).
 
 """
 

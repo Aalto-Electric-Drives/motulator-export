@@ -79,18 +79,19 @@ The script simulates the drive natively and plots the results. After you close t
 
 The scripts for PLECS and Simulink are:
 
-| System                                                    | PLECS                     | Simulink                        |
-| --------------------------------------------------------- | ------------------------- | ------------------------------- |
-| 2.2-kW IPMSM, sensorless flux-vector control              | `ipmsm_2kw_fvc.py`        | `ipmsm_2kw_fvc_simulink.py`     |
-| 2.2-kW IPMSM, sensorless current-vector control           | `ipmsm_2kw_cvc.py`        | `ipmsm_2kw_cvc_simulink.py`     |
-| 2.2-kW IPMSM, observer-based V/Hz control                 | `ipmsm_2kw_vhz.py`        | `ipmsm_2kw_vhz_simulink.py`     |
-| 5.6-kW PM-SyRM, GradNet models, flux-vector control       | `pmsyrm_6kw_gn_fvc.py`    | `pmsyrm_6kw_gn_fvc_simulink.py` |
-| 2.2-kW induction machine, current-vector control          | `im_2kw_cvc.py`           | `im_2kw_cvc_simulink.py`        |
-| 2.2-kW induction machine, flux-vector control             | `im_2kw_fvc.py`           | `im_2kw_fvc_simulink.py`        |
-| 2.2-kW induction machine, dead time and its compensation  | `im_2kw_dead_time_cvc.py` |                                 |
-| 2.2-kW induction machine, observer-based V/Hz control     | `im_2kw_vhz.py`           | `im_2kw_vhz_simulink.py`        |
-| 10-kVA grid converter, LCL filter, grid-following control | `gfl_10kva_lcl.py`        | `gfl_10kva_lcl_simulink.py`     |
-| 12.5-kVA grid converter, weak grid, grid-forming control  | `gfm_13kva_do.py`         | `gfm_13kva_do_simulink.py`      |
+| System                                                                    | PLECS                     | Simulink                          |
+| ------------------------------------------------------------------------- | ------------------------- | --------------------------------- |
+| 2.2-kW IPMSM, sensorless flux-vector control                              | `ipmsm_2kw_fvc.py`        | `ipmsm_2kw_fvc_simulink.py`       |
+| 2.2-kW IPMSM, sensorless current-vector control                           | `ipmsm_2kw_cvc.py`        | `ipmsm_2kw_cvc_simulink.py`       |
+| 2.2-kW IPMSM, observer-based V/Hz control                                 | `ipmsm_2kw_vhz.py`        | `ipmsm_2kw_vhz_simulink.py`       |
+| 5.6-kW PM-SyRM, GradNet models, flux-vector control                       | `pmsyrm_6kw_gn_fvc.py`    | `pmsyrm_6kw_gn_fvc_simulink.py`   |
+| 2.2-kW induction machine, current-vector control                          | `im_2kw_cvc.py`           | `im_2kw_cvc_simulink.py`          |
+| 2.2-kW induction machine, discrete-time current control in torque control | `im_2kw_cvc_discrete.py`  | `im_2kw_cvc_discrete_simulink.py` |
+| 2.2-kW induction machine, flux-vector control                             | `im_2kw_fvc.py`           | `im_2kw_fvc_simulink.py`          |
+| 2.2-kW induction machine, dead time and its compensation                  | `im_2kw_dead_time_cvc.py` |                                   |
+| 2.2-kW induction machine, observer-based V/Hz control                     | `im_2kw_vhz.py`           | `im_2kw_vhz_simulink.py`          |
+| 10-kVA grid converter, LCL filter, grid-following control                 | `gfl_10kva_lcl.py`        | `gfl_10kva_lcl_simulink.py`       |
+| 12.5-kVA grid converter, weak grid, grid-forming control                  | `gfm_13kva_do.py`         | `gfm_13kva_do_simulink.py`        |
 
 The MATLAB scripts that build the Simulink models are `examples/simulink/build_<name>.m`, and `build_<name>_matlab.m` with MATLAB Function blocks.
 
@@ -123,7 +124,7 @@ plecs.write_model("ipmsm.plecs", mdl, ctrl, t_stop=1.2)
 simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2)  # Writes build_ipmsm.m
 ```
 
-- The references, the load torque, and the gate enable (`ctrl.set_enable`) can be constants or `StepSignal` objects. A function of time cannot be exported.
+- The references (e.g., `ctrl.set_speed_ref`, or `ctrl.set_torque_ref` in the torque-control mode without the speed controller), the load torque (or the external rotor speed of `ExternalRotorSpeed`, `set_external_rotor_speed`), and the gate enable (`ctrl.set_enable`) can be constants or `StepSignal` objects. A function of time cannot be exported.
 - The models start from the state of the system model, e.g., a given initial speed (`mdl.mechanics.state.w_M = 50.0`). Write the models before simulating the system in *motulator*.
 - A system that is not supported raises `NotImplementedError` before any file is written, see [](supported.md).
 

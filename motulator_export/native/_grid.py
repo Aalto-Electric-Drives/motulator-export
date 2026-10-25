@@ -16,7 +16,7 @@ Supported:
   (`ObserverBasedGridFormingController`) in `GridConverterControlSystem` in the
   power-control mode, with the features of the C port (see
   `motulator_export.plecs._grid`), also with the gates blocked
-  (`ControlSystem.set_enable`, a constant or a `StepSignal`)
+  (`ControlSystem.set_enable`, a constant, a `StepSignal`, or a function of time)
 - Ideal sensors
 
 """
