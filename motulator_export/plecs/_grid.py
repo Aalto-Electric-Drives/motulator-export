@@ -148,7 +148,7 @@ def export_plant_variables(mdl: GridConverterSystem) -> list[tuple[str, Any]]:
     """Workspace variables of the system model."""
     f = mdl.ac_filter
     src = cast(ThreePhaseSource, mdl.ac_source)
-    variables: list[tuple[str, Any]] = [("converter.u_dc", mdl.converter.u_dc)]
+    variables: list[tuple[str, Any]] = [("converter.u_dc", mdl.converter.inp.u_dc)]
     if isinstance(f, LCLFilter):
         variables += [
             ("ac_filter.L_fc", f.L_fc),

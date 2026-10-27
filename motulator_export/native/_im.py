@@ -86,11 +86,11 @@ class InductionMachineDriveSystem(NativeSystem):
 
     """
 
-    def __init__(self, mdl: Any, ctrl: Any) -> None:
-        self.check_supported(mdl, ctrl)
+    def __init__(self, mdl: Any, ctrl: Any, front: Any = None) -> None:
+        self.check_supported(mdl, ctrl, front)
         super().__init__("im", {**DRIVE_API, **API})
         lib, h = self.lib, self.handle
-        set_drive(self, cast(Drive, mdl))
+        set_drive(self, cast(Drive, mdl), front)
 
         # Control system
         if isinstance(ctrl, VHzControlSystem):
@@ -125,8 +125,11 @@ class InductionMachineDriveSystem(NativeSystem):
         return isinstance(mdl, Drive) and isinstance(mdl.machine, InductionMachine)
 
     @staticmethod
-    def check_supported(mdl: Any, ctrl: Any) -> None:
-        """Raise an error if the drive system is not supported."""
+    def check_supported(mdl: Any, ctrl: Any, front: Any = None) -> None:
+        """
+        Raise an error if the drive system, fed from the diode bridge `front` if
+        given, is not supported.
+        """
         if type(ctrl) is VHzControlSystem:
             check_supported_vhz_ctrl(ctrl.vhz_ctrl)
         elif type(ctrl) is VectorControlSystem:
@@ -137,4 +140,4 @@ class InductionMachineDriveSystem(NativeSystem):
                 "Only VectorControlSystem and VHzControlSystem supported"
             )
         check_supported_control(ctrl, d_err=True)
-        check_supported_drive(cast(Drive, mdl))
+        check_supported_drive(cast(Drive, mdl), front)

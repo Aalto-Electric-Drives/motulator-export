@@ -15,7 +15,8 @@
 | Grid-following control                                                     |  yes   |   yes    |  yes   |
 | Grid-forming control (disturbance observer)                                |  yes   |   yes    |  yes   |
 | Stiff DC bus                                                               |  yes   |   yes    |  yes   |
-| Capacitive or diode-bridge-fed DC bus (`DCBus`, `DiodeBridgeDCBus`)        | drives |    no    |  yes   |
+| Capacitive DC bus (`DCBus`)                                                | drives |    no    |  yes   |
+| Diode bridge feeding the DC bus, through an L filter from the grid         | drives |    no    |  yes   |
 | Dead time and threshold voltage of the converter                           | drives |    no    |  yes   |
 | Their compensation in the control system (drives)                          |  yes   |   yes    |  yes   |
 | Single update in the PWM of the control system (`PWM(single_update=True)`) |  yes   |   yes    |  yes   |

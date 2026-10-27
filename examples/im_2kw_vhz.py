@@ -9,7 +9,7 @@ RPC interface enabled, simulates both and compares the results.
 
 With --open-loop, the control system is pure open-loop V/Hz control, i.e., the
 observer-based V/Hz controller with the machine model L_M = inf (and R_s = R_R =
-L_sgm = 0) and zero gains, as in examples/drive/vhz/plot_2kw_im_diode_vhz.py
+L_sgm = 0) and zero gains, as in examples/drive/grid_connection/plot_2kw_im_diode_vhz.py
 (im_2kw_vhz_open_loop.plecs).
 
 Run from the repository root:

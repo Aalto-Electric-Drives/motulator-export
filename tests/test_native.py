@@ -7,8 +7,6 @@ simulation takes the same steps as motulator, so the results agree to the roundi
 errors, also with the gates blocked, when the transitions of the diode states are
 located as events. With the carrier comparison, a change of the quantized duty ratios
 at the rounding error changes the switching instants, so a fine quantization is used.
-With the diode bridge, the clamping of the inductor current at zero makes the step
-sizes sensitive to the rounding errors, so the control signals are compared.
 
 Run from the repository root (requires gcc):
 
@@ -29,7 +27,14 @@ import motulator.grid.model as grid_model
 import numpy as np
 import pytest
 from motulator.common.control import PIController
-from motulator.common.model import CarrierComparison, DCBus, DiodeBridgeDCBus, SolverCfg
+from motulator.common.model import (
+    CarrierComparison,
+    CompositeModel,
+    DCBus,
+    DiodeBridge,
+    SolverCfg,
+    ThreePhaseSource,
+)
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal, native
@@ -465,7 +470,7 @@ def test_final_state(case: str) -> None:
             sensorless=True, t_d=2e-6, i_0=0.0, u_th=1.0, single_update=True
         )[0]
     else:
-        build = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0], bridge=False)
+        build = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0])
     mdl_py, ctrl_py = build()
     model.Simulation(mdl_py, ctrl_py, show_progress=False).simulate(0.06)
     mdl_c, ctrl_c = build()
@@ -594,37 +599,72 @@ def test_pi_speed_controller() -> None:
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
-def with_dc_bus(build: Build, bridge: bool) -> Build:
-    """The drive of `build` fed by a DC-bus model (DCBus or DiodeBridgeDCBus)."""
+def with_dc_bus(build: Build) -> Build:
+    """The drive of `build` fed by a DC-bus model (DCBus)."""
 
     def build_dc() -> tuple[model.Drive, Any]:
         mdl, ctrl = build()
         c = mdl.converter
         converter = model.VoltageSourceConverter(t_d=c.t_d, u_th=c.u_th)
-        if bridge:
-            dc_bus = DiodeBridgeDCBus(
-                235e-6, 2e-3, U_g=400, f_g=50, converters=[converter]
-            )
-        else:
-            dc_bus = DCBus(C_dc=1e-3, u_dc=540, converters=[converter])
+        dc_bus = DCBus(C_dc=1e-3, u_dc=540)
         return model.Drive(mdl.machine, mdl.mechanics, converter, dc_bus=dc_bus), ctrl
 
     return build_dc
 
 
-@pytest.mark.parametrize("bridge", [False, True], ids=["capacitor", "diode_bridge"])
 @pytest.mark.parametrize("machine", ["sm", "im"])
-def test_dc_bus(machine: str, bridge: bool) -> None:
-    """DC-bus models feeding the converter of the drive."""
+def test_dc_bus(machine: str) -> None:
+    """DC-bus model feeding the converter of the drive."""
     if machine == "sm":
         build = sm_system(sensorless=True, t_d=0.0)[0]
     else:
         build = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]
-    res_py, res_c = simulate(with_dc_bus(build, bridge), 0.3)
-    if bridge:
-        check(res_py, res_c, rtol=1e-5, same_steps=False)
+    res_py, res_c = simulate(with_dc_bus(build), 0.3)
+    check(res_py, res_c, rtol=1e-9)
+
+
+def with_diode_bridge(build: Build) -> Build:
+    """
+    The drive of `build` fed from a diode bridge, with the threshold voltage of its
+    diodes, through an L filter with its resistance, as a composite model.
+    """
+
+    def build_bridge() -> tuple[CompositeModel, dict[str, Any]]:
+        mdl, ctrl = with_dc_bus(build)()
+        grid = grid_model.GridConverterSystem(
+            DiodeBridge(u_th=1.0),
+            grid_model.LFilter(L_f=0.5e-3, R_f=0.05),
+            ThreePhaseSource(w_g=2 * np.pi * 50, e_g=np.sqrt(2 / 3) * 400),
+            dc_bus=mdl.dc_bus,
+        )
+        return CompositeModel({"grid": grid, "drive": mdl}), {"drive": ctrl}
+
+    return build_bridge
+
+
+@pytest.mark.parametrize("machine", ["sm", "im"])
+def test_diode_bridge(machine: str) -> None:
+    """
+    Drive fed from a diode bridge: the drive and the diode bridge with its L filter
+    and source agree, also the transitions of the diode states.
+    """
+    if machine == "sm":
+        build = sm_system(sensorless=True, t_d=0.0)[0]
     else:
-        check(res_py, res_c, rtol=1e-9)
+        build = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]
+    res_py, res_c = simulate(with_diode_bridge(build), 0.3)
+    assert res_py.ctrl.grid is None and res_c.ctrl.grid is None
+    drive_py, drive_c = (
+        model.SimulationResults(res.mdl.drive, res.ctrl.drive)
+        for res in (res_py, res_c)
+    )
+    check(drive_py, drive_c, rtol=1e-9)
+    names = [name for name in vars(res_py.mdl.grid) if name != "t"]
+    errors = max_errors(
+        {name: getattr(res_py.mdl.grid, name) for name in names},
+        {name: getattr(res_c.mdl.grid, name) for name in names},
+    )
+    assert max(errors.values()) < 1e-9
 
 
 def gfl_variant(lcl: bool, pwm: bool = False, dc_bus: bool = False) -> Build:
@@ -659,7 +699,7 @@ def gfl_variant(lcl: bool, pwm: bool = False, dc_bus: bool = False) -> Build:
             phi_neg=0.3,
         )
         converter = grid_model.VoltageSourceConverter(u_dc=None if dc_bus else 650)
-        dc = DCBus(C_dc=1e-3, u_dc=650, converters=[converter]) if dc_bus else None
+        dc = DCBus(C_dc=1e-3, u_dc=650) if dc_bus else None
         mdl = grid_model.GridConverterSystem(
             converter, ac_filter, ac_source, dc_bus=dc, pwm=pwm
         )
@@ -855,7 +895,7 @@ def test_unsupported() -> None:
     with pytest.raises(NotImplementedError, match="DC-bus voltage control"):
         native.Simulation(mdl, ctrl)
     # External DC current
-    mdl, ctrl = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0], False)()
+    mdl, ctrl = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0])()
     cast_dc_bus: Any = mdl.dc_bus
     cast_dc_bus.set_external_dc_current(1.0)
     with pytest.raises(NotImplementedError, match="External DC current"):

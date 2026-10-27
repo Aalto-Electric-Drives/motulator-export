@@ -16,7 +16,8 @@ from typing import Any
 
 import numpy as np
 from motulator.common.model._base import Model
-from motulator.common.model._converter import DCBus, DiodeBridgeDCBus
+from motulator.common.model._converter import DCBus
+from motulator.grid.model import GridConverterSystem, LFilter
 
 from motulator_export._common import C_SOURCES, StepSignal, c_define
 from motulator_export.plecs._netlist import Subsystem
@@ -213,6 +214,8 @@ X_RISER = 500
 # it (sch.dx), which makes the same space between the riser and the DC source
 X_DC, X_U_DC = CONV[0] - 120, CONV[0] - 60
 DC_DX = 60
+# Space of the diode bridge and its grid between the PWM and the DC bus
+BRIDGE_DX = 370
 SRC = {"DiscretizationBehavior": "2", "StateSpaceInlining": "1"}  # Controlled sources
 
 
@@ -440,18 +443,20 @@ def _add_converter(
     sch.signal(("Gate enable", 1), ("Converter", 4), [(x_g, y_p)])
 
 
-def _add_dc_bus(sch: _Schematic, dc_bus: DCBus | None) -> None:
+def _add_dc_bus(
+    sch: _Schematic, dc_bus: DCBus | None, front: GridConverterSystem | None = None
+) -> None:
     """
-    Add the DC bus: a stiff voltage (without a DC-bus model), a capacitor (`DCBus`),
-    or a diode bridge and LC (`DiodeBridgeDCBus`).
+    Add the DC bus: a stiff voltage (without a DC-bus model) or a capacitor
+    (`DCBus`), fed from the diode bridge `front` if given.
 
     The circuits are not grounded (as in motulator, there is no zero sequence).
 
     """
     x_c, y_c = CONV
     sch.component("Voltmeter", "u_dc", (X_U_DC, y_c), direction="up", label="west")
-    if isinstance(dc_bus, DiodeBridgeDCBus):
-        _add_diode_bridge(sch)
+    if front is not None:
+        _add_diode_bridge(sch, front)
         return
     if dc_bus is not None:
         dc, typ, params = "C_dc", "Capacitor", {"C": "dc_bus.C_dc"}
@@ -466,10 +471,17 @@ def _add_dc_bus(sch: _Schematic, dc_bus: DCBus | None) -> None:
         sch.bus((dc, terminal), "Wire", taps)
 
 
-def _add_diode_bridge(sch: _Schematic) -> None:
-    """Add the grid, the diode bridge, the DC inductor, and the DC capacitor."""
+def _add_diode_bridge(sch: _Schematic, front: GridConverterSystem) -> None:
+    """
+    Add the grid, the L filter (its series resistance only if nonzero), the diode
+    bridge, and the DC-bus capacitor.
+    """
     x_c, y_c = CONV
-    x_legs = [330, 370, 410]
+    x_legs = [360, 400, 440]
+    f = front.ac_filter
+    resistor = isinstance(f, LFilter) and f.R_f + f.R_g > 0
+    L = {"L": "grid.ac_filter.L_f + grid.ac_filter.L_g", "i_init": "0"}
+    R = {"R": "grid.ac_filter.R_f + grid.ac_filter.R_g"}
     for k, ph in enumerate("abc"):
         x = x_legs[k]
         for sign, y in (("+", y_c - 30), ("-", y_c + 30)):
@@ -477,38 +489,54 @@ def _add_diode_bridge(sch: _Schematic) -> None:
                 "Diode",
                 f"D{ph}{sign}",
                 (x, y),
-                {"Vf": "0", "Ron": "0"},
+                {"Vf": "grid.converter.u_th", "Ron": "0"},
                 direction="up",
                 flipped=True,
                 show=False,
             )
-        # Grid phase voltage u_g*cos(w_g*t - k*2*pi/3), i.e., exp_j_theta_g(0) = 1
+        # Grid phase voltage e_g*cos(w_g*t - k*2*pi/3), i.e., exp_j_theta_g(0) = 1,
+        # and the L filter
+        y_ph = y_c - 40 + 40 * k
+        src = {
+            "V": "grid.ac_source.e_g",
+            "w": "grid.ac_source.w_g",
+            "phi": f"pi/2 - {k}*2*pi/3",
+        }
         sch.component(
-            "ACVoltageSource",
-            f"u_g{ph}",
-            (240, y_c - 40 + 40 * k),
-            {"V": "dc_bus.u_g", "w": "dc_bus.w_g", "phi": f"pi/2 - {k}*2*pi/3"},
+            "ACVoltageSource", f"e_g{ph}", (190, y_ph), src, label="north", show=k == 0
+        )
+        sch.component(
+            "Inductor",
+            f"L_f{ph}",
+            (240, y_ph),
+            L,
+            direction="left",
             label="north",
             show=k == 0,
         )
+        sch.wire((f"e_g{ph}", 1), (f"L_f{ph}", 1))
+        last = f"L_f{ph}"
+        if resistor:
+            sch.component(
+                "Resistor",
+                f"R_f{ph}",
+                (290, y_ph),
+                R,
+                direction="left",
+                label="north",
+                show=k == 0,
+            )
+            sch.wire((last, 2), (f"R_f{ph}", 1))
+            last = f"R_f{ph}"
         # The midpoint of the leg, at a different height for each phase
         y = y_c - 10 + 10 * k
-        lead = [[(300, y_c - 40), (300, y)], [], [(310, y_c + 40), (310, y)]][k]
+        lead = [[(330, y_ph), (330, y)], [], [(340, y_ph), (340, y)]][k]
         dsts = [((f"D{ph}+", 1), []), ((f"D{ph}-", 2), [])]
-        sch.bus((f"u_g{ph}", 1), "Wire", [(lead + [(x, y)], dsts)])
+        sch.bus((last, 2), "Wire", [(lead + [(x, y)], dsts)])
     # Star point of the grid (not grounded)
     y_a, y_b, y_g = y_c - 40, y_c, y_c + 40
-    taps: list[Tap] = [([(200, y_a), (200, y_b)], [(("u_gb", 2), [])])]
-    sch.bus(("u_ga", 2), "Wire", taps + [([(200, y_g)], [(("u_gc", 2), [])])])
-    # DC bus: the cathodes of the upper diodes to the inductor, the anodes of the
-    # lower diodes to the negative rail
-    sch.component(
-        "Inductor",
-        "L_dc",
-        (450, Y_TOP),
-        {"L": "dc_bus.L_dc", "i_init": "0"},
-        direction="left",
-    )
+    taps: list[Tap] = [([(150, y_a), (150, y_b)], [(("e_gb", 2), [])])]
+    sch.bus(("e_ga", 2), "Wire", taps + [([(150, y_g)], [(("e_gc", 2), [])])])
     sch.component(
         "Capacitor",
         "C_dc",
@@ -517,16 +545,13 @@ def _add_diode_bridge(sch: _Schematic) -> None:
         direction="up",
         label="west",
     )
-    legs = [
-        ([(x, Y_TOP)], [((f"D{ph}+", 2), [])])
-        for x, ph in zip(x_legs, "abc", strict=True)
-    ]
-    sch.bus(("L_dc", 1), "Wire", legs[::-1])
-    taps = [
-        ([(X_DC, Y_TOP)], [(("C_dc", 1), [])]),
-        ([(X_U_DC, Y_TOP)], [(("u_dc", 1), [])]),
-    ]
-    sch.bus(("L_dc", 2), "Wire", taps + [([(x_c, Y_TOP)], [(("Converter", 5), [])])])
+    # DC bus: the cathodes of the upper diodes to the positive rail, the anodes of the
+    # lower diodes to the negative rail
+    taps = [([(x_legs[0], Y_TOP), (x_legs[1], Y_TOP)], [(("Db+", 2), [])])]
+    taps += [([(x_legs[2], Y_TOP)], [(("Dc+", 2), [])])]
+    taps += [([(X_DC, Y_TOP)], [(("C_dc", 1), [])])]
+    taps += [([(X_U_DC, Y_TOP)], [(("u_dc", 1), [])])]
+    sch.bus(("Da+", 2), "Wire", taps + [([(x_c, Y_TOP)], [(("Converter", 5), [])])])
     taps = [([(x_c, Y_BOT), (X_U_DC, Y_BOT)], [(("u_dc", 2), [])])]
     taps += [([(X_DC, Y_BOT)], [(("C_dc", 2), [])])]
     taps += [

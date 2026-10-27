@@ -8,11 +8,7 @@ and the scope.
 from typing import Any, cast
 
 import numpy as np
-from motulator.common.model._converter import (
-    DiodeBridgeDCBus,
-    DiodeBridgeDCBusStates,
-    VoltageSourceConverter,
-)
+from motulator.common.model._converter import VoltageSourceConverter
 from motulator.common.model._pwm import CarrierComparison
 from motulator.common.utils._utils import get_value, wrap
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
@@ -23,10 +19,12 @@ from motulator.drive.model import (
     MechanicalSystem,
     SynchronousMachine,
 )
+from motulator.grid.model import GridConverterSystem, LFilter, ThreePhaseSource
 
 from motulator_export._common import (
     StepSignal,
     check_supported_dc_bus,
+    check_supported_front,
     check_supported_pwm,
     reference,
 )
@@ -42,12 +40,16 @@ from motulator_export.plecs._schematic import _fmt, _probe, _Schematic, _scope
 
 # Machine signals in the output port "mdl"
 MDL_OUTPUTS = ["i_a", "i_b", "i_c", "w_M", "theta_M", "tau_M"]
+# Parameters of the L filter of the diode bridge
+L_FILTER_FIELDS = ["L_f", "R_f", "L_g", "R_g"]
 
 
-def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
+def _check_supported_plant(
+    mdl: Drive, dead_time: bool = False, front: GridConverterSystem | None = None
+) -> None:
     """
-    Raise an error if the mechanics, the converter, the DC bus, or the PWM is not
-    supported.
+    Raise an error if the mechanics, the converter, the DC bus (fed from the diode
+    bridge `front` if given), or the PWM is not supported.
 
     The dead time of the carrier comparison (`mdl.pwm.t_d`, by default that of the
     converter) and the threshold voltage of the converter (`u_th`) are supported only
@@ -68,7 +70,9 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
     if type(mdl.converter) is not VoltageSourceConverter:
         raise NotImplementedError("Only VoltageSourceConverter supported")
     if mdl.dc_bus is not None:
-        check_supported_dc_bus(mdl.dc_bus, mdl.converter)
+        check_supported_dc_bus(mdl.dc_bus, mdl.converter, front)
+    if front is not None:
+        check_supported_front(front)
     if mdl.machine.i_s_sensor is not None or mdl.converter.u_dc_sensor is not None:
         raise NotImplementedError("Sensor models not supported")
     if not isinstance(mdl.pwm, CarrierComparison):
@@ -86,15 +90,18 @@ def _check_supported_plant(mdl: Drive, dead_time: bool = False) -> None:
         if mdl.pwm.t_d < 0 or mdl.converter.u_th < 0:
             raise NotImplementedError("Only t_d >= 0 and u_th >= 0 supported")
     _check_delay(mdl)
-    _check_initial_drive_states(mdl)
+    _check_initial_drive_states(mdl, front)
 
 
-def _check_initial_drive_states(mdl: Drive) -> None:
+def _check_initial_drive_states(
+    mdl: Drive, front: GridConverterSystem | None = None
+) -> None:
     """
-    Raise an error if a state of the drive (other than the speed and the angle of
-    the mechanics and the DC-bus voltage, which are exported) is not at its initial
-    value. The synchronous machine model has its own rotor angle, which must be n_p
-    times that of the mechanics (modulo 2*pi), as in the exported models.
+    Raise an error if a state of the drive or of the diode bridge `front` (other than
+    the speed and the angle of the mechanics and the DC-bus voltage, which are
+    exported) is not at its initial value. The synchronous machine model has its own
+    rotor angle, which must be n_p times that of the mechanics (modulo 2*pi), as in
+    the exported models.
     """
     machine = mdl.machine
     mech = mdl.mechanics.state
@@ -122,10 +129,12 @@ def _check_initial_drive_states(mdl: Drive) -> None:
     dc_bus = mdl.dc_bus
     if dc_bus is not None:
         exported.append(("dc_bus.state.u_dc", dc_bus.state.u_dc))
-    if isinstance(dc_bus, DiodeBridgeDCBus):
-        bridge = cast(DiodeBridgeDCBusStates, dc_bus.state)
-        states.append(("dc_bus.state.i_L", bridge.i_L, 0j))
-        states.append(("dc_bus.state.exp_j_theta_g", bridge.exp_j_theta_g, 1))
+    if front is not None:
+        src = cast(ThreePhaseSource, front.ac_source)
+        states.append(("grid.ac_filter.state.i_c_ab", front.ac_filter.state.i_c_ab, 0j))
+        states.append(
+            ("grid.ac_source.state.exp_j_theta_g", src.state.exp_j_theta_g, 1)
+        )
     _check_initial_states(states, exported)
 
 
@@ -224,12 +233,14 @@ def drive_references(
     return ref, reference(cast(MechanicalSystem, mechanics).inp.tau_L, "load torque")
 
 
-def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
+def mechanics_and_converter_variables(
+    mdl: Drive, front: GridConverterSystem | None = None
+) -> list[tuple[str, Any]]:
     """
     Get the workspace variables of the mechanics (with the initial speed and angle
     of its state, or of ExternalRotorSpeed the initial angle and the external speed
-    at the start), the converter, and the DC bus (with the initial voltage of its
-    state).
+    at the start), the converter, the DC bus (with the initial voltage of its
+    state), and the diode bridge `front` with its L filter and grid.
     """
     mech = mdl.mechanics
     if isinstance(mech, ExternalRotorSpeed):
@@ -245,7 +256,7 @@ def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     variables += [("mechanics.theta_M0", float(wrap(mech.state.theta_M.real)))]
     dc_bus = mdl.dc_bus
     if dc_bus is None:
-        variables += [("converter.u_dc", mdl.converter.u_dc)]
+        variables += [("converter.u_dc", mdl.converter.inp.u_dc)]
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         variables += [("converter.t_d", t_d)]
@@ -254,9 +265,12 @@ def mechanics_and_converter_variables(mdl: Drive) -> list[tuple[str, Any]]:
     if dc_bus is not None:
         variables += [("dc_bus.C_dc", dc_bus.C_dc)]
         variables += [("dc_bus.u_dc0", float(dc_bus.state.u_dc.real))]
-    if isinstance(dc_bus, DiodeBridgeDCBus):
-        variables += [("dc_bus.L_dc", dc_bus.L_dc)]
-        variables += [("dc_bus.u_g", dc_bus.u_g), ("dc_bus.w_g", dc_bus.w_g)]
+    if front is not None:
+        f = cast(LFilter, front.ac_filter)
+        src = cast(ThreePhaseSource, front.ac_source)
+        variables += [("grid.converter.u_th", front.converter.u_th)]
+        variables += [(f"grid.ac_filter.{n}", getattr(f, n)) for n in L_FILTER_FIELDS]
+        variables += [("grid.ac_source.e_g", src.e_g), ("grid.ac_source.w_g", src.w_g)]
     return variables
 
 

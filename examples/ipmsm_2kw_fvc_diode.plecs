@@ -9,9 +9,9 @@ Plecs {
   InitStep      "-1"
   RelTol        "1e-6"
   AbsTol        "-1"
-  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\ndc_bus.C_dc = 0.000235;\ndc_bus.u_dc0 = 565.685424949238;\ndc_bus.L_dc = 0.002;\ndc_bus.u_g = 326.5986323710904;\ndc_bus.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Flux-vector controller (FluxVectorController)\nvector_ctrl.par = par;\nvector_ctrl.cfg = cfg;\n% Initial speed estimate of the observer (SpeedFluxObserver.w_M)\nvector_ctrl.observer.w_M = 0;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
+  InitializationCommands "% Generated from motulator. The blocks of the control system have masks of the\n% arguments of their classes, which refer to the structs below, as in the\n% motulator API.\n\n%% System model\nmachine.n_p = 3;\nmachine.R_s = 3.6;\nmachine.L_d = 0.036;\nmachine.L_q = 0.051;\nmachine.psi_f = 0.545;\nmechanics.J = 0.015;\nmechanics.w_M0 = 0;\nmechanics.theta_M0 = 0;\ndc_bus.C_dc = 0.000235;\ndc_bus.u_dc0 = 565.685424949238;\ngrid.converter.u_th = 0;\ngrid.ac_filter.L_f = 0.0005;\ngrid.ac_filter.R_f = 0;\ngrid.ac_filter.L_g = 0;\ngrid.ac_filter.R_g = 0;\ngrid.ac_source.e_g = 326.5986323710904;\ngrid.ac_source.w_g = 2*pi*50;\n\n%% Control system ([] = None, the default)\n% Machine model of the control system (SynchronousMachinePars)\npar.n_p = 3;\npar.R_s = 3.6;\npar.L_d = 0.036;\npar.L_q = 0.051;\npar.psi_f = 0.545;\n% Flux-vector control (FluxVectorControllerCfg)\ncfg.i_s_max = 6.5;\ncfg.alpha_tau = 2*pi*100;\ncfg.alpha_psi = [];\ncfg.alpha_i = [];\ncfg.alpha_o = [];\ncfg.k_o = [];\ncfg.k_f = [];\ncfg.psi_s_min = [];\ncfg.psi_s_max = inf;\ncfg.k_u = 0.9;\ncfg.k_mtpv = 0.85;\ncfg.J = [];\ncfg.sensorless = 1;\ncfg.T_s = 0.000125;\n% Flux-vector controller (FluxVectorController)\nvector_ctrl.par = par;\nvector_ctrl.cfg = cfg;\n% Initial speed estimate of the observer (SpeedFluxObserver.w_M)\nvector_ctrl.observer.w_M = 0;\n% Speed controller (SpeedController)\nspeed_ctrl.J = 0.015;\nspeed_ctrl.alpha_s = 25;\nspeed_ctrl.alpha_i = [];\nspeed_ctrl.tau_M_max = inf;\n% PWM: the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th,\n% sign) with sign = tanh(i/i_0) (np.sign if i_0 = 0, no error model if\n% t_d = u_th = 0), its compensation, the minimum duty ratio of a switching\n% leg, the single update (1) or the double update (0) of the duty ratios,\n% and the overmodulation ('MPE' or 'MME')\npwm.t_d = 0;\npwm.u_th = 0;\npwm.i_0 = 0;\npwm.feedforward = 1;\npwm.d_min = 0;\npwm.single_update = 0;\npwm.overmodulation = 'MPE';\n"
   Schematic {
-    Location      [0, 0; 1320, 520]
+    Location      [0, 0; 1370, 520]
     ZoomFactor    1
     SliderPosition [0, 0]
     ShowBrowser   off
@@ -4345,7 +4345,7 @@ Plecs {
       SrcComponent  "Components/Electrical/Converters/2-Level\\nIGBT\\nConv."
       Name          "Converter"
       Show          on
-      Position      [1060, 100]
+      Position      [1110, 100]
       Direction     down
       Flipped       on
       LabelPosition south
@@ -4432,7 +4432,7 @@ Plecs {
       Type          Voltmeter
       Name          "u_dc"
       Show          on
-      Position      [1000, 100]
+      Position      [1050, 100]
       Direction     up
       Flipped       off
       LabelPosition west
@@ -4441,13 +4441,13 @@ Plecs {
       Type          Diode
       Name          "Da+"
       Show          off
-      Position      [770, 70]
+      Position      [850, 70]
       Direction     up
       Flipped       on
       LabelPosition south
       Parameter {
         Variable      "Vf"
-        Value         "0"
+        Value         "grid.converter.u_th"
         Show          off
       }
       Parameter {
@@ -4460,13 +4460,13 @@ Plecs {
       Type          Diode
       Name          "Da-"
       Show          off
-      Position      [770, 130]
+      Position      [850, 130]
       Direction     up
       Flipped       on
       LabelPosition south
       Parameter {
         Variable      "Vf"
-        Value         "0"
+        Value         "grid.converter.u_th"
         Show          off
       }
       Parameter {
@@ -4477,7 +4477,7 @@ Plecs {
     }
     Component {
       Type          ACVoltageSource
-      Name          "u_ga"
+      Name          "e_ga"
       Show          on
       Position      [680, 60]
       Direction     right
@@ -4485,12 +4485,12 @@ Plecs {
       LabelPosition north
       Parameter {
         Variable      "V"
-        Value         "dc_bus.u_g"
+        Value         "grid.ac_source.e_g"
         Show          off
       }
       Parameter {
         Variable      "w"
-        Value         "dc_bus.w_g"
+        Value         "grid.ac_source.w_g"
         Show          off
       }
       Parameter {
@@ -4500,16 +4500,35 @@ Plecs {
       }
     }
     Component {
+      Type          Inductor
+      Name          "L_fa"
+      Show          on
+      Position      [730, 60]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "L"
+        Value         "grid.ac_filter.L_f + grid.ac_filter.L_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+    }
+    Component {
       Type          Diode
       Name          "Db+"
       Show          off
-      Position      [810, 70]
+      Position      [890, 70]
       Direction     up
       Flipped       on
       LabelPosition south
       Parameter {
         Variable      "Vf"
-        Value         "0"
+        Value         "grid.converter.u_th"
         Show          off
       }
       Parameter {
@@ -4522,13 +4541,13 @@ Plecs {
       Type          Diode
       Name          "Db-"
       Show          off
-      Position      [810, 130]
+      Position      [890, 130]
       Direction     up
       Flipped       on
       LabelPosition south
       Parameter {
         Variable      "Vf"
-        Value         "0"
+        Value         "grid.converter.u_th"
         Show          off
       }
       Parameter {
@@ -4539,7 +4558,7 @@ Plecs {
     }
     Component {
       Type          ACVoltageSource
-      Name          "u_gb"
+      Name          "e_gb"
       Show          off
       Position      [680, 100]
       Direction     right
@@ -4547,12 +4566,12 @@ Plecs {
       LabelPosition north
       Parameter {
         Variable      "V"
-        Value         "dc_bus.u_g"
+        Value         "grid.ac_source.e_g"
         Show          off
       }
       Parameter {
         Variable      "w"
-        Value         "dc_bus.w_g"
+        Value         "grid.ac_source.w_g"
         Show          off
       }
       Parameter {
@@ -4562,16 +4581,35 @@ Plecs {
       }
     }
     Component {
+      Type          Inductor
+      Name          "L_fb"
+      Show          off
+      Position      [730, 100]
+      Direction     left
+      Flipped       off
+      LabelPosition north
+      Parameter {
+        Variable      "L"
+        Value         "grid.ac_filter.L_f + grid.ac_filter.L_g"
+        Show          off
+      }
+      Parameter {
+        Variable      "i_init"
+        Value         "0"
+        Show          off
+      }
+    }
+    Component {
       Type          Diode
       Name          "Dc+"
       Show          off
-      Position      [850, 70]
+      Position      [930, 70]
       Direction     up
       Flipped       on
       LabelPosition south
       Parameter {
         Variable      "Vf"
-        Value         "0"
+        Value         "grid.converter.u_th"
         Show          off
       }
       Parameter {
@@ -4584,13 +4622,13 @@ Plecs {
       Type          Diode
       Name          "Dc-"
       Show          off
-      Position      [850, 130]
+      Position      [930, 130]
       Direction     up
       Flipped       on
       LabelPosition south
       Parameter {
         Variable      "Vf"
-        Value         "0"
+        Value         "grid.converter.u_th"
         Show          off
       }
       Parameter {
@@ -4601,7 +4639,7 @@ Plecs {
     }
     Component {
       Type          ACVoltageSource
-      Name          "u_gc"
+      Name          "e_gc"
       Show          off
       Position      [680, 140]
       Direction     right
@@ -4609,12 +4647,12 @@ Plecs {
       LabelPosition north
       Parameter {
         Variable      "V"
-        Value         "dc_bus.u_g"
+        Value         "grid.ac_source.e_g"
         Show          off
       }
       Parameter {
         Variable      "w"
-        Value         "dc_bus.w_g"
+        Value         "grid.ac_source.w_g"
         Show          off
       }
       Parameter {
@@ -4625,15 +4663,15 @@ Plecs {
     }
     Component {
       Type          Inductor
-      Name          "L_dc"
-      Show          on
-      Position      [890, 40]
+      Name          "L_fc"
+      Show          off
+      Position      [730, 140]
       Direction     left
       Flipped       off
-      LabelPosition south
+      LabelPosition north
       Parameter {
         Variable      "L"
-        Value         "dc_bus.L_dc"
+        Value         "grid.ac_filter.L_f + grid.ac_filter.L_g"
         Show          off
       }
       Parameter {
@@ -4646,7 +4684,7 @@ Plecs {
       Type          Capacitor
       Name          "C_dc"
       Show          on
-      Position      [940, 100]
+      Position      [990, 100]
       Direction     up
       Flipped       off
       LabelPosition west
@@ -4666,7 +4704,7 @@ Plecs {
       SrcComponent  "Components/Electrical/Machines/Perm.-Magnet SM"
       Name          "Machine"
       Show          on
-      Position      [1180, 100]
+      Position      [1230, 100]
       Direction     up
       Flipped       off
       LabelPosition east
@@ -4746,7 +4784,7 @@ Plecs {
       Type          Step
       Name          "tau_L"
       Show          on
-      Position      [1140, 180]
+      Position      [1190, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4775,7 +4813,7 @@ Plecs {
       Type          ControlledTorque
       Name          "Load"
       Show          on
-      Position      [1210, 180]
+      Position      [1260, 180]
       Direction     left
       Flipped       off
       LabelPosition east
@@ -4794,7 +4832,7 @@ Plecs {
       Type          RotationalReference
       Name          "Frame"
       Show          off
-      Position      [1210, 225]
+      Position      [1260, 225]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -5067,9 +5105,30 @@ Plecs {
       Type          Signal
       SrcComponent  "Gate enable"
       SrcTerminal   1
-      Points        [1075, 25]
+      Points        [1125, 25]
       DstComponent  "Converter"
       DstTerminal   4
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "e_ga"
+      SrcTerminal   1
+      DstComponent  "L_fa"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "e_gb"
+      SrcTerminal   1
+      DstComponent  "L_fb"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Wire
+      SrcComponent  "e_gc"
+      SrcTerminal   1
+      DstComponent  "L_fc"
+      DstTerminal   1
     }
     Connection {
       Type          Wire
@@ -5179,9 +5238,9 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "u_ga"
-      SrcTerminal   1
-      Points        [740, 60; 740, 90; 770, 90]
+      SrcComponent  "L_fa"
+      SrcTerminal   2
+      Points        [820, 60; 820, 90; 850, 90]
       Branch {
         DstComponent  "Da+"
         DstTerminal   1
@@ -5193,9 +5252,9 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "u_gb"
-      SrcTerminal   1
-      Points        [810, 100]
+      SrcComponent  "L_fb"
+      SrcTerminal   2
+      Points        [890, 100]
       Branch {
         DstComponent  "Db+"
         DstTerminal   1
@@ -5207,9 +5266,9 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "u_gc"
-      SrcTerminal   1
-      Points        [750, 140; 750, 110; 850, 110]
+      SrcComponent  "L_fc"
+      SrcTerminal   2
+      Points        [830, 140; 830, 110; 930, 110]
       Branch {
         DstComponent  "Dc+"
         DstTerminal   1
@@ -5221,60 +5280,52 @@ Plecs {
     }
     Connection {
       Type          Wire
-      SrcComponent  "u_ga"
+      SrcComponent  "e_ga"
       SrcTerminal   2
       Points        [640, 60; 640, 100]
       Branch {
-        DstComponent  "u_gb"
+        DstComponent  "e_gb"
         DstTerminal   2
       }
       Branch {
         Points        [640, 140]
-        DstComponent  "u_gc"
+        DstComponent  "e_gc"
         DstTerminal   2
       }
     }
     Connection {
       Type          Wire
-      SrcComponent  "L_dc"
-      SrcTerminal   1
-      Points        [850, 40]
-      Branch {
-        DstComponent  "Dc+"
-        DstTerminal   2
-      }
-      Branch {
-        Points        [810, 40]
-        Branch {
-          DstComponent  "Db+"
-          DstTerminal   2
-        }
-        Branch {
-          Points        [770, 40]
-          DstComponent  "Da+"
-          DstTerminal   2
-        }
-      }
-    }
-    Connection {
-      Type          Wire
-      SrcComponent  "L_dc"
+      SrcComponent  "Da+"
       SrcTerminal   2
-      Points        [940, 40]
+      Points        [850, 40; 890, 40]
       Branch {
-        DstComponent  "C_dc"
-        DstTerminal   1
+        DstComponent  "Db+"
+        DstTerminal   2
       }
       Branch {
-        Points        [1000, 40]
+        Points        [930, 40]
         Branch {
-          DstComponent  "u_dc"
-          DstTerminal   1
+          DstComponent  "Dc+"
+          DstTerminal   2
         }
         Branch {
-          Points        [1060, 40]
-          DstComponent  "Converter"
-          DstTerminal   5
+          Points        [990, 40]
+          Branch {
+            DstComponent  "C_dc"
+            DstTerminal   1
+          }
+          Branch {
+            Points        [1050, 40]
+            Branch {
+              DstComponent  "u_dc"
+              DstTerminal   1
+            }
+            Branch {
+              Points        [1110, 40]
+              DstComponent  "Converter"
+              DstTerminal   5
+            }
+          }
         }
       }
     }
@@ -5282,31 +5333,31 @@ Plecs {
       Type          Wire
       SrcComponent  "Converter"
       SrcTerminal   6
-      Points        [1060, 160; 1000, 160]
+      Points        [1110, 160; 1050, 160]
       Branch {
         DstComponent  "u_dc"
         DstTerminal   2
       }
       Branch {
-        Points        [940, 160]
+        Points        [990, 160]
         Branch {
           DstComponent  "C_dc"
           DstTerminal   2
         }
         Branch {
-          Points        [850, 160]
+          Points        [930, 160]
           Branch {
             DstComponent  "Dc-"
             DstTerminal   1
           }
           Branch {
-            Points        [810, 160]
+            Points        [890, 160]
             Branch {
               DstComponent  "Db-"
               DstTerminal   1
             }
             Branch {
-              Points        [770, 160]
+              Points        [850, 160]
               DstComponent  "Da-"
               DstTerminal   1
             }

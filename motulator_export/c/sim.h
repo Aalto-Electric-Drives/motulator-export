@@ -7,8 +7,7 @@
  *   motulator/common/model/_base.py        Model.modulate, Delay
  *   motulator/common/model/_pwm.py         ZOH, CarrierComparison
  *   motulator/common/utils/_dead_time.py   averaged_gate_signals
- *   motulator/common/model/_converter.py   VoltageSourceConverter, DCBus,
- *                                          DiodeBridgeDCBus
+ *   motulator/common/model/_converter.py   VoltageSourceConverter, DCBus
  *   motulator/common/model/_ac_port.py     ACPort, leg_voltages, diode_margin,
  *                                          update_diodes
  *   motulator_export/plecs/_common.py      StepSignal
@@ -32,7 +31,8 @@
  *
  * Supported: a single model with a single control system, and a constant DC-bus
  * voltage or a DC-bus model feeding only the converter, without an external DC
- * current.
+ * current, also fed from a diode bridge (a composite model of motulator, see
+ * DCBus).
  */
 
 #ifndef MOTULATOR_SIM_H
@@ -45,9 +45,12 @@
 #define DELAY_MAX_LENGTH 8
 /* Maximum number of switching intervals in a sampling period */
 #define SIM_MAX_SWITCHING 32
-/* Maximum number of the transitions of the diode states in an integration interval
- * (_MAX_TRANSITIONS of motulator) */
-#define SIM_MAX_TRANSITIONS 100
+/* Maximum number of consecutive transitions of the diode states at the same instant
+ * (_MAX_STUCK of motulator) */
+#define SIM_MAX_STUCK 10
+/* Default maximum step (s) while the gates of the converter are blocked (_MAX_STEP of
+ * motulator) */
+#define SIM_MAX_STEP 1e-4
 
 /* Status codes of the simulation */
 #define SIM_OK 0
@@ -57,7 +60,7 @@
 #define SIM_ERROR_MEMORY 4     /* The memory for the logs could not be allocated */
 #define SIM_ERROR_SWITCHING 5  /* Too many switching intervals in a sampling period */
 #define SIM_ERROR_SIGNAL 6     /* A signal is not finite (e.g., a failed function) */
-#define SIM_ERROR_TRANSITIONS 7 /* Too many diode transitions in an interval */
+#define SIM_ERROR_TRANSITIONS 7 /* Diode transitions stuck at the same instant */
 
 /* Signals ------------------------------------------------------------------ */
 
@@ -213,17 +216,21 @@ static void update_diodes(const ACPort *port, double u_dc, double diodes[3], int
 
 #define DC_BUS_NONE 0         /* Constant DC-bus voltage of the converter */
 #define DC_BUS_CAPACITOR 1    /* DCBus */
-#define DC_BUS_DIODE_BRIDGE 2 /* DiodeBridgeDCBus */
+#define DC_BUS_DIODE_BRIDGE 2 /* DCBus fed from a DiodeBridge */
 
-/* DC-bus model feeding the converter, without an external DC current. Its states
- * (u_dc of DCBus, and u_dc, i_L, and exp_j_theta_g of DiodeBridgeDCBus) come first
- * in the states of the model, as in motulator. */
+/* DC-bus model feeding the converter, without an external DC current, optionally fed
+ * from a diode bridge (DiodeBridge), which is supplied through an L filter (LFilter)
+ * from a balanced three-phase source (ThreePhaseSource) with a constant magnitude
+ * and frequency. Its states (u_dc of DCBus, and of the diode bridge, i_c_ab of the L
+ * filter and exp_j_theta_g of the source) come first in the states of the model, as
+ * in motulator (in a composite model, with the model of the diode bridge first). */
 typedef struct {
     int type;
-    double C_dc; /* DC-bus capacitance (F) */
-    double L_dc; /* DC-bus inductance (H) of the diode bridge */
-    double u_g;  /* Grid voltage (V), peak line-to-neutral, of the diode bridge */
-    double w_g;  /* Grid angular frequency (rad/s) of the diode bridge */
+    double C_dc;      /* DC-bus capacitance (F) */
+    double u_th;      /* Threshold voltage (V) of the diodes of the diode bridge */
+    double L_t, R_t;  /* Inductance (H) and resistance (Ohm) of the L filter */
+    double e_g, w_g;  /* Magnitude (V) and angular frequency (rad/s) of the source */
+    double diodes[3]; /* Diode states of the legs of the diode bridge */
 } DCBus;
 
 /* Number of states, and their names separated by spaces */
@@ -232,8 +239,16 @@ static const char *dc_bus_state_names(const DCBus *self);
 /* DC-bus voltage (V) from the states x of the model, or the constant DC-bus voltage
  * u_dc of the converter without a DC-bus model */
 static double dc_bus_voltage(const DCBus *self, const double complex *x, double u_dc);
-/* State derivatives of the DC bus (DCBus.rhs or DiodeBridgeDCBus.rhs), the converter
- * drawing the internal DC current i_dc_int */
+/* Voltage (V) of the diode bridge at the states x (DiodeBridge.set_outputs), and the
+ * margin of its diode states (if margin is not NULL) */
+static double complex bridge_voltage(const DCBus *self, const double complex *x,
+                                     double *margin);
+/* Update the diode states of the diode bridge at a transition, or latch them from the
+ * directions of the currents if latch is nonzero (DiodeBridge.update_diodes) */
+static void bridge_update_diodes(DCBus *self, const double complex *x, int latch);
+/* State derivatives of the DC bus (DCBus.rhs), and of the diode bridge feeding it
+ * (LFilter.rhs and ThreePhaseSource.rhs), the converter drawing the internal DC
+ * current i_dc_int */
 static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_int,
                        double complex *dx);
 
@@ -333,7 +348,8 @@ typedef struct {
     double b_abc[SIM_MAX_SWITCHING][3];
     /* Solution points: the time, the states, the switching state and the
      * current-direction vector of the converter, its gate enable, and its voltage with
-     * the gates blocked (else NaN), complex values as their real and imaginary parts */
+     * the gates blocked (else NaN), followed by the voltage of the diode bridge
+     * feeding the DC bus, complex values as their real and imaginary parts */
     Log log;
 } Simulation;
 

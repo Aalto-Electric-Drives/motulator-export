@@ -15,22 +15,20 @@ import ctypes
 import weakref
 from collections.abc import Callable, Sequence
 from math import nan
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
-from motulator.common.model import SolverCfg
+from motulator.common.model import SolverCfg, ThreePhaseSource
 from motulator.common.model._base import Model
-from motulator.common.model._converter import (
-    DCBus,
-    DiodeBridgeDCBus,
-    VoltageSourceConverter,
-)
+from motulator.common.model._converter import DCBus, VoltageSourceConverter
 from motulator.common.model._pwm import ZOH, CarrierComparison
+from motulator.grid.model import GridConverterSystem, LFilter
 
 from motulator_export._common import (
     StepSignal,
     c_define,
     check_supported_dc_bus,
+    check_supported_front,
     check_supported_pwm,
     gate_enable,
 )
@@ -52,6 +50,8 @@ API: Signatures = {
     "sim_state": (c_double, [c_void_p, c_double_p]),
     "sim_converter_state": (c_int, [c_void_p, c_double_p, c_double_p]),
     "sim_set_converter_state": (None, [c_void_p, c_int, c_double_p]),
+    "sim_bridge_state": (None, [c_void_p, c_double_p]),
+    "sim_set_bridge_state": (None, [c_void_p, c_double_p]),
     "sim_log": (c_void_p, [c_void_p, c_int]),
     "sim_fields": (ctypes.c_char_p, [c_void_p, c_int]),
     "log_rows": (c_int, [c_void_p]),
@@ -63,7 +63,8 @@ API: Signatures = {
     "signal_max_steps": (c_int, []),
     "set_converter": (None, [c_void_p, c_double, c_double]),
     "set_modulator": (None, [c_void_p, c_int, c_double, c_double, c_int, c_int]),
-    "set_dc_bus": (None, [c_void_p, c_int] + [c_double] * 4),
+    "set_dc_bus": (None, [c_void_p, c_int, c_double]),
+    "set_diode_bridge": (None, [c_void_p] + [c_double] * 5),
     "enable_signal": (c_void_p, [c_void_p]),
 }
 
@@ -86,7 +87,7 @@ GRADNET_API: Signatures = {
 
 DELAY_MAX_LENGTH = c_define("sim.h", "DELAY_MAX_LENGTH")
 # Types of the DC-bus models (DC_BUS_* in sim.h)
-DC_BUS_TYPES = {DCBus: 1, DiodeBridgeDCBus: 2}
+DC_BUS_TYPES = {DCBus: 1}
 
 # Status codes of the simulation (SIM_ERROR_* in sim.h)
 ERRORS = {
@@ -96,7 +97,7 @@ ERRORS = {
     4: "Out of memory for the results.",
     5: "Too many switching intervals in a sampling period.",
     6: "A reference signal is not finite.",
-    7: "Too many diode transitions in an interval.",
+    7: "Diode transitions stuck at the same instant.",
 }
 
 
@@ -212,21 +213,22 @@ class NativeSystem:
             g["out_base"],
         )
 
+    def set_diode_bridge(self, front: GridConverterSystem) -> None:
+        """Set the diode bridge feeding the DC bus, see `check_supported_front`."""
+        f = cast(LFilter, front.ac_filter)
+        src = cast(ThreePhaseSource, front.ac_source)
+        L_t, R_t = f.L_f + f.L_g, f.R_f + f.R_g
+        u_th = front.converter.u_th
+        e_g, w_g = float(cast(float, src.e_g)), float(cast(float, src.w_g))
+        self.lib.set_diode_bridge(self.handle, u_th, L_t, R_t, e_g, w_g)
+
     def set_converter(self, mdl: Model) -> None:
         """Set the converter, its DC bus, and its modulator from the model."""
         lib, h, converter = self.lib, self.handle, mdl.converter
-        lib.set_converter(h, value(converter.u_dc), converter.u_th)
+        lib.set_converter(h, value(converter.inp.u_dc), converter.u_th)
         dc_bus = mdl.dc_bus
         if dc_bus is not None:
-            bridge = dc_bus if isinstance(dc_bus, DiodeBridgeDCBus) else None
-            lib.set_dc_bus(
-                h,
-                DC_BUS_TYPES[type(dc_bus)],
-                dc_bus.C_dc,
-                nan if bridge is None else bridge.L_dc,
-                nan if bridge is None else bridge.u_g,
-                nan if bridge is None else bridge.w_g,
-            )
+            lib.set_dc_bus(h, DC_BUS_TYPES[type(dc_bus)], dc_bus.C_dc)
         pwm = mdl.pwm
         N = pwm.N if isinstance(pwm, CarrierComparison) else 0
         delay = len(mdl.delay.data)
@@ -260,15 +262,20 @@ class NativeSystem:
             )
         x = np.asarray(mdl.get_initial_values(), dtype=complex)
         xy = array(np.column_stack((np.real(x), np.imag(x))))
+        # The default maximum step (None) is resolved in C, see `Simulation`
+        max_step = value(cfg.max_step)
         self.lib.start(
-            self.handle, mdl.t0, xy, t_start, t_ctrl, cfg.max_step, cfg.rtol, cfg.atol
+            self.handle, mdl.t0, xy, t_start, t_ctrl, max_step, cfg.rtol, cfg.atol
         )
         # The gate enable and the diode states of the converter (e.g., blocked by an
-        # earlier simulation)
-        converter = mdl.converter
-        self.lib.sim_set_converter_state(
-            self.handle, int(converter.inp.enabled), array(converter._diodes)
-        )
+        # earlier simulation), and those of the diode bridge, NaN if not latched yet
+        for converter in mdl.converters:
+            diodes = [nan] * 3 if converter._diodes is None else converter._diodes
+            if isinstance(converter, VoltageSourceConverter):
+                enabled = int(converter.inp.enabled)
+                self.lib.sim_set_converter_state(self.handle, enabled, array(diodes))
+            else:
+                self.lib.sim_set_bridge_state(self.handle, array(diodes))
 
     def run(self, t_stop: float, N_eval: int) -> int:
         """
@@ -289,14 +296,22 @@ class NativeSystem:
         x = np.array(xy).reshape(n, 2)
         return t0, x[:, 0] + 1j * x[:, 1]
 
-    def converter_state(self) -> tuple[complex, complex, bool, np.ndarray]:
+    def converter_state(self) -> tuple[complex, complex, bool, np.ndarray | None]:
         """
         Switching state and current-direction vector of the converter, its gate
-        enable, and its diode states with the gates blocked.
+        enable, and its diode states with the gates blocked (None otherwise, as in
+        `VoltageSourceConverter`).
         """
         q, diodes = (c_double * 4)(), (c_double * 3)()
-        enabled = self.lib.sim_converter_state(self.handle, q, diodes)
-        return complex(q[0], q[1]), complex(q[2], q[3]), bool(enabled), np.array(diodes)
+        enabled = bool(self.lib.sim_converter_state(self.handle, q, diodes))
+        latched = None if enabled else np.array(diodes)
+        return complex(q[0], q[1]), complex(q[2], q[3]), enabled, latched
+
+    def bridge_state(self) -> np.ndarray:
+        """Diode states of the diode bridge feeding the DC bus."""
+        diodes = (c_double * 3)()
+        self.lib.sim_bridge_state(self.handle, diodes)
+        return np.array(diodes)
 
     def fields(self, control: bool) -> list[str]:
         """Names of the states of the model or of the logged fields of the control."""
@@ -313,10 +328,12 @@ class NativeSystem:
         return data
 
 
-def check_supported_converter(mdl: Model) -> None:
+def check_supported_converter(
+    mdl: Model, front: GridConverterSystem | None = None
+) -> None:
     """
-    Raise an error if the converter, its DC bus, its PWM model, or the delay is not
-    supported.
+    Raise an error if the converter, its DC bus (fed from the diode bridge `front` if
+    given), its PWM model, or the delay is not supported.
     """
     converter, pwm, dc_bus = mdl.converter, mdl.pwm, mdl.dc_bus
     if type(converter) is not VoltageSourceConverter or converter.sign is not np.sign:
@@ -325,13 +342,15 @@ def check_supported_converter(mdl: Model) -> None:
         )
     if converter.u_dc_sensor is not None:
         raise NotImplementedError("Sensor models not supported")
-    if dc_bus is None and converter.u_dc is None:
+    if dc_bus is None and converter.inp.u_dc is None:
         raise ValueError(
             "The DC-bus voltage must be given, unless the converter is fed from a "
             "DC-bus model"
         )
     if dc_bus is not None:
-        check_supported_dc_bus(dc_bus, converter)
+        check_supported_dc_bus(dc_bus, converter, front)
+    if front is not None:
+        check_supported_front(front)
     if type(pwm) not in (ZOH, CarrierComparison):
         raise NotImplementedError(
             "Only the PWM models ZOH and CarrierComparison supported"

@@ -1,23 +1,27 @@
 """Export of motulator systems to PLECS, for all the supported system types."""
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
+from motulator.common.model import CompositeModel
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.model import Drive
 from motulator.grid.control._base import GridConverterControlSystem
 from motulator.grid.model import GridConverterSystem
 
-from motulator_export._common import add_space_vectors, system_type
+from motulator_export._common import add_space_vectors, split_system, system_type
 from motulator_export.plecs import _grid, _im, _sm
 
 _MODULES = {"sm": _sm, "im": _im, "grid": _grid}
 
+type ControlSystem = VectorControlSystem | VHzControlSystem | GridConverterControlSystem
+
 
 def write_model(
     path: str | Path,
-    mdl: Drive | GridConverterSystem,
-    ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
+    mdl: Drive | GridConverterSystem | CompositeModel,
+    ctrl: ControlSystem | Mapping[str, ControlSystem],
     t_stop: float,
     outputs: bool = False,
     library: bool = False,
@@ -33,17 +37,21 @@ def write_model(
     `StepSignal`. The model starts from
     the state of `mdl`, e.g., its initial speed. A system that is not supported
     raises `NotImplementedError`, and an invalid argument `ValueError`, before any
-    file is written.
+    file is written. A drive fed from a diode bridge is given as a composite model of
+    the diode bridge and the drive, with the control system of the drive by its name,
+    as in the simulation of motulator.
 
     Parameters
     ----------
     path : str | Path
         Path of the model file (.plecs). The model refers to the C sources of the
         package by a path relative to the model file.
-    mdl : Drive | GridConverterSystem
-        Continuous-time system model.
-    ctrl : VectorControlSystem | VHzControlSystem | GridConverterControlSystem
-        Discrete-time control system.
+    mdl : Drive | GridConverterSystem | CompositeModel
+        Continuous-time system model: a drive, a grid converter system, or a
+        composite model of a diode bridge (`GridConverterSystem` with `DiodeBridge`)
+        and a drive sharing its DC bus, in this order.
+    ctrl : VectorControlSystem | VHzControlSystem | GridConverterControlSystem | Mapping
+        Discrete-time control system, of a composite model by the name of the drive.
     t_stop : float
         Simulation stop time (s).
     outputs : bool, optional
@@ -61,16 +69,18 @@ def write_model(
         Path of the written model file.
 
     """
-    return _MODULES[system_type(mdl, ctrl)].write_model(
-        path, mdl, ctrl, t_stop, outputs, library
-    )
+    mdl, ctrl, front = split_system(mdl, ctrl)
+    kind = system_type(mdl, ctrl)
+    if kind == "grid":
+        return _grid.write_model(path, mdl, ctrl, t_stop, outputs, library)
+    return _MODULES[kind].write_model(path, mdl, ctrl, t_stop, outputs, library, front)
 
 
 def simulate(
     path: str | Path,
     t_eval: np.ndarray,
-    mdl: Drive | GridConverterSystem,
-    ctrl: VectorControlSystem | VHzControlSystem | GridConverterControlSystem,
+    mdl: Drive | GridConverterSystem | CompositeModel,
+    ctrl: ControlSystem | Mapping[str, ControlSystem],
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """
     Simulate the PLECS model of the system via the RPC interface of PLECS Standalone.
@@ -83,9 +93,9 @@ def simulate(
         Path of the model file.
     t_eval : ndarray
         Output times (s).
-    mdl : Drive | GridConverterSystem
+    mdl : Drive | GridConverterSystem | CompositeModel
         Continuous-time system model of the written model.
-    ctrl : VectorControlSystem | VHzControlSystem | GridConverterControlSystem
+    ctrl : VectorControlSystem | VHzControlSystem | GridConverterControlSystem | Mapping
         Discrete-time control system of the written model, which defines the
         monitored signals.
 
@@ -135,5 +145,6 @@ def simulate(
     controller), the signals are those of the vector control without `w_M_ref`.
 
     """
+    mdl, ctrl, _ = split_system(mdl, ctrl)
     signals = _MODULES[system_type(mdl, ctrl)].simulate(path, t_eval, mdl, ctrl)
     return add_space_vectors(signals[0]), signals[1]

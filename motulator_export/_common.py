@@ -1,29 +1,26 @@
 """
 Parts shared by the PLECS and Simulink exports and the native simulation: the step
 signals, the references and the gate enable read from the motulator objects, the
-type of the system, the checks of the PWM and the DC bus, the space vectors of the
-results of `simulate`, and the C sources.
+type of the system and the diode bridge feeding a drive, the checks of the PWM and
+the DC bus, the space vectors of the results of `simulate`, and the C sources.
 
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from motulator.common.control._pwm import PWM
-from motulator.common.model._converter import (
-    DCBus,
-    DiodeBridgeDCBus,
-    VoltageSourceConverter,
-)
+from motulator.common.model import CompositeModel, ThreePhaseSource
+from motulator.common.model._converter import DCBus, DiodeBridge, VoltageSourceConverter
 from motulator.common.utils import abc2complex
 from motulator.drive.control._base import DriveControlSystem
 from motulator.drive.model import Drive, InductionMachine, SynchronousMachine
 from motulator.grid.control._base import GridConverterControlSystem
-from motulator.grid.model import GridConverterSystem
+from motulator.grid.model import GridConverterSystem, LFilter
 
 # Directory of the C sources (the C port, the C models, and the native libraries)
 C_SOURCES = Path(__file__).parent / "c"
@@ -147,6 +144,38 @@ def gate_enable(
 
 
 # %%
+def split_system(mdl: Any, ctrl: Any) -> tuple[Any, Any, GridConverterSystem | None]:
+    """
+    Split the system into the model and the control system of a drive or a grid
+    converter system, and the diode bridge feeding the DC bus of a drive.
+
+    A composite model (`CompositeModel`) is supported as a drive fed from a diode
+    bridge: the model of the diode bridge (`GridConverterSystem` with `DiodeBridge`)
+    and the drive, in this order, sharing the DC bus, with the control system of the
+    drive given by its name, as in the simulation of motulator. Another system is
+    returned as such, without a diode bridge (None).
+    """
+    if not isinstance(mdl, CompositeModel):
+        return mdl, ctrl, None
+    models = list(mdl.models.items())
+    front = models[0][1] if len(models) == 2 else None
+    name, drive = models[-1]
+    if not (
+        isinstance(front, GridConverterSystem)
+        and type(front.converter) is DiodeBridge
+        and isinstance(drive, Drive)
+    ):
+        raise NotImplementedError(
+            "Only a composite model of a diode bridge (GridConverterSystem with "
+            "DiodeBridge) and a drive, in this order, supported"
+        )
+    if drive.dc_bus is None or front.dc_bus is not drive.dc_bus:
+        raise NotImplementedError("The diode bridge must feed the DC bus of the drive")
+    if not isinstance(ctrl, Mapping) or ctrl.keys() != {name}:
+        raise ValueError(f"The control system of the drive must be given by {name!r}")
+    return drive, ctrl[name], front
+
+
 def system_type(mdl: Any, ctrl: Any) -> str:
     """
     Type of the system: "sm" (a drive with a synchronous machine), "im" (a drive
@@ -213,6 +242,21 @@ SPACE_VECTORS = {
 }
 
 
+def check_supported_front(front: GridConverterSystem) -> None:
+    """
+    Raise an error if the diode bridge feeding a drive is not supported: it must be
+    fed through an L filter (`LFilter`) from a balanced three-phase source
+    (`ThreePhaseSource`) with a constant magnitude and frequency.
+    """
+    if type(front.ac_filter) is not LFilter:
+        raise NotImplementedError("Only LFilter supported for the diode bridge")
+    src = front.ac_source
+    if type(src) is not ThreePhaseSource or callable(src.w_g) or callable(src.e_g):
+        raise NotImplementedError("Only ThreePhaseSource with constant w_g and e_g")
+    if src.phi != 0 or src.e_g_neg != 0:
+        raise NotImplementedError("Phase shift and negative sequence not supported")
+
+
 def add_space_vectors(signals: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     """Add the space vectors of the phase signals (`SPACE_VECTORS`) to the signals."""
     for name, phases in SPACE_VECTORS.items():
@@ -221,14 +265,22 @@ def add_space_vectors(signals: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     return signals
 
 
-def check_supported_dc_bus(dc_bus: DCBus, converter: VoltageSourceConverter) -> None:
+def check_supported_dc_bus(
+    dc_bus: DCBus,
+    converter: VoltageSourceConverter,
+    front: GridConverterSystem | None = None,
+) -> None:
     """
     Raise an error if the DC bus is not supported: it must feed only the converter of
-    the drive (e.g., not an active front end), without an external DC current.
+    the drive (e.g., not an active front end), fed from the diode bridge `front` or
+    from nothing, without an external DC current.
     """
-    if type(dc_bus) not in (DCBus, DiodeBridgeDCBus):
-        raise NotImplementedError("Only DCBus and DiodeBridgeDCBus supported")
-    if dc_bus.converters != [converter]:
+    if type(dc_bus) is not DCBus:
+        raise NotImplementedError("Only DCBus supported")
+    expected = [converter] if front is None else [front.converter, converter]
+    if len(dc_bus.converters) != len(expected) or any(
+        c not in dc_bus.converters for c in expected
+    ):
         raise NotImplementedError("DC bus shared with other converters not supported")
     if dc_bus.inp.i_dc is not None:
         raise NotImplementedError("External DC current not supported")
