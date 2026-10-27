@@ -94,7 +94,7 @@ The synchronous machine with a GradNet current map is a MATLAB Function block to
 
 ## Agreement with *motulator*
 
-Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.18.0 and MATLAB R2026b with gcc 14.2 on Linux, at the level of the PLECS models (cf. [the PLECS export](../plecs/README.md#agreement-with-motulator)).
+Maximum differences (Simulink − *motulator*) printed by the comparison scripts, with *motulator* 0.19.0 and MATLAB R2026b with gcc 14.2 on Linux, at the level of the PLECS models (cf. [the PLECS export](../plecs/README.md#agreement-with-motulator)).
 
 | Script                                 | System model                               | Control system                                               |
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
@@ -111,7 +111,7 @@ Maximum differences (Simulink − *motulator*) printed by the comparison scripts
 | `gfl_10kva_lcl_simulink.py`            | i_c_ab 3.1e-6, i_g_ab 2.1e-6, i_c_a 3.1e-6 | p_g 1.3e-3, q_g 7.4e-4, u_g 0, w_g 2.8e-13                   |
 | `gfm_13kva_do_simulink.py`             | i_c_ab 1.2e-6, i_c_a 1.2e-6                | p_g 4.9e-4, q_g 3.9e-4, v_c 3.3e-6, theta_c 1.8e-8           |
 
-With the MATLAB Function blocks (`--matlab`), the differences are the same to the printed digits (psi_s 4.4e-16 in open-loop V/Hz control), since the MATLAB port gives the results of the C port to the rounding errors.
+With the MATLAB Function blocks (`--matlab`), the differences are the same to the digits of the table (psi_s 4.4e-16 in open-loop V/Hz control), since the MATLAB port gives the results of the C port to the rounding errors.
 In `pmsyrm_6kw_gn_fvc_simulink.py`, the differences are larger, as in the PLECS model.
 
 ## Run times
