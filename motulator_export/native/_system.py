@@ -20,7 +20,7 @@ from typing import Any, cast
 import numpy as np
 from motulator.common.model import SolverCfg, ThreePhaseSource
 from motulator.common.model._base import Model
-from motulator.common.model._converter import DCBus, VoltageSourceConverter
+from motulator.common.model._converter import DCBus, DiodeBridge, VoltageSourceConverter
 from motulator.common.model._pwm import ZOH, CarrierComparison
 from motulator.grid.model import GridConverterSystem, LFilter
 
@@ -269,7 +269,7 @@ class NativeSystem:
         )
         # The gate enable and the diode states of the converter (e.g., blocked by an
         # earlier simulation), and those of the diode bridge, NaN if not latched yet
-        for converter in mdl.converters:
+        for converter in [c for c in mdl.converters if isinstance(c, DiodeBridge)]:
             diodes = [nan] * 3 if converter._diodes is None else converter._diodes
             if isinstance(converter, VoltageSourceConverter):
                 enabled = int(converter.inp.enabled)

@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 from motulator.common.model import CompositeModel
@@ -72,7 +73,11 @@ def write_model(
     mdl, ctrl, front = split_system(mdl, ctrl)
     kind = system_type(mdl, ctrl)
     if kind == "grid":
-        return _grid.write_model(path, mdl, ctrl, t_stop, outputs, library)
+        grid, grid_ctrl = (
+            cast(GridConverterSystem, mdl),
+            cast(GridConverterControlSystem, ctrl),
+        )
+        return _grid.write_model(path, grid, grid_ctrl, t_stop, outputs, library)
     return _MODULES[kind].write_model(path, mdl, ctrl, t_stop, outputs, library, front)
 
 

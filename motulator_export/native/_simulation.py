@@ -12,6 +12,7 @@ from motulator.common.control._base import ControlSystem
 from motulator.common.model import (
     CompositeModel,
     CompositeModelTimeSeries,
+    DiodeBridge,
     SolverCfg,
     VoltageSourceConverter,
 )
@@ -202,7 +203,7 @@ def _set_final_state(system: NativeSystem, mdl: Model) -> None:
             inp.q_c_ab, inp.s_c_ab, inp.enabled, converter._diodes = (
                 system.converter_state()
             )
-        else:
+        elif isinstance(converter, DiodeBridge):
             converter._diodes = system.bridge_state()
     mdl.set_outputs(mdl.t0)
 
