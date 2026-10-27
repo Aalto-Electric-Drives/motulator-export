@@ -87,11 +87,11 @@ class SynchronousMachineDriveSystem(NativeSystem):
 
     """
 
-    def __init__(self, mdl: Any, ctrl: Any) -> None:
-        self.check_supported(mdl, ctrl)
+    def __init__(self, mdl: Any, ctrl: Any, front: Any = None) -> None:
+        self.check_supported(mdl, ctrl, front)
         super().__init__("sm", {**DRIVE_API, **API})
         lib, h = self.lib, self.handle
-        set_drive(self, cast(Drive, mdl))
+        set_drive(self, cast(Drive, mdl), front)
 
         # Control system
         if isinstance(ctrl, VHzControlSystem):
@@ -132,12 +132,15 @@ class SynchronousMachineDriveSystem(NativeSystem):
         return isinstance(mdl, Drive) and isinstance(mdl.machine, SynchronousMachine)
 
     @staticmethod
-    def check_supported(mdl: Any, ctrl: Any) -> None:
-        """Raise an error if the drive system is not supported."""
+    def check_supported(mdl: Any, ctrl: Any, front: Any = None) -> None:
+        """
+        Raise an error if the drive system, fed from the diode bridge `front` if
+        given, is not supported.
+        """
         _check_supported_control(ctrl)
         if type(mdl.machine) is not SynchronousMachine:
             raise NotImplementedError("Only SynchronousMachine supported")
-        check_supported_drive(mdl)
+        check_supported_drive(mdl, front)
 
 
 def _check_supported_control(ctrl: Any) -> None:

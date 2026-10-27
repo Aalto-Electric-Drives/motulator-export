@@ -210,7 +210,7 @@ def _drive_model(mdl: Drive, machine: list[str]) -> list[str]:
         lines.append(f"mechanics.state.theta_M = {_value(theta_M0)};")
     return [
         *lines,
-        f"converter = VoltageSourceConverter(u_dc={_value(mdl.converter.u_dc)});",
+        f"converter = VoltageSourceConverter(u_dc={_value(mdl.converter.inp.u_dc)});",
         "mdl = Drive(machine, mechanics, converter);",
     ]
 
@@ -399,7 +399,7 @@ def _grid_script(
         _defaults(ThreePhaseSource),
     )
     model = [
-        f"converter = VoltageSourceConverter(u_dc={_value(mdl.converter.u_dc)});",
+        f"converter = VoltageSourceConverter(u_dc={_value(mdl.converter.inp.u_dc)});",
         f"ac_filter = {ac_filter};",
         f"ac_source = {source};",
         "mdl = GridConverterSystem(converter, ac_filter, ac_source);",

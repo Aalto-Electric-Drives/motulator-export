@@ -419,9 +419,11 @@ static double converter_dc_current(const VoltageSourceConverter *self,
 
 /* Time constant (s) at which the residual current of a floating leg decays */
 #define AC_PORT_TAU 1e-4
-/* Tolerances of the diode-state transitions: current (A) and voltage (V) */
-#define AC_PORT_I_TOL 1e-9
-#define AC_PORT_U_TOL 1e-9
+/* Tolerances of the diode-state transitions: current (A) and voltage (V). They exceed
+ * the numerical noise of the solution, e.g., in the residual currents of floating
+ * legs, so that the margin of the diode states is positive after a transition. */
+#define AC_PORT_I_TOL 1e-4
+#define AC_PORT_U_TOL 1e-3
 
 /* Transformation from the real and imaginary parts of a space vector to the phase
  * quantities (_A of _ac_port.py), whose transpose times 2/3 is the inverse (_B) */
@@ -484,13 +486,13 @@ static void leg_voltages(const ACPort *port, double u_dc, const double diodes[3]
     }
     if (n_float == 3) {
         /* All the legs float: the voltage drives the current to zero, centered
-         * between the rails */
-        double M[3][3] = {{port->Y[0][0], port->Y[0][1], 0.0},
-                          {port->Y[1][0], port->Y[1][1], 0.0},
-                          {0.0, 0.0, 0.0}};
-        double b[3] = {creal(port->i), cimag(port->i), 0.0};
-        solve_small(2, M, b);
-        double complex u = port->e - complex_from(b[0], b[1]) / AC_PORT_TAU;
+         * between the rails. The inverse of Y is applied to the current in closed
+         * form. */
+        double a = port->Y[0][0], b = port->Y[0][1];
+        double c = port->Y[1][0], d = port->Y[1][1];
+        double i_re = creal(port->i), i_im = cimag(port->i);
+        double complex Y_inv_i = complex_from(d * i_re - b * i_im, a * i_im - c * i_re);
+        double complex u = port->e - Y_inv_i / (a * d - b * c) / AC_PORT_TAU;
         complex2abc(u, u_abc);
         double u_max = fmax(fmax(u_abc[0], u_abc[1]), u_abc[2]);
         double u_min = fmin(fmin(u_abc[0], u_abc[1]), u_abc[2]);
@@ -505,26 +507,11 @@ static void leg_voltages(const ACPort *port, double u_dc, const double diodes[3]
     if (n_float == 0) {
         return;
     }
-    /* The current derivatives are affine in the leg voltages, M u_abc + c, from which
-     * the voltages of the floating legs are solved */
-    double A[3][2], AY[3][2], M[3][3], c[3], i_abc[3];
+    /* The current derivatives of the floating legs are affine in the leg voltages,
+     * A_f Y (B u_abc - e), from which their voltages are solved. They are zero in
+     * u_abc here, and usually only one leg floats. */
+    double A[3][2], i_abc[3];
     ac_port_transform(A);
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 2; j++) {
-            AY[i][j] = A[i][0] * port->Y[0][j] + A[i][1] * port->Y[1][j];
-        }
-        for (int j = 0; j < 3; j++) {
-            M[i][j] =
-                AY[i][0] * (2.0 / 3.0 * A[j][0]) + AY[i][1] * (2.0 / 3.0 * A[j][1]);
-        }
-    }
-    double Ye[2];
-    for (int j = 0; j < 2; j++) {
-        Ye[j] = port->Y[j][0] * creal(port->e) + port->Y[j][1] * cimag(port->e);
-    }
-    for (int i = 0; i < 3; i++) {
-        c[i] = -A[i][0] * Ye[0] + -A[i][1] * Ye[1];
-    }
     complex2abc(port->i, i_abc);
     int f[3], n_f = 0;
     for (int k = 0; k < 3; k++) {
@@ -534,18 +521,25 @@ static void leg_voltages(const ACPort *port, double u_dc, const double diodes[3]
     }
     double M_f[3][3], rhs[3];
     for (int i = 0; i < n_f; i++) {
-        double coupling = 0.0;
-        for (int k = 0; k < 3; k++) {
-            if (!floating[k]) {
-                coupling += M[f[i]][k] * u_abc[k];
-            }
+        double AY[2], M[3];
+        for (int j = 0; j < 2; j++) {
+            AY[j] = A[f[i]][0] * port->Y[0][j] + A[f[i]][1] * port->Y[1][j];
         }
-        rhs[i] = -i_abc[f[i]] / AC_PORT_TAU - c[f[i]] - coupling;
+        for (int k = 0; k < 3; k++) {
+            M[k] = AY[0] * (2.0 / 3.0 * A[k][0]) + AY[1] * (2.0 / 3.0 * A[k][1]);
+        }
+        double AYe = AY[0] * creal(port->e) + AY[1] * cimag(port->e);
+        rhs[i] = AYe - (M[0] * u_abc[0] + M[1] * u_abc[1] + M[2] * u_abc[2]);
+        rhs[i] -= i_abc[f[i]] / AC_PORT_TAU;
         for (int j = 0; j < n_f; j++) {
-            M_f[i][j] = M[f[i]][f[j]];
+            M_f[i][j] = M[f[j]];
         }
     }
-    solve_small(n_f, M_f, rhs);
+    if (n_f == 1) {
+        rhs[0] /= M_f[0][0];
+    } else {
+        solve_small(n_f, M_f, rhs);
+    }
     for (int i = 0; i < n_f; i++) {
         u_abc[f[i]] = rhs[i];
     }
@@ -633,7 +627,7 @@ static const char *dc_bus_state_names(const DCBus *self)
     case DC_BUS_CAPACITOR:
         return "u_dc";
     case DC_BUS_DIODE_BRIDGE:
-        return "u_dc i_L exp_j_theta_g";
+        return "u_dc i_c_ab exp_j_theta_g";
     default:
         return "";
     }
@@ -644,29 +638,54 @@ static double dc_bus_voltage(const DCBus *self, const double complex *x, double 
     return (self->type == DC_BUS_NONE) ? u_dc : creal(x[0]);
 }
 
+/* AC port of the L filter of the diode bridge (LFilter.compute_ac_port) */
+static void bridge_port(const DCBus *self, const double complex *x, ACPort *port)
+{
+    port->i = x[1];
+    port->e = self->e_g * x[2] + self->R_t * x[1];
+    port->Y[0][0] = 1.0 / self->L_t;
+    port->Y[0][1] = 0.0;
+    port->Y[1][0] = 0.0;
+    port->Y[1][1] = 1.0 / self->L_t;
+}
+
+static double complex bridge_voltage(const DCBus *self, const double complex *x,
+                                     double *margin)
+{
+    ACPort port;
+    bridge_port(self, x, &port);
+    double u_dc = creal(x[0]) + 2.0 * self->u_th, u_abc[3];
+    leg_voltages(&port, u_dc, self->diodes, u_abc);
+    if (margin != NULL) {
+        *margin = diode_margin(&port, u_dc, self->diodes, u_abc);
+    }
+    return abc2complex(u_abc);
+}
+
+static void bridge_update_diodes(DCBus *self, const double complex *x, int latch)
+{
+    ACPort port;
+    bridge_port(self, x, &port);
+    update_diodes(&port, creal(x[0]) + 2.0 * self->u_th, self->diodes, latch);
+}
+
 static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_int,
                        double complex *dx)
 {
-    /* Net current fed to the capacitor (DCBus.compute_dc_current), without an
-     * external DC current */
-    double i_dc = 0.0 - i_dc_int;
     if (self->type == DC_BUS_CAPACITOR) {
-        dx[0] = i_dc / self->C_dc;
+        /* Net current fed to the capacitor (DCBus.compute_dc_current), without an
+         * external DC current */
+        dx[0] = (0.0 - i_dc_int) / self->C_dc;
     } else if (self->type == DC_BUS_DIODE_BRIDGE) {
-        /* Output voltage of the diode bridge (DiodeBridgeDCBus.compute_voltages) */
-        double u_g_abc[3];
-        complex2abc(self->u_g * x[2], u_g_abc);
-        double u_max = fmax(fmax(u_g_abc[0], u_g_abc[1]), u_g_abc[2]);
-        double u_min = fmin(fmin(u_g_abc[0], u_g_abc[1]), u_g_abc[2]);
-        double u_di = u_max - u_min;
-        double i_L = creal(x[1]);
-        dx[0] = (i_L + i_dc) / self->C_dc;
-        double d_i_L = (u_di - creal(x[0])) / self->L_dc;
-        /* The inductor current cannot be negative due to the diode bridge */
-        if (i_L < 0.0 && d_i_L < 0.0) {
-            d_i_L = 0.0;
-        }
-        dx[1] = d_i_L;
+        /* The diode bridge draws the internal DC current
+         * (DiodeBridge.compute_internal_dc_current) */
+        double i_abc[3];
+        complex2abc(x[1], i_abc);
+        double i_dc_bridge = -0.5 * (fabs(i_abc[0]) + fabs(i_abc[1]) + fabs(i_abc[2]));
+        dx[0] = (0.0 - (i_dc_bridge + i_dc_int)) / self->C_dc;
+        double complex u_c_ab = bridge_voltage(self, x, NULL);
+        double complex e_g_ab = self->e_g * x[2];
+        dx[1] = (u_c_ab - e_g_ab - self->R_t * x[1]) / self->L_t;
         dx[2] = I * self->w_g * x[2];
     }
 }
@@ -829,7 +848,8 @@ static void simulation_init(Simulation *self, Model *mdl, ControlSystem *ctrl,
     self->t_sample = t_start;
     self->n_events = 0;
     self->i_event = 0;
-    log_init(&self->log, 1 + 2 * mdl->n + 7);
+    int bridge = mdl->dc_bus.type == DC_BUS_DIODE_BRIDGE;
+    log_init(&self->log, 1 + 2 * mdl->n + 7 + (bridge ? 2 : 0));
 }
 
 static void simulation_rhs(void *data, double t, const double complex *x,
@@ -840,7 +860,8 @@ static void simulation_rhs(void *data, double t, const double complex *x,
 }
 
 /* Save a solution point with the switching state, the gate enable, and the voltage of
- * the converter with blocked gates, evaluated at the point (Model.save) */
+ * the converter with blocked gates, followed by the voltage of the diode bridge,
+ * evaluated at the point (Model.save) */
 static int simulation_save(Simulation *self, double t, const double complex *x)
 {
     const Model *mdl = self->mdl;
@@ -856,16 +877,19 @@ static int simulation_save(Simulation *self, double t, const double complex *x)
     log_put_complex(&p, converter->q_c_ab);
     log_put_complex(&p, converter->s_c_ab);
     log_put(&p, converter->enabled);
+    double complex x_set[SIM_MAX_STATES];
+    for (int i = 0; i < mdl->n; i++) {
+        x_set[i] = x[i];
+    }
+    mdl->set_states(mdl, x_set); /* As Model._evaluate */
     double complex u_c_ab = NAN;
     if (!converter->enabled) {
-        double complex x_set[SIM_MAX_STATES];
-        for (int i = 0; i < mdl->n; i++) {
-            x_set[i] = x[i];
-        }
-        mdl->set_states(mdl, x_set); /* As Model._evaluate_outputs */
         u_c_ab = model_converter_voltage(mdl, t, x_set, NULL);
     }
     log_put_complex(&p, u_c_ab);
+    if (mdl->dc_bus.type == DC_BUS_DIODE_BRIDGE) {
+        log_put_complex(&p, bridge_voltage(&mdl->dc_bus, x_set, NULL));
+    }
     return SIM_OK;
 }
 
@@ -879,27 +903,16 @@ static int all_finite(const double complex *x, int n)
     return 1;
 }
 
-/* Event of the transitions of the diode states of the converter (_DiodeEvent): the
- * margin of the diode states on the dense output of the latest step */
-typedef struct {
-    const Model *mdl;
-    const RK45 *solver;
-} DiodeEvent;
+/* Blocked converters, whose transitions of the diode states are located as events, in
+ * the order of the converters of motulator: the diode bridge feeding the DC bus and
+ * the converter with blocked gates */
+#define SIM_BRIDGE 0
+#define SIM_CONVERTER 1
 
-static double diode_event(double t, void *data)
-{
-    const DiodeEvent *event = data;
-    double complex x[SIM_MAX_STATES];
-    rk45_dense_output(event->solver, t, x);
-    event->mdl->set_states(event->mdl, x); /* As the event function of motulator */
-    double margin;
-    model_converter_voltage(event->mdl, t, x, &margin);
-    return margin;
-}
-
-/* Margin of the diode states at the time t and the states x, set as by Model.set_states
- * (the converter with blocked gates) */
-static double simulation_margin(const Model *mdl, double t, const double complex *x)
+/* Margin of the diode states of the blocked converter k (SIM_BRIDGE or
+ * SIM_CONVERTER) at the time t and the states x, set as by Model.set_states */
+static double simulation_margin(const Model *mdl, int k, double t,
+                                const double complex *x)
 {
     double complex x_set[SIM_MAX_STATES];
     for (int i = 0; i < mdl->n; i++) {
@@ -907,17 +920,39 @@ static double simulation_margin(const Model *mdl, double t, const double complex
     }
     mdl->set_states(mdl, x_set);
     double margin;
-    model_converter_voltage(mdl, t, x_set, &margin);
+    if (k == SIM_BRIDGE) {
+        bridge_voltage(&mdl->dc_bus, x_set, &margin);
+    } else {
+        model_converter_voltage(mdl, t, x_set, &margin);
+    }
     return margin;
+}
+
+/* Event of the transitions of the diode states of the blocked converter k
+ * (_DiodeEvent): the margin of its diode states on the dense output of the latest
+ * step */
+typedef struct {
+    const Model *mdl;
+    const RK45 *solver;
+    int k;
+} DiodeEvent;
+
+static double diode_event(double t, void *data)
+{
+    const DiodeEvent *event = data;
+    double complex x[SIM_MAX_STATES];
+    rk45_dense_output(event->solver, t, x);
+    return simulation_margin(event->mdl, event->k, t, x);
 }
 
 /* Integrate from t0 to t1 and save the solution (Simulation._integrate). With N_eval,
  * the evenly spaced points of the interval are saved, excluding its end point, at
- * which the dense output gives the final states, as t_eval of solve_ivp. With the
- * gates of the converter blocked, the transitions of its diode states are located as
- * the terminal events of solve_ivp (the margin decreasing to zero, the root found by
- * brentq with the tolerances 4*eps), at which the diode states are updated and the
- * integration is restarted. */
+ * which the dense output gives the final states, as t_eval of solve_ivp. The
+ * transitions of the diode states of the blocked converters (the diode bridge, and
+ * the converter with blocked gates) are located as the terminal events of solve_ivp
+ * (the margin decreasing to zero, the root found by brentq with the tolerances
+ * 4*eps, the earliest root of the converters), at which the diode states are updated
+ * and the integration is restarted. */
 static int simulation_integrate(Simulation *self, double t1, int N_eval)
 {
     double t_start = self->t0;
@@ -925,20 +960,33 @@ static int simulation_integrate(Simulation *self, double t1, int N_eval)
         return SIM_OK;
     }
     Model *mdl = self->mdl;
-    int events = !mdl->converter.enabled;
+    int blocked[2];
+    blocked[SIM_BRIDGE] = mdl->dc_bus.type == DC_BUS_DIODE_BRIDGE;
+    blocked[SIM_CONVERTER] = !mdl->converter.enabled;
+    int events = blocked[SIM_BRIDGE] || blocked[SIM_CONVERTER];
+    /* The default maximum step (NaN) limits the steps while a converter is blocked */
+    SolverCfg cfg = self->cfg;
+    if (isnan(cfg.max_step)) {
+        cfg.max_step = events ? SIM_MAX_STEP : INFINITY;
+    }
     /* The evaluation points over the whole interval, kept at the restarts */
     double dt_eval = (N_eval > 0) ? (t1 - t_start) / N_eval : 0.0;
     int i_eval = 0;
-    for (int transition = 0; transition < SIM_MAX_TRANSITIONS; transition++) {
+    int n_stuck = 0; /* Consecutive transitions at the same instant */
+    for (;;) {
         double t0 = self->t0;
         int rows = self->log.rows; /* Points saved before this solution */
         RK45 solver;
         /* The whole interval is tried as the first step */
-        double first_step = fmin(t1 - t0, self->cfg.max_step);
+        double first_step = fmin(t1 - t0, cfg.max_step);
         rk45_init(&solver, simulation_rhs, mdl, mdl->n, t0, self->x, t1, first_step,
-                  &self->cfg);
-        DiodeEvent event = {mdl, &solver};
-        double g = events ? simulation_margin(mdl, t0, self->x) : 0.0;
+                  &cfg);
+        double g[2] = {0.0, 0.0};
+        for (int k = 0; k < 2; k++) {
+            if (blocked[k]) {
+                g[k] = simulation_margin(mdl, k, t0, self->x);
+            }
+        }
         double complex x_eval[SIM_MAX_STATES], x_event[SIM_MAX_STATES];
         const double complex *x_end = self->x;
         double t_end = t1;
@@ -958,17 +1006,27 @@ static int simulation_integrate(Simulation *self, double t1, int N_eval)
             }
             double t = solver.t;
             const double complex *x = solver.x;
-            if (events) {
-                double g_new = simulation_margin(mdl, solver.t, solver.x);
-                /* Active with the margin decreasing (find_active_events) */
-                if (g >= 0.0 && g_new <= 0.0) {
-                    t = brentq_tol(diode_event, solver.t_old, solver.t, &event,
-                                   4.0 * DBL_EPSILON, 4.0 * DBL_EPSILON);
-                    rk45_dense_output(&solver, t, x_event);
-                    x = x_event;
-                    terminated = 1;
+            /* The earliest root of the active events, with the margin decreasing
+             * (find_active_events and handle_events) */
+            double t_event = INFINITY;
+            for (int k = 0; k < 2; k++) {
+                if (!blocked[k]) {
+                    continue;
                 }
-                g = g_new;
+                double g_new = simulation_margin(mdl, k, solver.t, solver.x);
+                if (g[k] >= 0.0 && g_new <= 0.0) {
+                    DiodeEvent event = {mdl, &solver, k};
+                    double t_k = brentq_tol(diode_event, solver.t_old, solver.t, &event,
+                                            4.0 * DBL_EPSILON, 4.0 * DBL_EPSILON);
+                    t_event = fmin(t_event, t_k);
+                }
+                g[k] = g_new;
+            }
+            if (t_event < INFINITY) {
+                t = t_event;
+                rk45_dense_output(&solver, t, x_event);
+                x = x_event;
+                terminated = 1;
             }
             if (N_eval == 0) {
                 status = simulation_save(self, t, x);
@@ -1000,14 +1058,22 @@ static int simulation_integrate(Simulation *self, double t1, int N_eval)
         for (int i = 0; i < mdl->n; i++) {
             self->x[i] = x_end[i];
         }
+        n_stuck = (terminated && t_end <= t0 + SIM_T_TOL) ? n_stuck + 1 : 0;
         self->t0 = t_end;
         mdl->set_states(mdl, self->x);
         if (!terminated) {
             return SIM_OK;
         }
-        model_update_diodes(mdl, self->t0, self->x);
+        if (n_stuck > SIM_MAX_STUCK) {
+            return SIM_ERROR_TRANSITIONS;
+        }
+        if (blocked[SIM_BRIDGE]) {
+            bridge_update_diodes(&mdl->dc_bus, self->x, 0);
+        }
+        if (blocked[SIM_CONVERTER]) {
+            model_update_diodes(mdl, self->t0, self->x);
+        }
     }
-    return SIM_ERROR_TRANSITIONS;
 }
 
 static int simulation_run(Simulation *self, double t_stop, int N_eval)
@@ -1133,9 +1199,38 @@ int sim_converter_state(const Simulation *self, double *q, double *diodes)
 void sim_set_converter_state(Simulation *self, int enabled, const double *diodes)
 {
     VoltageSourceConverter *converter = &self->mdl->converter;
+    if (isnan(diodes[0])) {
+        /* Not latched yet: latched now if the gates are blocked */
+        converter->enabled = 1;
+        model_set_enable(self->mdl, self->t0, self->x, enabled);
+        return;
+    }
     converter->enabled = enabled;
     for (int k = 0; k < 3; k++) {
         converter->diodes[k] = diodes[k];
+    }
+}
+
+/* Diode states of the diode bridge feeding the DC bus */
+void sim_bridge_state(const Simulation *self, double *diodes)
+{
+    for (int k = 0; k < 3; k++) {
+        diodes[k] = self->mdl->dc_bus.diodes[k];
+    }
+}
+
+/* Diode states of the diode bridge feeding the DC bus, e.g., of a model simulated
+ * earlier, or NaN if they are not latched yet, in which case they are latched from
+ * the directions of the currents */
+void sim_set_bridge_state(Simulation *self, const double *diodes)
+{
+    DCBus *dc_bus = &self->mdl->dc_bus;
+    if (isnan(diodes[0])) {
+        bridge_update_diodes(dc_bus, self->x, 1);
+        return;
+    }
+    for (int k = 0; k < 3; k++) {
+        dc_bus->diodes[k] = diodes[k];
     }
 }
 
@@ -1212,16 +1307,29 @@ void set_modulator(Simulation *self, int carrier, double N, double t_d, int dela
     modulator_init(&self->mdl->modulator, carrier, N, t_d, delay, single_update);
 }
 
-/* DC-bus model (DC_BUS_NONE, DC_BUS_CAPACITOR, or DC_BUS_DIODE_BRIDGE) with its
- * parameters (see DCBus), updating the states of the model */
-void set_dc_bus(Simulation *self, int type, double C_dc, double L_dc, double u_g,
-                double w_g)
+/* DC-bus model (DC_BUS_NONE or DC_BUS_CAPACITOR) with its capacitance (see DCBus),
+ * updating the states of the model */
+void set_dc_bus(Simulation *self, int type, double C_dc)
 {
     DCBus *dc_bus = &self->mdl->dc_bus;
     dc_bus->type = type;
     dc_bus->C_dc = C_dc;
-    dc_bus->L_dc = L_dc;
-    dc_bus->u_g = u_g;
+    self->mdl->init_states(self->mdl);
+}
+
+/* Diode bridge feeding the DC-bus capacitor set by set_dc_bus (DC_BUS_DIODE_BRIDGE):
+ * the threshold voltage of its diodes, the inductance and the resistance of its L
+ * filter, and the magnitude and the angular frequency of its source (see DCBus),
+ * updating the states of the model */
+void set_diode_bridge(Simulation *self, double u_th, double L_t, double R_t, double e_g,
+                      double w_g)
+{
+    DCBus *dc_bus = &self->mdl->dc_bus;
+    dc_bus->type = DC_BUS_DIODE_BRIDGE;
+    dc_bus->u_th = u_th;
+    dc_bus->L_t = L_t;
+    dc_bus->R_t = R_t;
+    dc_bus->e_g = e_g;
     dc_bus->w_g = w_g;
     self->mdl->init_states(self->mdl);
 }

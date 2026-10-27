@@ -23,8 +23,7 @@ Currently supported:
 - Mechanical system (`MechanicalSystem` without friction), with PLECS blocks
 - Converter: carrier comparison (`pwm=True` in `Drive`) with the Symmetrical PWM
   block and the IGBT converter of PLECS with ideal IGBTs and diodes. The DC bus is stiff
-  (`VoltageSourceConverter` without a DC-bus model), capacitive (`DCBus`), or fed by
-  a diode bridge with a DC-bus inductor and capacitor (`DiodeBridgeDCBus`). The
+  (`VoltageSourceConverter` without a DC-bus model) or capacitive (`DCBus`). The
   DC-bus model feeds only the converter of the drive, without an external DC
   current, and the capacitor voltage starts from the state of the model. The
   computational delay of one sampling period is a PLECS Delay block. The duty
@@ -59,7 +58,6 @@ from typing import Any, cast
 
 import motulator.drive.gradnet as gn
 import numpy as np
-from motulator.common.model._converter import DiodeBridgeDCBus
 from motulator.common.model._pwm import CarrierComparison
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._sm_current_vector import (
@@ -78,10 +76,12 @@ from motulator.drive.utils._parameters import (
     SpatialSaturatedSynchronousMachinePars,
     SynchronousMachinePars,
 )
+from motulator.grid.model import GridConverterSystem
 
 from motulator_export._common import StepSignal, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
+    BRIDGE_DX,
     C_DIR,
     C_GRADNET_PARAMS,
     C_PARAMS,
@@ -205,8 +205,15 @@ def has_gradnet_plant(mdl: Drive) -> bool:
     return isinstance(mdl.machine.par, SpatialSaturatedSynchronousMachinePars)
 
 
-def check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) -> None:
-    """Raise an error if the drive system is not supported."""
+def check_supported(
+    mdl: Drive,
+    ctrl: VectorControlSystem | VHzControlSystem,
+    front: GridConverterSystem | None = None,
+) -> None:
+    """
+    Raise an error if the drive system, fed from the diode bridge `front` if given,
+    is not supported.
+    """
     # System model
     par = mdl.machine.par
     if not isinstance(mdl.machine, SynchronousMachine) or not isinstance(
@@ -226,7 +233,7 @@ def check_supported(mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem) ->
             )
     if par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
-    _check_supported_plant(mdl, dead_time=True)
+    _check_supported_plant(mdl, dead_time=True, front=front)
     _check_supported_control(ctrl)
 
 
@@ -437,7 +444,9 @@ def vhz_values(
     return values, flux_map
 
 
-def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
+def export_plant_variables(
+    mdl: Drive, front: GridConverterSystem | None = None
+) -> list[tuple[str, Any]]:
     """Get the workspace variables of the system model."""
     variables: list[tuple[str, Any]] = []
     if has_gradnet_plant(mdl):
@@ -455,7 +464,7 @@ def export_plant_variables(mdl: Drive) -> list[tuple[str, Any]]:
             ("machine.L_q", par.L_q),
             ("machine.psi_f", par.psi_f),
         ]
-    return variables + mechanics_and_converter_variables(mdl)
+    return variables + mechanics_and_converter_variables(mdl, front)
 
 
 def machine_cscript_code() -> dict[str, str]:
@@ -703,6 +712,7 @@ def write_model(
     t_stop: float,
     outputs: bool = False,
     library: bool = False,
+    front: GridConverterSystem | None = None,
 ) -> Path:
     """
     Write a PLECS model of the synchronous machine drive, see `plecs.write_model`.
@@ -714,7 +724,7 @@ def write_model(
 
     """
     path = Path(path)
-    check_supported(mdl, ctrl)
+    check_supported(mdl, ctrl, front)
     if isinstance(ctrl, VHzControlSystem):
         values, flux_map = export_vhz_values(ctrl)
         script = vhz_init_script
@@ -723,7 +733,7 @@ def write_model(
         cvc = isinstance(ctrl.vector_ctrl, CurrentVectorController)
         script = cvc_init_script if cvc else init_script
     ref, mech_signal = drive_references(mdl, ctrl, values["T_s"])
-    variables = export_plant_variables(mdl)
+    variables = export_plant_variables(mdl, front)
     if flux_map is not None:
         variables += [(f"est_flux_map.{f}", flux_map[f]) for f in GRADNET_FIELDS]
     init = script(variables, values, INIT_COMMENT)
@@ -744,13 +754,13 @@ def write_model(
     t_d = cast(CarrierComparison, mdl.pwm).t_d
     if t_d > 0:
         _add_blanking_time(sch)
-    # The blanking time, the diode bridge, and its grid need space between the PWM and
-    # the DC bus
-    sch.dx = 320 if isinstance(mdl.dc_bus, DiodeBridgeDCBus) else 0
+    # The diode bridge and its grid, and the blanking time need space between the PWM
+    # and the DC bus
+    sch.dx = BRIDGE_DX if front is not None else 0
     sch.dx += BLANKING_DX if t_d > 0 else 0
     sch.dx += DC_DX + GATE_DX
     _add_converter(sch, T_s, t_d, mdl.converter.u_th)
-    _add_dc_bus(sch, mdl.dc_bus)
+    _add_dc_bus(sch, mdl.dc_bus, front)
     external = external_speed(mdl)
     if gradnet_plant:
         _add_gradnet_machine(sch, library)

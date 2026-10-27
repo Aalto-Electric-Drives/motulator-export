@@ -12,7 +12,7 @@ Supported:
   a function of the speed, or the external rotor speed (`ExternalRotorSpeed`),
   constant or a function of time
 - Converter (`VoltageSourceConverter`) with a constant DC-bus voltage or fed by a
-  DC-bus model (`DCBus` or `DiodeBridgeDCBus`, without an external DC current), the
+  DC-bus model (`DCBus`, without an external DC current), the
   dead time, and the threshold voltage (with `sign=np.sign`). The PWM model is `ZOH`
   (the default) or `CarrierComparison` (`pwm=True`), with any computational delay and
   the single or double update, starting from their initial states.
@@ -37,6 +37,7 @@ from motulator.drive.utils._parameters import (
     SpatialSaturatedSynchronousMachinePars,
     SynchronousMachinePars,
 )
+from motulator.grid.model import GridConverterSystem
 
 from motulator_export.native._build import Signatures
 from motulator_export.native._system import (
@@ -68,8 +69,13 @@ DRIVE_API: Signatures = {
 }
 
 
-def set_drive(system: NativeSystem, mdl: Drive) -> None:
-    """Set the parameters of the drive model `mdl` in the library of `system`."""
+def set_drive(
+    system: NativeSystem, mdl: Drive, front: GridConverterSystem | None = None
+) -> None:
+    """
+    Set the parameters of the drive model `mdl`, and of the diode bridge `front`
+    feeding its DC bus if given, in the library of `system`.
+    """
     lib, h = system.lib, system.handle
     machine = mdl.machine
     if isinstance(machine, InductionMachine):
@@ -88,6 +94,8 @@ def set_drive(system: NativeSystem, mdl: Drive) -> None:
     else:
         lib.set_mechanics(h, cast(MechanicalSystem, mdl.mechanics).J)
     system.set_converter(mdl)
+    if front is not None:
+        system.set_diode_bridge(front)
 
 
 def set_mechanics_signals(system: NativeSystem, mdl: Drive) -> None:
@@ -157,8 +165,11 @@ def current_map(par: SpatialSaturatedSynchronousMachinePars) -> Any:
     return par.magnetic_map_fcn
 
 
-def check_supported_drive(mdl: Drive) -> None:
-    """Raise an error if the machine, the mechanics, or the converter is unsupported."""
+def check_supported_drive(mdl: Drive, front: GridConverterSystem | None = None) -> None:
+    """
+    Raise an error if the machine, the mechanics, or the converter (with the diode
+    bridge `front` feeding its DC bus if given) is not supported.
+    """
     machine = mdl.machine
     par = machine.par
     if type(machine) is InductionMachine:
@@ -186,4 +197,4 @@ def check_supported_drive(mdl: Drive) -> None:
         )
     if mdl.lc_filter is not None:
         raise NotImplementedError("LC filter not supported")
-    check_supported_converter(mdl)
+    check_supported_converter(mdl, front)

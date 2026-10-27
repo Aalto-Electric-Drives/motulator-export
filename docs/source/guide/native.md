@@ -29,11 +29,12 @@ Run times of `simulate` on one core of a laptop (the shortest of repeated runs),
 
 ## Accuracy
 
-The results agree with *motulator* to the rounding errors, about 1e-12 relative to the signal magnitudes. With carrier comparison (`pwm=True`) or a diode bridge (`DiodeBridgeDCBus`), a rounding error can change a switching instant or a step size, after which the results differ more. The simulations of *motulator* itself are equally sensitive to the rounding errors.
+The results agree with *motulator* to the rounding errors, about 1e-12 relative to the signal magnitudes. With carrier comparison (`pwm=True`), a rounding error can change a switching instant, after which the results differ more. The simulations of *motulator* itself are equally sensitive to the rounding errors.
 
 ## Good to know
 
 - The references and the load torque can be constants, `StepSignal` objects (evaluated in C, fastest), or functions of time (called from C).
 - As in *motulator*, the results are also stored in `mdl` and `ctrl`, and a subsequent call of `simulate` continues the simulation.
 - The gate enable (`ctrl.set_enable`) can block the gates, as in *motulator*: the diodes of the converter conduct according to the currents, and their transitions are located as events.
+- A drive fed from a diode bridge is given as a composite model of the diode bridge and the drive, with the control system of the drive by its name, as in *motulator*: `native.Simulation(CompositeModel({"grid": grid_sys, "drive": drive_sys}), {"drive": ctrl})`.
 - Unsupported systems raise `NotImplementedError` when the simulation is created, see [](supported.md).

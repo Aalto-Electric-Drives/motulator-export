@@ -45,7 +45,7 @@ The example scripts are in [examples/](../../examples/README.md).
 - The induction machine is the PLECS squirrel-cage induction machine, parametrized as the T model with zero rotor leakage inductance, which is identical to the inverse-Γ model of *motulator*.
 - The initial speed and angle of the machine (or of the inertia, and the angle sensor of the GradNet machine) are those of the mechanics of *motulator* (`mechanics.w_M0` and `mechanics.theta_M0` of the initialization commands).
 - With the external rotor speed (`ExternalRotorSpeed`), a Controlled Rotational Speed source imposes the speed (the Step or Constant block `w_M ext.`) on the flange of the machine, whose moment of inertia is zero (the GradNet machine without the inertia), and the initial angle is that of the mechanics.
-- The DC bus is a DC voltage source (without a DC-bus model), a capacitor (`DCBus`), or a diode bridge fed by the grid with a DC-bus inductor and capacitor (`DiodeBridgeDCBus`, zero grid inductance). The DC-bus model feeds only the converter of the drive, and its capacitor voltage starts from the state of the model.
+- The DC bus is a DC voltage source (without a DC-bus model) or a capacitor (`DCBus`), which can be fed from a diode bridge, supplied from the grid through an L filter (a composite model of a `GridConverterSystem` with `DiodeBridge`, `LFilter`, and `ThreePhaseSource`, and the drive; `grid.*` in the initialization commands). The DC-bus model feeds only the converter of the drive, and its capacitor voltage starts from the state of the model.
 - The AC filter of the grid converter is an LCL filter or an L filter with its series resistance and the grid inductance (`LFilter`), with the grid as three AC voltage sources.
 - The circuits are not grounded: as in the space-vector models of *motulator*, there is no zero-sequence path (grounding both the DC bus and the grid neutral would let the common-mode voltage of the converter drive a zero-sequence current).
 - Voltmeters and ammeters are used only for the signals fed back to the control system. The AC voltages are measured line to line (u_ab and u_bc), as in practice. The other signals, e.g., the inductor currents shown in the scope, are measured with PLECS probes.
@@ -62,17 +62,17 @@ The library `motulator_lib.plecs` has the blocks of the control systems (`CONTRO
 
 ## Agreement with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the example scripts, with *motulator* 0.18.0 and PLECS 5.0 (2026-10-26).
+Maximum differences (PLECS − *motulator*) printed by the example scripts, with *motulator* 0.19.0 and PLECS 5.0 (2026-10-27).
 *motulator* uses the tolerances of 1e-9, and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
 | Script                           | System model                               | Control system                                               |
 | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
 | `ipmsm_2kw_fvc.py`               | w_M 9.3e-7, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
-| `ipmsm_2kw_fvc.py --diode`       | w_M 9.2e-6, tau_M 7.2e-6, i_s_ab 3.1e-6    | w_M 9.1e-6, tau_M 7.2e-6, tau_M_ref 7.4e-6, psi_s_ref 1.9e-8 |
-| `ipmsm_2kw_fvc.py --blocked`     | w_M 9.3e-7, tau_M 2.0e-6, i_s_ab 1.1e-6    | w_M 3.0e-6, tau_M 2.1e-6, tau_M_ref 2.2e-6, psi_s_ref 1.0e-8 |
+| `ipmsm_2kw_fvc.py --diode`       | w_M 8.9e-6, tau_M 6.0e-6, i_s_ab 2.9e-6    | w_M 7.3e-6, tau_M 6.1e-6, tau_M_ref 6.0e-6, psi_s_ref 1.8e-8 |
+| `ipmsm_2kw_fvc.py --blocked`     | w_M 2.6e-6, tau_M 2.7e-4, i_s_ab 1.1e-4    | w_M 3.9e-6, tau_M 1.6e-4, tau_M_ref 2.7e-6, psi_s_ref 1.6e-8 |
 | `ipmsm_2kw_cvc.py`               | w_M 1.8e-5, tau_M 1.2e-5, i_s_ab 5.1e-6    | w_M 1.5e-5, tau_M 1.2e-5, tau_M_ref 1.3e-5, i_q_ref 5.0e-6   |
-| `ipmsm_2kw_cvc.py --blocked`     | w_M 5.6e-7, tau_M 1.8e-6, i_s_ab 1.0e-6    | w_M 2.6e-6, tau_M 1.5e-6, tau_M_ref 2.0e-6, i_q_ref 6.9e-7   |
+| `ipmsm_2kw_cvc.py --blocked`     | w_M 1.8e-6, tau_M 2.4e-4, i_s_ab 1.0e-4    | w_M 3.0e-6, tau_M 8.2e-5, tau_M_ref 2.0e-6, i_q_ref 6.9e-7   |
 | `ipmsm_2kw_cvc.py --discrete`    | w_M 1.8e-5, tau_M 1.3e-5, i_s_ab 5.5e-6    | w_M 1.5e-5, tau_M 1.3e-5, tau_M_ref 1.3e-5, i_q_ref 5.2e-6   |
 | `ipmsm_2kw_vhz.py`               | w_M 2.1e-5, tau_M 1.1e-5, i_s_ab 1.0e-5    | w_c 6.6e-5, tau_M 1.1e-5, tau_M_ref 1.8e-6, psi_s 1.2e-8     |
 | `pmsyrm_6kw_gn_fvc.py`           | w_M 5.4e-5, tau_M 2.4e-4, i_s_ab 9.6e-5    |                                                              |
@@ -88,7 +88,9 @@ After a change in the writers or the C port, regenerate the models by running th
 
 The differences are in SI units; relative to the signal magnitudes, they are about 1e-6 or below (e.g., 1e-3 W of 10 kW).
 In `pmsyrm_6kw_gn_fvc.py`, the differences are larger (about 3e-6 relative to the torque and the current); they decrease with the tolerances of *motulator* (w_M 5.4e-6, tau_M 3.8e-5, and i_s_ab 1.3e-5 with 1e-10), but not with those of PLECS.
-In `ipmsm_2kw_fvc.py --blocked`, the differences are at the level of the drive without the gate blocking, which verifies the standby of the control system, the flying start after the release, and the blocked converter, whose diodes conduct the decaying currents (*motulator* locates the transitions of the diode states as events).
+In `ipmsm_2kw_fvc.py --diode`, the diode bridge, supplied through the AC chokes, agrees at the level of the drive with a stiff DC bus (*motulator* locates the transitions of the diode states as events).
+In `ipmsm_2kw_fvc.py --blocked`, the differences of the speed and the references are at the level of the drive without the gate blocking, which verifies the standby of the control system, the flying start after the release, and the blocked converter, whose diodes conduct the decaying currents.
+The differences of the current and the torque are larger, at the level of the tolerance of 1e-4 A of the transitions of the diode states in *motulator*: a diode turns off when its current has reversed by the tolerance, whereas the ideal diodes of PLECS turn off at zero current.
 In `ipmsm_2kw_cvc.py --blocked`, the flying start of current-vector control (the current reference and the current controller restarting from the zero-torque operating point of the caught speed) agrees as closely.
 
 ### Dead time

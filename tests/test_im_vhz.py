@@ -101,10 +101,14 @@ def build_system(
     blocked: bool = False,
 ) -> tuple[model.Drive, control.VHzControlSystem]:
     """Build the 2.2-kW drive with observer-based or pure open-loop V/Hz control."""
+    # While the gates are blocked, the currents of the floating legs decay to the
+    # rounding errors, whose signs would give the current directions at the release of
+    # the gates with np.sign, so the current directions are smooth then
+    sign = (lambda x: np.tanh(x / I_0)) if blocked else np.sign
     mdl = model.Drive(
         model.InductionMachine(PAR),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
+        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th, sign=sign),
         delay=2 if single_update else 1,  # One sampling period
         single_update=single_update,
     )

@@ -85,8 +85,8 @@ class GridConverterNativeSystem(NativeSystem):
 
     """
 
-    def __init__(self, mdl: Any, ctrl: Any) -> None:
-        self.check_supported(mdl, ctrl)
+    def __init__(self, mdl: Any, ctrl: Any, front: Any = None) -> None:
+        self.check_supported(mdl, ctrl, front)
         mdl = cast(GridConverterSystem, mdl)
         ctrl = cast(GridConverterControlSystem, ctrl)
         self.grid_forming = isinstance(
@@ -134,8 +134,11 @@ class GridConverterNativeSystem(NativeSystem):
         return isinstance(mdl, GridConverterSystem)
 
     @staticmethod
-    def check_supported(mdl: Any, ctrl: Any) -> None:
-        """Raise an error if the grid converter system is not supported."""
+    def check_supported(mdl: Any, ctrl: Any, front: Any = None) -> None:
+        """
+        Raise an error if the grid converter system is not supported (a diode bridge
+        `front` feeds only a drive, so it is None).
+        """
         if type(ctrl) is not GridConverterControlSystem:
             raise NotImplementedError("Only GridConverterControlSystem supported")
         inner = ctrl.inner_ctrl

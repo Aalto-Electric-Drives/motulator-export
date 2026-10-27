@@ -22,6 +22,7 @@ import motulator.grid.control as grid_control
 import motulator.grid.model as grid_model
 import numpy as np
 import pytest
+from motulator.common.model import CompositeModel, DiodeBridge, ThreePhaseSource
 from motulator.common.utils import complex2abc
 from motulator.drive import model
 
@@ -180,11 +181,11 @@ def test_missing_reference(tmp_path: Path, gfl: bool) -> None:
     assert not list(tmp_path.iterdir())  # Nothing is written
 
 
-def _drive(sm: bool, dc_bus: str = "") -> tuple[Any, Any]:
+def _drive(sm: bool, dc_bus: bool = False) -> tuple[Any, Any]:
     """
     Drive with carrier comparison and its control system, with the speed reference
-    and the load torque. The DC bus is stiff, or a capacitor (`dc_bus` "capacitor")
-    or a diode bridge with LC ("diode") feeding the converter.
+    and the load torque. The DC bus is stiff, or a capacitor feeding the converter if
+    `dc_bus` is True.
     """
     if sm:
         mdl, ctrl = sm_system(True, 0.0)[0]()
@@ -194,12 +195,7 @@ def _drive(sm: bool, dc_bus: str = "") -> tuple[Any, Any]:
     bus = None
     if dc_bus:
         converter = model.VoltageSourceConverter()
-        if dc_bus == "diode":
-            bus = model.DiodeBridgeDCBus(
-                C_dc=235e-6, L_dc=2e-3, U_g=400, f_g=50, converters=[converter]
-            )
-        else:
-            bus = model.DCBus(C_dc=235e-6, u_dc=540, converters=[converter])
+        bus = model.DCBus(C_dc=235e-6, u_dc=540)
     drive = model.Drive(mdl.machine, mdl.mechanics, converter, pwm=True, dc_bus=bus)
     ctrl.set_speed_ref(StepSignal(0.1, 50.0))
     drive.mechanics.set_external_load_torque(StepSignal(0.2, 5.0))
@@ -465,37 +461,75 @@ def test_non_finite_states(tmp_path: Path, case: str) -> None:
 
 
 @pytest.mark.parametrize("sm", [True, False], ids=["sm", "im"])
-@pytest.mark.parametrize("dc_bus", ["capacitor", "diode"])
-def test_dc_bus(tmp_path: Path, sm: bool, dc_bus: str) -> None:
-    """The DC-bus models of the drives should be exported to PLECS, starting from the
-    DC-bus voltage of their state, and rejected in Simulink (only a stiff DC bus)."""
-    mdl, ctrl = _drive(sm, dc_bus)
+def test_dc_bus(tmp_path: Path, sm: bool) -> None:
+    """The DC-bus model of the drives should be exported to PLECS, starting from the
+    DC-bus voltage of its state, and rejected in Simulink (only a stiff DC bus)."""
+    mdl, ctrl = _drive(sm, dc_bus=True)
     mdl.dc_bus.state.u_dc = 500.0 + 0j
     plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
     text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
     assert "dc_bus.u_dc0 = 500;" in text
     assert '"dc_bus.C_dc"' in text and "converter.u_dc" not in text
-    assert ('"dc_bus.L_dc"' in text) == (dc_bus == "diode")
     with pytest.raises(NotImplementedError, match="DC-bus model"):
         simulink.write_model(tmp_path / "drive.slx", mdl, ctrl, T_STOP)
     assert not (tmp_path / "drive.slx").exists()
 
 
-@pytest.mark.parametrize("case", ["shared", "external_current", "inductor_current"])
+@pytest.mark.parametrize("case", ["shared", "external_current"])
 def test_unsupported_dc_bus(tmp_path: Path, case: str) -> None:
     """The DC bus should feed only the converter of the drive, without an external
-    current, and the states of the diode bridge should be at their initial values."""
-    mdl, ctrl = _drive(True, "diode" if case == "inductor_current" else "cap")
+    current."""
+    mdl, ctrl = _drive(True, dc_bus=True)
     if case == "shared":  # E.g., with an active front end
         mdl.dc_bus.converters.append(model.VoltageSourceConverter())
         match = "shared"
-    elif case == "external_current":
+    else:
         mdl.dc_bus.set_external_dc_current(1.0)
         match = "External DC current"
-    else:
-        mdl.dc_bus.state.i_L = 1.0 + 0j
-        match = "i_L"
     with pytest.raises(NotImplementedError, match=match):
+        plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+def _diode_bridge_drive(sm: bool, ac_filter: Any = None) -> tuple[Any, Any]:
+    """
+    Drive fed from a diode bridge through an L filter (or `ac_filter`), as a composite
+    model with the control system of the drive by its name.
+    """
+    mdl, ctrl = _drive(sm, dc_bus=True)
+    grid = grid_model.GridConverterSystem(
+        DiodeBridge(u_th=1.0),
+        ac_filter or grid_model.LFilter(L_f=0.5e-3, R_f=0.05),
+        ThreePhaseSource(w_g=2 * pi * 50, e_g=np.sqrt(2 / 3) * 400),
+        dc_bus=mdl.dc_bus,
+    )
+    return CompositeModel({"grid": grid, "drive": mdl}), {"drive": ctrl}
+
+
+@pytest.mark.parametrize("sm", [True, False], ids=["sm", "im"])
+def test_diode_bridge(tmp_path: Path, sm: bool) -> None:
+    """A drive fed from a diode bridge should be exported to PLECS with the diode
+    bridge, its L filter (with the resistor), and its source."""
+    mdl, ctrl = _diode_bridge_drive(sm)
+    plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
+    text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+    for line in ("grid.converter.u_th = 1;", "grid.ac_filter.R_f = 0.05;"):
+        assert line in text
+    assert all(f'"{name}"' in text for name in ("Da+", "Dc-", "L_fa", "R_fc", "e_gb"))
+
+
+@pytest.mark.parametrize("case", ["order", "ctrl", "filter"])
+def test_unsupported_diode_bridge(tmp_path: Path, case: str) -> None:
+    """The model of the diode bridge should come first, the control system should be
+    given by the name of the drive, and the filter should be an L filter."""
+    lcl = grid_model.LCLFilter(L_fc=1e-3, C_f=10e-6, L_fg=1e-3)
+    mdl, ctrl = _diode_bridge_drive(True, lcl if case == "filter" else None)
+    error: type[Exception] = NotImplementedError
+    if case == "order":
+        mdl = CompositeModel(dict(reversed(mdl.models.items())))
+    elif case == "ctrl":
+        ctrl, error = ctrl["drive"], ValueError
+    with pytest.raises(error):
         plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
     assert not list(tmp_path.iterdir())  # Nothing is written
 
@@ -504,7 +538,7 @@ def test_unsupported_grid_dc_bus(tmp_path: Path) -> None:
     """Only the stiff DC bus is supported in the grid converter systems."""
     ref, ctrl = _grid(gfl=True)
     converter = grid_model.VoltageSourceConverter()
-    dc_bus = grid_model.DCBus(C_dc=1e-3, u_dc=650, converters=[converter])
+    dc_bus = grid_model.DCBus(C_dc=1e-3, u_dc=650)
     mdl = grid_model.GridConverterSystem(
         converter, ref.ac_filter, ref.ac_source, pwm=True, dc_bus=dc_bus
     )
