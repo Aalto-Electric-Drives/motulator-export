@@ -15,8 +15,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from motulator.common.model import CarrierComparison
-from motulator.drive import model
+from motulator.common.model import ZOH, CarrierComparison
 from scipy.integrate import solve_ivp
 
 from tests.c_port import arr, compile_library, d
@@ -209,16 +208,10 @@ def test_modulator(
 ) -> None:
     """Computational delay and PWM models, with the dead time."""
     N, t_d = 2**6, 3e-6
-    drive = model.Drive(
-        model.SynchronousMachine(model.SynchronousMachinePars(3, 3.6, 0.04, 0.05, 0.5)),
-        model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d),
-        pwm=carrier,
-        delay=delay,
-        single_update=single_update,
-    )
     if carrier:
-        drive.pwm = CarrierComparison(N=N, t_d=t_d)
+        modulator = CarrierComparison(t_d, delay, single_update, N)
+    else:
+        modulator = ZOH(t_d, delay, single_update)
     dll.modulator_new(int(carrier), d(N), d(t_d), delay, int(single_update))
 
     # Duty ratios, including 0, 1, short pulses, and quantization boundaries, and
@@ -231,7 +224,8 @@ def test_modulator(
     T_s = 1e-4 * rng.choice([1.0, 1.25, 0.8], 200)
     out = (ctypes.c_double * (7 * 64))()
     for k in range(200):
-        t_py, q_py, b_py = drive.modulate(T_s[k], list(d_abc[k]))
+        t_py, gates = modulator(T_s[k], list(d_abc[k]))
+        q_py, b_py = gates[:, 0], gates[:, 1]
         n = dll.modulate(d(T_s[k]), arr(d_abc[k]), out)
         c = np.array(out)[: 7 * n].reshape(n, 7)
         assert n == len(t_py)

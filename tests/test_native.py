@@ -71,17 +71,17 @@ def ipmsm_drive(pwm: bool = False) -> tuple[model.Drive, control.VectorControlSy
         n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
     )
     t_d, u_th = (2e-6, 1.0) if pwm else (0.0, 0.0)
+    if pwm:  # Single update, fine quantization
+        modulator = model.CarrierComparison(t_d=t_d, single_update=True, N=2**24)
+    else:
+        modulator = model.ZOH(t_d=t_d)
     mdl = model.Drive(
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.015, B_L=0.01),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
-        pwm=pwm,
-        delay=2 if pwm else 1,
-        single_update=pwm,
+        model.VoltageSourceConverter(u_dc=540, modulator=modulator, u_th=u_th),
     )
     d_err = None
     if pwm:
-        mdl.pwm = CarrierComparison(N=2**24, t_d=t_d)
         d_err = control.InverterNonlinearity(t_d, u_th)
     cfg = control.FluxVectorControllerCfg(i_s_max=1.5 * BASE.i)
     ctrl = control.VectorControlSystem(
@@ -381,10 +381,9 @@ def im_cvc_discrete_drive(
     mdl = model.Drive(
         model.InductionMachine(par),
         model.ExternalRotorSpeed(),
-        model.VoltageSourceConverter(u_dc=540),
-        pwm=True,
+        # Fine quantization
+        model.VoltageSourceConverter(u_dc=540, modulator=CarrierComparison(N=2**24)),
     )
-    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization
     cast(Any, mdl.mechanics).set_external_rotor_speed(lambda t: 0.5 * base.w_M)
     cfg = im_control.CurrentVectorControllerCfg(
         psi_s_nom=base.psi,
@@ -605,7 +604,7 @@ def with_dc_bus(build: Build) -> Build:
     def build_dc() -> tuple[model.Drive, Any]:
         mdl, ctrl = build()
         c = mdl.converter
-        converter = model.VoltageSourceConverter(t_d=c.t_d, u_th=c.u_th)
+        converter = model.VoltageSourceConverter(modulator=c.modulator, u_th=c.u_th)
         dc_bus = DCBus(C_dc=1e-3, u_dc=540)
         return model.Drive(mdl.machine, mdl.mechanics, converter, dc_bus=dc_bus), ctrl
 
@@ -698,13 +697,12 @@ def gfl_variant(lcl: bool, pwm: bool = False, dc_bus: bool = False) -> Build:
             e_g_neg=0.05 * B.u,
             phi_neg=0.3,
         )
-        converter = grid_model.VoltageSourceConverter(u_dc=None if dc_bus else 650)
-        dc = DCBus(C_dc=1e-3, u_dc=650) if dc_bus else None
-        mdl = grid_model.GridConverterSystem(
-            converter, ac_filter, ac_source, dc_bus=dc, pwm=pwm
+        converter = grid_model.VoltageSourceConverter(
+            u_dc=None if dc_bus else 650,
+            modulator=CarrierComparison(N=2**24) if pwm else None,
         )
-        if pwm:
-            mdl.pwm = CarrierComparison(N=2**24)
+        dc = DCBus(C_dc=1e-3, u_dc=650) if dc_bus else None
+        mdl = grid_model.GridConverterSystem(converter, ac_filter, ac_source, dc_bus=dc)
         cfg = grid_control.CurrentVectorControllerCfg(
             i_max=1.5 * B.i, L=0.073 * B.L, T_s=100e-6
         )

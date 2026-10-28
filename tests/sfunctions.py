@@ -117,6 +117,9 @@ class SFunctionControlSystem(ControlSystem):
     def compute_standby_output(self, fbk: Any) -> Any:
         raise NotImplementedError
 
+    def get_command(self, ref: Any) -> Any:
+        raise NotImplementedError
+
     def run_control_loop(self, mdl: Any) -> tuple[float, Sequence[float]]:
         u = self.inputs(mdl, self.t)
         self.recorded.append(u)

@@ -115,9 +115,9 @@ def build_system(
     mdl = model.Drive(
         model.InductionMachine(PAR),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d),
-        delay=2 if single_update else 1,  # One sampling period
-        single_update=single_update,
+        model.VoltageSourceConverter(
+            u_dc=540, modulator=model.ZOH(t_d=t_d, single_update=single_update)
+        ),
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.8) * 0.5 * NOM.tau)
     cfg = control.FluxVectorControllerCfg(

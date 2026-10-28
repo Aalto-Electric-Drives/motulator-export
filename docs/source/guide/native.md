@@ -29,7 +29,7 @@ Run times of `simulate` on one core of a laptop (the shortest of repeated runs),
 
 ## Accuracy
 
-The results agree with *motulator* to the rounding errors, about 1e-12 relative to the signal magnitudes. With carrier comparison (`pwm=True`), a rounding error can change a switching instant, after which the results differ more. The simulations of *motulator* itself are equally sensitive to the rounding errors.
+The results agree with *motulator* to the rounding errors, about 1e-12 relative to the signal magnitudes. With carrier comparison (`CarrierComparison`), a rounding error can change a switching instant, after which the results differ more. The simulations of *motulator* itself are equally sensitive to the rounding errors.
 
 ## Good to know
 

@@ -123,6 +123,7 @@ static void drive_rhs(const Model *base, double t, const double complex *x,
 static void drive_set_states(const Model *base, double complex *x)
 {
     const Drive *self = (const Drive *)base;
+    dc_bus_set_states(&base->dc_bus, x);
     double complex *x_m = x + dc_bus_states(&base->dc_bus);
     if (!self->induction) {
         x_m[DRIVE_theta_m] = wrap(creal(x_m[DRIVE_theta_m]));

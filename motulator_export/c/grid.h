@@ -15,7 +15,7 @@
  *
  * The states are those of motulator, in the same order: the states of the DC bus,
  * the converter current (L filter) or the converter current, the capacitor voltage,
- * and the grid current (LCL filter), and exp(1j*theta_g) of the source.
+ * and the grid current (LCL filter), and the angle theta_g of the source.
  */
 
 #ifndef MOTULATOR_GRID_H
@@ -28,8 +28,8 @@
 #define GRID_i_c_ab 0
 #define GRID_u_f_ab 1 /* LCL filter */
 #define GRID_i_g_ab 2 /* LCL filter */
-#define L_FILTER_STATES "i_c_ab exp_j_theta_g"
-#define LCL_FILTER_STATES "i_c_ab u_f_ab i_g_ab exp_j_theta_g"
+#define L_FILTER_STATES "i_c_ab theta_g"
+#define LCL_FILTER_STATES "i_c_ab u_f_ab i_g_ab theta_g"
 
 /* L filter (LFilter) or LCL filter (LCLFilter) with the grid impedance */
 typedef struct {
@@ -60,7 +60,7 @@ typedef struct {
  * parameters of the filter, the source, the converter, the DC bus, and the modulator
  * are set by the API functions. */
 static void grid_init(GridConverterSystem *self);
-/* Voltage (V) of the source at the time t with the state exp_j_theta_g
+/* Voltage (V) of the source at the time t with exp(1j*theta_g) of its angle
  * (ThreePhaseSource.generate_space_vector) */
 static double complex source_voltage(const ThreePhaseSource *self, double t,
                                      double complex exp_j_theta_g);

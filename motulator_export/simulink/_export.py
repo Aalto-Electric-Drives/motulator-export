@@ -47,7 +47,7 @@ def check_supported_converter(
         raise NotImplementedError("Only VoltageSourceConverter supported")
     if mdl.dc_bus is not None:
         raise NotImplementedError("DC-bus model not supported, only a stiff DC bus")
-    if cast(CarrierComparison, mdl.pwm).t_d != 0 or mdl.converter.u_th != 0:
+    if cast(CarrierComparison, mdl.converter.modulator).t_d != 0 or mdl.converter.u_th:
         raise NotImplementedError(
             "Dead time and threshold voltage not supported in the system model"
         )

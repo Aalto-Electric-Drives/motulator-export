@@ -21,15 +21,16 @@ Currently supported:
   machine: a C-Script block computes the currents and the torque, which are
   injected with controlled current and torque sources)
 - Mechanical system (`MechanicalSystem` without friction), with PLECS blocks
-- Converter: carrier comparison (`pwm=True` in `Drive`) with the Symmetrical PWM
-  block and the IGBT converter of PLECS with ideal IGBTs and diodes. The DC bus is stiff
-  (`VoltageSourceConverter` without a DC-bus model) or capacitive (`DCBus`). The
-  DC-bus model feeds only the converter of the drive, without an external DC
-  current, and the capacitor voltage starts from the state of the model. The
-  computational delay of one sampling period is a PLECS Delay block. The duty
-  ratios are updated twice per carrier period, or once (`single_update=True` with
-  `delay=2`). The dead time and the threshold voltage (`t_d` and `u_th` with
-  `sign=np.sign`) are modeled as in `motulator_export.plecs._im`.
+- Converter: carrier comparison (`CarrierComparison` of the converter) with the
+  Symmetrical PWM block and the IGBT converter of PLECS with ideal IGBTs and diodes.
+  The DC bus is stiff (`VoltageSourceConverter` without a DC-bus model) or
+  capacitive (`DCBus`). The DC-bus model feeds only the converter of the drive,
+  without an external DC current, and the capacitor voltage starts from the state
+  of the model. The computational delay of one sampling period is a PLECS Delay
+  block. The duty ratios are updated twice per carrier period, or once
+  (`single_update=True` of the modulator). The dead time and the threshold voltage
+  (`t_d` of the modulator and `u_th` with `sign=np.sign`) are modeled as in
+  `motulator_export.plecs._im`.
 - Flux-vector control (`FluxVectorController`) in the sensorless or sensored mode,
   with `SynchronousMachinePars` or `SaturatedSynchronousMachinePars` (GradNet flux
   map), and a speed controller (`SpeedController`) in `VectorControlSystem`, with
@@ -750,8 +751,9 @@ def write_model(
         sources += [("theta_M", _probe("Machine", MACHINE_PROBES[2:3]))]
     y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
-    _add_pwm(sch, T_s, mdl.single_update)
-    t_d = cast(CarrierComparison, mdl.pwm).t_d
+    modulator = cast(CarrierComparison, mdl.converter.modulator)
+    _add_pwm(sch, T_s, modulator.single_update)
+    t_d = modulator.t_d
     if t_d > 0:
         _add_blanking_time(sch)
     # The diode bridge and its grid, and the blanking time need space between the PWM

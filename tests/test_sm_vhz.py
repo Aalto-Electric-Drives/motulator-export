@@ -108,9 +108,11 @@ def build_system(
     mdl = model.Drive(
         model.SynchronousMachine(PAR),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
-        delay=2 if single_update else 1,  # One sampling period
-        single_update=single_update,
+        model.VoltageSourceConverter(
+            u_dc=540,
+            modulator=model.ZOH(t_d=t_d, single_update=single_update),
+            u_th=u_th,
+        ),
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * 0.5 * NOM.tau)
     cfg = control.ObserverBasedVHzControllerCfg(i_s_max=1.5 * BASE.i)

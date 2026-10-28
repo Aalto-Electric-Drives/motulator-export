@@ -18,8 +18,8 @@ Currently supported:
 - Grid-forming control (`ObserverBasedGridFormingController`) in the power-control
   mode, with the active power reference and the converter voltage reference
   (constants or step signals)
-- Converter: carrier comparison (`pwm=True`) with the Symmetrical PWM block and the
-  IGBT converter of PLECS with ideal IGBTs and diodes, a stiff DC bus
+- Converter: carrier comparison (`CarrierComparison`) with the Symmetrical PWM block
+  and the IGBT converter of PLECS with ideal IGBTs and diodes, a stiff DC bus
   (`VoltageSourceConverter` without a DC-bus model), and the computational delay of
   one sampling period as a PLECS Delay block
 - Gate blocking (`set_enable`), as in `motulator_export.plecs._sm`
@@ -106,16 +106,17 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
         raise NotImplementedError("Only ThreePhaseSource with constant w_g and e_g")
     if src.phi != 0 or src.e_g_neg != 0:
         raise NotImplementedError("Phase shift and negative sequence not supported")
-    if not isinstance(mdl.pwm, CarrierComparison):
-        raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
-    if mdl.pwm.t_d != 0 or mdl.converter.u_th != 0:
+    modulator = mdl.converter.modulator
+    if not isinstance(modulator, CarrierComparison):
+        raise NotImplementedError("Only the modulator CarrierComparison supported")
+    if modulator.t_d != 0 or mdl.converter.u_th != 0:
         raise NotImplementedError(
             "Converter dead time and threshold voltage not supported"
         )
     _check_delay(mdl)
     # The capacitor voltage of the LCL filter is exported, the other states start
     # from their initial values
-    states = [("ac_source.state.exp_j_theta_g", src.state.exp_j_theta_g, 1 + 0j)]
+    states = [("ac_source.state.theta_g", src.state.theta_g, 0j)]
     states.append(("ac_filter.state.i_c_ab", f.state.i_c_ab, 0j))
     exported: list[tuple[str, complex]] = []
     if isinstance(f, LCLFilter):
@@ -214,7 +215,7 @@ def _abc_probe(comp: str, signal: str) -> str:
 
 
 def _grid_source(k: int) -> dict[str, str]:
-    """Grid voltage e_g*cos(w_g*t - k*2*pi/3) of the phase k, exp_j_theta_g(0) = 1."""
+    """Grid voltage e_g*cos(w_g*t - k*2*pi/3) of the phase k, theta_g(0) = 0."""
     return {"V": "ac_source.e_g", "w": "ac_source.w_g", "phi": f"pi/2 - {k}*2*pi/3"}
 
 
@@ -425,7 +426,7 @@ def write_model(
     sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
     _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
-    _add_pwm(sch, T_s, mdl.single_update)
+    _add_pwm(sch, T_s, mdl.converter.modulator.single_update)
     sch.dx = DC_DX + GATE_DX  # Space for the gate enable and the DC bus
     _add_converter(sch, T_s)
     _add_dc_bus(sch, None)

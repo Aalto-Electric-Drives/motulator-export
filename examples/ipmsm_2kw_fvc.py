@@ -41,13 +41,7 @@ from _compare import (
     simulate_plecs,
     write_plecs_model,
 )
-from motulator.common.model import (
-    CarrierComparison,
-    CompositeModel,
-    DCBus,
-    DiodeBridge,
-    ThreePhaseSource,
-)
+from motulator.common.model import CompositeModel, DCBus, DiodeBridge, ThreePhaseSource
 from motulator.drive import model
 from motulator.grid.model import GridConverterSystem, LFilter
 
@@ -75,11 +69,12 @@ def build_system(
     mdl = model.Drive(
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=None if diode else 540),
-        pwm=True,
+        # Fine quantization (not modeled in PLECS)
+        model.VoltageSourceConverter(
+            u_dc=None if diode else 540, modulator=model.CarrierComparison(N=2**24)
+        ),
         dc_bus=DCBus(C_dc=235e-6, u_dc=sqrt(2) * 400) if diode else None,
     )
-    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
     cfg = control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=True)
     ctrl = control.VectorControlSystem(
         control.FluxVectorController(par, cfg),

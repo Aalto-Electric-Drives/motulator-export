@@ -29,7 +29,6 @@ from _compare import (
     simulate_plecs,
     write_plecs_model,
 )
-from motulator.common.model import CarrierComparison
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal
@@ -50,10 +49,11 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     mdl = model.Drive(
         model.InductionMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540),
-        pwm=True,
+        # Fine quantization (not modeled in PLECS)
+        model.VoltageSourceConverter(
+            u_dc=540, modulator=model.CarrierComparison(N=2**24)
+        ),
     )
-    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
     est_par = control.InductionMachineInvGammaPars(
         n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
     )

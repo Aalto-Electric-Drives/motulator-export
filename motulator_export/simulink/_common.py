@@ -36,7 +36,7 @@ def check_supported_model(
     period or the control system blocks the gates (`set_enable`), which the ideal
     converter of the system model does not model.
     """
-    if mdl.single_update:
+    if mdl.converter.modulator.single_update:
         raise NotImplementedError("Single update not supported in the system model")
     if gate_enable(ctrl) != 1:
         raise NotImplementedError(

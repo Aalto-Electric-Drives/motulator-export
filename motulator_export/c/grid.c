@@ -18,6 +18,13 @@ static double complex source_voltage(const ThreePhaseSource *self, double t,
     return e_g_ab;
 }
 
+/* exp(1j*theta_g) of the angle state of the source, wrapped as by
+ * ThreePhaseSource.set_states */
+static double complex source_rotation(double complex theta_g)
+{
+    return cexp(I * wrap(creal(theta_g)));
+}
+
 /* Number of the states of the filter */
 static int filter_states(const ACFilter *self)
 {
@@ -60,7 +67,7 @@ static void grid_rhs(const Model *base, double t, const double complex *x,
     const double complex *x_f = x + k;
     double complex *dx_f = dx + k;
     int k_s = filter_states(f);
-    double complex exp_j_theta_g = x_f[k_s];
+    double complex exp_j_theta_g = source_rotation(x_f[k_s]);
     double complex u_c_ab = model_converter_voltage(base, t, x, NULL);
     double complex e_g_ab = source_voltage(&self->ac_source, t, exp_j_theta_g);
 
@@ -81,7 +88,7 @@ static void grid_rhs(const Model *base, double t, const double complex *x,
     }
 
     /* Source */
-    dx_f[k_s] = I * signal_value(&self->ac_source.w_g, t) * exp_j_theta_g;
+    dx_f[k_s] = signal_value(&self->ac_source.w_g, t);
 
     /* DC bus */
     dc_bus_rhs(&base->dc_bus, x, converter_dc_current(&base->converter, i_c_ab), dx);
@@ -101,8 +108,8 @@ static void grid_ac_port(const Model *base, double t, const double complex *x,
         port->e = x_f[GRID_u_f_ab] + f->R_fc * i_c_ab;
         L = f->L_fc;
     } else {
-        double complex e_g_ab =
-            source_voltage(&self->ac_source, t, x_f[filter_states(f)]);
+        double complex e_g_ab = source_voltage(&self->ac_source, t,
+                                               source_rotation(x_f[filter_states(f)]));
         port->e = e_g_ab + (f->R_f + f->R_g) * i_c_ab;
         L = f->L_f + f->L_g;
     }
@@ -113,11 +120,15 @@ static void grid_ac_port(const Model *base, double t, const double complex *x,
     port->Y[1][1] = 1.0 / L;
 }
 
-/* The states are not changed at the start of an integration interval */
+/* Keep the angle of the source within [-pi, pi) at the start of an integration
+ * interval (ThreePhaseSource.set_states) */
 static void grid_set_states(const Model *base, double complex *x)
 {
-    (void)base;
-    (void)x;
+    const GridConverterSystem *self = (const GridConverterSystem *)base;
+    dc_bus_set_states(&base->dc_bus, x);
+    double complex *x_f = x + dc_bus_states(&base->dc_bus);
+    int k_s = filter_states(&self->ac_filter);
+    x_f[k_s] = wrap(creal(x_f[k_s]));
 }
 
 static void grid_init_states(Model *base)
@@ -163,7 +174,8 @@ static double complex grid_meas_pcc_voltage(const GridConverterSystem *self, dou
 {
     const Model *base = &self->base;
     const double complex *x_f = x + dc_bus_states(&base->dc_bus);
-    double complex exp_j_theta_g = x_f[filter_states(&self->ac_filter)];
+    int k_s = filter_states(&self->ac_filter);
+    double complex exp_j_theta_g = source_rotation(x_f[k_s]);
     double complex u_c_ab = model_converter_voltage(base, t, x, NULL);
     double complex e_g_ab = source_voltage(&self->ac_source, t, exp_j_theta_g);
     double complex u_g_ab = pcc_voltage(&self->ac_filter, x_f, u_c_ab, e_g_ab);

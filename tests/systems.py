@@ -87,7 +87,7 @@ def sm_system(
         mdl = model.Drive(
             model.SynchronousMachine(par),
             mechanics(torque),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+            model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
         )
         cfg = sm_control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=sensorless)
         pwm = sm_control.PWM()
@@ -140,7 +140,7 @@ def sm_cvc_system(
         mdl = model.Drive(
             model.SynchronousMachine(par),
             mechanics(torque),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+            model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
         )
         cfg = sm_control.CurrentVectorControllerCfg(
             i_s_max=6.5, sensorless=sensorless, discrete=discrete
@@ -191,9 +191,11 @@ def im_system(
         mdl = model.Drive(
             model.InductionMachine(par),
             mechanics(torque),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d, u_th=u_th),
-            delay=2 if single_update else 1,  # One sampling period
-            single_update=single_update,
+            model.VoltageSourceConverter(
+                u_dc=540,
+                modulator=model.ZOH(t_d=t_d, single_update=single_update),
+                u_th=u_th,
+            ),
         )
         cfg = im_control.CurrentVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless, discrete=discrete
@@ -241,7 +243,7 @@ def im_fvc_system(
         mdl = model.Drive(
             model.InductionMachine(par),
             mechanics(torque),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+            model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
         )
         cfg = im_control.FluxVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, alpha_i=alpha_i, sensorless=sensorless
@@ -313,7 +315,7 @@ def vhz_system(
         mdl = model.Drive(
             model.InductionMachine(model.InductionMachineInvGammaPars(**IM_PAR)),
             model.MechanicalSystem(J=0.015),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+            model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * 0.5 * IM_NOM.tau)
         if open_loop:
@@ -367,7 +369,7 @@ def sm_vhz_system(
         mdl = model.Drive(
             model.SynchronousMachine(par),
             model.MechanicalSystem(J=0.015),
-            model.VoltageSourceConverter(u_dc=540, t_d=t_d),
+            model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * 0.5 * SM_NOM.tau)
         cfg = sm_control.ObserverBasedVHzControllerCfg(i_s_max=1.5 * SM_BASE.i)

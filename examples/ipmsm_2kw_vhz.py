@@ -29,7 +29,6 @@ from _compare import (
     simulate_plecs,
     write_plecs_model,
 )
-from motulator.common.model import CarrierComparison
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal
@@ -50,10 +49,11 @@ def build_system() -> tuple[model.Drive, control.VHzControlSystem]:
     mdl = model.Drive(
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540),
-        pwm=True,
+        # Fine quantization (not modeled in PLECS)
+        model.VoltageSourceConverter(
+            u_dc=540, modulator=model.CarrierComparison(N=2**24)
+        ),
     )
-    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
     cfg = control.ObserverBasedVHzControllerCfg(i_s_max=1.5 * base.i)
     vhz_ctrl = control.ObserverBasedVHzController(par, cfg)
     ctrl = control.VHzControlSystem(vhz_ctrl, slew_rate=2 * pi * 120)
