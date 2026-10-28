@@ -113,10 +113,11 @@ def _grid_model(lcl: bool) -> grid_model.GridConverterSystem:
     else:
         ac_filter = grid_model.LFilter(L_f=0.15 * BASE.L)
     return grid_model.GridConverterSystem(
-        grid_model.VoltageSourceConverter(u_dc=650),
+        grid_model.VoltageSourceConverter(
+            u_dc=650, modulator=grid_model.CarrierComparison()
+        ),
         ac_filter,
         grid_model.ThreePhaseSource(w_g=BASE.w, e_g=BASE.u),
-        pwm=True,
     )
 
 
@@ -192,11 +193,12 @@ def _drive(sm: bool, dc_bus: bool = False) -> tuple[Any, Any]:
     else:
         mdl, ctrl = im_system(True, 0.0, 0.0)[0]()
     converter = mdl.converter
+    converter.modulator = model.CarrierComparison()
     bus = None
     if dc_bus:
-        converter = model.VoltageSourceConverter()
+        converter = model.VoltageSourceConverter(modulator=model.CarrierComparison())
         bus = model.DCBus(C_dc=235e-6, u_dc=540)
-    drive = model.Drive(mdl.machine, mdl.mechanics, converter, pwm=True, dc_bus=bus)
+    drive = model.Drive(mdl.machine, mdl.mechanics, converter, dc_bus=bus)
     ctrl.set_speed_ref(StepSignal(0.1, 50.0))
     drive.mechanics.set_external_load_torque(StepSignal(0.2, 5.0))
     return drive, ctrl
@@ -335,7 +337,8 @@ def test_torque_control(tmp_path: Path, sm: bool) -> None:
     time is not supported, and nothing is written.
     """
     mdl, ctrl = torque_system("fvc" if sm else "cvc", True)[0]()
-    mdl = model.Drive(mdl.machine, mdl.mechanics, mdl.converter, pwm=True)
+    mdl.converter.modulator = model.CarrierComparison()
+    mdl = model.Drive(mdl.machine, mdl.mechanics, mdl.converter)
     ctrl.set_torque_ref(StepSignal(0.1, 5.0))  # T_s = 125 us
     mech = mdl.mechanics
     assert isinstance(mech, model.ExternalRotorSpeed)
@@ -431,8 +434,8 @@ def test_unsupported_initial_states(tmp_path: Path, case: str) -> None:
         if case == "grid_current":
             mdl.ac_filter.state.i_g_ab = 1 + 0j
         else:
-            mdl.ac_source.state.exp_j_theta_g = 1j
-        match = "i_g_ab" if case == "grid_current" else "exp_j_theta_g"
+            mdl.ac_source.state.theta_g = 0.5 * pi + 0j
+        match = "i_g_ab" if case == "grid_current" else "theta_g"
     for tool, path in TOOLS:
         with pytest.raises(NotImplementedError, match=match):
             tool.write_model(tmp_path / path, mdl, ctrl, 0.1)
@@ -537,10 +540,12 @@ def test_unsupported_diode_bridge(tmp_path: Path, case: str) -> None:
 def test_unsupported_grid_dc_bus(tmp_path: Path) -> None:
     """Only the stiff DC bus is supported in the grid converter systems."""
     ref, ctrl = _grid(gfl=True)
-    converter = grid_model.VoltageSourceConverter()
+    converter = grid_model.VoltageSourceConverter(
+        modulator=grid_model.CarrierComparison()
+    )
     dc_bus = grid_model.DCBus(C_dc=1e-3, u_dc=650)
     mdl = grid_model.GridConverterSystem(
-        converter, ref.ac_filter, ref.ac_source, pwm=True, dc_bus=dc_bus
+        converter, ref.ac_filter, ref.ac_source, dc_bus=dc_bus
     )
     for tool, path in TOOLS:
         with pytest.raises(NotImplementedError, match="DC-bus model"):
@@ -568,16 +573,8 @@ def _im_drive(
     them. The delay defaults to one sampling period.
     """
     mdl, ctrl = im_system(True, t_d, 0.0, u_th, single_update)[0]()
-    if delay is None:
-        delay = 2 if single_update else 1
-    drive = model.Drive(
-        mdl.machine,
-        mdl.mechanics,
-        mdl.converter,
-        pwm=True,
-        delay=delay,
-        single_update=single_update,
-    )
+    mdl.converter.modulator = model.CarrierComparison(t_d, delay, single_update)
+    drive = model.Drive(mdl.machine, mdl.mechanics, mdl.converter)
     ctrl.set_speed_ref(StepSignal(0.1, 50.0))
     drive.mechanics.set_external_load_torque(StepSignal(0.2, 5.0))
     return drive, ctrl
@@ -684,14 +681,8 @@ def test_gate_enable(tmp_path: Path, system: str) -> None:
 def test_unsupported_single_update_grid(tmp_path: Path) -> None:
     """Single update is supported in the system model of the PLECS export only."""
     ref, ctrl = _grid(gfl=True)
-    mdl = grid_model.GridConverterSystem(
-        ref.converter,
-        ref.ac_filter,
-        ref.ac_source,
-        pwm=True,
-        delay=2,
-        single_update=True,
-    )
+    ref.converter.modulator = grid_model.CarrierComparison(single_update=True)
+    mdl = grid_model.GridConverterSystem(ref.converter, ref.ac_filter, ref.ac_source)
     plecs.write_model(tmp_path / "grid.plecs", mdl, ctrl, 0.1)
     text = (tmp_path / "grid.plecs").read_text(encoding="utf-8")
     assert re.search(r'Variable\s+"fc"\s+Value\s+"1/cfg.T_s"', text)
@@ -710,8 +701,7 @@ def test_unsupported_gate_blocking_gradnet(tmp_path: Path) -> None:
     mdl = model.Drive(
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540),
-        pwm=True,
+        model.VoltageSourceConverter(u_dc=540, modulator=model.CarrierComparison()),
     )
     ctrl = sm_system(True, 0.0)[0]()[1]
     ctrl.set_speed_ref(StepSignal(0.1, 50.0))

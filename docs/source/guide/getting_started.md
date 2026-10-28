@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.12 or later. The package installs *motulator* 0.19.0 or a later 0.19 release.
+- Python 3.12 or later. The package installs *motulator* 0.20.0 or a later 0.20 release.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (File > PLECS Preferences > General > RPC interface port, 1080).
 - **Simulink**: MATLAB R2021a or later with Simulink, and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks need no compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 - **Native simulation**: a C compiler, by default gcc (or the one given by the environment variable `CC`).
@@ -109,8 +109,7 @@ par = model.SynchronousMachinePars(n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0
 mdl = model.Drive(
     model.SynchronousMachine(par),
     model.MechanicalSystem(J=0.015),
-    model.VoltageSourceConverter(u_dc=540),
-    pwm=True,
+    model.VoltageSourceConverter(u_dc=540, modulator=model.CarrierComparison()),
 )
 cfg = control.FluxVectorControllerCfg(i_s_max=6.5)
 ctrl = control.VectorControlSystem(

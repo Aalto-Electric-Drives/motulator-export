@@ -174,7 +174,9 @@ typedef struct {
 } ACPort;
 
 /* Three-phase voltage-source converter with a constant DC-bus voltage, the dead time
- * resolved by the current directions given by the signum function. With the gates
+ * resolved by the current directions given by the signum function, a current within
+ * the tolerance of the diode-state transitions having no direction (current_direction
+ * of _ac_port.py). With the gates
  * blocked, the diode state of each leg is 1 if its lower diode conducts, -1 if its
  * upper diode conducts, and 0 if the leg floats (see leg_voltages). */
 typedef struct {
@@ -211,6 +213,9 @@ static double diode_margin(const ACPort *port, double u_dc, const double diodes[
 /* Update the diode states at a transition, or latch them from the directions of the
  * currents if latch is nonzero (update_diodes with diodes None) */
 static void update_diodes(const ACPort *port, double u_dc, double diodes[3], int latch);
+/* Direction of the phase current i (current_direction of _ac_port.py with np.sign),
+ * zero within the tolerance of the diode-state transitions */
+static double current_direction(double i);
 
 /* DC bus ------------------------------------------------------------------- */
 
@@ -222,8 +227,8 @@ static void update_diodes(const ACPort *port, double u_dc, double diodes[3], int
  * from a diode bridge (DiodeBridge), which is supplied through an L filter (LFilter)
  * from a balanced three-phase source (ThreePhaseSource) with a constant magnitude
  * and frequency. Its states (u_dc of DCBus, and of the diode bridge, i_c_ab of the L
- * filter and exp_j_theta_g of the source) come first in the states of the model, as
- * in motulator (in a composite model, with the model of the diode bridge first). */
+ * filter and the angle theta_g of the source) come first in the states of the model,
+ * as in motulator (in a composite model, with the model of the diode bridge first). */
 typedef struct {
     int type;
     double C_dc;      /* DC-bus capacitance (F) */
@@ -251,6 +256,9 @@ static void bridge_update_diodes(DCBus *self, const double complex *x, int latch
  * current i_dc_int */
 static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_int,
                        double complex *dx);
+/* Keep the angle of the source of the diode bridge within [-pi, pi)
+ * (ThreePhaseSource.set_states) */
+static void dc_bus_set_states(const DCBus *self, double complex *x);
 
 /* Logs --------------------------------------------------------------------- */
 

@@ -42,7 +42,6 @@ from _compare import (
     simulate_plecs,
     write_plecs_model,
 )
-from motulator.common.model import CarrierComparison
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal
@@ -74,16 +73,14 @@ def build_system(tanh: bool = False) -> tuple[model.Drive, control.VectorControl
     par = model.InductionMachineInvGammaPars(
         n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
     )
+    # Single update with the computational delay of one sampling period, i.e., two
+    # half carrier periods, and fine quantization (not modeled in PLECS)
+    modulator = model.CarrierComparison(t_d=T_D, single_update=True, N=2**24)
     mdl = model.Drive(
         model.InductionMachine(par),
         model.MechanicalSystem(J=0.015),
-        model.VoltageSourceConverter(u_dc=540, t_d=T_D, u_th=U_TH),
-        pwm=True,
-        delay=2,  # One sampling period, i.e., two half carrier periods
-        single_update=True,
+        model.VoltageSourceConverter(u_dc=540, modulator=modulator, u_th=U_TH),
     )
-    # Fine quantization (not modeled in PLECS), the dead time as in the converter
-    mdl.pwm = CarrierComparison(N=2**24, t_d=T_D)
     est_par = control.InductionMachineInvGammaPars(
         n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
     )

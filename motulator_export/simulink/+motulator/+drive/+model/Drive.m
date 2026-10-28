@@ -1,8 +1,6 @@
 classdef Drive < motulator.internal.Object
     %DRIVE Continuous-time model of a machine drive.
-    %   MDL = DRIVE(MACHINE, MECHANICS, CONVERTER) as in motulator. The converter is
-    %   modeled with the carrier comparison (pwm=True of motulator) and the
-    %   computational delay of one sampling period.
+    %   MDL = DRIVE(MACHINE, MECHANICS, CONVERTER) as in motulator.
 
     properties
         machine    % Machine model (SynchronousMachine or InductionMachine)

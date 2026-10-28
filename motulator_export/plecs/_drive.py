@@ -51,11 +51,11 @@ def _check_supported_plant(
     Raise an error if the mechanics, the converter, the DC bus (fed from the diode
     bridge `front` if given), or the PWM is not supported.
 
-    The dead time of the carrier comparison (`mdl.pwm.t_d`, by default that of the
-    converter) and the threshold voltage of the converter (`u_th`) are supported only
-    if `dead_time` is True, and only with the current-direction function `np.sign` of
-    the converter. The computational delay must be one sampling period (`delay=1`,
-    or `delay=2` with `single_update`).
+    The modulator must be `CarrierComparison`. Its dead time (`t_d`) and the threshold
+    voltage of the converter (`u_th`) are supported only if `dead_time` is True, and
+    only with the current-direction function `np.sign` of the converter. The
+    computational delay must be one sampling period (the default `delay` of the
+    modulator).
 
     """
     mechanics = mdl.mechanics
@@ -75,9 +75,10 @@ def _check_supported_plant(
         check_supported_front(front)
     if mdl.machine.i_s_sensor is not None or mdl.converter.u_dc_sensor is not None:
         raise NotImplementedError("Sensor models not supported")
-    if not isinstance(mdl.pwm, CarrierComparison):
-        raise NotImplementedError("Only CarrierComparison (pwm=True) supported")
-    if mdl.pwm.t_d != 0 or mdl.converter.u_th != 0:
+    modulator = mdl.converter.modulator
+    if not isinstance(modulator, CarrierComparison):
+        raise NotImplementedError("Only the modulator CarrierComparison supported")
+    if modulator.t_d != 0 or mdl.converter.u_th != 0:
         if not dead_time:
             raise NotImplementedError(
                 "Converter dead time and threshold voltage not supported"
@@ -87,7 +88,7 @@ def _check_supported_plant(
                 "Only the dead time and the threshold voltage with sign=np.sign "
                 "supported"
             )
-        if mdl.pwm.t_d < 0 or mdl.converter.u_th < 0:
+        if modulator.t_d < 0 or mdl.converter.u_th < 0:
             raise NotImplementedError("Only t_d >= 0 and u_th >= 0 supported")
     _check_delay(mdl)
     _check_initial_drive_states(mdl, front)
@@ -132,9 +133,7 @@ def _check_initial_drive_states(
     if front is not None:
         src = cast(ThreePhaseSource, front.ac_source)
         states.append(("grid.ac_filter.state.i_c_ab", front.ac_filter.state.i_c_ab, 0j))
-        states.append(
-            ("grid.ac_source.state.exp_j_theta_g", src.state.exp_j_theta_g, 1)
-        )
+        states.append(("grid.ac_source.state.theta_g", src.state.theta_g, 0))
     _check_initial_states(states, exported)
 
 
@@ -257,7 +256,7 @@ def mechanics_and_converter_variables(
     dc_bus = mdl.dc_bus
     if dc_bus is None:
         variables += [("converter.u_dc", mdl.converter.inp.u_dc)]
-    t_d = cast(CarrierComparison, mdl.pwm).t_d
+    t_d = cast(CarrierComparison, mdl.converter.modulator).t_d
     if t_d > 0:
         variables += [("converter.t_d", t_d)]
     if mdl.converter.u_th > 0:

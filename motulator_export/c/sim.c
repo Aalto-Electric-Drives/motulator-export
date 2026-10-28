@@ -382,6 +382,19 @@ static int modulator_modulate(Modulator *self, double T_s, const double d_abc[3]
     return SIM_OK;
 }
 
+/* Time constant (s) at which the residual current of a floating leg decays */
+#define AC_PORT_TAU 1e-4
+/* Tolerances of the diode-state transitions: current (A) and voltage (V). They exceed
+ * the numerical noise of the solution, e.g., in the residual currents of floating
+ * legs, so that the margin of the diode states is positive after a transition. */
+#define AC_PORT_I_TOL 1e-4
+#define AC_PORT_U_TOL 1e-3
+
+static double current_direction(double i)
+{
+    return (fabs(i) > AC_PORT_I_TOL) ? sign(i) : 0.0;
+}
+
 /* Converter ---------------------------------------------------------------- */
 
 static void converter_set_gate_signals(VoltageSourceConverter *self,
@@ -392,7 +405,7 @@ static void converter_set_gate_signals(VoltageSourceConverter *self,
     double i_abc[3], s_abc[3], q[3];
     complex2abc(i_c_ab, i_abc);
     for (int k = 0; k < 3; k++) {
-        s_abc[k] = sign(i_abc[k]);
+        s_abc[k] = current_direction(i_abc[k]);
         q[k] = q_abc[k] + 0.5 * b_abc[k] * (1.0 - s_abc[k]);
     }
     self->q_c_ab = abc2complex(q);
@@ -416,14 +429,6 @@ static double converter_dc_current(const VoltageSourceConverter *self,
     complex2abc(i_c_ab, i_abc);
     return -0.5 * (fabs(i_abc[0]) + fabs(i_abc[1]) + fabs(i_abc[2]));
 }
-
-/* Time constant (s) at which the residual current of a floating leg decays */
-#define AC_PORT_TAU 1e-4
-/* Tolerances of the diode-state transitions: current (A) and voltage (V). They exceed
- * the numerical noise of the solution, e.g., in the residual currents of floating
- * legs, so that the margin of the diode states is positive after a transition. */
-#define AC_PORT_I_TOL 1e-4
-#define AC_PORT_U_TOL 1e-3
 
 /* Transformation from the real and imaginary parts of a space vector to the phase
  * quantities (_A of _ac_port.py), whose transpose times 2/3 is the inverse (_B) */
@@ -576,7 +581,7 @@ static void update_diodes(const ACPort *port, double u_dc, double diodes[3], int
     int positive = 0, negative = 0;
     for (int k = 0; k < 3; k++) {
         if (latch) {
-            diodes[k] = (fabs(i_abc[k]) > AC_PORT_I_TOL) ? sign(i_abc[k]) : 0.0;
+            diodes[k] = current_direction(i_abc[k]);
         } else if (diodes[k] * i_abc[k] <= 0.0) {
             diodes[k] = 0.0;
         }
@@ -627,7 +632,7 @@ static const char *dc_bus_state_names(const DCBus *self)
     case DC_BUS_CAPACITOR:
         return "u_dc";
     case DC_BUS_DIODE_BRIDGE:
-        return "u_dc i_c_ab exp_j_theta_g";
+        return "u_dc i_c_ab theta_g";
     default:
         return "";
     }
@@ -642,7 +647,7 @@ static double dc_bus_voltage(const DCBus *self, const double complex *x, double 
 static void bridge_port(const DCBus *self, const double complex *x, ACPort *port)
 {
     port->i = x[1];
-    port->e = self->e_g * x[2] + self->R_t * x[1];
+    port->e = self->e_g * cexp(I * wrap(creal(x[2]))) + self->R_t * x[1];
     port->Y[0][0] = 1.0 / self->L_t;
     port->Y[0][1] = 0.0;
     port->Y[1][0] = 0.0;
@@ -684,9 +689,16 @@ static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_i
         double i_dc_bridge = -0.5 * (fabs(i_abc[0]) + fabs(i_abc[1]) + fabs(i_abc[2]));
         dx[0] = (0.0 - (i_dc_bridge + i_dc_int)) / self->C_dc;
         double complex u_c_ab = bridge_voltage(self, x, NULL);
-        double complex e_g_ab = self->e_g * x[2];
+        double complex e_g_ab = self->e_g * cexp(I * wrap(creal(x[2])));
         dx[1] = (u_c_ab - e_g_ab - self->R_t * x[1]) / self->L_t;
-        dx[2] = I * self->w_g * x[2];
+        dx[2] = self->w_g;
+    }
+}
+
+static void dc_bus_set_states(const DCBus *self, double complex *x)
+{
+    if (self->type == DC_BUS_DIODE_BRIDGE) {
+        x[2] = wrap(creal(x[2]));
     }
 }
 

@@ -257,13 +257,14 @@ CONVERTER_FRAME = "      Frame         [-25, -25; 25, 25]\n"
 
 def _check_delay(mdl: Model) -> None:
     """
-    Raise an error if the computational delay is not one sampling period (one half
-    carrier period with double update, two with single update).
+    Raise an error if the computational delay of the modulator is not one sampling
+    period (one half carrier period with double update, two with single update).
     """
-    if len(mdl.delay.data) != (2 if mdl.single_update else 1):
+    modulator = mdl.converter.modulator
+    if modulator.delay.length != (2 if modulator.single_update else 1):
         raise NotImplementedError(
-            "Only the computational delay of one sampling period supported (delay=1, "
-            "or delay=2 with single_update)"
+            "Only the computational delay of one sampling period (the default delay "
+            "of the modulator) supported"
         )
 
 
@@ -494,7 +495,7 @@ def _add_diode_bridge(sch: _Schematic, front: GridConverterSystem) -> None:
                 flipped=True,
                 show=False,
             )
-        # Grid phase voltage e_g*cos(w_g*t - k*2*pi/3), i.e., exp_j_theta_g(0) = 1,
+        # Grid phase voltage e_g*cos(w_g*t - k*2*pi/3), i.e., theta_g(0) = 0,
         # and the L filter
         y_ph = y_c - 40 + 40 * k
         src = {

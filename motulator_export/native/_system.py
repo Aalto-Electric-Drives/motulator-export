@@ -229,10 +229,10 @@ class NativeSystem:
         dc_bus = mdl.dc_bus
         if dc_bus is not None:
             lib.set_dc_bus(h, DC_BUS_TYPES[type(dc_bus)], dc_bus.C_dc)
-        pwm = mdl.pwm
-        N = pwm.N if isinstance(pwm, CarrierComparison) else 0
-        delay = len(mdl.delay.data)
-        lib.set_modulator(h, N > 0, N, pwm.t_d, delay, mdl.single_update)
+        modulator = cast(ZOH | CarrierComparison, converter.modulator)
+        N = modulator.N if isinstance(modulator, CarrierComparison) else 0
+        delay, single_update = modulator.delay.length, modulator.single_update
+        lib.set_modulator(h, N > 0, N, modulator.t_d, delay, single_update)
 
     def set_pwm(self, pwm: Any) -> None:
         """Set the PWM of the control system, in a library of `PWM_API`."""
@@ -333,9 +333,9 @@ def check_supported_converter(
 ) -> None:
     """
     Raise an error if the converter, its DC bus (fed from the diode bridge `front` if
-    given), its PWM model, or the delay is not supported.
+    given), or its modulator is not supported.
     """
-    converter, pwm, dc_bus = mdl.converter, mdl.pwm, mdl.dc_bus
+    converter, dc_bus = mdl.converter, mdl.dc_bus
     if type(converter) is not VoltageSourceConverter or converter.sign is not np.sign:
         raise NotImplementedError(
             "Only VoltageSourceConverter with sign=np.sign supported"
@@ -351,18 +351,17 @@ def check_supported_converter(
         check_supported_dc_bus(dc_bus, converter, front)
     if front is not None:
         check_supported_front(front)
-    if type(pwm) not in (ZOH, CarrierComparison):
-        raise NotImplementedError(
-            "Only the PWM models ZOH and CarrierComparison supported"
-        )
-    delay = mdl.delay.data
-    if len(delay) > DELAY_MAX_LENGTH:
+    modulator = converter.modulator
+    if type(modulator) not in (ZOH, CarrierComparison):
+        raise NotImplementedError("Only the modulators ZOH and CarrierComparison")
+    if modulator.delay.length > DELAY_MAX_LENGTH:
         raise NotImplementedError(f"At most the delay {DELAY_MAX_LENGTH} supported")
-    initial = not np.any(delay)
-    if isinstance(pwm, CarrierComparison):
-        initial &= pwm._rising_edge and pwm._command is None
+    # The delay buffer is filled at the first call of the modulator
+    initial = not modulator.delay.data
+    if isinstance(modulator, CarrierComparison):
+        initial &= modulator._rising_edge and modulator._gate_cmd is None
     if not initial:
-        raise NotImplementedError("Only the initial state of the PWM model supported")
+        raise NotImplementedError("Only the initial state of the modulator supported")
 
 
 def enable_signal(ctrl: Any) -> StepSignal | float | Callable[[float], float]:

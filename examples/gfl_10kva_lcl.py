@@ -23,7 +23,6 @@ from _compare import (
     simulate_plecs,
     write_plecs_model,
 )
-from motulator.common.model import CarrierComparison
 from motulator.common.utils import complex2abc
 from motulator.grid import control, model, utils
 
@@ -45,9 +44,10 @@ def build_system() -> tuple[
         L_fc=0.073 * base.L, L_fg=0.073 * base.L, C_f=0.043 * base.C, u_f0_ab=base.u
     )
     ac_source = model.ThreePhaseSource(w_g=base.w, e_g=base.u)
-    converter = model.VoltageSourceConverter(u_dc=650)
-    mdl = model.GridConverterSystem(converter, ac_filter, ac_source, pwm=True)
-    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
+    # Fine quantization (not modeled in PLECS)
+    modulator = model.CarrierComparison(N=2**24)
+    converter = model.VoltageSourceConverter(u_dc=650, modulator=modulator)
+    mdl = model.GridConverterSystem(converter, ac_filter, ac_source)
     cfg = control.CurrentVectorControllerCfg(
         i_max=1.5 * base.i, L=0.073 * base.L, T_s=100e-6
     )

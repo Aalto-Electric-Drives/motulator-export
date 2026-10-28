@@ -30,10 +30,10 @@ Currently supported:
 - The MPE or MME overmodulation of the PWM (`overmodulation`, MME by default in V/Hz
   control), the minimum duty ratio (`d_min`), and the single update
   (`single_update`)
-- Dead time and threshold voltage of the converter (`t_d` and `u_th` with
-  `sign=np.sign`), modeled with the Blanking Time block and the IGBT converter of
-  PLECS (with the threshold voltage, the IGBT converter with parasitics, whose
-  forward voltages are `u_th`), and their compensation in the PWM
+- Dead time of the modulator and threshold voltage of the converter (`t_d` and
+  `u_th` with `sign=np.sign`), modeled with the Blanking Time block and the IGBT
+  converter of PLECS (with the threshold voltage, the IGBT converter with
+  parasitics, whose forward voltages are `u_th`), and their compensation in the PWM
   (`PWM(d_err=InverterNonlinearity(t_d, u_th, sign))` with `sign=np.sign` or the
   smooth `sign=lambda i: np.tanh(i/i_0)`)
 - Gate blocking (`set_enable`): the input `enable` of the control system, which
@@ -347,8 +347,9 @@ def write_model(
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
     y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
-    _add_pwm(sch, T_s, mdl.single_update)
-    t_d = cast(CarrierComparison, mdl.pwm).t_d
+    modulator = cast(CarrierComparison, mdl.converter.modulator)
+    _add_pwm(sch, T_s, modulator.single_update)
+    t_d = modulator.t_d
     if t_d > 0:
         _add_blanking_time(sch)
     # The diode bridge and its grid, and the blanking time need space between the PWM

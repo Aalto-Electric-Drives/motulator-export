@@ -32,7 +32,6 @@ from _compare import (
     simulate_plecs,
     write_plecs_model,
 )
-from motulator.common.model import CarrierComparison
 from motulator.drive import model, utils
 
 from motulator_export import StepSignal
@@ -57,10 +56,11 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     mdl = model.Drive(
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.05),
-        model.VoltageSourceConverter(u_dc=540),
-        pwm=True,
+        # Fine quantization (not modeled in PLECS)
+        model.VoltageSourceConverter(
+            u_dc=540, modulator=model.CarrierComparison(N=2**24)
+        ),
     )
-    mdl.pwm = CarrierComparison(N=2**24)  # Fine quantization (not modeled in PLECS)
 
     path = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"
     est_flux_map = gn.FluxMap(gn.load_gradnet(path))

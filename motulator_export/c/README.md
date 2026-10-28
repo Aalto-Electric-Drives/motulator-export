@@ -40,7 +40,7 @@ The states are complex and in the order of *motulator*, and the control system l
 A new type of system needs its C model (e.g., a machine in `drive.c`), a library combining the model with the C port of its control system, and a Python module setting the parameters (e.g., `motulator_export/native/_im.py`).
 
 The native simulation takes the same solver steps as *motulator*, so the results agree to the rounding errors: about 1e-12 relative to the signal magnitudes, also with the GradNet models, see `tests/test_native.py`.
-With the carrier comparison (`pwm=True`), a rounding error can change a quantized duty ratio and thereby a switching instant, after which the solutions differ more; with a fine quantization (`CarrierComparison(N=2**24)`), they agree to about 1e-7.
+With the carrier comparison (`CarrierComparison`), a rounding error can change a quantized duty ratio and thereby a switching instant, after which the solutions differ more; with a fine quantization (`CarrierComparison(N=2**24)`), they agree to about 1e-7.
 The closed-loop simulations of *motulator* itself are equally sensitive to the rounding errors.
 
 ## Tests

@@ -13,9 +13,9 @@ Supported:
   constant or a function of time
 - Converter (`VoltageSourceConverter`) with a constant DC-bus voltage or fed by a
   DC-bus model (`DCBus`, without an external DC current), the
-  dead time, and the threshold voltage (with `sign=np.sign`). The PWM model is `ZOH`
-  (the default) or `CarrierComparison` (`pwm=True`), with any computational delay and
-  the single or double update, starting from their initial states.
+  dead time, and the threshold voltage (with `sign=np.sign`). The modulator is `ZOH`
+  (the default) or `CarrierComparison`, with any computational delay and the single
+  or double update, starting from its initial state.
 - Ideal sensors
 
 """
