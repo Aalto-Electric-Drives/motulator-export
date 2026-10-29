@@ -254,7 +254,10 @@ class NativeSystem:
         sampling instant `t_start` and the controller time `t_ctrl`.
         """
         names = [
-            n for s in mdl.subsystems if s.state is not None for n in vars(s.state)
+            n
+            for s in mdl.subsystems.values()
+            if s.state is not None
+            for n in vars(s.state)
         ]
         if names != self.fields(control=False):
             raise NotImplementedError(
