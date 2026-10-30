@@ -18,14 +18,14 @@ The control system runs the C port of its algorithms, and the system model runs 
 
 ## Run times
 
-Run times of `simulate` on one core of a laptop (the shortest of repeated runs), with *motulator* 0.20.0:
+Run times of `simulate` on one core of a laptop (the shortest of repeated runs), with *motulator* 0.21.0:
 
 | System                                 | PWM model          | *motulator* | Native | Ratio |
 | -------------------------------------- | ------------------ | ----------: | -----: | ----: |
 | 5.6-kW PM-SyRM, GradNet models, 1.75 s | zero-order hold    |       9.7 s | 0.28 s |    35 |
-| 5.6-kW PM-SyRM, GradNet models, 1.75 s | carrier comparison |      27.2 s | 0.81 s |    33 |
-| 2.2-kW IPMSM, sensorless FVC, 1.6 s    | zero-order hold    |       3.4 s | 0.10 s |    35 |
-| 2.2-kW IPMSM, sensorless FVC, 1.6 s    | carrier comparison |      10.1 s | 0.26 s |    38 |
+| 5.6-kW PM-SyRM, GradNet models, 1.75 s | carrier comparison |      28.0 s | 0.84 s |    33 |
+| 2.2-kW IPMSM, sensorless FVC, 1.6 s    | zero-order hold    |       3.5 s | 0.09 s |    40 |
+| 2.2-kW IPMSM, sensorless FVC, 1.6 s    | carrier comparison |      10.1 s | 0.26 s |    39 |
 
 ## Accuracy
 
