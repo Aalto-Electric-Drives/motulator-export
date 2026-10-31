@@ -22,6 +22,7 @@ import motulator.grid.control as grid_control
 import motulator.grid.model as grid_model
 import numpy as np
 import pytest
+from motulator.common.control import PWM
 from motulator.common.model import CompositeModel, DiodeBridge, ThreePhaseSource
 from motulator.common.utils import complex2abc
 from motulator.drive import model
@@ -549,6 +550,16 @@ def test_unsupported_grid_dc_bus(tmp_path: Path) -> None:
     )
     for tool, path in TOOLS:
         with pytest.raises(NotImplementedError, match="DC-bus model"):
+            tool.write_model(tmp_path / path, mdl, ctrl, 0.1)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+def test_unsupported_pwm_method(tmp_path: Path) -> None:
+    """Only space-vector PWM is supported, not the discontinuous PWM methods."""
+    mdl, ctrl = _grid(gfl=False)
+    ctrl.pwm = PWM(method="DPWM1")
+    for tool, path in TOOLS:
+        with pytest.raises(NotImplementedError, match="space-vector PWM"):
             tool.write_model(tmp_path / path, mdl, ctrl, 0.1)
     assert not list(tmp_path.iterdir())  # Nothing is written
 
