@@ -239,7 +239,7 @@ static void pwm_set_overmodulation(PWM *self, int mme);
 static void pwm_set_min_pulse(PWM *self, double d_min);
 /* Single update (single_update of PWM in motulator) if single_update is nonzero */
 static void pwm_set_single_update(PWM *self, int single_update);
-/* Limit the duty ratios of the switching legs to [d_min, 1 - d_min] (limit_pulses):
+/* Limit the duty ratios of the switching legs to [d_min, 1 - d_min] (_limit_pulses):
  * a duty ratio in (0, d_min) is replaced by 0 or d_min, and in (1 - d_min, 1) by
  * 1 - d_min or 1, whichever gives the realized duty ratio nearer to the reference
  * d_ref (the leg switches if equally near). The realized duty ratios are corrected

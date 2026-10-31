@@ -220,6 +220,8 @@ def check_supported_pwm(
     pwm = ctrl.pwm
     if not isinstance(pwm, PWM) or pwm.overmodulation not in ("MPE", "MME"):
         raise NotImplementedError("Only the MPE and MME overmodulation supported")
+    if pwm.method != "SVPWM":
+        raise NotImplementedError("Only space-vector PWM supported")
     # The angle-advance factor of the controller: zero with the direct discrete-time
     # current controller, which includes the delays in its design
     cfg = getattr(getattr(ctrl, "vector_ctrl", None), "cfg", None)

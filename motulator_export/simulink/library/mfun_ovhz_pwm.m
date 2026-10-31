@@ -130,7 +130,7 @@ end
 function [d_abc, d_realized] = pwm_limit_pulses(self, d_abc, d_ref, i_abc, use_i, ...
     u_dc, T_half)
 %PWM_LIMIT_PULSES Limit the duty ratios of the switching legs to [d_min, 1 - d_min]
-%   (limit_pulses): a duty ratio in (0, d_min) is replaced by 0 or d_min, and in
+%   (_limit_pulses): a duty ratio in (0, d_min) is replaced by 0 or d_min, and in
 %   (1 - d_min, 1) by 1 - d_min or 1, whichever gives the realized duty ratio nearer
 %   to the reference d_ref (the leg switches if equally near). The realized duty
 %   ratios are corrected for the duty-ratio error at the currents i_abc, the DC-bus
