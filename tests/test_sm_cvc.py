@@ -128,6 +128,7 @@ def build_system(
         model.VoltageSourceConverter(
             u_dc=540, modulator=model.ZOH(t_d=t_d, single_update=single_update)
         ),
+        sensors=None if sensorless else model.DriveSensors(theta_M=model.Sensor()),
     )
     if syrm:
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * SYRM_NOM.tau)

@@ -118,6 +118,7 @@ def build_system(
         model.VoltageSourceConverter(
             u_dc=540, modulator=model.ZOH(t_d=t_d, single_update=single_update)
         ),
+        sensors=None if sensorless else model.DriveSensors(w_M=model.Sensor()),
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.8) * 0.5 * NOM.tau)
     cfg = control.FluxVectorControllerCfg(

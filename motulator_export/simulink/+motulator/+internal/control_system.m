@@ -91,6 +91,22 @@ if ~any(strcmp(part, fieldnames(mdl))) || ~isa(mdl.(part), cls)
     error('motulator:unsupported', '%s needs a system model with the %s %s.', ...
         c.name, part, cls);
 end
+% Sensored vector control needs the sensor of its measured rotor angle (synchronous
+% machine) or speed (induction machine) in the drive, as in motulator
+if isa(ctrl, 'motulator.drive.control.VectorControlSystem') ...
+        && ~ctrl.vector_ctrl.cfg.sensorless
+    if isa(mdl.machine, 'motulator.drive.model.SynchronousMachine')
+        meas = 'theta_M';
+        sensor = 'position sensor';
+    else
+        meas = 'w_M';
+        sensor = 'speed sensor';
+    end
+    if isempty(mdl.sensors.(meas))
+        error('motulator:arguments', 'Sensored control needs the %s (%s).', ...
+            sensor, meas);
+    end
+end
 end
 
 function value = required(value, name, setter)

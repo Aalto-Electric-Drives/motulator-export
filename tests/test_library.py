@@ -93,6 +93,7 @@ CLASSES = {
     "+drive/+model/MechanicalSystem.m": model.MechanicalSystem,
     "+drive/+model/ExternalRotorSpeed.m": model.ExternalRotorSpeed,
     "+drive/+model/Drive.m": model.Drive,
+    "+drive/+model/DriveSensors.m": model.DriveSensors,
     "+drive/+control/SpeedController.m": sm_control.SpeedController,
     "+drive/+control/VectorControlSystem.m": VectorControlSystem,
     "+drive/+control/VHzControlSystem.m": VHzControlSystem,

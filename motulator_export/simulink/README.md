@@ -125,7 +125,7 @@ Run times of the simulation of the IPMSM drive (`ipmsm_2kw_fvc_simulink.py`, 1.2
 | Later, accelerator mode                            |         2 s |                    2 s |
 
 The normal mode takes about 100 000 solver steps, mostly at the switching instants located by the zero-crossing detection.
-The first simulation with MATLAB Function blocks compiles them just in time; since the blocks call the functions of the files, this takes about 1.5 times as long as with the code of the functions copied into the blocks (as up to version 0.8.0, 22–25 s).
+The first simulation with MATLAB Function blocks compiles them just in time, including the functions of the files that the blocks call.
 Most of the run time of a comparison script is the start of MATLAB, the build of the model, and the first simulation.
 
 ## Tests

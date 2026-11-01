@@ -126,6 +126,7 @@ def build_system(
             modulator=model.ZOH(t_d=t_d, single_update=single_update),
             u_th=u_th,
         ),
+        sensors=None if sensorless else model.DriveSensors(w_M=model.Sensor()),
     )
     mdl.mechanics.set_external_load_torque(lambda t: (t > 0.3) * NOM.tau)
     cfg = control.CurrentVectorControllerCfg(

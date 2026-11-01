@@ -88,6 +88,7 @@ def sm_system(
             model.SynchronousMachine(par),
             mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
+            sensors=None if sensorless else model.DriveSensors(theta_M=model.Sensor()),
         )
         cfg = sm_control.FluxVectorControllerCfg(i_s_max=6.5, sensorless=sensorless)
         pwm = sm_control.PWM()
@@ -141,6 +142,7 @@ def sm_cvc_system(
             model.SynchronousMachine(par),
             mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
+            sensors=None if sensorless else model.DriveSensors(theta_M=model.Sensor()),
         )
         cfg = sm_control.CurrentVectorControllerCfg(
             i_s_max=6.5, sensorless=sensorless, discrete=discrete
@@ -196,6 +198,7 @@ def im_system(
                 modulator=model.ZOH(t_d=t_d, single_update=single_update),
                 u_th=u_th,
             ),
+            sensors=None if sensorless else model.DriveSensors(w_M=model.Sensor()),
         )
         cfg = im_control.CurrentVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, sensorless=sensorless, discrete=discrete
@@ -244,6 +247,7 @@ def im_fvc_system(
             model.InductionMachine(par),
             mechanics(torque),
             model.VoltageSourceConverter(u_dc=540, modulator=model.ZOH(t_d=t_d)),
+            sensors=None if sensorless else model.DriveSensors(w_M=model.Sensor()),
         )
         cfg = im_control.FluxVectorControllerCfg(
             psi_s_nom=1.04, i_s_max=10.6, alpha_i=alpha_i, sensorless=sensorless

@@ -15,7 +15,8 @@ Supported:
   DC-bus model (`DCBus`, without an external DC current), the
   dead time, and the threshold voltage (with `sign=np.sign`). The modulator is `ZOH`
   (the default) or `CarrierComparison`, with any computational delay and the single
-  or double update, starting from its initial state.
+  or double update, starting from its initial state, and sampling at the carrier
+  extrema (no `sampling_delay`).
 - Ideal sensors
 
 """
@@ -39,6 +40,7 @@ from motulator.drive.utils._parameters import (
 )
 from motulator.grid.model import GridConverterSystem
 
+from motulator_export._common import check_ideal_sensors
 from motulator_export.native._build import Signatures
 from motulator_export.native._system import (
     GRADNET_API,
@@ -189,8 +191,7 @@ def check_supported_drive(mdl: Drive, front: GridConverterSystem | None = None) 
         )
     if par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
-    if machine.i_s_sensor is not None:
-        raise NotImplementedError("Sensor models not supported")
+    check_ideal_sensors(mdl.sensors)
     if type(mdl.mechanics) not in (MechanicalSystem, ExternalRotorSpeed):
         raise NotImplementedError(
             "Only MechanicalSystem and ExternalRotorSpeed supported"

@@ -20,7 +20,7 @@ Plecs {
       Type          Constant
       Name          "enable"
       Show          on
-      Position      [60, 25]
+      Position      [60, 30]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -34,7 +34,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [195, 10]
+      Position      [195, 15]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -53,7 +53,7 @@ Plecs {
       Type          Step
       Name          "w_M_ref"
       Show          on
-      Position      [60, 75]
+      Position      [60, 80]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -82,7 +82,7 @@ Plecs {
       Type          PlecsProbe
       Name          "i_s_abc"
       Show          on
-      Position      [60, 125]
+      Position      [60, 130]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -94,9 +94,9 @@ Plecs {
     }
     Component {
       Type          PlecsProbe
-      Name          "u_dc meas."
+      Name          "u_dc meas"
       Show          on
-      Position      [60, 175]
+      Position      [60, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3612,7 +3612,7 @@ Plecs {
       Type          From
       Name          "From enable"
       Show          off
-      Position      [410, 5]
+      Position      [410, 20]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3631,7 +3631,7 @@ Plecs {
       Type          ZeroOrderHold
       Name          "Sampled enable"
       Show          off
-      Position      [470, 5]
+      Position      [470, 20]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -3999,14 +3999,14 @@ Plecs {
       Type          Signal
       SrcComponent  "enable"
       SrcTerminal   1
-      Points        [155, 25]
+      Points        [155, 30]
       Branch {
-        Points        [160, 25; 160, 85]
+        Points        [160, 30; 160, 85]
         DstComponent  "Observer-based VHz control (SM)"
         DstTerminal   1
       }
       Branch {
-        Points        [155, 10]
+        Points        [155, 15]
         DstComponent  "Goto enable"
         DstTerminal   1
       }
@@ -4015,7 +4015,7 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M_ref"
       SrcTerminal   1
-      Points        [140, 75; 140, 95]
+      Points        [140, 80; 140, 95]
       DstComponent  "Observer-based VHz control (SM)"
       DstTerminal   2
     }
@@ -4023,15 +4023,15 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [150, 125; 150, 105]
+      Points        [150, 130; 150, 105]
       DstComponent  "Observer-based VHz control (SM)"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc meas."
+      SrcComponent  "u_dc meas"
       SrcTerminal   1
-      Points        [170, 175; 170, 115]
+      Points        [170, 180; 170, 115]
       DstComponent  "Observer-based VHz control (SM)"
       DstTerminal   4
     }
@@ -4060,7 +4060,6 @@ Plecs {
       Type          Signal
       SrcComponent  "Sampled enable"
       SrcTerminal   2
-      Points        [515, 5; 515, 20]
       DstComponent  "Gate enable"
       DstTerminal   2
     }

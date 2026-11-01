@@ -20,7 +20,7 @@ Plecs {
       Type          Step
       Name          "enable"
       Show          on
-      Position      [60, 20]
+      Position      [60, 30]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -49,7 +49,7 @@ Plecs {
       Type          Gain
       Name          "enable sum"
       Show          off
-      Position      [110, 20]
+      Position      [110, 30]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -68,7 +68,7 @@ Plecs {
       Type          Goto
       Name          "Goto enable"
       Show          off
-      Position      [195, 5]
+      Position      [195, 15]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -87,7 +87,7 @@ Plecs {
       Type          Step
       Name          "w_M_ref"
       Show          on
-      Position      [60, 70]
+      Position      [60, 80]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -116,7 +116,7 @@ Plecs {
       Type          PlecsProbe
       Name          "i_s_abc"
       Show          on
-      Position      [60, 120]
+      Position      [60, 130]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -128,9 +128,9 @@ Plecs {
     }
     Component {
       Type          PlecsProbe
-      Name          "u_dc meas."
+      Name          "u_dc meas"
       Show          on
-      Position      [60, 170]
+      Position      [60, 180]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -138,20 +138,6 @@ Plecs {
         Component     "u_dc"
         Path          ""
         Signals       {"Measured voltage"}
-      }
-    }
-    Component {
-      Type          PlecsProbe
-      Name          "theta_M"
-      Show          on
-      Position      [60, 220]
-      Direction     right
-      Flipped       off
-      LabelPosition south
-      Probe {
-        Component     "Machine"
-        Path          ""
-        Signals       {"Rotor position"}
       }
     }
     Component {
@@ -4419,7 +4405,7 @@ Plecs {
       Type          From
       Name          "From enable"
       Show          off
-      Position      [410, 5]
+      Position      [410, 20]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4438,7 +4424,7 @@ Plecs {
       Type          ZeroOrderHold
       Name          "Sampled enable"
       Show          off
-      Position      [470, 5]
+      Position      [470, 20]
       Direction     right
       Flipped       off
       LabelPosition south
@@ -4813,14 +4799,14 @@ Plecs {
       Type          Signal
       SrcComponent  "enable sum"
       SrcTerminal   2
-      Points        [155, 20]
+      Points        [155, 30]
       Branch {
-        Points        [160, 20; 160, 80]
+        Points        [160, 30; 160, 80]
         DstComponent  "Flux-vector control"
         DstTerminal   1
       }
       Branch {
-        Points        [155, 5]
+        Points        [155, 15]
         DstComponent  "Goto enable"
         DstTerminal   1
       }
@@ -4829,7 +4815,7 @@ Plecs {
       Type          Signal
       SrcComponent  "w_M_ref"
       SrcTerminal   1
-      Points        [140, 70; 140, 90]
+      Points        [140, 80; 140, 90]
       DstComponent  "Flux-vector control"
       DstTerminal   2
     }
@@ -4837,25 +4823,17 @@ Plecs {
       Type          Signal
       SrcComponent  "i_s_abc"
       SrcTerminal   1
-      Points        [150, 120; 150, 100]
+      Points        [150, 130; 150, 100]
       DstComponent  "Flux-vector control"
       DstTerminal   3
     }
     Connection {
       Type          Signal
-      SrcComponent  "u_dc meas."
+      SrcComponent  "u_dc meas"
       SrcTerminal   1
-      Points        [170, 170; 170, 110]
+      Points        [170, 180; 170, 110]
       DstComponent  "Flux-vector control"
       DstTerminal   4
-    }
-    Connection {
-      Type          Signal
-      SrcComponent  "theta_M"
-      SrcTerminal   1
-      Points        [180, 220; 180, 120]
-      DstComponent  "Flux-vector control"
-      DstTerminal   5
     }
     Connection {
       Type          Signal
@@ -4882,7 +4860,6 @@ Plecs {
       Type          Signal
       SrcComponent  "Sampled enable"
       SrcTerminal   2
-      Points        [515, 5; 515, 20]
       DstComponent  "Gate enable"
       DstTerminal   2
     }

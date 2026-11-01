@@ -59,7 +59,7 @@ from motulator.drive.utils._parameters import (
 )
 from motulator.grid.model import GridConverterSystem
 
-from motulator_export._common import StepSignal, gate_enable
+from motulator_export._common import StepSignal, check_mechanical_sensor, gate_enable
 from motulator_export.plecs._common import (
     BLANKING_DX,
     BRIDGE_DX,
@@ -134,6 +134,7 @@ def check_supported(
         raise NotImplementedError("Core losses not supported")
     _check_supported_plant(mdl, dead_time=True, front=front)
     _check_supported_control(ctrl)
+    check_mechanical_sensor(mdl, ctrl)
 
 
 def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
@@ -341,9 +342,11 @@ def write_model(
         (ENABLE, gate_enable(ctrl, values["T_s"])),
         ("tau_M_ref" if torque_control(ctrl) else "w_M_ref", ref),
         ("i_s_abc", _probe("Machine", MACHINE_PROBES[:1])),
-        ("u_dc meas.", _probe("u_dc", ["Measured voltage"])),
+        ("u_dc meas", _probe("u_dc", ["Measured voltage"])),
     ]
-    if block is not VHZ_BLOCK:
+    # The measured speed only from a speed sensor of the system model; without the
+    # sensor, the input of the sensorless control system is not connected
+    if block is not VHZ_BLOCK and mdl.sensors.w_M is not None:
         sources += [("w_M", _probe("Machine", MACHINE_PROBES[1:2]))]
     y_sources = _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)

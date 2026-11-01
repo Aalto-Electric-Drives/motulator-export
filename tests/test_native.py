@@ -109,6 +109,7 @@ def gradnet_drive() -> tuple[model.Drive, control.VectorControlSystem]:
         model.SynchronousMachine(par),
         model.MechanicalSystem(J=0.05),
         model.VoltageSourceConverter(u_dc=540),
+        sensors=model.DriveSensors(theta_M=model.Sensor()),  # Sensored control
     )
     flux_map = gn.FluxMap(gn.load_gradnet(FLUX_MAP))
     est_par = control.SaturatedSynchronousMachinePars(
@@ -302,6 +303,7 @@ def torque_drive(
             model.InductionMachine(par),
             mechanics,
             model.VoltageSourceConverter(u_dc=540),
+            sensors=None if sensorless else model.DriveSensors(w_M=model.Sensor()),
         )
         if method == "im_fvc":
             vector_ctrl: Any = im_control.FluxVectorController(
@@ -325,7 +327,10 @@ def torque_drive(
         n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
     )
     mdl = model.Drive(
-        model.SynchronousMachine(par), mechanics, model.VoltageSourceConverter(u_dc=540)
+        model.SynchronousMachine(par),
+        mechanics,
+        model.VoltageSourceConverter(u_dc=540),
+        sensors=None if sensorless else model.DriveSensors(theta_M=model.Sensor()),
     )
     if method == "fvc":
         cfg: Any = control.FluxVectorControllerCfg(
@@ -892,6 +897,11 @@ def test_unsupported() -> None:
     )
     with pytest.raises(NotImplementedError, match="DC-bus voltage control"):
         native.Simulation(mdl, ctrl)
+    # Sensored control without the position sensor in the system model
+    mdl = sm_system(sensorless=True, t_d=0.0)[0]()[0]
+    sensored_ctrl = sm_system(sensorless=False, t_d=0.0)[0]()[1]
+    with pytest.raises(ValueError, match="position sensor"):
+        native.Simulation(mdl, sensored_ctrl)
     # External DC current
     mdl, ctrl = with_dc_bus(sm_system(sensorless=True, t_d=0.0)[0])()
     cast_dc_bus: Any = mdl.dc_bus

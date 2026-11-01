@@ -216,15 +216,20 @@ def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem
         ref = ctrl.ext_ref.tau_M if torque else ctrl.ext_ref.w_M
 
         def inputs(mdl: model.Drive, t: float) -> list[float]:
-            mech = mdl.mechanics
-            i_s_abc = mdl.machine.meas_currents()
-            u_dc = mdl.converter.meas_dc_voltage()
+            sensors = mdl.sensors
+            i_s_abc = sensors.i_c.sample()
+            u_dc = sensors.u_dc.sample()
             enabled = float(bool(get_value(ctrl._enable, t)))  # The gate enable
             u = [enabled, get_value(cast(Any, ref), t), *i_s_abc, u_dc]
+            # The block has the angle or speed input also in the sensorless mode, where
+            # the control system does not use it and the model may have no sensor
+            mech = mdl.mechanics.out
             if "theta_M" in block.inputs:
-                u.append(wrap(mech.meas_position()))
+                theta_M = sensors.theta_M
+                u.append(wrap(mech.theta_M if theta_M is None else theta_M.sample()))
             elif "w_M" in block.inputs:
-                u.append(mech.meas_speed())
+                w_M = sensors.w_M
+                u.append(mech.w_M if w_M is None else w_M.sample())
             return u
 
         if isinstance(ctrl, VHzControlSystem):
@@ -247,10 +252,10 @@ def grid_sfun(
         ext_ref = cast(Any, ctrl.ext_ref)
 
         def inputs(mdl: grid_model.GridConverterSystem, t: float) -> list[float]:
-            i_c_abc = mdl.ac_filter.meas_currents()
-            u_dc = mdl.converter.meas_dc_voltage()
+            i_c_abc = mdl.sensors.i_c.sample()
+            u_dc = mdl.sensors.u_dc.sample()
             enabled = float(bool(get_value(ctrl._enable, t)))  # The gate enable
-            u_g_line = mdl.ac_filter.meas_pcc_voltages()
+            u_g_line = mdl.sensors.u_g.sample()
             if "q_g_ref" in block.inputs:
                 refs = [ext_ref.p_g(t), ext_ref.q_g(t)]
             else:

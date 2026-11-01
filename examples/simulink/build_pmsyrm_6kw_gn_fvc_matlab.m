@@ -29,7 +29,8 @@ par = SpatialSaturatedSynchronousMachinePars(n_p=2, R_s=0.63, magnetic_map_fcn=c
 machine = SynchronousMachine(par);
 mechanics = MechanicalSystem(J=0.05);
 converter = VoltageSourceConverter(u_dc=540);
-mdl = Drive(machine, mechanics, converter);
+sensors = DriveSensors(theta_M=Sensor());
+mdl = Drive(machine, mechanics, converter, sensors=sensors);
 
 %% Control system ([] = None, the default)
 % GradNet flux map of the control system

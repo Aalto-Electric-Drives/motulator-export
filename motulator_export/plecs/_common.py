@@ -411,11 +411,13 @@ def _add_converter(
     )
     # The gate signals rise next to the PWM (or the blanking time) to the product
     # with the sampled gate enable, from which they are routed above the DC bus. The
-    # gate enable comes from its tag above them. The coordinates are absolute (the
-    # components after the PWM are shifted by sch.dx).
+    # gate enable comes from its tag at the height of the upper input of the product,
+    # above the end of the riser, so that the blocks are within the top margin of the
+    # schematic. The coordinates are absolute (the components after the PWM are
+    # shifted by sch.dx).
     gate: Terminal = ("Blanking time", 1) if t_d > 0 else ("PWM", 1)
     x_r = X_RISER + (BLANKING_DX if t_d > 0 else 0)  # The riser of the gate signals
-    y_p, y_e = 25, 25 - 4 * 5  # The product and the gate enable above it
+    y_p, y_e = 25, 25 - 5  # The product and its upper input, the gate enable
     dx = sch.dx
     sch.component("From", "From enable", (x_r - 90 - dx, y_e), TAG, show=False)
     ts = T_s if isinstance(T_s, str) else _fmt(T_s)
@@ -433,12 +435,7 @@ def _add_converter(
         show=False,
     )
     # The gate enable to the upper input, the gate signals to the lower one
-    x_e = x_r + 15
-    sch.signal(
-        ("Sampled enable", 2),
-        ("Gate enable", 2),
-        [(x_e - dx, y_e), (x_e - dx, y_p - 5)],
-    )
+    sch.signal(("Sampled enable", 2), ("Gate enable", 2))
     sch.signal(gate, ("Gate enable", 3), [(x_r - dx, CS[1]), (x_r - dx, y_p + 5)])
     x_g = CONV[0] + 15  # The gate input of the converter (shifted by sch.dx)
     sch.signal(("Gate enable", 1), ("Converter", 4), [(x_g, y_p)])
@@ -667,6 +664,8 @@ def _add_control_system(
 
     Each source is a `(name, signal)` pair in the order of the block inputs, the
     signal being a `StepSignal`, a constant, or a probe definition (`_probe`). The
+    inputs after the sources are not connected (e.g., the measured angle of a
+    sensorless control system, when the system model has no position sensor). The
     steps of a `StepSignal` with several steps are summed by a Gain block. The mask
     values `values` are the structs of the model initialization. With `library`, the
     control system is a reference to its block in the library (`LIBRARY`), which
@@ -674,12 +673,13 @@ def _add_control_system(
     source.
 
     """
-    n_in = len(sources)
-    # The sources are centered at the control system, but not above the top margin,
-    # spaced so that their labels below them do not touch the next source
-    y_0 = max(CS[1] - 25 * (n_in - 1), 20)
+    n_in, n_ports = len(sources), len(block.inputs)
+    # The sources are centered at the control system, but not so high that the tag of
+    # the gate enable above the first source would cross the top margin, spaced so
+    # that their labels below them do not touch the next source
+    y_0 = max(CS[1] - 25 * (n_in - 1), Y_TAG + 15)
     y_src = [y_0 + 50 * k for k in range(n_in)]
-    y_in = [CS[1] + 10 * k - 5 * (n_in - 1) for k in range(n_in)]
+    y_in = [CS[1] + 10 * k - 5 * (n_ports - 1) for k in range(n_in)]
     # The vertical segments 10 apart, the last at least 10 left of the frame
     x_jog = _jogs(y_src, y_in, min(140, CS[0] - 50 - 10 * n_in), 10)
     for k, (name, src) in enumerate(sources):

@@ -8,7 +8,7 @@ the DC bus, the space vectors of the results of `simulate`, and the C sources.
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +16,16 @@ import numpy as np
 from motulator.common.control._pwm import PWM
 from motulator.common.model import CompositeModel, ThreePhaseSource
 from motulator.common.model._converter import DCBus, DiodeBridge, VoltageSourceConverter
-from motulator.common.utils import abc2complex
-from motulator.drive.control._base import DriveControlSystem
-from motulator.drive.model import Drive, InductionMachine, SynchronousMachine
+from motulator.common.utils import abc2complex, complex2abc, complex2line
+from motulator.drive.control._base import DriveControlSystem, VectorControlSystem
+from motulator.drive.model import (
+    Drive,
+    DriveSensors,
+    InductionMachine,
+    SynchronousMachine,
+)
 from motulator.grid.control._base import GridConverterControlSystem
-from motulator.grid.model import GridConverterSystem, LFilter
+from motulator.grid.model import GridConverterSensors, GridConverterSystem, LFilter
 
 # Directory of the C sources (the C port, the C models, and the native libraries)
 C_SOURCES = Path(__file__).parent / "c"
@@ -236,6 +241,50 @@ def check_supported_pwm(
         gate_enable(ctrl)  # Raises if not supported
 
 
+# Conversions of the sensors to the measured channels, the defaults of the sensors of
+# the system models (see DriveSensors and GridConverterSensors): the phase currents
+# and the line-to-line PCC voltages, the other signals measured as such
+CONVERSIONS = {"i_c": complex2abc, "u_g": complex2line}
+
+
+def check_ideal_sensors(sensors: DriveSensors | GridConverterSensors) -> None:
+    """
+    Raise an error if a sensor of the system model is not ideal or does not convert
+    its signal as the sensors of the system models do by default (`CONVERSIONS`).
+    """
+    for f in fields(sensors):
+        sensor = getattr(sensors, f.name)
+        if sensor is None:
+            continue
+        errors = (sensor.gain, sensor.offset, sensor.std)
+        nonideal = sensor.state is not None or any(e is not None for e in errors)
+        if nonideal or sensor.convert is not CONVERSIONS.get(f.name):
+            raise NotImplementedError(
+                "Only ideal sensors with the default conversions supported"
+            )
+
+
+def check_mechanical_sensor(mdl: Drive, ctrl: DriveControlSystem) -> None:
+    """
+    Raise an error if sensored vector control has no sensor of its measured signal in
+    the system model: the rotor angle of a synchronous machine or the rotor speed of
+    an induction machine.
+    """
+    if not isinstance(ctrl, VectorControlSystem) or ctrl.vector_ctrl.sensorless:
+        return
+    if isinstance(mdl.machine, SynchronousMachine):
+        if mdl.sensors.theta_M is None:
+            raise ValueError("Sensored control needs the position sensor (theta_M)")
+    elif mdl.sensors.w_M is None:
+        raise ValueError("Sensored control needs the speed sensor (w_M)")
+
+
+def check_sampling_at_extrema(modulator: Any) -> None:
+    """Raise an error if the sampling instant is delayed from the carrier extremum."""
+    if modulator.sampling_delay:
+        raise NotImplementedError("Sampling delay of the modulator not supported")
+
+
 # Space vectors in the results of simulate, from their phase signals
 SPACE_VECTORS = {
     "i_s_ab": ("i_a", "i_b", "i_c"),  # Stator current of a drive
@@ -248,7 +297,7 @@ def check_supported_front(front: GridConverterSystem) -> None:
     """
     Raise an error if the diode bridge feeding a drive is not supported: it must be
     fed through an L filter (`LFilter`) from a balanced three-phase source
-    (`ThreePhaseSource`) with a constant magnitude and frequency.
+    (`ThreePhaseSource`) with a constant magnitude and frequency, with ideal sensors.
     """
     if type(front.ac_filter) is not LFilter:
         raise NotImplementedError("Only LFilter supported for the diode bridge")
@@ -257,6 +306,7 @@ def check_supported_front(front: GridConverterSystem) -> None:
         raise NotImplementedError("Only ThreePhaseSource with constant w_g and e_g")
     if src.phi != 0 or src.e_g_neg != 0:
         raise NotImplementedError("Phase shift and negative sequence not supported")
+    check_ideal_sensors(front.sensors)
 
 
 def add_space_vectors(signals: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
