@@ -27,6 +27,7 @@ from motulator.grid.model import GridConverterSystem, LFilter
 from motulator_export._common import (
     StepSignal,
     c_define,
+    check_sampling_at_extrema,
     check_supported_dc_bus,
     check_supported_front,
     check_supported_pwm,
@@ -343,8 +344,6 @@ def check_supported_converter(
         raise NotImplementedError(
             "Only VoltageSourceConverter with sign=np.sign supported"
         )
-    if converter.u_dc_sensor is not None:
-        raise NotImplementedError("Sensor models not supported")
     if dc_bus is None and converter.inp.u_dc is None:
         raise ValueError(
             "The DC-bus voltage must be given, unless the converter is fed from a "
@@ -359,6 +358,7 @@ def check_supported_converter(
         raise NotImplementedError("Only the modulators ZOH and CarrierComparison")
     if modulator.delay.length > DELAY_MAX_LENGTH:
         raise NotImplementedError(f"At most the delay {DELAY_MAX_LENGTH} supported")
+    check_sampling_at_extrema(modulator)
     # The delay buffer is filled at the first call of the modulator
     initial = not modulator.delay.data
     if isinstance(modulator, CarrierComparison):

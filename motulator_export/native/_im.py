@@ -24,6 +24,7 @@ from motulator.drive.control._im_current_vector import CurrentVectorController
 from motulator.drive.control._im_flux_vector import FluxVectorController
 from motulator.drive.model import Drive, InductionMachine
 
+from motulator_export._common import check_mechanical_sensor
 from motulator_export.native._build import Signatures
 from motulator_export.native._drive import (
     DRIVE_API,
@@ -141,3 +142,4 @@ class InductionMachineDriveSystem(NativeSystem):
             )
         check_supported_control(ctrl, d_err=True)
         check_supported_drive(cast(Drive, mdl), front)
+        check_mechanical_sensor(cast(Drive, mdl), ctrl)

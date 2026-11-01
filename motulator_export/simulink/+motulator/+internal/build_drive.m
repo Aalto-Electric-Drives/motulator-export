@@ -5,7 +5,10 @@ function scope = build_drive(sys, mdl, c, lib, info)
 %   described by the data of the library (see block_info), the computational delay
 %   of one sampling period, the carrier comparison, the converter, the machine,
 %   and the mechanics of the drive MDL, with the references and the load torque
-%   (or the external rotor speed of ExternalRotorSpeed).
+%   (or the external rotor speed of ExternalRotorSpeed). The measured rotor angle
+%   (synchronous machine) or speed (induction machine) comes from the sensor of
+%   the drive (mdl.sensors); without the sensor, the input of the sensorless
+%   control system is zero.
 %   The masks of the blocks refer to the parameters of the model. The root-level
 %   output ports 'mdl' and 'ctrl' give the machine signals [i_a i_b i_c w_M
 %   theta_M tau_M] and the monitored signals of the control system, which are also
@@ -95,18 +98,30 @@ route(sys, 'Machine/2', 'Mux mdl/4', 'x', 815);
 route(sys, 'Machine/1', sprintf('%s/%d', cs, in('i_s_abc')), 'x', 800, 'y', y_top, ...
     'x', 60);
 route(sys, 'Mechanics/1', 'Machine/2', 'x', 1010, 'y', y_w_M, 'x', 660);
-if isa(mdl.machine, 'motulator.drive.model.SynchronousMachine')
-    % The rotor angle to the machine, and to the control system (not in V/Hz
-    % control)
+sm = isa(mdl.machine, 'motulator.drive.model.SynchronousMachine');
+if sm
+    % The rotor angle to the machine
     route(sys, 'Mechanics/2', 'Machine/3', 'x', 1025, 'y', y_theta_M, 'x', 640);
-    if ~isempty(in('theta_M'))
-        route(sys, 'Mechanics/2', sprintf('%s/%d', cs, in('theta_M')), ...
-            'x', 1025, 'y', y_theta_M, 'x', 140);
+    meas = 'theta_M';
+else
+    meas = 'w_M';
+end
+% The measured rotor angle or speed to the control system (not in V/Hz control)
+% from the sensor of the drive, or zero to the input of the sensorless control
+% system without the sensor (a scalar constant, since a Ground block would take its
+% size from the input, which the MATLAB Function blocks infer)
+if ~isempty(in(meas))
+    dst = sprintf('%s/%d', cs, in(meas));
+    if isempty(mdl.sensors.(meas))
+        add([sys '/No sensor'], 'built-in/Constant', [100 0 120 20], 'Value', '0', ...
+            'ShowName', 'off');
+        align(sys, 'No sensor', 'Outport', 1, port_y(sys, cs, 'Inport', in(meas)));
+        connect(sys, 'No sensor/1', dst);
+    elseif sm
+        route(sys, 'Mechanics/2', dst, 'x', 1025, 'y', y_theta_M, 'x', 140);
+    else
+        route(sys, 'Mechanics/1', dst, 'x', 1010, 'y', y_w_M, 'x', 140);
     end
-elseif ~isempty(in('w_M'))
-    % The rotor speed to the control system (not in V/Hz control)
-    route(sys, 'Mechanics/1', sprintf('%s/%d', cs, in('w_M')), ...
-        'x', 1010, 'y', y_w_M, 'x', 140);
 end
 
 % Output ports and the scope: the speed and the torque of the control system and

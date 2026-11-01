@@ -27,7 +27,7 @@ from motulator.common.model import CompositeModel, DiodeBridge, ThreePhaseSource
 from motulator.common.utils import complex2abc
 from motulator.drive import model
 
-from motulator_export import StepSignal, plecs, simulink
+from motulator_export import StepSignal, native, plecs, simulink
 from motulator_export._common import add_space_vectors, sampled_step
 from motulator_export.plecs._common import LIBRARY
 from motulator_export.plecs._drive import _add_mechanics
@@ -205,6 +205,36 @@ def _drive(sm: bool, dc_bus: bool = False) -> tuple[Any, Any]:
     return drive, ctrl
 
 
+@pytest.mark.parametrize("sm", [True, False], ids=["sm", "im"])
+def test_mechanical_sensor(tmp_path: Path, sm: bool) -> None:
+    """The measured rotor angle (synchronous machine) or speed (induction machine) is
+    connected to the control system only from a sensor of the system model, which
+    sensored control needs."""
+    mdl, ctrl = _drive(sm)
+    name = "theta_M" if sm else "w_M"
+    probe = rf'Type\s+PlecsProbe\s+Name\s+"{name}"'  # The source of the measurement
+    path = tmp_path / "model.plecs"
+    plecs.write_model(path, mdl, ctrl, T_STOP)
+    assert not re.search(probe, path.read_text(encoding="utf-8"))
+    script = simulink.write_model(tmp_path / "model.slx", mdl, ctrl, T_STOP)
+    assert "DriveSensors" not in script.read_text(encoding="utf-8")
+    sensors = model.DriveSensors(**{name: model.Sensor()})
+    sensored = model.Drive(mdl.machine, mdl.mechanics, mdl.converter, sensors=sensors)
+    plecs.write_model(path, sensored, ctrl, T_STOP)
+    assert re.search(probe, path.read_text(encoding="utf-8"))
+    script = simulink.write_model(tmp_path / "model.slx", sensored, ctrl, T_STOP)
+    assert f"sensors = DriveSensors({name}=Sensor());" in script.read_text("utf-8")
+    # Sensored control without the sensor
+    if sm:
+        sensored_ctrl = sm_system(False, 0.0)[0]()[1]
+    else:
+        sensored_ctrl = im_system(False, 0.0, 0.0)[0]()[1]
+    sensored_ctrl.set_speed_ref(StepSignal(0.1, 50.0))
+    for tool, file in TOOLS:
+        with pytest.raises(ValueError, match="sensor"):
+            tool.write_model(tmp_path / file, mdl, sensored_ctrl, T_STOP)
+
+
 @pytest.mark.parametrize("system", ["sm", "im", "grid"])
 def test_references(tmp_path: Path, system: str) -> None:
     """
@@ -356,7 +386,7 @@ def test_torque_control(tmp_path: Path, sm: bool) -> None:
     assert "speed_ctrl" not in text
     step = r'Type\s+Step\s+Name\s+"%s"[^}]*"Time"\s+Value\s+"%s"'
     assert re.search(step % ("tau_M_ref", r"0\.0999375"), text)
-    assert re.search(step % ("w_M ext\\.", r"0\.05"), text)
+    assert re.search(step % ("w_M ext", r"0\.05"), text)
     assert re.search(r'Type\s+ControlledRotationalSpeed\s+Name\s+"Load"', text)
     assert "mechanics.theta_M0 = 0.25;" in text
     assert "vector_ctrl.observer.w_M = 25;" in text
@@ -522,10 +552,11 @@ def test_diode_bridge(tmp_path: Path, sm: bool) -> None:
     assert all(f'"{name}"' in text for name in ("Da+", "Dc-", "L_fa", "R_fc", "e_gb"))
 
 
-@pytest.mark.parametrize("case", ["order", "ctrl", "filter"])
+@pytest.mark.parametrize("case", ["order", "ctrl", "filter", "sensor"])
 def test_unsupported_diode_bridge(tmp_path: Path, case: str) -> None:
     """The model of the diode bridge should come first, the control system should be
-    given by the name of the drive, and the filter should be an L filter."""
+    given by the name of the drive, the filter should be an L filter, and the sensors
+    of the diode bridge should be ideal."""
     lcl = grid_model.LCLFilter(L_fc=1e-3, C_f=10e-6, L_fg=1e-3)
     mdl, ctrl = _diode_bridge_drive(True, lcl if case == "filter" else None)
     error: type[Exception] = NotImplementedError
@@ -533,6 +564,8 @@ def test_unsupported_diode_bridge(tmp_path: Path, case: str) -> None:
         mdl = CompositeModel(dict(reversed(mdl.models.items())))
     elif case == "ctrl":
         ctrl, error = ctrl["drive"], ValueError
+    elif case == "sensor":
+        cast(Any, mdl.models["grid"]).sensors.u_dc.offset = 1.0
     with pytest.raises(error):
         plecs.write_model(tmp_path / "drive.plecs", mdl, ctrl, T_STOP)
     assert not list(tmp_path.iterdir())  # Nothing is written
@@ -630,6 +663,29 @@ def test_unsupported_delay(tmp_path: Path, single_update: bool) -> None:
         with pytest.raises(NotImplementedError, match="computational delay"):
             tool.write_model(tmp_path / path, mdl, ctrl, T_STOP)
     assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("case", ["sensor", "conversion", "sampling_delay"])
+def test_unsupported_measurement(tmp_path: Path, case: str) -> None:
+    """Nonideal sensors, conversions other than the defaults, and a sampling delay
+    from the carrier extremum are not supported in the exports and the native
+    simulation."""
+    mdl, ctrl = _im_drive(0.0, 0.0, False)
+    match = "ideal sensors"
+    if case == "sensor":
+        sensors = model.DriveSensors(i_c=model.Sensor(alpha=2 * pi * 10e3))
+        mdl = model.Drive(mdl.machine, mdl.mechanics, mdl.converter, sensors=sensors)
+    elif case == "conversion":
+        mdl.sensors.u_dc.convert = lambda u_dc: u_dc + 20.0
+    else:
+        mdl.converter.modulator = model.CarrierComparison(sampling_delay=10e-6)
+        match = "Sampling delay"
+    for tool, path in TOOLS:
+        with pytest.raises(NotImplementedError, match=match):
+            tool.write_model(tmp_path / path, mdl, ctrl, T_STOP)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+    with pytest.raises(NotImplementedError, match=match):
+        native.Simulation(mdl, ctrl)
 
 
 @pytest.mark.parametrize("case", ["sm", "sm_sign", "grid"])

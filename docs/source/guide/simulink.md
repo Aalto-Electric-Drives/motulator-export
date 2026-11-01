@@ -96,5 +96,6 @@ The signals are those of the [PLECS models](plecs.md#simulating-from-python). In
 - The script of `write_model` refers to the package by a path relative to the folder of the model. If you move the files, write the model again.
 - A model needs the library: a model opened in a new MATLAB session finds it if the folder `motulator_export/simulink` is on the MATLAB path.
 - The models agree with *motulator* as the PLECS models do, see [](plecs.md#accuracy).
+- As in the PLECS models, the measured rotor angle (synchronous machine) or speed (induction machine) comes from the sensor of the drive, which sensored control needs (`DriveSensors(theta_M=Sensor())` or `DriveSensors(w_M=Sensor())`). Without the sensor, this input of the sensorless control system is zero.
 - An S-function keeps its state in static variables, so a model can contain only one instance of each control system with S-functions. The MATLAB Function blocks have no such limit.
 - The Simulink models support fewer configurations than the PLECS models, e.g., no dead time, DC-bus dynamics, or gate blocking (the gate enable is 1), see [](supported.md). The control systems still have the input `enable` and run in standby while it is zero, e.g., when the control code is reused on hardware.

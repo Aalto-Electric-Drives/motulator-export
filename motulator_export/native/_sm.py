@@ -23,6 +23,7 @@ from motulator.drive.control._sm_current_vector import CurrentVectorController
 from motulator.drive.control._sm_flux_vector import FluxVectorController
 from motulator.drive.model import Drive, SynchronousMachine
 
+from motulator_export._common import check_mechanical_sensor
 from motulator_export.native._build import Signatures
 from motulator_export.native._drive import (
     DRIVE_API,
@@ -141,6 +142,7 @@ class SynchronousMachineDriveSystem(NativeSystem):
         if type(mdl.machine) is not SynchronousMachine:
             raise NotImplementedError("Only SynchronousMachine supported")
         check_supported_drive(mdl, front)
+        check_mechanical_sensor(mdl, ctrl)
 
 
 def _check_supported_control(ctrl: Any) -> None:

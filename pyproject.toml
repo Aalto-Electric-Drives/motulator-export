@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "motulator-export"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
-    "motulator>=0.22.0,<0.23",
+    "motulator>=0.23.0,<0.24",
     "numpy",
     "tqdm",
 ]

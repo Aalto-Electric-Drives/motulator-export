@@ -35,6 +35,7 @@ from motulator.grid.model import (
     ThreePhaseSource,
 )
 
+from motulator_export._common import check_ideal_sensors
 from motulator_export.native._build import Signatures
 from motulator_export.native._system import (
     PWM_API,
@@ -156,8 +157,7 @@ class GridConverterNativeSystem(NativeSystem):
         f = mdl.ac_filter
         if type(f) not in (LFilter, LCLFilter):
             raise NotImplementedError("Only LFilter and LCLFilter supported")
-        if f.i_c_sensor is not None or f.u_g_sensor is not None:
-            raise NotImplementedError("Sensor models not supported")
+        check_ideal_sensors(mdl.sensors)
         if type(mdl.ac_source) is not ThreePhaseSource:
             raise NotImplementedError("Only ThreePhaseSource supported")
         check_supported_converter(mdl)

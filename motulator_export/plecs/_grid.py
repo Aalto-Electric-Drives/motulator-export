@@ -51,6 +51,8 @@ from motulator.grid.model import (
 
 from motulator_export._common import (
     StepSignal,
+    check_ideal_sensors,
+    check_sampling_at_extrema,
     check_supported_pwm,
     gate_enable,
     reference,
@@ -93,9 +95,7 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
     if mdl.dc_bus is not None:
         raise NotImplementedError("DC-bus model not supported, only a stiff DC bus")
     f = mdl.ac_filter
-    sensors = (mdl.converter.u_dc_sensor, f.i_c_sensor, f.u_g_sensor)
-    if any(sensor is not None for sensor in sensors):
-        raise NotImplementedError("Sensor models not supported")
+    check_ideal_sensors(mdl.sensors)
     if isinstance(f, LCLFilter):
         if f.R_fc or f.R_fg or f.L_g or f.R_g:
             raise NotImplementedError("Only LCLFilter without resistances and L_g")
@@ -109,6 +109,7 @@ def _check_supported_plant(mdl: GridConverterSystem) -> None:
     modulator = mdl.converter.modulator
     if not isinstance(modulator, CarrierComparison):
         raise NotImplementedError("Only the modulator CarrierComparison supported")
+    check_sampling_at_extrema(modulator)
     if modulator.t_d != 0 or mdl.converter.u_th != 0:
         raise NotImplementedError(
             "Converter dead time and threshold voltage not supported"
@@ -423,7 +424,7 @@ def write_model(
     voltages = _probe("u_gab", ["Measured voltage"])
     voltages += _probe("u_gbc", ["Measured voltage"])
     sources += [("u_g_line", voltages)]
-    sources += [("u_dc meas.", _probe("u_dc", ["Measured voltage"]))]
+    sources += [("u_dc meas", _probe("u_dc", ["Measured voltage"]))]
     _add_control_system(sch, block, sources, VALUES, library)
     _add_delay(sch, T_s, block)
     _add_pwm(sch, T_s, mdl.converter.modulator.single_update)

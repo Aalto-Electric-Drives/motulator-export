@@ -60,6 +60,7 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
         model.VoltageSourceConverter(
             u_dc=540, modulator=model.CarrierComparison(N=2**24)
         ),
+        sensors=model.DriveSensors(theta_M=model.Sensor()),  # Sensored control
     )
 
     path = MODEL_DIR / "baldor_fem_flux_map_pnorm_d12_sub20.npz"

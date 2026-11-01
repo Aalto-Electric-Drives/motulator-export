@@ -631,6 +631,40 @@ def test_reference_luts_error(harnesses: Harnesses) -> None:
         eng.sm_reference_luts(swapped, 6.5)
 
 
+def test_sensored_control_needs_sensor(harnesses: Harnesses) -> None:
+    """
+    Sensored vector control should need the position sensor of the drive in the
+    MATLAB classes, as in motulator, and its system model should be accepted with it.
+    """
+    import matlab.engine  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+    eng = harnesses.eng
+    m, c = "motulator.drive.model", "motulator.drive.control.sm"
+    eng.eval(
+        f"par = {m}.SynchronousMachinePars(n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, "
+        "psi_f=0.545);\n"
+        f"cfg = {c}.FluxVectorControllerCfg(i_s_max=6.5, sensorless=false);\n"
+        f"ctrl = {c}.VectorControlSystem({c}.FluxVectorController(par, cfg), "
+        f"{c}.SpeedController(J=0.015, alpha_s=25));\n"
+        "ctrl.set_speed_ref(50);\n"
+        f"parts = {{{m}.SynchronousMachine(par), {m}.MechanicalSystem(J=0.015), "
+        f"{m}.VoltageSourceConverter(u_dc=540)}};",
+        nargout=0,
+    )
+    error = matlab.engine.MatlabExecutionError  # pyright: ignore[reportAttributeAccessIssue]
+    with pytest.raises(error, match="position sensor"):
+        eng.eval(
+            f"motulator.internal.control_system(ctrl, {m}.Drive(parts{{:}}));",
+            nargout=0,
+        )
+    eng.eval(
+        f"sensors = {m}.DriveSensors(theta_M={m}.Sensor());\n"
+        f"motulator.internal.control_system(ctrl, {m}.Drive(parts{{:}}, "
+        "sensors=sensors));",
+        nargout=0,
+    )
+
+
 @pytest.mark.parametrize("code", CODES)
 def test_library(harnesses: Harnesses, code: str) -> None:
     """

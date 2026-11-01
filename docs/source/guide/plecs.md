@@ -172,5 +172,6 @@ In the comparisons of the examples, the PLECS models agree with *motulator* to a
 ## Good to know
 
 - The first input of the control system is the gate enable (`ctrl.set_enable`). While it is zero, the gates of the converter are blocked, and the control system runs in standby, as in *motulator*; after the release, a sensorless drive catches the rotating machine with a flying start.
+- The measurements come from the sensors of the system model: the measured rotor angle (synchronous machine) or speed (induction machine) is connected to the control system only if the drive has the sensor, which sensored control needs. Without the sensor, this input of the sensorless control system is not connected.
 - The model refers to the C sources of the installed package (with `library=True`, to its library) by a path relative to the model file. If you move the model or update the package, write the model again.
 - `plecs.simulate` closes the model in PLECS before loading it, discarding unsaved changes, since PLECS does not reload an open model from the file.

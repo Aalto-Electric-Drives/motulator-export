@@ -208,10 +208,17 @@ def _drive_model(mdl: Drive, machine: list[str]) -> list[str]:
     theta_M0 = float(wrap(mdl.mechanics.state.theta_M.real))
     if theta_M0 != 0:
         lines.append(f"mechanics.state.theta_M = {_value(theta_M0)};")
+    lines.append(
+        f"converter = VoltageSourceConverter(u_dc={_value(mdl.converter.inp.u_dc)});"
+    )
+    # The speed and position sensors, as in motulator (ideal sensors)
+    sensors = [f"{n}=Sensor()" for n in ("w_M", "theta_M") if getattr(mdl.sensors, n)]
+    if not sensors:
+        return [*lines, "mdl = Drive(machine, mechanics, converter);"]
     return [
         *lines,
-        f"converter = VoltageSourceConverter(u_dc={_value(mdl.converter.inp.u_dc)});",
-        "mdl = Drive(machine, mechanics, converter);",
+        f"sensors = DriveSensors({', '.join(sensors)});",
+        "mdl = Drive(machine, mechanics, converter, sensors=sensors);",
     ]
 
 

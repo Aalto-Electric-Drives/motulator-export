@@ -23,6 +23,8 @@ from motulator.grid.model import GridConverterSystem, LFilter, ThreePhaseSource
 
 from motulator_export._common import (
     StepSignal,
+    check_ideal_sensors,
+    check_sampling_at_extrema,
     check_supported_dc_bus,
     check_supported_front,
     check_supported_pwm,
@@ -73,11 +75,11 @@ def _check_supported_plant(
         check_supported_dc_bus(mdl.dc_bus, mdl.converter, front)
     if front is not None:
         check_supported_front(front)
-    if mdl.machine.i_s_sensor is not None or mdl.converter.u_dc_sensor is not None:
-        raise NotImplementedError("Sensor models not supported")
+    check_ideal_sensors(mdl.sensors)
     modulator = mdl.converter.modulator
     if not isinstance(modulator, CarrierComparison):
         raise NotImplementedError("Only the modulator CarrierComparison supported")
+    check_sampling_at_extrema(modulator)
     if modulator.t_d != 0 or mdl.converter.u_th != 0:
         if not dead_time:
             raise NotImplementedError(
@@ -323,7 +325,7 @@ def _add_mechanics(
         sch.connect(("Machine", 4), ("Load", 1), "Rotational")
     else:
         sch.connect(("Machine", 4), ("Load", 3), "Rotational")
-    source = "w_M ext." if external else "tau_L"
+    source = "w_M ext" if external else "tau_L"
     if isinstance(signal, StepSignal):
         # Several steps are summed by a Gain block in front of the load
         x_step = x_f - 70 if np.isscalar(signal.time) else x_f - 120
