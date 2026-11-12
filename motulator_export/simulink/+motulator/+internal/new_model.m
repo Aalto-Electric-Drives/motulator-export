@@ -1,6 +1,6 @@
-function new_model(name, folder, variables, T_s, t_stop)
+function new_model(name, folder, variables, T_s, t_stop, init_fcn)
 %NEW_MODEL Create a model with its parameters and solver settings.
-%   NEW_MODEL(NAME, FOLDER, VARIABLES, T_S, T_STOP) creates the model NAME,
+%   NEW_MODEL(NAME, FOLDER, VARIABLES, T_S, T_STOP, INIT_FCN) creates the model NAME,
 %   deleting a previous model NAME.slx of the folder FOLDER (which would shadow
 %   the new one). The fields of the struct VARIABLES are the parameters of the
 %   model, in its model workspace, saved with the model. The solver is as in the
@@ -8,7 +8,9 @@ function new_model(name, folder, variables, T_s, t_stop)
 %   maximum step T_S (the sampling period, s), and the stop time is T_STOP (s).
 %   The outputs are saved as arrays. Unconnected ports and lines are errors, so
 %   that the builders cannot leave them. The model adds the folder of the library
-%   to the MATLAB path when it is loaded (motulator.setup).
+%   to the MATLAB path when it is loaded (motulator.setup), unless it has the
+%   commands INIT_FCN, which it runs at the start of a simulation (the script of
+%   its parameters, see Simulation.build).
 import motulator.internal.*
 if bdIsLoaded(name)
     close_system(name, 0);
@@ -18,13 +20,19 @@ if exist(slx, 'file')
     delete(slx);
 end
 new_system(name);
+% A model with an initialization script needs neither the library nor the package
+preload = '';
+if isempty(init_fcn)
+    preload = 'try, motulator.setup(); catch, end';
+end
 ws = get_param(name, 'ModelWorkspace');
 fields = fieldnames(variables);
 for k = 1:numel(fields)
     ws.assignin(fields{k}, variables.(fields{k}));
 end
 set_param(name, ...
-    'PreLoadFcn', 'try, motulator.setup(); catch, end', ...
+    'PreLoadFcn', preload, ...
+    'InitFcn', init_fcn, ...
     'Solver', 'ode45', ...
     'MaxStep', num(T_s), ...
     'RelTol', '1e-6', ...

@@ -6,21 +6,22 @@ function add_netlist(blk, net)
 %     blocks   Blocks {path, type, position, parameters}, the paths relative to
 %              BLK, a subsystem before its contents. The S-functions have dummy
 %              parameters until the lines exist. The parameters of a MATLAB
-%              Function block are {function, sample time, output widths}, see
-%              motulator.internal.add_mfunction.
+%              Function block are {function, sample time, output widths, struct
+%              of its parameters}, see motulator.internal.add_mfunction.
 %     aligns   Alignments {system, block, kind, number, target, kind, number,
 %              offset}: the block is moved vertically so that its port is at the
 %              height of the port of the target plus the offset.
 %     lines    Lines {system, source, destination, corners}, the ports as
 %              'block/number' and the corners as in motulator.internal.route.
 %     masks    Masks of the blocks of the classes {path, type, description,
-%              initialization, parameters {variable, prompt, value}, display}.
+%              initialization, parameters {variable, prompt, value}, display}
+%              (only with S-functions; the MATLAB Function blocks refer to the
+%              struct ctrl of the parameters of the blocks instead)
 %     sfunctions  Parameters of the S-functions {path, parameters} (only with
 %              S-functions)
-%     folder   Folder of the files of the functions of the MATLAB Function blocks
-%              (only with MATLAB Function blocks)
-%     embed    (optional) True to copy the code of the functions into the MATLAB
-%              Function blocks, see motulator.internal.add_mfunction
+%     folder   Folder of the files of the functions of the MATLAB Function blocks,
+%              whose code is copied into the blocks (only with MATLAB Function
+%              blocks, see motulator.internal.add_mfunction)
 %
 %   The layout is computed by motulator_export, but Simulink places the ports of
 %   the blocks itself, so the blocks are aligned with the ports. The unconnected
@@ -33,15 +34,13 @@ types = struct('S_Function', 'built-in/S-Function', ...
     'Mux', 'built-in/Mux', 'Goto', 'built-in/Goto', 'From', 'built-in/From', ...
     'Inport', 'built-in/Inport', 'Outport', 'built-in/Outport', ...
     'Constant', 'built-in/Constant', 'UnitDelay', 'built-in/UnitDelay');
-embed = isfield(net, 'embed') && net.embed;
 for k = 1:size(net.blocks, 1)
     [path, type, pos, params] = net.blocks{k, :};
     if isempty(params)
         params = {};
     end
     if strcmp(type, 'MATLAB Function')
-        params(end + 1:4) = {[]}; % The parameter p by default
-        add_mfunction([blk '/' path], pos, net.folder, params{:}, embed);
+        add_mfunction([blk '/' path], pos, net.folder, params{:});
     else
         add([blk '/' path], types.(strrep(type, '-', '_')), pos, params{:});
     end

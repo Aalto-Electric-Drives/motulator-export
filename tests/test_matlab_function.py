@@ -12,7 +12,7 @@ monitored signals, should agree with those of the S-functions of the blocks
 (`tests/netlist.py`), which agree with motulator, to the rounding errors (amplified
 by the replay in the vector control of the drives, see `test_matlab_function`).
 
-The libraries of both codes are built (`test_library`), and the systems of the
+The library is built (`test_library`), and the systems of the
 examples are built by the scripts of `simulink.write_model` and simulated, and their
 signals compared with the native simulation (`test_example`), so that this module
 tests the whole Simulink export before a release. It takes several minutes, mostly
@@ -28,6 +28,7 @@ repository root:
 
 # %%
 import ctypes
+import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -61,7 +62,10 @@ from motulator_export.simulink._mfunction import (
     functions,
     gradnet_machine_mfunction,
     library,
+    params_mfunction,
+    params_name,
     reference_luts_mfunction,
+    struct_path,
 )
 from motulator_export.simulink._render import CODES, netlist_rows, with_signals, wrapper
 from motulator_export.simulink._script import write_script
@@ -115,9 +119,22 @@ RTOL = 1e-9
 # (see IM_FVC_RTOL), so the rounding errors of the MATLAB code show at the square
 # root of their level, which the perturbations need not show
 KEY_RTOL = {"imfvc": 1e-6, "imfvc_torque": 1e-6}
+# Type of the MATLAB Function blocks in the rows of a netlist
+FUNCTION = "MATLAB Function"
 # The variables of the model initializations of the harnesses are cleared first, so
 # that the fields of a previous initialization (e.g., a flux map) are not left
-CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm\n"
+CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm ctrl\n"
+
+
+def harness_init(block: ControlBlock, init: str) -> str:
+    """
+    Initialization script of a harness: the model initialization and the struct ctrl
+    of the parameters of the blocks, to which the MATLAB Function blocks refer,
+    computed by the function of the parameters of the control system.
+    """
+    args = ", ".join(m.variable for m in block.mask_params)
+    return f"{CLEAR}{init}ctrl = {params_name(block)}({args});\n"
+
 
 Run = Callable[[Netlist], list[list[float]]]
 
@@ -148,6 +165,31 @@ def test_functions() -> None:
             assert f.sample_time is None or f.sample_time in fields
             assert f.source.startswith("function ")
             assert f"{f.name}(" in f.source.splitlines()[0]
+
+
+def test_params_functions() -> None:
+    """
+    The functions of the parameters of the control systems should have unique names
+    and set the struct of each block, to which its MATLAB Function block refers.
+    """
+    names = set()
+    for block in CONTROL_BLOCKS:
+        f = params_mfunction(block)
+        names.add(f.name)
+        args = ", ".join(m.variable for m in block.mask_params)
+        assert f.source.startswith(f"function ctrl = {f.name}({args})\n")
+        rows = netlist_rows(with_signals(block.netlist(), MONITOR), code="matlab")
+        assert rows["masks"] == []
+        functions = [params for _, typ, _, params in rows["blocks"] if typ == FUNCTION]
+        structs = {params[3] for params in functions} - {""}
+        assert structs == {
+            struct_path(path) for path, b in leaves(block.netlist()) if b.params
+        }
+        for path, _ in leaves(block.netlist()):
+            *parents, field = struct_path(path).split(".")[1:]
+            var = "ctrl" if not parents else "s"
+            assert len(re.findall(rf"^{var}\.{field} = ", f.source, re.M)) >= 1
+    assert len(names) == len(CONTROL_BLOCKS)
 
 
 def test_reference_generator_check() -> None:
@@ -395,8 +437,9 @@ class Harnesses:
         name = f"harness_{key}"
         if key not in self.models:
             folder = self.tmp.mktemp(key)
-            (folder / f"init_{name}.m").write_text(CLEAR + init, encoding="utf-8")
             block, _ = SYSTEMS[key]
+            text = harness_init(block, init)
+            (folder / f"init_{name}.m").write_text(text, encoding="utf-8")
             self.eng.addpath(str(folder), nargout=0)
             # Without the Engine API, pyright takes the module tests/matlab.py
             widths = matlab.double([float(w) for w in block.input_widths])  # pyright: ignore[reportAttributeAccessIssue]
@@ -423,7 +466,8 @@ class Harnesses:
 
         name = f"harness_{key}"
         path = self.build(key, init)
-        path.with_name(f"init_{name}.m").write_text(CLEAR + init, encoding="utf-8")
+        text = harness_init(SYSTEMS[key][0], init)
+        path.with_name(f"init_{name}.m").write_text(text, encoding="utf-8")
         self.eng.eval(f"clear('init_{name}');", nargout=0)
         # The input of the sampling instant k at (k - 0.5)*T_s (k > 0), so that the
         # inputs are sampled at the instants regardless of the rounding of the time,
@@ -631,6 +675,25 @@ def test_reference_luts_error(harnesses: Harnesses) -> None:
         eng.sm_reference_luts(swapped, 6.5)
 
 
+def test_init_script(harnesses: Harnesses, tmp_path: Path) -> None:
+    """
+    The initialization script of a model should give the values of its parameters
+    exactly: nested structs, real and complex scalars and matrices, empty values, and
+    character vectors.
+    """
+    eng = harnesses.eng
+    file = tmp_path / "init_values.m"
+    eng.eval(
+        "motulator.setup();\n"
+        "values = struct('a', struct('x', 0.1, 'u', 100 + 50j, 'e', [], "
+        "'b', struct('s', 'it''s', 'm', [1/3 -2e-9; pi 4], 'z', [1j; 0.1 - 2j])));\n"
+        f"motulator.internal.write_init('{file}', 'values', {{'Values', values}});\n"
+        f"clear a\nrun('{file}');\nequal = isequal(a, values.a);",
+        nargout=0,
+    )
+    assert eng.eval("equal")
+
+
 def test_sensored_control_needs_sensor(harnesses: Harnesses) -> None:
     """
     Sensored vector control should need the position sensor of the drive in the
@@ -665,18 +728,17 @@ def test_sensored_control_needs_sensor(harnesses: Harnesses) -> None:
     )
 
 
-@pytest.mark.parametrize("code", CODES)
-def test_library(harnesses: Harnesses, code: str) -> None:
+def test_library(harnesses: Harnesses) -> None:
     """
     The library should be built, and the lines of its control systems should connect
-    the ports of the netlists, also those of the S-functions, whose parameters are
-    set in the library after the lines (see add_control_system.m).
+    the ports of the netlists of the S-functions, whose parameters are set in the
+    library after the lines (see add_control_system.m).
     """
     eng = harnesses.eng
-    require_compiler(eng, code)
-    lib = eng.eval(f"motulator.internal.library('{code}')")
+    require_compiler(eng, "c")
+    lib = eng.eval("motulator.internal.library()")
     for block in CONTROL_BLOCKS:
-        rows = netlist_rows(with_signals(block.netlist(), MONITOR), code=code)
+        rows = netlist_rows(with_signals(block.netlist(), MONITOR), code="c")
         expected = {(path, src, dst) for path, src, dst, _ in rows["lines"]}
         lines = eng.model_lines(f"{lib}/{block.name}")
         assert {tuple(row.split("|")) for row in lines} == expected, block.name
@@ -687,11 +749,11 @@ def test_control_block(
 ) -> None:
     """
     A model should be built with the control-system block of another library
-    (`control_block` of `Simulation.build`), here a copy of the block of the library
-    with the further output status, which should be shown in a Display block.
+    (`control_block` of `Simulation.build`), here the control system with MATLAB
+    Function blocks with the further output status, which should be shown in a
+    Display block.
     """
     eng = harnesses.eng
-    lib = eng.eval("motulator.internal.library('matlab')")
     monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
     mdl, ctrl, t_stop = example_system("im_2kw_vhz")
     name = "Observer-based VHz control"
@@ -699,9 +761,12 @@ def test_control_block(
     eng.eval(
         "; ".join(
             [
+                "motulator.setup()",
+                f"info = motulator.internal.block_info('matlab', '{name}')",
+                "info.folder = motulator.internal.library_folder()",
                 "new_system('ctrl_lib', 'Library')",
-                f"add_block('{lib}/{name}', '{block}')",
-                f"set_param('{block}', 'LinkStatus', 'none')",
+                f"motulator.internal.add_control_system('{block}', info, "
+                "[40 40 180 240])",
                 f"add_block('built-in/Constant', '{block}/one', 'Value', '1')",
                 f"add_block('built-in/Outport', '{block}/status')",
                 f"add_line('{block}', 'one/1', 'status/1')",
@@ -735,11 +800,12 @@ def test_vector_ctrl_without_observer(
     model built before it was exported) should be updated with the library, the
     mask of the control system giving the zero initial speed estimate.
     """
+    eng = harnesses.eng
+    require_compiler(eng, "c")
     monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
     mdl, ctrl, t_stop = example_system("ipmsm_2kw_fvc")
     path = tmp_path / "legacy_observer.slx"
-    script = simulink.write_model(path, mdl, ctrl, t_stop, code="matlab")
-    eng = harnesses.eng
+    script = simulink.write_model(path, mdl, ctrl, t_stop)
     eng.run(str(script), nargout=0)
     eng.eval(
         "ws = get_param('legacy_observer', 'ModelWorkspace');\n"
@@ -767,6 +833,10 @@ def test_example(
     simulation (motulator to the rounding errors) to EXAMPLE_RTOL relative to their
     magnitudes. The scripts of the drives and the grid converters run in the same
     MATLAB session, so their imports must not conflict.
+
+    A model with MATLAB Function blocks should need neither the library nor the
+    package: it should have no links to the library and no masks in its control
+    system, and its parameters should be in its initialization script.
     """
     require_compiler(harnesses.eng, code)
     monkeypatch.syspath_prepend(str(EXAMPLES))  # The scripts import their helpers
@@ -791,3 +861,19 @@ def test_example(
         scale = np.max(np.abs(value))
         print(f"  {key}: max difference {err:.3g} (scale {scale:.3g})")
         assert err <= EXAMPLE_RTOL * scale
+    if code == "matlab":
+        eng = harnesses.eng
+        find = f"find_system('{path.stem}', 'LookUnderMasks', 'all', "
+        links = f"get_param({find}'LinkStatus', 'resolved'), 'ReferenceBlock')"
+        assert eng.eval(f"sum(contains({links}, 'motulator'))") == 0
+        eng.eval(
+            f"control = find_system('{path.stem}', 'SearchDepth', 1, 'Regexp', 'on', "
+            "'Name', 'control');",
+            nargout=0,
+        )
+        assert eng.eval("numel(control)") == 1
+        masks = "find_system(control{1}, 'LookUnderMasks', 'all', 'Mask', 'on')"
+        assert eng.eval(f"numel({masks})") == 0
+        assert eng.get_param(path.stem, "PreLoadFcn") == ""
+        init = path.with_name(f"init_{path.stem}.m").read_text(encoding="utf-8")
+        assert "\nctrl.T_s = " in init

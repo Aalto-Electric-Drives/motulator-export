@@ -2,14 +2,17 @@ function build_harness(name, folder, block, init_script, input_widths, T_s)
 %BUILD_HARNESS Build a model running a control system of the library alone.
 %   BUILD_HARNESS(NAME, FOLDER, BLOCK, INIT_SCRIPT, INPUT_WIDTHS, T_S) builds the
 %   model NAME in the folder FOLDER, for the tests, with the control system BLOCK
-%   of the library with MATLAB Function blocks (motulator_lib_matlab), the
+%   with MATLAB Function blocks (see motulator.internal.add_control_block), the
 %   root-level inputs of its inputs (of the widths INPUT_WIDTHS, given by the
 %   external input of sim), and the outputs 'd_abc' and 'signals'. The script
-%   INIT_SCRIPT of the folder defines the variables of the mask of the block in the
-%   base workspace, and the model runs it at the start of each simulation. The
+%   INIT_SCRIPT of the folder defines the struct ctrl of the parameters of the
+%   blocks in the base workspace, to which the MATLAB Function blocks refer, and
+%   the model runs it at the start of each simulation. The
 %   solver is discrete with the fixed step T_S (an expression), so that the outputs
 %   are those of the sampling instants.
-lib = motulator.internal.library('matlab');
+motulator.setup();
+info = motulator.internal.block_info('matlab', block);
+info.folder = motulator.internal.library_folder();
 evalin('base', init_script);
 if bdIsLoaded(name)
     close_system(name, 0);
@@ -23,8 +26,8 @@ set_param(name, 'InitFcn', [init_script ';'], 'Solver', 'FixedStepDiscrete', ...
     'FixedStep', T_s, 'SaveTime', 'on', 'SaveOutput', 'on', 'SaveFormat', 'Array', ...
     'LimitDataPoints', 'off', 'ReturnWorkspaceOutputs', 'on');
 n = numel(input_widths);
-add_block([lib '/' block], [name '/Control system'], ...
-    'Position', [300 40 440 40 + 40*n]);
+motulator.internal.add_control_system([name '/Control system'], info, ...
+    [300 40 440 40 + 40*n]);
 for k = 1:n
     in = sprintf('u%d', k);
     add_block('built-in/Inport', [name '/' in], ...

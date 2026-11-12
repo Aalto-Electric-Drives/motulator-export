@@ -17,6 +17,7 @@ from motulator.grid.control._base import GridConverterControlSystem
 from motulator_export._common import gate_enable
 from motulator_export.plecs._common import MONITOR, ControlBlock, _fmt_mask
 from motulator_export.plecs._schematic import _fmt
+from motulator_export.simulink._mfunction import params_name
 from motulator_export.simulink._render import (
     ASCII,
     netlist_rows,
@@ -84,12 +85,19 @@ def control_fields(
     """
     Fields of the struct of the control system (see add_control_system.m), given the
     S-functions of its blocks (none for the MATLAB Function blocks of `code`
-    "matlab").
+    "matlab"). With MATLAB Function blocks, the control system has no mask, but the
+    function of the parameters of its blocks (`_mfunction.params_mfunction`) and
+    the arguments of the function.
     """
     mask = [
         [m.variable, m.prompt.translate(ASCII), m.tab, _fmt_mask(values[m.variable])]
         for m in block.mask_params
     ]
+    if code == "matlab":
+        args = [m.variable for m in block.mask_params]
+        top_mask = [("params", params_name(block)), ("params_args", args)]
+    else:
+        top_mask = [("mask", mask), ("mask_init", block.mask_init)]
     top = with_signals(block.netlist(), MONITOR)
     rows = netlist_rows(top, code=code)
     return [
@@ -97,8 +105,7 @@ def control_fields(
         ("sfunction", [f.name for f in sfuns]),
         ("mask_type", block.mask_type),
         ("description", block.description),
-        ("mask", mask),
-        ("mask_init", block.mask_init),
+        *top_mask,
         ("inputs", block.inputs),
         ("netlist.blocks", rows["blocks"]),
         ("netlist.aligns", rows["aligns"]),

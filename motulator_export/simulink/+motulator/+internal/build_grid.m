@@ -1,8 +1,10 @@
 function scope = build_grid(sys, mdl, c, lib, info)
 %BUILD_GRID Blocks and lines of the model of a grid converter system.
 %   BUILD_GRID(SYS, MDL, C, LIB, INFO) adds to the model SYS the blocks of the
-%   library LIB: the control system C (see control_system), whose block INFO is
-%   described by the data of the library (see block_info), the computational delay
+%   library LIB (with LIB empty, the blocks themselves instead of links to the
+%   library, see add_part and add_control_block): the control system C (see
+%   control_system), whose block INFO is described by the data of the library (see
+%   block_info), the computational delay
 %   of one sampling period, the carrier comparison, the converter, the AC filter,
 %   and the grid of the grid converter system MDL, with the references. The masks
 %   of the blocks refer to the parameters of the model. The root-level output
@@ -22,19 +24,17 @@ lcl = isa(mdl.ac_filter, 'motulator.grid.model.LCLFilter');
 % period, the PWM, the converter, and the AC filter, with the grid below the line
 % from the converter to the filter
 n_in = numel(info.inputs);
-add_block(control_block(c, lib), [sys '/' cs], ...
-    'Position', [160 100 300 100 + 50*n_in]);
+add_control_block([sys '/' cs], c, lib, info, [160 100 300 100 + 50*n_in]);
 add([sys '/Delay'], 'built-in/UnitDelay', [340 0 375 30], 'SampleTime', c.T_s_expr);
-add_block([lib '/CarrierComparison'], [sys '/PWM'], 'Position', [410 0 490 60]);
+add_part(lib, 'CarrierComparison', [sys '/PWM'], [410 0 490 60]);
 set_param([sys '/PWM'], 'T_s', c.T_s_expr);
-add_block([lib '/VoltageSourceConverter'], [sys '/Converter'], ...
-    'Position', [530 0 610 60]);
+add_part(lib, 'VoltageSourceConverter', [sys '/Converter'], [530 0 610 60]);
 if lcl
-    add_block([lib '/LCLFilter'], [sys '/AC filter'], 'Position', [720 0 820 120]);
+    add_part(lib, 'LCLFilter', [sys '/AC filter'], [720 0 820 120]);
 else
-    add_block([lib '/LFilter'], [sys '/AC filter'], 'Position', [720 0 820 80]);
+    add_part(lib, 'LFilter', [sys '/AC filter'], [720 0 820 80]);
 end
-add_block([lib '/ThreePhaseSource'], [sys '/Grid'], 'Position', [630 0 680 30]);
+add_part(lib, 'ThreePhaseSource', [sys '/Grid'], [630 0 680 30]);
 y = port_y(sys, cs, 'Outport', 1);
 for blk = {'Delay', 'PWM', 'Converter', 'AC filter'}
     align(sys, blk{1}, 'Inport', 1, y);
