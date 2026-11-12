@@ -25,7 +25,6 @@ from typing import Any
 from motulator_export.plecs._netlist import (
     SIMULINK,
     CBlock,
-    Constant,
     Delay,
     Layout,
     Mask,
@@ -343,19 +342,7 @@ def _block(b: Any) -> tuple[str, list[str]]:  # noqa: PLR0911
     if isinstance(b, Delay):
         sample_time = "-1" if b.sample_time is None else b.sample_time
         return "UnitDelay", ["SampleTime", sample_time]
-    # The names of the tags, the multiplexers, and the constants are not shown (the
-    # value of a constant is)
-    if isinstance(b, Constant):
-        return "Constant", [
-            "Value",
-            b.value,
-            "SampleTime",
-            b.sample_time,
-            "OutDataTypeStr",
-            "double",
-            "ShowName",
-            "off",
-        ]
+    # The names of the tags and the multiplexers are not shown
     if isinstance(b, Tag):
         params = ["GotoTag", b.tag, "ShowName", "off"]
         visibility = ["TagVisibility", "local"] if b.goto else []
