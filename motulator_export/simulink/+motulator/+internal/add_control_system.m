@@ -8,7 +8,7 @@ function add_control_system(blk, c, pos)
 %     description    Description of the mask, or of the subsystem without a mask
 %     mask           Mask parameters {variable, prompt, tab, value} (only with
 %                    S-functions; the MATLAB Function blocks refer to the struct
-%                    ctrl of the parameters of the blocks, see
+%                    ctrl_par of the parameters of the blocks, see
 %                    motulator.internal.control_params)
 %     mask_init      Initialization commands of the mask
 %     netlist        Contents of the subsystem, see motulator.internal.add_netlist

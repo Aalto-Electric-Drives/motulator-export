@@ -16,7 +16,7 @@ function add_netlist(blk, net)
 %     masks    Masks of the blocks of the classes {path, type, description,
 %              initialization, parameters {variable, prompt, value}, display}
 %              (only with S-functions; the MATLAB Function blocks refer to the
-%              struct ctrl of the parameters of the blocks instead)
+%              struct ctrl_par of the parameters of the blocks instead)
 %     sfunctions  Parameters of the S-functions {path, parameters} (only with
 %              S-functions)
 %     folder   Folder of the files of the functions of the MATLAB Function blocks,

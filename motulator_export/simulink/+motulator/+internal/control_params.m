@@ -1,4 +1,4 @@
-function ctrl = control_params(info, variables)
+function ctrl_par = control_params(info, variables)
 %CONTROL_PARAMS Parameters of the blocks of a control system.
 %   CTRL = CONTROL_PARAMS(INFO, VARIABLES) gives the struct of the parameters of
 %   the MATLAB Function blocks of the control system with the data INFO (see
@@ -9,5 +9,5 @@ function ctrl = control_params(info, variables)
 %   library (e.g., fvc_params.m).
 args = cellfun(@(name) variables.(name), cellstr(info.params_args), ...
     'UniformOutput', false);
-ctrl = feval(info.params, args{:});
+ctrl_par = feval(info.params, args{:});
 end

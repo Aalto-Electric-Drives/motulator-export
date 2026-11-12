@@ -16,11 +16,11 @@ classdef Simulation < handle
     %   With CODE 'matlab', the control system runs MATLAB Function blocks, and the
     %   model needs neither the library nor this package: the blocks are in the
     %   model, and the MATLAB Function blocks contain their code. The blocks of the
-    %   control system have no masks: each refers to its struct in the struct ctrl
-    %   of the parameters of the blocks (e.g., ctrl.SpeedController), which is
+    %   control system have no masks: each refers to its struct in the struct ctrl_par
+    %   of the parameters of the blocks (e.g., ctrl_par.SpeedController), which is
     %   computed from the arguments of CTRL by the function of the parameters of
     %   the control system (e.g., fvc_params.m in the folder library of the
-    %   package). The parameters of the model, i.e., ctrl and the arguments of the
+    %   package). The parameters of the model, i.e., ctrl_par and the arguments of the
     %   parts of MDL as structs, are in the script init_NAME.m, saved next to the
     %   model, which runs it at the start of a simulation (its callback InitFcn). A
     %   block copied to another model needs only the variables of the script.
@@ -67,12 +67,12 @@ classdef Simulation < handle
                 % runs at each start, and the blocks in the model
                 lib = '';
                 ctrl_params = motulator.internal.control_params(info, c.variables);
-                c.T_s_expr = 'ctrl.T_s';
+                c.T_s_expr = 'ctrl_par.T_s';
                 init = ['init_' name];
                 motulator.internal.write_init(fullfile(folder, [init '.m']), name, ...
                     {'System model', variables
                     ['Blocks of the control system (' info.params ')'], ...
-                    struct('ctrl', ctrl_params)});
+                    struct('ctrl_par', ctrl_params)});
                 init_fcn = sprintf( ...
                     'run(fullfile(fileparts(get_param(bdroot, ''FileName'')), ''%s.m''));', ...
                     init);

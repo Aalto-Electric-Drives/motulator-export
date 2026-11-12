@@ -5,7 +5,7 @@ function build_harness(name, folder, block, init_script, input_widths, T_s)
 %   with MATLAB Function blocks (see motulator.internal.add_control_block), the
 %   root-level inputs of its inputs (of the widths INPUT_WIDTHS, given by the
 %   external input of sim), and the outputs 'd_abc' and 'signals'. The script
-%   INIT_SCRIPT of the folder defines the struct ctrl of the parameters of the
+%   INIT_SCRIPT of the folder defines the struct ctrl_par of the parameters of the
 %   blocks in the base workspace, to which the MATLAB Function blocks refer, and
 %   the model runs it at the start of each simulation. The
 %   solver is discrete with the fixed step T_S (an expression), so that the outputs

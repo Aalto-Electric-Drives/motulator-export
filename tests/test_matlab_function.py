@@ -122,17 +122,19 @@ KEY_RTOL = {"imfvc": 1e-6, "imfvc_torque": 1e-6}
 FUNCTION = "MATLAB Function"
 # The variables of the model initializations of the harnesses are cleared first, so
 # that the fields of a previous initialization (e.g., a flux map) are not left
-CLEAR = "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm ctrl\n"
+CLEAR = (
+    "clear par cfg vector_ctrl vhz_ctrl inner_ctrl speed_ctrl slew_rate pwm ctrl_par\n"
+)
 
 
 def harness_init(block: ControlBlock, init: str) -> str:
     """
-    Initialization script of a harness: the model initialization and the struct ctrl
+    Initialization script of a harness: the model initialization and the struct ctrl_par
     of the parameters of the blocks, to which the MATLAB Function blocks refer,
     computed by the function of the parameters of the control system.
     """
     args = ", ".join(m.variable for m in block.mask_params)
-    return f"{CLEAR}{init}ctrl = {params_name(block)}({args});\n"
+    return f"{CLEAR}{init}ctrl_par = {params_name(block)}({args});\n"
 
 
 Run = Callable[[Netlist], list[list[float]]]
@@ -176,7 +178,7 @@ def test_params_functions() -> None:
         f = params_mfunction(block)
         names.add(f.name)
         args = ", ".join(m.variable for m in block.mask_params)
-        assert f.source.startswith(f"function ctrl = {f.name}({args})\n")
+        assert f.source.startswith(f"function ctrl_par = {f.name}({args})\n")
         rows = netlist_rows(with_signals(block.netlist(), MONITOR), code="matlab")
         assert rows["masks"] == []
         functions = [params for _, typ, _, params in rows["blocks"] if typ == FUNCTION]
@@ -186,7 +188,7 @@ def test_params_functions() -> None:
         }
         for path, _ in leaves(block.netlist()):
             *parents, field = struct_path(path).split(".")[1:]
-            var = "ctrl" if not parents else "s"
+            var = "ctrl_par" if not parents else "s"
             assert len(re.findall(rf"^{var}\.{field} = ", f.source, re.M)) >= 1
     assert len(names) == len(CONTROL_BLOCKS)
 
@@ -827,4 +829,4 @@ def test_example(
         assert eng.eval(f"numel({masks})") == 0
         assert eng.get_param(path.stem, "PreLoadFcn") == ""
         init = path.with_name(f"init_{path.stem}.m").read_text(encoding="utf-8")
-        assert "\nctrl.T_s = " in init
+        assert "\nctrl_par.T_s = " in init

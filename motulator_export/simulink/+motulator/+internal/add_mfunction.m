@@ -11,14 +11,14 @@ function add_mfunction(blk, pos, folder, name, sample_time, widths, param)
 %   The global variables of the code are Data Store Memory blocks of the model.
 %
 %   The last argument of the function is the struct of its parameters, which is
-%   the expression PARAM of a variable of the model, e.g., 'ctrl.SpeedController'
-%   of the struct ctrl of the parameters of the blocks of a control system (see
-%   motulator.internal.add_netlist). The variable (e.g., ctrl) is a nontunable
+%   the expression PARAM of a variable of the model, e.g., 'ctrl_par.SpeedController'
+%   of the struct ctrl_par of the parameters of the blocks of a control system (see
+%   motulator.internal.add_netlist). The variable (e.g., ctrl_par) is a nontunable
 %   parameter of the block, which passes the struct to the function. With PARAM
 %   empty, the function has no parameters.
 source = fileread(fullfile(folder, [name '.m']));
 % The signature of the function, e.g., 'y = name(u, p)', as the function of the
-% block, e.g., 'y = fcn(u, ctrl)', calling 'y = name(u, ctrl.SpeedController)'
+% block, e.g., 'y = fcn(u, ctrl_par)', calling 'y = name(u, ctrl_par.SpeedController)'
 signature = regexp(source, '^function\s+([^\r\n]*)', 'tokens', 'once');
 parts = regexp(signature{1}, '^(.*\()(.*)\)\s*$', 'tokens', 'once');
 [head, args] = parts{:};

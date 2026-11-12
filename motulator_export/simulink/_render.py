@@ -11,8 +11,8 @@ corners of the wires. The contents of all subsystems are given as rows with the
 paths of the blocks relative to the control-system subsystem.
 
 With MATLAB Function blocks, the blocks have no masks: a MATLAB Function block
-refers to the struct of its parameters in the struct `ctrl` of the parameters of the
-blocks of the control system (e.g., `ctrl.SpeedController`, see
+refers to the struct of its parameters in the struct `ctrl_par` of the parameters of the
+blocks of the control system (e.g., `ctrl_par.SpeedController`, see
 `_mfunction.params_mfunction`), and the subsystems have the descriptions of their
 classes. A block with inputs without direct feedthrough is a subsystem containing
 the MATLAB Function block and the unit delays of these inputs, laid out as a netlist.
@@ -278,7 +278,7 @@ def _mfunction_block(
     Type and parameters of the MATLAB Function block of a C block, or of its
     subsystem with the unit delays, which is added to `children`. The parameters of
     a MATLAB Function block are its function, its sample time, the widths of its
-    outputs, and the struct of its parameters, an expression of the struct ctrl, or
+    outputs, and the struct of its parameters, an expression of the struct ctrl_par, or
     "" for a function without parameters (see `motulator.internal.add_mfunction`).
     """
     if isinstance(b, Wrapped):

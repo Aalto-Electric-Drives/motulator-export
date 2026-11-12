@@ -4,7 +4,7 @@ function write_init(file, model, sections)
 %   parameters of the model MODEL in the base workspace: the fields of the structs
 %   of the rows {title, struct} of SECTIONS as variables, their values (nested
 %   structs, numeric arrays, and character vectors) as assignments, e.g.,
-%   ctrl.SpeedController.J = 0.015. The variables are cleared first, so that no
+%   ctrl_par.SpeedController.J = 0.015. The variables are cleared first, so that no
 %   fields of other models are left. The model runs the script at the start of a
 %   simulation (see Simulation.build).
 names = {};

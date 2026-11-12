@@ -5,7 +5,7 @@ function [blocks, version, plant] = control_blocks_matlab()
 %   version of the data, and the parameters of the S-function of the GradNet
 %   machine. Written by motulator_export.simulink._library from the
 %   netlists of the control systems; do not edit.
-version = 'f4b25a355157d20a';
+version = '223154b417ad0fc5';
 plant.gradnet_params = {'double(machine.n_p)', 'double(machine.R_s)', 'double(machine.k)', 'double(machine.current_map.in_dim)', 'double(machine.current_map.mu_dim)', 'double(machine.current_map.W)', 'double(machine.current_map.b)', 'double(machine.current_map.mu_log)', 'double(machine.current_map.bias)', 'double(machine.current_map.activation)', 'double(machine.current_map.beta_log)', 'double(machine.current_map.p)', 'double(machine.current_map.in_base)', 'double(machine.current_map.out_base)'};
 blocks = cell(1, 12);
 
@@ -26,7 +26,7 @@ c.netlist.blocks = { ...
     'theta_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [1005.0 476.0 1035.0 490.0], {'Port', '1'}
     'signals', 'Outport', [1735.0 523.0 1765.0 537.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [265.0 235.0 405.0 325.0], {'mfun_fvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [265.0 235.0 405.0 325.0], {'mfun_fvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [1220.0 208.0 1290.0 222.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1220.0 373.0 1290.0 387.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [495.0 108.0 565.0 122.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -36,15 +36,15 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [1220.0 428.0 1290.0 442.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [1220.0 483.0 1290.0 497.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [1220.0 538.0 1290.0 552.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [265.0 40.0 405.0 100.0], {'mfun_fvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
+    'standby', 'MATLAB Function', [265.0 40.0 405.0 100.0], {'mfun_fvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
     'fbk.w_M', 'Selector', [495.0 145.0 545.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[18]', 'InputPortWidth', '23'}
     'ref.tau_M', 'Selector', [495.0 200.0 545.0 230.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[2]', 'InputPortWidth', '4'}
     'SpeedController', 'Subsystem', [775.0 115.0 915.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', '2DOF PI speed controller (SpeedController). The inputs are the standby of the control system, the speed estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), and the speed reference w_M_ref, and the output is the torque reference. In standby (the input standby nonzero), the torque reference is zero and the controller is not updated, as in VectorControlSystem.'}
     'PWM', 'Subsystem', [775.0 350.0 915.0 510.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'FluxVectorController', 'Subsystem', [1005.0 220.0 1145.0 380.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-vector controller (FluxVectorController). The configuration cfg is a struct with the fields of FluxVectorControllerCfg ([] = None, i.e., the default; the offline reference generation and k_f = [] only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as FluxVectorController. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'ref.u_s', 'Selector', [1220.0 320.0 1270.0 350.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'MATLAB Function', [1470.0 245.0 1610.0 335.0], {'mfun_fvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1470.0 470.0 1610.0 590.0], {'mfun_fvc_monitored_signals', 'ctrl.Monitored_signals.T_s', [2.0 2.0 2.0 3.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1470.0 245.0 1610.0 335.0], {'mfun_fvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1470.0 470.0 1610.0 590.0], {'mfun_fvc_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 2.0 3.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1688.0 470.0 1693.0 590.0], {'Inputs', '[2 2 2 3]', 'ShowName', 'off'}
     'From SpeedController.w_M_ref', 'From', [680.0 213.0 750.0 227.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
     'From Monitored signals.w_M_ref', 'From', [1375.0 563.0 1445.0 577.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
@@ -54,8 +54,8 @@ c.netlist.blocks = { ...
     'SpeedController/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'SpeedController/w_M_ref', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'SpeedController/tau_M_ref', 'Outport', [425.0 93.0 455.0 107.0], {'Port', '1'}
-    'SpeedController/mfun_fvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_fvc_speed_controller', 'ctrl.SpeedController.T_s', [1.0], 'ctrl.SpeedController'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.SpeedController.T_s'}
+    'SpeedController/mfun_fvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_fvc_speed_controller', 'ctrl_par.SpeedController.T_s', [1.0], 'ctrl_par.SpeedController'}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.SpeedController.T_s'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
     'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '3'}
@@ -63,7 +63,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_fvc_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_fvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.standby', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'PWM/Goto standby', 'Goto', [110.0 133.0 180.0 147.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -72,8 +72,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_fvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_fvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_fvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_fvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'FluxVectorController/tau_M_ref', 'Inport', [40.0 58.0 70.0 72.0], {'Port', '1'}
     'FluxVectorController/meas', 'Inport', [40.0 228.0 70.0 242.0], {'Port', '2'}
     'FluxVectorController/u_c_ab', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '3'}
@@ -83,14 +83,14 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver', 'Subsystem', [160.0 215.0 300.0 335.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'FluxVectorController/meas.u_dc', 'Selector', [360.0 125.0 410.0 155.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'FluxVectorController/fbk.w_m', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[17]', 'InputPortWidth', '23'}
-    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [485.0 50.0 625.0 140.0], {'mfun_fvc_reference_generator', '', [2.0], 'ctrl.FluxVectorController.ReferenceGenerator'}
-    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [700.0 80.0 840.0 140.0], {'mfun_fvc_flux_torque_controller', 'ctrl.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl.FluxVectorController.FluxTorqueController'}
+    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [485.0 50.0 625.0 140.0], {'mfun_fvc_reference_generator', '', [2.0], 'ctrl_par.FluxVectorController.ReferenceGenerator'}
+    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [700.0 80.0 840.0 140.0], {'mfun_fvc_flux_torque_controller', 'ctrl_par.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl_par.FluxVectorController.FluxTorqueController'}
     'FluxVectorController/Mux ref', 'Mux', [898.0 65.0 903.0 125.0], {'Inputs', '[2 2]', 'ShowName', 'off'}
     'FluxVectorController/SpeedFluxObserver/meas', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'FluxVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 103.0 70.0 117.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '3'}
     'FluxVectorController/SpeedFluxObserver/out', 'Outport', [705.0 123.0 735.0 137.0], {'Port', '1'}
-    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_fvc_flux_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver'}
+    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_fvc_flux_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver'}
     'FluxVectorController/SpeedFluxObserver/Goto init', 'Goto', [360.0 63.0 430.0 77.0], {'GotoTag', 'init', 'ShowName', 'off', 'TagVisibility', 'local'}
     'FluxVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '23'}
     'FluxVectorController/SpeedFluxObserver/From init', 'From', [360.0 228.0 430.0 242.0], {'GotoTag', 'init', 'ShowName', 'off'}
@@ -101,10 +101,10 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 55.0 520.0 69.0], {'Port', '1'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 101.0 520.0 115.0], {'Port', '2'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_fvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_fvc_speed_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_fvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_fvc_speed_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -278,7 +278,7 @@ c.netlist.blocks = { ...
     'theta_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [1200.0 483.0 1230.0 497.0], {'Port', '1'}
     'signals', 'Outport', [1930.0 543.0 1960.0 557.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [355.0 235.0 495.0 325.0], {'mfun_smcvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [355.0 235.0 495.0 325.0], {'mfun_smcvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [1415.0 228.0 1485.0 242.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1415.0 393.0 1485.0 407.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [585.0 108.0 655.0 122.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -288,15 +288,15 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [1415.0 448.0 1485.0 462.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [1415.0 503.0 1485.0 517.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [1415.0 558.0 1485.0 572.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [355.0 40.0 495.0 100.0], {'mfun_smcvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
+    'standby', 'MATLAB Function', [355.0 40.0 495.0 100.0], {'mfun_smcvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
     'fbk.w_M', 'Selector', [585.0 145.0 635.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[18]', 'InputPortWidth', '23'}
     'ref.tau_M', 'Selector', [585.0 200.0 635.0 230.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[2]', 'InputPortWidth', '6'}
     'SpeedController', 'Subsystem', [865.0 115.0 1005.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', '2DOF PI speed controller (SpeedController). The inputs are the standby of the control system, the speed estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), and the speed reference w_M_ref, and the output is the torque reference. In standby (the input standby nonzero), the torque reference is zero and the controller is not updated, as in VectorControlSystem.'}
     'PWM', 'Subsystem', [865.0 350.0 1005.0 510.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'CurrentVectorController', 'Subsystem', [1200.0 220.0 1340.0 460.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the offline reference generation and k_f = [] only). The parameters are passed to the blocks inside it, as CurrentVectorController, and the SpeedFluxObserver resolves the defaults of create_speed_flux_observer. The inputs u_c_lim_ab (the limited voltage reference of the PWM) and enable (the gate enable) are used by the direct discrete-time current controller. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'ref.u_s', 'Selector', [1415.0 340.0 1465.0 370.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
-    'modulate', 'MATLAB Function', [1665.0 265.0 1805.0 355.0], {'mfun_smcvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1665.0 490.0 1805.0 610.0], {'mfun_smcvc_monitored_signals', 'ctrl.Monitored_signals.T_s', [2.0 2.0 2.0 4.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1665.0 265.0 1805.0 355.0], {'mfun_smcvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1665.0 490.0 1805.0 610.0], {'mfun_smcvc_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 2.0 4.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1878.0 490.0 1883.0 610.0], {'Inputs', '[2 2 2 4]', 'ShowName', 'off'}
     'From standby.enable', 'From', [260.0 63.0 330.0 77.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From SpeedController.w_M_ref', 'From', [770.0 213.0 840.0 227.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
@@ -309,8 +309,8 @@ c.netlist.blocks = { ...
     'SpeedController/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'SpeedController/w_M_ref', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'SpeedController/tau_M_ref', 'Outport', [425.0 93.0 455.0 107.0], {'Port', '1'}
-    'SpeedController/mfun_smcvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_smcvc_speed_controller', 'ctrl.SpeedController.T_s', [1.0], 'ctrl.SpeedController'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.SpeedController.T_s'}
+    'SpeedController/mfun_smcvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_smcvc_speed_controller', 'ctrl_par.SpeedController.T_s', [1.0], 'ctrl_par.SpeedController'}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.SpeedController.T_s'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
     'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '3'}
@@ -319,7 +319,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/u_c_lim_ab', 'Outport', [755.0 205.0 785.0 219.0], {'Port', '3'}
     'PWM/d_abc', 'Outport', [755.0 251.0 785.0 265.0], {'Port', '4'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_smcvc_pwm', 'ctrl.PWM.compute_output.T_s', [2.0 3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_smcvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [2.0 3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/Goto d_abc', 'Goto', [555.0 296.0 625.0 310.0], {'GotoTag', 'd_abc', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/From d_abc', 'From', [265.0 108.0 335.0 122.0], {'GotoTag', 'd_abc', 'ShowName', 'off'}
@@ -330,8 +330,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_smcvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_smcvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_smcvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_smcvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'CurrentVectorController/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/meas', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '2'}
     'CurrentVectorController/u_c_ab', 'Inport', [40.0 213.0 70.0 227.0], {'Port', '3'}
@@ -342,7 +342,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/ref', 'Outport', [1190.0 116.0 1220.0 130.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [265.0 145.0 405.0 265.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/meas.u_dc', 'Selector', [465.0 115.0 515.0 145.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
-    'CurrentVectorController/ReferenceGenerator', 'MATLAB Function', [590.0 40.0 730.0 130.0], {'mfun_smcvc_reference_generator', 'ctrl.CurrentVectorController.ReferenceGenerator.T_s', [2.0 2.0], 'ctrl.CurrentVectorController.ReferenceGenerator'}
+    'CurrentVectorController/ReferenceGenerator', 'MATLAB Function', [590.0 40.0 730.0 130.0], {'mfun_smcvc_reference_generator', 'ctrl_par.CurrentVectorController.ReferenceGenerator.T_s', [2.0 2.0], 'ctrl_par.CurrentVectorController.ReferenceGenerator'}
     'CurrentVectorController/CurrentController', 'Subsystem', [910.0 93.0 1050.0 213.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-linkage-based current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller (DiscreteCurrentController), the currents mapped to the flux linkages by the machine model. The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/Mux ref', 'Mux', [1128.0 78.0 1133.0 168.0], {'Inputs', '[2 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/From CurrentController.u_c_lim_ab', 'From', [815.0 161.0 885.0 175.0], {'GotoTag', 'u_c_lim_ab', 'ShowName', 'off'}
@@ -353,7 +353,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 103.0 70.0 117.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '3'}
     'CurrentVectorController/SpeedFluxObserver/out', 'Outport', [705.0 123.0 735.0 137.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_smcvc_flux_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
+    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_smcvc_flux_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
     'CurrentVectorController/SpeedFluxObserver/Goto init', 'Goto', [360.0 63.0 430.0 77.0], {'GotoTag', 'init', 'ShowName', 'off', 'TagVisibility', 'local'}
     'CurrentVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '23'}
     'CurrentVectorController/SpeedFluxObserver/From init', 'From', [360.0 228.0 430.0 242.0], {'GotoTag', 'init', 'ShowName', 'off'}
@@ -364,18 +364,18 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 55.0 520.0 69.0], {'Port', '1'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 101.0 520.0 115.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_smcvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_smcvc_speed_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_smcvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_smcvc_speed_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     'CurrentVectorController/CurrentController/i_s_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentController/fbk', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentController/u_c_lim_ab', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/CurrentController/enable', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'CurrentVectorController/CurrentController/u_s', 'Outport', [505.0 93.0 535.0 107.0], {'Port', '1'}
-    'CurrentVectorController/CurrentController/mfun_smcvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_smcvc_current_controller', 'ctrl.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl.CurrentVectorController.CurrentController'}
-    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
-    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/mfun_smcvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_smcvc_current_controller', 'ctrl_par.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl_par.CurrentVectorController.CurrentController'}
+    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -579,7 +579,7 @@ c.netlist.blocks = { ...
     'w_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [1200.0 483.0 1230.0 497.0], {'Port', '1'}
     'signals', 'Outport', [1930.0 543.0 1960.0 557.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [355.0 235.0 495.0 325.0], {'mfun_cvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [355.0 235.0 495.0 325.0], {'mfun_cvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [1415.0 228.0 1485.0 242.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1415.0 393.0 1485.0 407.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [585.0 108.0 655.0 122.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -589,15 +589,15 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [1415.0 448.0 1485.0 462.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [1415.0 503.0 1485.0 517.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [1415.0 558.0 1485.0 572.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [355.0 40.0 495.0 100.0], {'mfun_cvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
+    'standby', 'MATLAB Function', [355.0 40.0 495.0 100.0], {'mfun_cvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
     'fbk.w_M', 'Selector', [585.0 145.0 635.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[16]', 'InputPortWidth', '21'}
     'ref.tau_M', 'Selector', [585.0 200.0 635.0 230.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1]', 'InputPortWidth', '5'}
     'SpeedController', 'Subsystem', [865.0 115.0 1005.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', '2DOF PI speed controller (SpeedController). The inputs are the standby of the control system, the speed estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), and the speed reference w_M_ref, and the output is the torque reference. In standby (the input standby nonzero), the torque reference is zero and the controller is not updated, as in VectorControlSystem.'}
     'PWM', 'Subsystem', [865.0 350.0 1005.0 510.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'CurrentVectorController', 'Subsystem', [1200.0 220.0 1340.0 460.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as CurrentVectorController. The inputs u_c_lim_ab (the limited voltage reference of the PWM) and enable (the gate enable) are used by the direct discrete-time current controller. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'ref.u_s', 'Selector', [1415.0 340.0 1465.0 370.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[4 5]', 'InputPortWidth', '5'}
-    'modulate', 'MATLAB Function', [1665.0 265.0 1805.0 355.0], {'mfun_cvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1665.0 490.0 1805.0 610.0], {'mfun_cvc_monitored_signals', 'ctrl.Monitored_signals.T_s', [2.0 2.0 2.0 4.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1665.0 265.0 1805.0 355.0], {'mfun_cvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1665.0 490.0 1805.0 610.0], {'mfun_cvc_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 2.0 4.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1878.0 490.0 1883.0 610.0], {'Inputs', '[2 2 2 4]', 'ShowName', 'off'}
     'From standby.enable', 'From', [260.0 63.0 330.0 77.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From SpeedController.w_M_ref', 'From', [770.0 213.0 840.0 227.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
@@ -610,8 +610,8 @@ c.netlist.blocks = { ...
     'SpeedController/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'SpeedController/w_M_ref', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'SpeedController/tau_M_ref', 'Outport', [425.0 93.0 455.0 107.0], {'Port', '1'}
-    'SpeedController/mfun_cvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_cvc_speed_controller', 'ctrl.SpeedController.T_s', [1.0], 'ctrl.SpeedController'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.SpeedController.T_s'}
+    'SpeedController/mfun_cvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_cvc_speed_controller', 'ctrl_par.SpeedController.T_s', [1.0], 'ctrl_par.SpeedController'}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.SpeedController.T_s'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
     'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '3'}
@@ -620,7 +620,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/u_c_lim_ab', 'Outport', [755.0 205.0 785.0 219.0], {'Port', '3'}
     'PWM/d_abc', 'Outport', [755.0 251.0 785.0 265.0], {'Port', '4'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_cvc_pwm', 'ctrl.PWM.compute_output.T_s', [2.0 3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_cvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [2.0 3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/Goto d_abc', 'Goto', [555.0 296.0 625.0 310.0], {'GotoTag', 'd_abc', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/From d_abc', 'From', [265.0 108.0 335.0 122.0], {'GotoTag', 'd_abc', 'ShowName', 'off'}
@@ -631,8 +631,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_cvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_cvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_cvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_cvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'CurrentVectorController/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/meas', 'Inport', [40.0 233.0 70.0 247.0], {'Port', '2'}
     'CurrentVectorController/u_c_ab', 'Inport', [40.0 288.0 70.0 302.0], {'Port', '3'}
@@ -657,7 +657,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'CurrentVectorController/SpeedFluxObserver/out', 'Outport', [670.0 93.0 700.0 107.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_cvc_flux_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
+    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_cvc_flux_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
     'CurrentVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[20]', 'InputPortWidth', '21'}
     'CurrentVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [360.0 245.0 410.0 275.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Subsystem', [470.0 175.0 610.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given.'}
@@ -665,26 +665,26 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 48.0 520.0 62.0], {'Port', '1'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 83.0 520.0 97.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_cvc_speed_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_cvc_speed_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     'CurrentVectorController/CurrentReferenceGenerator/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentReferenceGenerator/u_s', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentReferenceGenerator/u_dc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/CurrentReferenceGenerator/psi_R', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'CurrentVectorController/CurrentReferenceGenerator/tau_M', 'Outport', [505.0 63.0 535.0 77.0], {'Port', '1'}
     'CurrentVectorController/CurrentReferenceGenerator/i_s', 'Outport', [505.0 123.0 535.0 137.0], {'Port', '2'}
-    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_reference_generator', 'ctrl.CurrentVectorController.CurrentReferenceGenerator.T_s', [1.0 2.0], 'ctrl.CurrentVectorController.CurrentReferenceGenerator'}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentReferenceGenerator.T_s'}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentReferenceGenerator.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_reference_generator', 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator.T_s', [1.0 2.0], 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator'}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator.T_s'}
     'CurrentVectorController/CurrentController/i_s_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentController/fbk', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentController/u_c_lim_ab', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/CurrentController/enable', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'CurrentVectorController/CurrentController/u_s', 'Outport', [505.0 93.0 535.0 107.0], {'Port', '1'}
-    'CurrentVectorController/CurrentController/mfun_cvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_controller', 'ctrl.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl.CurrentVectorController.CurrentController'}
-    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
-    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/mfun_cvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_controller', 'ctrl_par.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl_par.CurrentVectorController.CurrentController'}
+    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -899,7 +899,7 @@ c.netlist.blocks = { ...
     'w_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [1005.0 476.0 1035.0 490.0], {'Port', '1'}
     'signals', 'Outport', [1735.0 523.0 1765.0 537.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [265.0 235.0 405.0 325.0], {'mfun_imfvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [265.0 235.0 405.0 325.0], {'mfun_imfvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [1220.0 208.0 1290.0 222.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1220.0 373.0 1290.0 387.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [495.0 108.0 565.0 122.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -909,15 +909,15 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [1220.0 428.0 1290.0 442.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [1220.0 483.0 1290.0 497.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [1220.0 538.0 1290.0 552.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [265.0 40.0 405.0 100.0], {'mfun_imfvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
+    'standby', 'MATLAB Function', [265.0 40.0 405.0 100.0], {'mfun_imfvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
     'fbk.w_M', 'Selector', [495.0 145.0 545.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[16]', 'InputPortWidth', '21'}
     'ref.tau_M', 'Selector', [495.0 200.0 545.0 230.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[2]', 'InputPortWidth', '4'}
     'SpeedController', 'Subsystem', [775.0 115.0 915.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', '2DOF PI speed controller (SpeedController). The inputs are the standby of the control system, the speed estimate fbk.w_M, the limited torque reference ref.tau_M (anti-windup), and the speed reference w_M_ref, and the output is the torque reference. In standby (the input standby nonzero), the torque reference is zero and the controller is not updated, as in VectorControlSystem.'}
     'PWM', 'Subsystem', [775.0 350.0 915.0 510.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'FluxVectorController', 'Subsystem', [1005.0 220.0 1145.0 380.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-vector controller (FluxVectorController). The configuration cfg is a struct with the fields of FluxVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as FluxVectorController, and the SpeedFluxObserver resolves the defaults of create_speed_flux_observer. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'ref.u_s', 'Selector', [1220.0 320.0 1270.0 350.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'MATLAB Function', [1470.0 245.0 1610.0 335.0], {'mfun_imfvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1470.0 470.0 1610.0 590.0], {'mfun_imfvc_monitored_signals', 'ctrl.Monitored_signals.T_s', [2.0 2.0 3.0 2.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1470.0 245.0 1610.0 335.0], {'mfun_imfvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1470.0 470.0 1610.0 590.0], {'mfun_imfvc_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 3.0 2.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1688.0 470.0 1693.0 590.0], {'Inputs', '[2 2 3 2]', 'ShowName', 'off'}
     'From SpeedController.w_M_ref', 'From', [680.0 213.0 750.0 227.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
     'From Monitored signals.w_M_ref', 'From', [1375.0 563.0 1445.0 577.0], {'GotoTag', 'w_M_ref', 'ShowName', 'off'}
@@ -927,8 +927,8 @@ c.netlist.blocks = { ...
     'SpeedController/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'SpeedController/w_M_ref', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'SpeedController/tau_M_ref', 'Outport', [425.0 93.0 455.0 107.0], {'Port', '1'}
-    'SpeedController/mfun_imfvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_imfvc_speed_controller', 'ctrl.SpeedController.T_s', [1.0], 'ctrl.SpeedController'}
-    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.SpeedController.T_s'}
+    'SpeedController/mfun_imfvc_speed_controller', 'MATLAB Function', [240.0 40.0 380.0 160.0], {'mfun_imfvc_speed_controller', 'ctrl_par.SpeedController.T_s', [1.0], 'ctrl_par.SpeedController'}
+    'SpeedController/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.SpeedController.T_s'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
     'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
     'PWM/u_c_ref_ab', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '3'}
@@ -936,7 +936,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_imfvc_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_imfvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.standby', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'PWM/Goto standby', 'Goto', [110.0 133.0 180.0 147.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -945,8 +945,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_imfvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_imfvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_imfvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_imfvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'FluxVectorController/tau_M_ref', 'Inport', [40.0 53.0 70.0 67.0], {'Port', '1'}
     'FluxVectorController/meas', 'Inport', [40.0 123.0 70.0 137.0], {'Port', '2'}
     'FluxVectorController/u_c_ab', 'Inport', [40.0 178.0 70.0 192.0], {'Port', '3'}
@@ -955,8 +955,8 @@ c.netlist.blocks = { ...
     'FluxVectorController/ref', 'Outport', [1115.0 88.0 1145.0 102.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver', 'Subsystem', [265.0 110.0 405.0 230.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'FluxVectorController/meas.u_dc', 'Selector', [450.0 50.0 500.0 80.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
-    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [650.0 50.0 790.0 140.0], {'mfun_imfvc_reference_generator', '', [2.0], 'ctrl.FluxVectorController.ReferenceGenerator'}
-    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [865.0 80.0 1005.0 140.0], {'mfun_imfvc_flux_torque_controller', 'ctrl.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl.FluxVectorController.FluxTorqueController'}
+    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [650.0 50.0 790.0 140.0], {'mfun_imfvc_reference_generator', '', [2.0], 'ctrl_par.FluxVectorController.ReferenceGenerator'}
+    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [865.0 80.0 1005.0 140.0], {'mfun_imfvc_flux_torque_controller', 'ctrl_par.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl_par.FluxVectorController.FluxTorqueController'}
     'FluxVectorController/Mux ref', 'Mux', [1068.0 65.0 1073.0 125.0], {'Inputs', '[2 2]', 'ShowName', 'off'}
     'FluxVectorController/From ReferenceGenerator.tau_M_ref', 'From', [555.0 88.0 625.0 102.0], {'GotoTag', 'tau_M_ref', 'ShowName', 'off'}
     'FluxVectorController/Goto tau_M_ref', 'Goto', [110.0 53.0 180.0 67.0], {'GotoTag', 'tau_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -964,7 +964,7 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'FluxVectorController/SpeedFluxObserver/out', 'Outport', [670.0 93.0 700.0 107.0], {'Port', '1'}
-    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_imfvc_flux_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver'}
+    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_imfvc_flux_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver'}
     'FluxVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[20]', 'InputPortWidth', '21'}
     'FluxVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [360.0 245.0 410.0 275.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Subsystem', [470.0 175.0 610.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given.'}
@@ -972,9 +972,9 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 48.0 520.0 62.0], {'Port', '1'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 83.0 520.0 97.0], {'Port', '2'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_imfvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_imfvc_speed_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_imfvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_imfvc_speed_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -1141,8 +1141,8 @@ c.netlist.blocks = { ...
     'u_dc', 'Inport', [40.0 203.0 70.0 217.0], {'Port', '4'}
     'd_abc', 'Outport', [905.0 341.0 935.0 355.0], {'Port', '1'}
     'signals', 'Outport', [1545.0 298.0 1575.0 312.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [250.0 155.0 390.0 215.0], {'mfun_ovhz_get_measurement', 'ctrl.get_measurement.T_s', [3.0], 'ctrl.get_measurement'}
-    'RateLimiter', 'MATLAB Function', [250.0 70.0 390.0 130.0], {'mfun_ovhz_rate_limiter', 'ctrl.RateLimiter.T_s', [1.0], 'ctrl.RateLimiter'}
+    'get_measurement', 'MATLAB Function', [250.0 155.0 390.0 215.0], {'mfun_ovhz_get_measurement', 'ctrl_par.get_measurement.T_s', [3.0], 'ctrl_par.get_measurement'}
+    'RateLimiter', 'MATLAB Function', [250.0 70.0 390.0 130.0], {'mfun_ovhz_rate_limiter', 'ctrl_par.RateLimiter.T_s', [1.0], 'ctrl_par.RateLimiter'}
     'PWM', 'Subsystem', [585.0 215.0 725.0 375.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'ObserverBasedVHzController', 'Subsystem', [905.0 40.0 1045.0 240.0], {'ContentPreviewEnabled', 'off', 'Description', 'Observer-based V/Hz controller (ObserverBasedVHzController), or pure open-loop V/Hz control if par.L_M = inf. The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization passes the parameters to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'Goto w_M', 'Goto', [585.0 48.0 655.0 62.0], {'GotoTag', 'w_M', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1152,8 +1152,8 @@ c.netlist.blocks = { ...
     'From ref', 'From', [1120.0 313.0 1190.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
     'From w_M', 'From', [1120.0 368.0 1190.0 382.0], {'GotoTag', 'w_M', 'ShowName', 'off'}
     'ref.u_s', 'Selector', [1120.0 150.0 1170.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'MATLAB Function', [1280.0 75.0 1420.0 135.0], {'mfun_ovhz_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1280.0 245.0 1420.0 365.0], {'mfun_ovhz_monitored_signals', 'ctrl.Monitored_signals.T_s', [2.0 2.0 3.0 2.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1280.0 75.0 1420.0 135.0], {'mfun_ovhz_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1280.0 245.0 1420.0 365.0], {'mfun_ovhz_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 3.0 2.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1498.0 245.0 1503.0 365.0], {'Inputs', '[2 2 3 2]', 'ShowName', 'off'}
     'From PWM.enable', 'From', [490.0 228.0 560.0 242.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From ObserverBasedVHzController.enable', 'From', [810.0 53.0 880.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -1165,7 +1165,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_ovhz_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_ovhz_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.enable', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1174,8 +1174,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_ovhz_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_ovhz_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_ovhz_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_ovhz_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'ObserverBasedVHzController/enable', 'Inport', [40.0 353.0 70.0 367.0], {'Port', '1'}
     'ObserverBasedVHzController/w_M', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '2'}
     'ObserverBasedVHzController/meas', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '3'}
@@ -1183,20 +1183,20 @@ c.netlist.blocks = { ...
     'ObserverBasedVHzController/u_c_zoh_ab', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '5'}
     'ObserverBasedVHzController/fbk', 'Outport', [1545.0 198.0 1575.0 212.0], {'Port', '1'}
     'ObserverBasedVHzController/ref', 'Outport', [1545.0 123.0 1575.0 137.0], {'Port', '2'}
-    'ObserverBasedVHzController/FluxObserver', 'MATLAB Function', [280.0 145.0 420.0 265.0], {'mfun_ovhz_flux_observer', 'ctrl.ObserverBasedVHzController.FluxObserver.T_s', [21.0], 'ctrl.ObserverBasedVHzController.FluxObserver'}
+    'ObserverBasedVHzController/FluxObserver', 'MATLAB Function', [280.0 145.0 420.0 265.0], {'mfun_ovhz_flux_observer', 'ctrl_par.ObserverBasedVHzController.FluxObserver.T_s', [21.0], 'ctrl_par.ObserverBasedVHzController.FluxObserver'}
     'ObserverBasedVHzController/meas.u_dc', 'Selector', [480.0 40.0 530.0 70.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '3'}
     'ObserverBasedVHzController/fbk.tau_M', 'Selector', [480.0 115.0 530.0 145.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'ObserverBasedVHzController/tau_M_lpf', 'Subsystem', [575.0 100.0 715.0 160.0], {'ContentPreviewEnabled', 'off'}
-    'ObserverBasedVHzController/ReferenceGenerator', 'MATLAB Function', [790.0 85.0 930.0 175.0], {'mfun_ovhz_reference_generator', '', [2.0], 'ctrl.ObserverBasedVHzController.ReferenceGenerator'}
+    'ObserverBasedVHzController/ReferenceGenerator', 'MATLAB Function', [790.0 85.0 930.0 175.0], {'mfun_ovhz_reference_generator', '', [2.0], 'ctrl_par.ObserverBasedVHzController.ReferenceGenerator'}
     'ObserverBasedVHzController/compute_standby_output', 'MATLAB Function', [1080.0 85.0 1220.0 175.0], {'mfun_ovhz_standby_output', '', [2.0], ''}
-    'ObserverBasedVHzController/FluxTorqueController', 'MATLAB Function', [1295.0 115.0 1435.0 175.0], {'mfun_ovhz_flux_torque_controller', '', [2.0], 'ctrl.ObserverBasedVHzController.FluxTorqueController'}
+    'ObserverBasedVHzController/FluxTorqueController', 'MATLAB Function', [1295.0 115.0 1435.0 175.0], {'mfun_ovhz_flux_torque_controller', '', [2.0], 'ctrl_par.ObserverBasedVHzController.FluxTorqueController'}
     'ObserverBasedVHzController/Mux ref', 'Mux', [1498.0 100.0 1503.0 160.0], {'Inputs', '[2 2]', 'ShowName', 'off'}
     'ObserverBasedVHzController/From compute_standby_output.enable', 'From', [985.0 93.0 1055.0 107.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'ObserverBasedVHzController/Goto enable', 'Goto', [110.0 353.0 180.0 367.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedVHzController/tau_M_lpf/tau_M', 'Inport', [40.0 63.0 70.0 77.0], {'Port', '1'}
     'ObserverBasedVHzController/tau_M_lpf/tau_M_lpf', 'Outport', [380.0 63.0 410.0 77.0], {'Port', '1'}
-    'ObserverBasedVHzController/tau_M_lpf/mfun_ovhz_torque_filter', 'MATLAB Function', [195.0 40.0 335.0 100.0], {'mfun_ovhz_torque_filter', 'ctrl.ObserverBasedVHzController.tau_M_lpf.T_s', [1.0], 'ctrl.ObserverBasedVHzController.tau_M_lpf'}
-    'ObserverBasedVHzController/tau_M_lpf/Delay tau_M', 'UnitDelay', [113.0 55.0 148.0 85.0], {'SampleTime', 'ctrl.ObserverBasedVHzController.tau_M_lpf.T_s'}
+    'ObserverBasedVHzController/tau_M_lpf/mfun_ovhz_torque_filter', 'MATLAB Function', [195.0 40.0 335.0 100.0], {'mfun_ovhz_torque_filter', 'ctrl_par.ObserverBasedVHzController.tau_M_lpf.T_s', [1.0], 'ctrl_par.ObserverBasedVHzController.tau_M_lpf'}
+    'ObserverBasedVHzController/tau_M_lpf/Delay tau_M', 'UnitDelay', [113.0 55.0 148.0 85.0], {'SampleTime', 'ctrl_par.ObserverBasedVHzController.tau_M_lpf.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedVHzController', 'Outport', 1.0, -45.0
@@ -1338,8 +1338,8 @@ c.netlist.blocks = { ...
     'u_dc', 'Inport', [40.0 203.0 70.0 217.0], {'Port', '4'}
     'd_abc', 'Outport', [905.0 341.0 935.0 355.0], {'Port', '1'}
     'signals', 'Outport', [1545.0 298.0 1575.0 312.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [250.0 155.0 390.0 215.0], {'mfun_smvhz_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
-    'RateLimiter', 'MATLAB Function', [250.0 70.0 390.0 130.0], {'mfun_smvhz_rate_limiter', 'ctrl.RateLimiter.T_s', [1.0], 'ctrl.RateLimiter'}
+    'get_measurement', 'MATLAB Function', [250.0 155.0 390.0 215.0], {'mfun_smvhz_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
+    'RateLimiter', 'MATLAB Function', [250.0 70.0 390.0 130.0], {'mfun_smvhz_rate_limiter', 'ctrl_par.RateLimiter.T_s', [1.0], 'ctrl_par.RateLimiter'}
     'PWM', 'Subsystem', [585.0 215.0 725.0 375.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'ObserverBasedVHzController', 'Subsystem', [905.0 40.0 1045.0 240.0], {'ContentPreviewEnabled', 'off', 'Description', 'Observer-based V/Hz controller (ObserverBasedVHzController). The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'Goto w_M', 'Goto', [585.0 48.0 655.0 62.0], {'GotoTag', 'w_M', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1349,8 +1349,8 @@ c.netlist.blocks = { ...
     'From ref', 'From', [1120.0 313.0 1190.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
     'From w_M', 'From', [1120.0 368.0 1190.0 382.0], {'GotoTag', 'w_M', 'ShowName', 'off'}
     'ref.u_s', 'Selector', [1120.0 150.0 1170.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'MATLAB Function', [1280.0 75.0 1420.0 135.0], {'mfun_smvhz_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1280.0 245.0 1420.0 365.0], {'mfun_smvhz_monitored_signals', 'ctrl.Monitored_signals.T_s', [2.0 2.0 2.0 3.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1280.0 75.0 1420.0 135.0], {'mfun_smvhz_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1280.0 245.0 1420.0 365.0], {'mfun_smvhz_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 2.0 3.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1498.0 245.0 1503.0 365.0], {'Inputs', '[2 2 2 3]', 'ShowName', 'off'}
     'From PWM.enable', 'From', [490.0 228.0 560.0 242.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From ObserverBasedVHzController.enable', 'From', [810.0 53.0 880.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -1362,7 +1362,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_smvhz_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_smvhz_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.enable', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1371,8 +1371,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_smvhz_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_smvhz_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_smvhz_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_smvhz_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'ObserverBasedVHzController/enable', 'Inport', [40.0 413.0 70.0 427.0], {'Port', '1'}
     'ObserverBasedVHzController/w_M', 'Inport', [40.0 358.0 70.0 372.0], {'Port', '2'}
     'ObserverBasedVHzController/meas', 'Inport', [40.0 213.0 70.0 227.0], {'Port', '3'}
@@ -1380,23 +1380,23 @@ c.netlist.blocks = { ...
     'ObserverBasedVHzController/u_c_zoh_ab', 'Inport', [40.0 303.0 70.0 317.0], {'Port', '5'}
     'ObserverBasedVHzController/fbk', 'Outport', [1565.0 258.0 1595.0 272.0], {'Port', '1'}
     'ObserverBasedVHzController/ref', 'Outport', [1565.0 93.0 1595.0 107.0], {'Port', '2'}
-    'ObserverBasedVHzController/FluxObserver', 'MATLAB Function', [280.0 205.0 420.0 325.0], {'mfun_smvhz_flux_observer', 'ctrl.ObserverBasedVHzController.FluxObserver.T_s', [23.0], 'ctrl.ObserverBasedVHzController.FluxObserver'}
+    'ObserverBasedVHzController/FluxObserver', 'MATLAB Function', [280.0 205.0 420.0 325.0], {'mfun_smvhz_flux_observer', 'ctrl_par.ObserverBasedVHzController.FluxObserver.T_s', [23.0], 'ctrl_par.ObserverBasedVHzController.FluxObserver'}
     'ObserverBasedVHzController/Goto meas', 'Goto', [280.0 58.0 350.0 72.0], {'GotoTag', 'meas', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedVHzController/From meas', 'From', [480.0 138.0 550.0 152.0], {'GotoTag', 'meas', 'ShowName', 'off'}
     'ObserverBasedVHzController/meas.u_dc', 'Selector', [595.0 130.0 645.0 160.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'ObserverBasedVHzController/fbk.tau_M', 'Selector', [480.0 55.0 530.0 85.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[15]', 'InputPortWidth', '23'}
     'ObserverBasedVHzController/fbk.w_m', 'Selector', [480.0 205.0 530.0 235.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[17]', 'InputPortWidth', '23'}
     'ObserverBasedVHzController/tau_M_lpf', 'Subsystem', [595.0 40.0 735.0 100.0], {'ContentPreviewEnabled', 'off'}
-    'ObserverBasedVHzController/ReferenceGenerator', 'MATLAB Function', [810.0 55.0 950.0 145.0], {'mfun_smvhz_reference_generator', '', [2.0], 'ctrl.ObserverBasedVHzController.ReferenceGenerator'}
+    'ObserverBasedVHzController/ReferenceGenerator', 'MATLAB Function', [810.0 55.0 950.0 145.0], {'mfun_smvhz_reference_generator', '', [2.0], 'ctrl_par.ObserverBasedVHzController.ReferenceGenerator'}
     'ObserverBasedVHzController/compute_standby_output', 'MATLAB Function', [1100.0 55.0 1240.0 145.0], {'mfun_smvhz_standby_output', '', [2.0], ''}
-    'ObserverBasedVHzController/FluxTorqueController', 'MATLAB Function', [1315.0 85.0 1455.0 145.0], {'mfun_smvhz_flux_torque_controller', 'ctrl.ObserverBasedVHzController.FluxTorqueController.T_s', [2.0], 'ctrl.ObserverBasedVHzController.FluxTorqueController'}
+    'ObserverBasedVHzController/FluxTorqueController', 'MATLAB Function', [1315.0 85.0 1455.0 145.0], {'mfun_smvhz_flux_torque_controller', 'ctrl_par.ObserverBasedVHzController.FluxTorqueController.T_s', [2.0], 'ctrl_par.ObserverBasedVHzController.FluxTorqueController'}
     'ObserverBasedVHzController/Mux ref', 'Mux', [1518.0 70.0 1523.0 130.0], {'Inputs', '[2 2]', 'ShowName', 'off'}
     'ObserverBasedVHzController/From compute_standby_output.enable', 'From', [1005.0 63.0 1075.0 77.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'ObserverBasedVHzController/Goto enable', 'Goto', [110.0 413.0 180.0 427.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedVHzController/tau_M_lpf/tau_M', 'Inport', [40.0 63.0 70.0 77.0], {'Port', '1'}
     'ObserverBasedVHzController/tau_M_lpf/tau_M_lpf', 'Outport', [380.0 63.0 410.0 77.0], {'Port', '1'}
-    'ObserverBasedVHzController/tau_M_lpf/mfun_smvhz_torque_filter', 'MATLAB Function', [195.0 40.0 335.0 100.0], {'mfun_smvhz_torque_filter', 'ctrl.ObserverBasedVHzController.tau_M_lpf.T_s', [1.0], 'ctrl.ObserverBasedVHzController.tau_M_lpf'}
-    'ObserverBasedVHzController/tau_M_lpf/Delay tau_M', 'UnitDelay', [113.0 55.0 148.0 85.0], {'SampleTime', 'ctrl.ObserverBasedVHzController.tau_M_lpf.T_s'}
+    'ObserverBasedVHzController/tau_M_lpf/mfun_smvhz_torque_filter', 'MATLAB Function', [195.0 40.0 335.0 100.0], {'mfun_smvhz_torque_filter', 'ctrl_par.ObserverBasedVHzController.tau_M_lpf.T_s', [1.0], 'ctrl_par.ObserverBasedVHzController.tau_M_lpf'}
+    'ObserverBasedVHzController/tau_M_lpf/Delay tau_M', 'UnitDelay', [113.0 55.0 148.0 85.0], {'SampleTime', 'ctrl_par.ObserverBasedVHzController.tau_M_lpf.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedVHzController', 'Outport', 1.0, -45.0
@@ -1544,7 +1544,7 @@ c.netlist.blocks = { ...
     'u_dc', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
     'd_abc', 'Outport', [890.0 381.0 920.0 395.0], {'Port', '1'}
     'signals', 'Outport', [1530.0 280.0 1560.0 294.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [250.0 180.0 390.0 270.0], {'mfun_gfl_get_measurement', 'ctrl.get_measurement.T_s', [5.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [250.0 180.0 390.0 270.0], {'mfun_gfl_get_measurement', 'ctrl_par.get_measurement.T_s', [5.0], 'ctrl_par.get_measurement'}
     'PWM', 'Subsystem', [570.0 255.0 710.0 415.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured PCC voltage, as in get_feedback of the control system.'}
     'CurrentVectorController', 'Subsystem', [890.0 40.0 1030.0 240.0], {'ContentPreviewEnabled', 'off', 'Description', 'Grid-following current-vector controller (CurrentVectorController) in the power-control mode. The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default), passed to the blocks inside it, as CurrentVectorController. The blocks compute_output and power_reference are its compute_output before and after the current limiter: the power references ref.p_g and ref.q_g correspond to the limited current reference.'}
     'Goto fbk', 'Goto', [1105.0 38.0 1175.0 52.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1552,8 +1552,8 @@ c.netlist.blocks = { ...
     'From fbk', 'From', [1105.0 258.0 1175.0 272.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref', 'From', [1105.0 313.0 1175.0 327.0], {'GotoTag', 'ref', 'ShowName', 'off'}
     'ref.u_c', 'Selector', [1105.0 150.0 1155.0 180.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
-    'modulate', 'MATLAB Function', [1265.0 75.0 1405.0 135.0], {'mfun_gfl_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1265.0 242.0 1405.0 332.0], {'mfun_gfl_monitored_signals', 'ctrl.Monitored_signals.T_s', [4.0 4.0 3.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1265.0 75.0 1405.0 135.0], {'mfun_gfl_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1265.0 242.0 1405.0 332.0], {'mfun_gfl_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [4.0 4.0 3.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1478.0 242.0 1483.0 332.0], {'Inputs', '[4 4 3]', 'ShowName', 'off'}
     'From PWM.enable', 'From', [475.0 268.0 545.0 282.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From CurrentVectorController.enable', 'From', [795.0 53.0 865.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -1565,7 +1565,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_gfl_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_gfl_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.enable', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1574,8 +1574,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_gfl_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_gfl_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_gfl_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_gfl_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'CurrentVectorController/enable', 'Inport', [40.0 373.0 70.0 387.0], {'Port', '1'}
     'CurrentVectorController/p_g_ref', 'Inport', [40.0 38.0 70.0 52.0], {'Port', '2'}
     'CurrentVectorController/q_g_ref', 'Inport', [40.0 113.0 70.0 127.0], {'Port', '3'}
@@ -1583,13 +1583,13 @@ c.netlist.blocks = { ...
     'CurrentVectorController/u_c_ab', 'Inport', [40.0 318.0 70.0 332.0], {'Port', '5'}
     'CurrentVectorController/fbk', 'Outport', [1790.0 278.0 1820.0 292.0], {'Port', '1'}
     'CurrentVectorController/ref', 'Outport', [1790.0 200.0 1820.0 214.0], {'Port', '2'}
-    'CurrentVectorController/PLL', 'MATLAB Function', [235.0 255.0 375.0 315.0], {'mfun_gfl_pll', 'ctrl.CurrentVectorController.PLL.T_s', [13.0], 'ctrl.CurrentVectorController.PLL'}
+    'CurrentVectorController/PLL', 'MATLAB Function', [235.0 255.0 375.0 315.0], {'mfun_gfl_pll', 'ctrl_par.CurrentVectorController.PLL.T_s', [13.0], 'ctrl_par.CurrentVectorController.PLL'}
     'CurrentVectorController/fbk.u_g', 'Selector', [435.0 180.0 485.0 210.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5]', 'InputPortWidth', '13'}
-    'CurrentVectorController/compute_output', 'MATLAB Function', [575.0 120.0 715.0 210.0], {'mfun_gfl_current_reference', 'ctrl.CurrentVectorController.compute_output.T_s', [2.0], 'ctrl.CurrentVectorController.compute_output'}
-    'CurrentVectorController/CurrentLimiter', 'MATLAB Function', [760.0 135.0 900.0 195.0], {'mfun_gfl_current_limiter', '', [2.0], 'ctrl.CurrentVectorController.CurrentLimiter'}
-    'CurrentVectorController/power_reference', 'MATLAB Function', [975.0 142.0 1115.0 232.0], {'mfun_gfl_power_reference', 'ctrl.CurrentVectorController.power_reference.T_s', [1.0 1.0 2.0], 'ctrl.CurrentVectorController.power_reference'}
+    'CurrentVectorController/compute_output', 'MATLAB Function', [575.0 120.0 715.0 210.0], {'mfun_gfl_current_reference', 'ctrl_par.CurrentVectorController.compute_output.T_s', [2.0], 'ctrl_par.CurrentVectorController.compute_output'}
+    'CurrentVectorController/CurrentLimiter', 'MATLAB Function', [760.0 135.0 900.0 195.0], {'mfun_gfl_current_limiter', '', [2.0], 'ctrl_par.CurrentVectorController.CurrentLimiter'}
+    'CurrentVectorController/power_reference', 'MATLAB Function', [975.0 142.0 1115.0 232.0], {'mfun_gfl_power_reference', 'ctrl_par.CurrentVectorController.power_reference.T_s', [1.0 1.0 2.0], 'ctrl_par.CurrentVectorController.power_reference'}
     'CurrentVectorController/compute_standby_output', 'MATLAB Function', [1265.0 112.0 1405.0 262.0], {'mfun_gfl_standby_output', '', [1.0 1.0 2.0], ''}
-    'CurrentVectorController/CurrentController', 'MATLAB Function', [1510.0 222.0 1650.0 282.0], {'mfun_gfl_current_controller', 'ctrl.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl.CurrentVectorController.CurrentController'}
+    'CurrentVectorController/CurrentController', 'MATLAB Function', [1510.0 222.0 1650.0 282.0], {'mfun_gfl_current_controller', 'ctrl_par.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl_par.CurrentVectorController.CurrentController'}
     'CurrentVectorController/Mux ref', 'Mux', [1738.0 147.0 1743.0 267.0], {'Inputs', '[1 1 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/From compute_standby_output.enable', 'From', [1170.0 120.0 1240.0 134.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'CurrentVectorController/Goto enable', 'Goto', [110.0 373.0 180.0 387.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1729,7 +1729,7 @@ c.netlist.blocks = { ...
     'u_dc', 'Inport', [40.0 298.0 70.0 312.0], {'Port', '6'}
     'd_abc', 'Outport', [905.0 381.0 935.0 395.0], {'Port', '1'}
     'signals', 'Outport', [1530.0 298.0 1560.0 312.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [250.0 180.0 390.0 270.0], {'mfun_gfm_get_measurement', 'ctrl.get_measurement.T_s', [5.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [250.0 180.0 390.0 270.0], {'mfun_gfm_get_measurement', 'ctrl_par.get_measurement.T_s', [5.0], 'ctrl_par.get_measurement'}
     'PWM', 'Subsystem', [570.0 255.0 710.0 415.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is the measured PCC voltage, as in get_feedback of the control system.'}
     'ObserverBasedGridFormingController', 'Subsystem', [905.0 40.0 1045.0 280.0], {'ContentPreviewEnabled', 'off', 'Description', 'Disturbance-observer-based grid-forming controller (ObserverBasedGridFormingController) in the power-control mode, with the transparent current limitation. The configuration cfg is a struct with the fields of ObserverBasedGridFormingControllerCfg ([] = None, i.e., the default). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as ObserverBasedGridFormingController. The blocks compute_output and voltage_reference are its compute_output before and after the current limiter.'}
     'Goto fbk', 'Goto', [1120.0 48.0 1190.0 62.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1737,8 +1737,8 @@ c.netlist.blocks = { ...
     'From fbk', 'From', [1120.0 268.0 1190.0 282.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref', 'From', [1120.0 323.0 1190.0 337.0], {'GotoTag', 'ref', 'ShowName', 'off'}
     'ref.u_c', 'Selector', [1120.0 160.0 1170.0 190.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
-    'modulate', 'MATLAB Function', [1265.0 85.0 1405.0 145.0], {'mfun_gfm_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1265.0 245.0 1405.0 365.0], {'mfun_gfm_monitored_signals', 'ctrl.Monitored_signals.T_s', [3.0 2.0 4.0 1.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1265.0 85.0 1405.0 145.0], {'mfun_gfm_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1265.0 245.0 1405.0 365.0], {'mfun_gfm_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [3.0 2.0 4.0 1.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1478.0 245.0 1483.0 365.0], {'Inputs', '[3 2 4 1]', 'ShowName', 'off'}
     'From PWM.enable', 'From', [475.0 268.0 545.0 282.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From ObserverBasedGridFormingController.enable', 'From', [810.0 53.0 880.0 67.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -1750,7 +1750,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_gfm_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_gfm_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.enable', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1759,8 +1759,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_gfm_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_gfm_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_gfm_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_gfm_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'ObserverBasedGridFormingController/enable', 'Inport', [40.0 508.0 70.0 522.0], {'Port', '1'}
     'ObserverBasedGridFormingController/p_g_ref', 'Inport', [40.0 103.0 70.0 117.0], {'Port', '2'}
     'ObserverBasedGridFormingController/v_c_ref', 'Inport', [40.0 253.0 70.0 267.0], {'Port', '3'}
@@ -1769,16 +1769,16 @@ c.netlist.blocks = { ...
     'ObserverBasedGridFormingController/u_c_zoh_ab', 'Inport', [40.0 453.0 70.0 467.0], {'Port', '6'}
     'ObserverBasedGridFormingController/fbk', 'Outport', [1920.0 373.0 1950.0 387.0], {'Port', '1'}
     'ObserverBasedGridFormingController/ref', 'Outport', [1920.0 273.0 1950.0 287.0], {'Port', '2'}
-    'ObserverBasedGridFormingController/Observer', 'MATLAB Function', [250.0 335.0 390.0 425.0], {'mfun_gfm_observer', 'ctrl.ObserverBasedGridFormingController.Observer.T_s', [14.0], 'ctrl.ObserverBasedGridFormingController.Observer'}
+    'ObserverBasedGridFormingController/Observer', 'MATLAB Function', [250.0 335.0 390.0 425.0], {'mfun_gfm_observer', 'ctrl_par.ObserverBasedGridFormingController.Observer.T_s', [14.0], 'ctrl_par.ObserverBasedGridFormingController.Observer'}
     'ObserverBasedGridFormingController/fbk.i_c', 'Selector', [565.0 410.0 615.0 440.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1 2]', 'InputPortWidth', '14'}
     'ObserverBasedGridFormingController/Goto i_c', 'Goto', [780.0 418.0 850.0 432.0], {'GotoTag', 'i_c', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedGridFormingController/From u_c', 'From', [435.0 133.0 505.0 147.0], {'GotoTag', 'u_c', 'ShowName', 'off'}
     'ObserverBasedGridFormingController/From i_c', 'From', [250.0 163.0 320.0 177.0], {'GotoTag', 'i_c', 'ShowName', 'off'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter', 'Subsystem', [565.0 95.0 705.0 185.0], {'ContentPreviewEnabled', 'off', 'Description', 'Limiter of the active-power reference (PowerReferenceLimiter): the maximum active power is computed from the voltage reference u_c and the current i_c, prioritizing the reactive current, and low-pass filtered (update, with ref.u_c and fbk.i_c). Without i_d_max, the active-power reference is not limited, as ObserverBasedGridFormingController has no limiter then.'}
-    'ObserverBasedGridFormingController/compute_output', 'MATLAB Function', [780.0 215.0 920.0 305.0], {'mfun_gfm_current_reference', '', [1.0 1.0 2.0], 'ctrl.ObserverBasedGridFormingController.compute_output'}
-    'ObserverBasedGridFormingController/CurrentLimiter', 'MATLAB Function', [995.0 260.0 1135.0 320.0], {'mfun_gfm_current_limiter', '', [2.0], 'ctrl.ObserverBasedGridFormingController.CurrentLimiter'}
+    'ObserverBasedGridFormingController/compute_output', 'MATLAB Function', [780.0 215.0 920.0 305.0], {'mfun_gfm_current_reference', '', [1.0 1.0 2.0], 'ctrl_par.ObserverBasedGridFormingController.compute_output'}
+    'ObserverBasedGridFormingController/CurrentLimiter', 'MATLAB Function', [995.0 260.0 1135.0 320.0], {'mfun_gfm_current_limiter', '', [2.0], 'ctrl_par.ObserverBasedGridFormingController.CurrentLimiter'}
     'ObserverBasedGridFormingController/compute_standby_output', 'MATLAB Function', [1315.0 185.0 1455.0 335.0], {'mfun_gfm_standby_output', '', [1.0 1.0 2.0], ''}
-    'ObserverBasedGridFormingController/voltage_reference', 'MATLAB Function', [1560.0 295.0 1700.0 355.0], {'mfun_gfm_voltage_reference', '', [2.0], 'ctrl.ObserverBasedGridFormingController.voltage_reference'}
+    'ObserverBasedGridFormingController/voltage_reference', 'MATLAB Function', [1560.0 295.0 1700.0 355.0], {'mfun_gfm_voltage_reference', '', [2.0], 'ctrl_par.ObserverBasedGridFormingController.voltage_reference'}
     'ObserverBasedGridFormingController/Mux ref', 'Mux', [1808.0 220.0 1813.0 340.0], {'Inputs', '[1 1 2 2]', 'ShowName', 'off'}
     'ObserverBasedGridFormingController/Goto u_c', 'Goto', [1805.0 363.0 1875.0 377.0], {'GotoTag', 'u_c', 'ShowName', 'off', 'TagVisibility', 'local'}
     'ObserverBasedGridFormingController/From compute_standby_output.enable', 'From', [1220.0 193.0 1290.0 207.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -1787,9 +1787,9 @@ c.netlist.blocks = { ...
     'ObserverBasedGridFormingController/PowerReferenceLimiter/u_c', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/i_c', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'ObserverBasedGridFormingController/PowerReferenceLimiter/p_g_ref_lim', 'Outport', [490.0 78.0 520.0 92.0], {'Port', '1'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/mfun_gfm_power_reference_limiter', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_gfm_power_reference_limiter', 'ctrl.ObserverBasedGridFormingController.PowerReferenceLimiter.T_s', [1.0], 'ctrl.ObserverBasedGridFormingController.PowerReferenceLimiter'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay u_c', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'ctrl.ObserverBasedGridFormingController.PowerReferenceLimiter.T_s'}
-    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay i_c', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'ctrl.ObserverBasedGridFormingController.PowerReferenceLimiter.T_s'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/mfun_gfm_power_reference_limiter', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_gfm_power_reference_limiter', 'ctrl_par.ObserverBasedGridFormingController.PowerReferenceLimiter.T_s', [1.0], 'ctrl_par.ObserverBasedGridFormingController.PowerReferenceLimiter'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay u_c', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'ctrl_par.ObserverBasedGridFormingController.PowerReferenceLimiter.T_s'}
+    'ObserverBasedGridFormingController/PowerReferenceLimiter/Delay i_c', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'ctrl_par.ObserverBasedGridFormingController.PowerReferenceLimiter.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'Goto fbk', 'Inport', 1.0, 'ObserverBasedGridFormingController', 'Outport', 1.0, -45.0
@@ -1945,7 +1945,7 @@ c.netlist.blocks = { ...
     'theta_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [765.0 391.0 795.0 405.0], {'Port', '1'}
     'signals', 'Outport', [1405.0 428.0 1435.0 442.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [160.0 150.0 300.0 240.0], {'mfun_fvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [160.0 150.0 300.0 240.0], {'mfun_fvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [980.0 123.0 1050.0 137.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [980.0 288.0 1050.0 302.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [360.0 38.0 430.0 52.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1953,13 +1953,13 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [980.0 343.0 1050.0 357.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [980.0 398.0 1050.0 412.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [980.0 453.0 1050.0 467.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [160.0 60.0 300.0 120.0], {'mfun_fvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
-    'torque_reference', 'MATLAB Function', [535.0 75.0 675.0 135.0], {'mfun_fvc_torque_reference', 'ctrl.torque_reference.T_s', [1.0], 'ctrl.torque_reference'}
+    'standby', 'MATLAB Function', [160.0 60.0 300.0 120.0], {'mfun_fvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
+    'torque_reference', 'MATLAB Function', [535.0 75.0 675.0 135.0], {'mfun_fvc_torque_reference', 'ctrl_par.torque_reference.T_s', [1.0], 'ctrl_par.torque_reference'}
     'PWM', 'Subsystem', [535.0 265.0 675.0 425.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'FluxVectorController', 'Subsystem', [765.0 135.0 905.0 295.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-vector controller (FluxVectorController). The configuration cfg is a struct with the fields of FluxVectorControllerCfg ([] = None, i.e., the default; the offline reference generation and k_f = [] only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as FluxVectorController. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'ref.u_s', 'Selector', [980.0 235.0 1030.0 265.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'MATLAB Function', [1140.0 160.0 1280.0 250.0], {'mfun_fvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1140.0 375.0 1280.0 495.0], {'mfun_fvc_torque_monitored_signals', 'ctrl.Monitored_signals.T_s', [1.0 2.0 2.0 3.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1140.0 160.0 1280.0 250.0], {'mfun_fvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1140.0 375.0 1280.0 495.0], {'mfun_fvc_torque_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [1.0 2.0 2.0 3.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1358.0 375.0 1363.0 495.0], {'Inputs', '[1 2 2 3]', 'ShowName', 'off'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
     'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
@@ -1968,7 +1968,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_fvc_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_fvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.standby', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'PWM/Goto standby', 'Goto', [110.0 133.0 180.0 147.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1977,8 +1977,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_fvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_fvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_fvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_fvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'FluxVectorController/tau_M_ref', 'Inport', [40.0 58.0 70.0 72.0], {'Port', '1'}
     'FluxVectorController/meas', 'Inport', [40.0 228.0 70.0 242.0], {'Port', '2'}
     'FluxVectorController/u_c_ab', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '3'}
@@ -1988,14 +1988,14 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver', 'Subsystem', [160.0 215.0 300.0 335.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'FluxVectorController/meas.u_dc', 'Selector', [360.0 125.0 410.0 155.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'FluxVectorController/fbk.w_m', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[17]', 'InputPortWidth', '23'}
-    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [485.0 50.0 625.0 140.0], {'mfun_fvc_reference_generator', '', [2.0], 'ctrl.FluxVectorController.ReferenceGenerator'}
-    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [700.0 80.0 840.0 140.0], {'mfun_fvc_flux_torque_controller', 'ctrl.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl.FluxVectorController.FluxTorqueController'}
+    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [485.0 50.0 625.0 140.0], {'mfun_fvc_reference_generator', '', [2.0], 'ctrl_par.FluxVectorController.ReferenceGenerator'}
+    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [700.0 80.0 840.0 140.0], {'mfun_fvc_flux_torque_controller', 'ctrl_par.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl_par.FluxVectorController.FluxTorqueController'}
     'FluxVectorController/Mux ref', 'Mux', [898.0 65.0 903.0 125.0], {'Inputs', '[2 2]', 'ShowName', 'off'}
     'FluxVectorController/SpeedFluxObserver/meas', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'FluxVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 103.0 70.0 117.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '3'}
     'FluxVectorController/SpeedFluxObserver/out', 'Outport', [705.0 123.0 735.0 137.0], {'Port', '1'}
-    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_fvc_flux_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver'}
+    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_fvc_flux_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver'}
     'FluxVectorController/SpeedFluxObserver/Goto init', 'Goto', [360.0 63.0 430.0 77.0], {'GotoTag', 'init', 'ShowName', 'off', 'TagVisibility', 'local'}
     'FluxVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '23'}
     'FluxVectorController/SpeedFluxObserver/From init', 'From', [360.0 228.0 430.0 242.0], {'GotoTag', 'init', 'ShowName', 'off'}
@@ -2006,10 +2006,10 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 55.0 520.0 69.0], {'Port', '1'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 101.0 520.0 115.0], {'Port', '2'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_fvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_fvc_speed_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_fvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_fvc_speed_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -2166,7 +2166,7 @@ c.netlist.blocks = { ...
     'theta_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [1065.0 398.0 1095.0 412.0], {'Port', '1'}
     'signals', 'Outport', [1705.0 448.0 1735.0 462.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [355.0 150.0 495.0 240.0], {'mfun_smcvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [355.0 150.0 495.0 240.0], {'mfun_smcvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [1280.0 143.0 1350.0 157.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1280.0 308.0 1350.0 322.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [555.0 38.0 625.0 52.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -2174,13 +2174,13 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [1280.0 363.0 1350.0 377.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [1280.0 418.0 1350.0 432.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [1280.0 473.0 1350.0 487.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [355.0 60.0 495.0 120.0], {'mfun_smcvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
-    'torque_reference', 'MATLAB Function', [730.0 75.0 870.0 135.0], {'mfun_smcvc_torque_reference', 'ctrl.torque_reference.T_s', [1.0], 'ctrl.torque_reference'}
+    'standby', 'MATLAB Function', [355.0 60.0 495.0 120.0], {'mfun_smcvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
+    'torque_reference', 'MATLAB Function', [730.0 75.0 870.0 135.0], {'mfun_smcvc_torque_reference', 'ctrl_par.torque_reference.T_s', [1.0], 'ctrl_par.torque_reference'}
     'PWM', 'Subsystem', [730.0 265.0 870.0 425.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'CurrentVectorController', 'Subsystem', [1065.0 135.0 1205.0 375.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the offline reference generation and k_f = [] only). The parameters are passed to the blocks inside it, as CurrentVectorController, and the SpeedFluxObserver resolves the defaults of create_speed_flux_observer. The inputs u_c_lim_ab (the limited voltage reference of the PWM) and enable (the gate enable) are used by the direct discrete-time current controller. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'ref.u_s', 'Selector', [1280.0 255.0 1330.0 285.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[5 6]', 'InputPortWidth', '6'}
-    'modulate', 'MATLAB Function', [1440.0 180.0 1580.0 270.0], {'mfun_smcvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1440.0 395.0 1580.0 515.0], {'mfun_smcvc_torque_monitored_signals', 'ctrl.Monitored_signals.T_s', [1.0 2.0 2.0 4.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1440.0 180.0 1580.0 270.0], {'mfun_smcvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1440.0 395.0 1580.0 515.0], {'mfun_smcvc_torque_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [1.0 2.0 2.0 4.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1658.0 395.0 1663.0 515.0], {'Inputs', '[1 2 2 4]', 'ShowName', 'off'}
     'From standby.enable', 'From', [260.0 83.0 330.0 97.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From CurrentVectorController.enable', 'From', [970.0 348.0 1040.0 362.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -2193,7 +2193,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/u_c_lim_ab', 'Outport', [755.0 205.0 785.0 219.0], {'Port', '3'}
     'PWM/d_abc', 'Outport', [755.0 251.0 785.0 265.0], {'Port', '4'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_smcvc_pwm', 'ctrl.PWM.compute_output.T_s', [2.0 3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_smcvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [2.0 3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/Goto d_abc', 'Goto', [555.0 296.0 625.0 310.0], {'GotoTag', 'd_abc', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/From d_abc', 'From', [265.0 108.0 335.0 122.0], {'GotoTag', 'd_abc', 'ShowName', 'off'}
@@ -2204,8 +2204,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_smcvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_smcvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_smcvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_smcvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'CurrentVectorController/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/meas', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '2'}
     'CurrentVectorController/u_c_ab', 'Inport', [40.0 213.0 70.0 227.0], {'Port', '3'}
@@ -2216,7 +2216,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/ref', 'Outport', [1190.0 116.0 1220.0 130.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [265.0 145.0 405.0 265.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/meas.u_dc', 'Selector', [465.0 115.0 515.0 145.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
-    'CurrentVectorController/ReferenceGenerator', 'MATLAB Function', [590.0 40.0 730.0 130.0], {'mfun_smcvc_reference_generator', 'ctrl.CurrentVectorController.ReferenceGenerator.T_s', [2.0 2.0], 'ctrl.CurrentVectorController.ReferenceGenerator'}
+    'CurrentVectorController/ReferenceGenerator', 'MATLAB Function', [590.0 40.0 730.0 130.0], {'mfun_smcvc_reference_generator', 'ctrl_par.CurrentVectorController.ReferenceGenerator.T_s', [2.0 2.0], 'ctrl_par.CurrentVectorController.ReferenceGenerator'}
     'CurrentVectorController/CurrentController', 'Subsystem', [910.0 93.0 1050.0 213.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-linkage-based current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller (DiscreteCurrentController), the currents mapped to the flux linkages by the machine model. The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/Mux ref', 'Mux', [1128.0 78.0 1133.0 168.0], {'Inputs', '[2 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/From CurrentController.u_c_lim_ab', 'From', [815.0 161.0 885.0 175.0], {'GotoTag', 'u_c_lim_ab', 'ShowName', 'off'}
@@ -2227,7 +2227,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 103.0 70.0 117.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 158.0 70.0 172.0], {'Port', '3'}
     'CurrentVectorController/SpeedFluxObserver/out', 'Outport', [705.0 123.0 735.0 137.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_smcvc_flux_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
+    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_smcvc_flux_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [2.0 23.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
     'CurrentVectorController/SpeedFluxObserver/Goto init', 'Goto', [360.0 63.0 430.0 77.0], {'GotoTag', 'init', 'ShowName', 'off', 'TagVisibility', 'local'}
     'CurrentVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '23'}
     'CurrentVectorController/SpeedFluxObserver/From init', 'From', [360.0 228.0 430.0 242.0], {'GotoTag', 'init', 'ShowName', 'off'}
@@ -2238,18 +2238,18 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 55.0 520.0 69.0], {'Port', '1'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 101.0 520.0 115.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_smcvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_smcvc_speed_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_smcvc_speed_observer', 'MATLAB Function', [305.0 40.0 445.0 130.0], {'mfun_smcvc_speed_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [133.0 40.0 168.0 70.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay init', 'UnitDelay', [223.0 70.0 258.0 100.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     'CurrentVectorController/CurrentController/i_s_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentController/fbk', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentController/u_c_lim_ab', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/CurrentController/enable', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'CurrentVectorController/CurrentController/u_s', 'Outport', [505.0 93.0 535.0 107.0], {'Port', '1'}
-    'CurrentVectorController/CurrentController/mfun_smcvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_smcvc_current_controller', 'ctrl.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl.CurrentVectorController.CurrentController'}
-    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
-    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/mfun_smcvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_smcvc_current_controller', 'ctrl_par.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl_par.CurrentVectorController.CurrentController'}
+    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -2436,7 +2436,7 @@ c.netlist.blocks = { ...
     'w_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [1065.0 398.0 1095.0 412.0], {'Port', '1'}
     'signals', 'Outport', [1705.0 448.0 1735.0 462.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [355.0 150.0 495.0 240.0], {'mfun_cvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [355.0 150.0 495.0 240.0], {'mfun_cvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [1280.0 143.0 1350.0 157.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1280.0 308.0 1350.0 322.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [555.0 38.0 625.0 52.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -2444,13 +2444,13 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [1280.0 363.0 1350.0 377.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [1280.0 418.0 1350.0 432.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [1280.0 473.0 1350.0 487.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [355.0 60.0 495.0 120.0], {'mfun_cvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
-    'torque_reference', 'MATLAB Function', [730.0 75.0 870.0 135.0], {'mfun_cvc_torque_reference', 'ctrl.torque_reference.T_s', [1.0], 'ctrl.torque_reference'}
+    'standby', 'MATLAB Function', [355.0 60.0 495.0 120.0], {'mfun_cvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
+    'torque_reference', 'MATLAB Function', [730.0 75.0 870.0 135.0], {'mfun_cvc_torque_reference', 'ctrl_par.torque_reference.T_s', [1.0], 'ctrl_par.torque_reference'}
     'PWM', 'Subsystem', [730.0 265.0 870.0 425.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'CurrentVectorController', 'Subsystem', [1065.0 135.0 1205.0 375.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as CurrentVectorController. The inputs u_c_lim_ab (the limited voltage reference of the PWM) and enable (the gate enable) are used by the direct discrete-time current controller. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'ref.u_s', 'Selector', [1280.0 255.0 1330.0 285.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[4 5]', 'InputPortWidth', '5'}
-    'modulate', 'MATLAB Function', [1440.0 180.0 1580.0 270.0], {'mfun_cvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1440.0 395.0 1580.0 515.0], {'mfun_cvc_torque_monitored_signals', 'ctrl.Monitored_signals.T_s', [1.0 2.0 2.0 4.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1440.0 180.0 1580.0 270.0], {'mfun_cvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1440.0 395.0 1580.0 515.0], {'mfun_cvc_torque_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [1.0 2.0 2.0 4.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1658.0 395.0 1663.0 515.0], {'Inputs', '[1 2 2 4]', 'ShowName', 'off'}
     'From standby.enable', 'From', [260.0 83.0 330.0 97.0], {'GotoTag', 'enable', 'ShowName', 'off'}
     'From CurrentVectorController.enable', 'From', [970.0 348.0 1040.0 362.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -2463,7 +2463,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/u_c_lim_ab', 'Outport', [755.0 205.0 785.0 219.0], {'Port', '3'}
     'PWM/d_abc', 'Outport', [755.0 251.0 785.0 265.0], {'Port', '4'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_cvc_pwm', 'ctrl.PWM.compute_output.T_s', [2.0 3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 190.0 405.0 280.0], {'mfun_cvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [2.0 3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/Goto d_abc', 'Goto', [555.0 296.0 625.0 310.0], {'GotoTag', 'd_abc', 'ShowName', 'off', 'TagVisibility', 'local'}
     'PWM/From d_abc', 'From', [265.0 108.0 335.0 122.0], {'GotoTag', 'd_abc', 'ShowName', 'off'}
@@ -2474,8 +2474,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_cvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_cvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_cvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_cvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'CurrentVectorController/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/meas', 'Inport', [40.0 233.0 70.0 247.0], {'Port', '2'}
     'CurrentVectorController/u_c_ab', 'Inport', [40.0 288.0 70.0 302.0], {'Port', '3'}
@@ -2500,7 +2500,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'CurrentVectorController/SpeedFluxObserver/out', 'Outport', [670.0 93.0 700.0 107.0], {'Port', '1'}
-    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_cvc_flux_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
+    'CurrentVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_cvc_flux_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.FluxObserver'}
     'CurrentVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[20]', 'InputPortWidth', '21'}
     'CurrentVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [360.0 245.0 410.0 275.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver', 'Subsystem', [470.0 175.0 610.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given.'}
@@ -2508,26 +2508,26 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 48.0 520.0 62.0], {'Port', '1'}
     'CurrentVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 83.0 520.0 97.0], {'Port', '2'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_cvc_speed_observer', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/mfun_cvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_cvc_speed_observer', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'CurrentVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl_par.CurrentVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     'CurrentVectorController/CurrentReferenceGenerator/tau_M_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentReferenceGenerator/u_s', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentReferenceGenerator/u_dc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/CurrentReferenceGenerator/psi_R', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'CurrentVectorController/CurrentReferenceGenerator/tau_M', 'Outport', [505.0 63.0 535.0 77.0], {'Port', '1'}
     'CurrentVectorController/CurrentReferenceGenerator/i_s', 'Outport', [505.0 123.0 535.0 137.0], {'Port', '2'}
-    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_reference_generator', 'ctrl.CurrentVectorController.CurrentReferenceGenerator.T_s', [1.0 2.0], 'ctrl.CurrentVectorController.CurrentReferenceGenerator'}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentReferenceGenerator.T_s'}
-    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentReferenceGenerator.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/mfun_cvc_current_reference_generator', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_reference_generator', 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator.T_s', [1.0 2.0], 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator'}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_s', 'UnitDelay', [133.0 70.0 168.0 100.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator.T_s'}
+    'CurrentVectorController/CurrentReferenceGenerator/Delay u_dc', 'UnitDelay', [223.0 100.0 258.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentReferenceGenerator.T_s'}
     'CurrentVectorController/CurrentController/i_s_ref', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
     'CurrentVectorController/CurrentController/fbk', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'CurrentVectorController/CurrentController/u_c_lim_ab', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'CurrentVectorController/CurrentController/enable', 'Inport', [40.0 153.0 70.0 167.0], {'Port', '4'}
     'CurrentVectorController/CurrentController/u_s', 'Outport', [505.0 93.0 535.0 107.0], {'Port', '1'}
-    'CurrentVectorController/CurrentController/mfun_cvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_controller', 'ctrl.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl.CurrentVectorController.CurrentController'}
-    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
-    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/mfun_cvc_current_controller', 'MATLAB Function', [320.0 40.0 460.0 160.0], {'mfun_cvc_current_controller', 'ctrl_par.CurrentVectorController.CurrentController.T_s', [2.0], 'ctrl_par.CurrentVectorController.CurrentController'}
+    'CurrentVectorController/CurrentController/Delay u_c_lim_ab', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
+    'CurrentVectorController/CurrentController/Delay enable', 'UnitDelay', [223.0 130.0 258.0 160.0], {'SampleTime', 'ctrl_par.CurrentVectorController.CurrentController.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
@@ -2725,7 +2725,7 @@ c.netlist.blocks = { ...
     'w_M', 'Inport', [40.0 283.0 70.0 297.0], {'Port', '5'}
     'd_abc', 'Outport', [765.0 391.0 795.0 405.0], {'Port', '1'}
     'signals', 'Outport', [1405.0 428.0 1435.0 442.0], {'Port', '2'}
-    'get_measurement', 'MATLAB Function', [160.0 150.0 300.0 240.0], {'mfun_imfvc_get_measurement', 'ctrl.get_measurement.T_s', [4.0], 'ctrl.get_measurement'}
+    'get_measurement', 'MATLAB Function', [160.0 150.0 300.0 240.0], {'mfun_imfvc_get_measurement', 'ctrl_par.get_measurement.T_s', [4.0], 'ctrl_par.get_measurement'}
     'Goto fbk', 'Goto', [980.0 123.0 1050.0 137.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [980.0 288.0 1050.0 302.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto standby', 'Goto', [360.0 38.0 430.0 52.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -2733,13 +2733,13 @@ c.netlist.blocks = { ...
     'From standby 2', 'From', [980.0 343.0 1050.0 357.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'From fbk 2', 'From', [980.0 398.0 1050.0 412.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
     'From ref 2', 'From', [980.0 453.0 1050.0 467.0], {'GotoTag', 'ref', 'ShowName', 'off'}
-    'standby', 'MATLAB Function', [160.0 60.0 300.0 120.0], {'mfun_imfvc_standby', 'ctrl.standby.T_s', [1.0], 'ctrl.standby'}
-    'torque_reference', 'MATLAB Function', [535.0 75.0 675.0 135.0], {'mfun_imfvc_torque_reference', 'ctrl.torque_reference.T_s', [1.0], 'ctrl.torque_reference'}
+    'standby', 'MATLAB Function', [160.0 60.0 300.0 120.0], {'mfun_imfvc_standby', 'ctrl_par.standby.T_s', [1.0], 'ctrl_par.standby'}
+    'torque_reference', 'MATLAB Function', [535.0 75.0 675.0 135.0], {'mfun_imfvc_torque_reference', 'ctrl_par.torque_reference.T_s', [1.0], 'ctrl_par.torque_reference'}
     'PWM', 'Subsystem', [535.0 265.0 675.0 425.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. In standby of the control system (the input standby nonzero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
     'FluxVectorController', 'Subsystem', [765.0 135.0 905.0 295.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-vector controller (FluxVectorController). The configuration cfg is a struct with the fields of FluxVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as FluxVectorController, and the SpeedFluxObserver resolves the defaults of create_speed_flux_observer. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'ref.u_s', 'Selector', [980.0 235.0 1030.0 265.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3 4]', 'InputPortWidth', '4'}
-    'modulate', 'MATLAB Function', [1140.0 160.0 1280.0 250.0], {'mfun_imfvc_modulate', 'ctrl.modulate.T_s', [2.0 1.0], 'ctrl.modulate'}
-    'Monitored signals', 'MATLAB Function', [1140.0 375.0 1280.0 495.0], {'mfun_imfvc_torque_monitored_signals', 'ctrl.Monitored_signals.T_s', [1.0 2.0 3.0 2.0], 'ctrl.Monitored_signals'}
+    'modulate', 'MATLAB Function', [1140.0 160.0 1280.0 250.0], {'mfun_imfvc_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1140.0 375.0 1280.0 495.0], {'mfun_imfvc_torque_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [1.0 2.0 3.0 2.0], 'ctrl_par.Monitored_signals'}
     'Mux signals', 'Mux', [1358.0 375.0 1363.0 495.0], {'Inputs', '[1 2 3 2]', 'ShowName', 'off'}
     'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
     'PWM/standby', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '2'}
@@ -2748,7 +2748,7 @@ c.netlist.blocks = { ...
     'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
     'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
     'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
-    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_imfvc_pwm', 'ctrl.PWM.compute_output.T_s', [3.0], 'ctrl.PWM.compute_output'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_imfvc_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
     'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
     'PWM/From get_realized_voltage.standby', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'standby', 'ShowName', 'off'}
     'PWM/Goto standby', 'Goto', [110.0 133.0 180.0 147.0], {'GotoTag', 'standby', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -2757,8 +2757,8 @@ c.netlist.blocks = { ...
     'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
     'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
     'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
-    'PWM/get_realized_voltage/mfun_imfvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_imfvc_pwm_realized_voltage', 'ctrl.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl.PWM.get_realized_voltage'}
-    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl.PWM.get_realized_voltage.T_s'}
+    'PWM/get_realized_voltage/mfun_imfvc_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_imfvc_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
     'FluxVectorController/tau_M_ref', 'Inport', [40.0 53.0 70.0 67.0], {'Port', '1'}
     'FluxVectorController/meas', 'Inport', [40.0 123.0 70.0 137.0], {'Port', '2'}
     'FluxVectorController/u_c_ab', 'Inport', [40.0 178.0 70.0 192.0], {'Port', '3'}
@@ -2767,8 +2767,8 @@ c.netlist.blocks = { ...
     'FluxVectorController/ref', 'Outport', [1115.0 88.0 1145.0 102.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver', 'Subsystem', [265.0 110.0 405.0 230.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer with the default observer gain k_o. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'FluxVectorController/meas.u_dc', 'Selector', [450.0 50.0 500.0 80.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
-    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [650.0 50.0 790.0 140.0], {'mfun_imfvc_reference_generator', '', [2.0], 'ctrl.FluxVectorController.ReferenceGenerator'}
-    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [865.0 80.0 1005.0 140.0], {'mfun_imfvc_flux_torque_controller', 'ctrl.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl.FluxVectorController.FluxTorqueController'}
+    'FluxVectorController/ReferenceGenerator', 'MATLAB Function', [650.0 50.0 790.0 140.0], {'mfun_imfvc_reference_generator', '', [2.0], 'ctrl_par.FluxVectorController.ReferenceGenerator'}
+    'FluxVectorController/FluxTorqueController', 'MATLAB Function', [865.0 80.0 1005.0 140.0], {'mfun_imfvc_flux_torque_controller', 'ctrl_par.FluxVectorController.FluxTorqueController.T_s', [2.0], 'ctrl_par.FluxVectorController.FluxTorqueController'}
     'FluxVectorController/Mux ref', 'Mux', [1068.0 65.0 1073.0 125.0], {'Inputs', '[2 2]', 'ShowName', 'off'}
     'FluxVectorController/From ReferenceGenerator.tau_M_ref', 'From', [555.0 88.0 625.0 102.0], {'GotoTag', 'tau_M_ref', 'ShowName', 'off'}
     'FluxVectorController/Goto tau_M_ref', 'Goto', [110.0 53.0 180.0 67.0], {'GotoTag', 'tau_M_ref', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -2776,7 +2776,7 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/u_s_ab', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver/u_s_zoh_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
     'FluxVectorController/SpeedFluxObserver/out', 'Outport', [670.0 93.0 700.0 107.0], {'Port', '1'}
-    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_imfvc_flux_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl.FluxVectorController.SpeedFluxObserver.FluxObserver'}
+    'FluxVectorController/SpeedFluxObserver/FluxObserver', 'MATLAB Function', [160.0 40.0 300.0 160.0], {'mfun_imfvc_flux_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver.T_s', [21.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.FluxObserver'}
     'FluxVectorController/SpeedFluxObserver/fbk.eps', 'Selector', [360.0 175.0 410.0 205.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[20]', 'InputPortWidth', '21'}
     'FluxVectorController/SpeedFluxObserver/fbk.tau_M', 'Selector', [360.0 245.0 410.0 275.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[11]', 'InputPortWidth', '21'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver', 'Subsystem', [470.0 175.0 610.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Speed observer (SpeedObserver), driven by the speed error signal eps and the torque estimate tau_M, starting from the speed estimate w_M. The mechanical system model is used if J is given.'}
@@ -2784,9 +2784,9 @@ c.netlist.blocks = { ...
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_M', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/w_M', 'Outport', [490.0 48.0 520.0 62.0], {'Port', '1'}
     'FluxVectorController/SpeedFluxObserver/SpeedObserver/tau_L', 'Outport', [490.0 83.0 520.0 97.0], {'Port', '2'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_imfvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_imfvc_speed_observer', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
-    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/mfun_imfvc_speed_observer', 'MATLAB Function', [290.0 40.0 430.0 100.0], {'mfun_imfvc_speed_observer', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s', [1.0 1.0], 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay eps', 'UnitDelay', [113.0 40.0 148.0 70.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
+    'FluxVectorController/SpeedFluxObserver/SpeedObserver/Delay tau_M', 'UnitDelay', [213.0 70.0 248.0 100.0], {'SampleTime', 'ctrl_par.FluxVectorController.SpeedFluxObserver.SpeedObserver.T_s'}
     };
 c.netlist.aligns = { ...
     '', 'standby', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
