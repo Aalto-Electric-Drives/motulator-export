@@ -6,8 +6,8 @@ function add_machine(blk, pos, script, state, ic, inputs, par, folder)
 %   initial condition IC), the phase currents, and the torque from the stator
 %   voltage, the state, the inputs INPUTS (the rotor speed and angle), and the
 %   parameters PAR (a Constant block). With the folder FOLDER (and SCRIPT and PAR
-%   empty), the function is mfun_gradnet_machine of the folder, whose parameter
-%   is the struct machine of the mask.
+%   empty), the code is that of mfun_gradnet_machine of the folder, whose
+%   parameter is the struct machine of the mask.
 import motulator.internal.*
 add(blk, 'built-in/Subsystem', pos);
 fcn = [blk '/Machine model'];

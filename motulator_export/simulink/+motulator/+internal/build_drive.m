@@ -1,15 +1,17 @@
 function scope = build_drive(sys, mdl, c, lib, info)
 %BUILD_DRIVE Blocks and lines of the model of a machine drive.
 %   BUILD_DRIVE(SYS, MDL, C, LIB, INFO) adds to the model SYS the blocks of the
-%   library LIB: the control system C (see control_system), whose block INFO is
-%   described by the data of the library (see block_info), the computational delay
-%   of one sampling period, the carrier comparison, the converter, the machine,
-%   and the mechanics of the drive MDL, with the references and the load torque
-%   (or the external rotor speed of ExternalRotorSpeed). The measured rotor angle
+%   library LIB (with LIB empty, the blocks themselves instead of links to the
+%   library, see add_part and add_control_block): the control system C (see
+%   control_system), whose block INFO is described by the data of the library (see
+%   block_info), the computational delay of one sampling period, the carrier
+%   comparison, the converter, the machine, and the mechanics of the drive MDL,
+%   with the references and the load torque (or the external rotor speed of
+%   ExternalRotorSpeed). The measured rotor angle
 %   (synchronous machine) or speed (induction machine) comes from the sensor of
 %   the drive (mdl.sensors); without the sensor, the input of the sensorless
 %   control system is zero.
-%   The masks of the blocks refer to the parameters of the model. The root-level
+%   The blocks refer to the parameters of the model. The root-level
 %   output ports 'mdl' and 'ctrl' give the machine signals [i_a i_b i_c w_M
 %   theta_M tau_M] and the monitored signals of the control system, which are also
 %   shown in a scope, whose groups SCOPE {name, indices in [mdl; ctrl]} are
@@ -23,25 +25,24 @@ in = @(name) find(strcmp(info.inputs, name));
 
 % Main path in a row: the control system, the computational delay of one sampling
 % period, the PWM, the converter, the machine, and the mechanics
-add_block(control_block(c, lib), [sys '/' cs], 'Position', [160 100 300 300]);
+add_control_block([sys '/' cs], c, lib, info, [160 100 300 300]);
 add([sys '/Delay'], 'built-in/UnitDelay', [340 0 375 30], 'SampleTime', c.T_s_expr);
-add_block([lib '/CarrierComparison'], [sys '/PWM'], 'Position', [410 0 490 60]);
+add_part(lib, 'CarrierComparison', [sys '/PWM'], [410 0 490 60]);
 set_param([sys '/PWM'], 'T_s', c.T_s_expr);
-add_block([lib '/VoltageSourceConverter'], [sys '/Converter'], ...
-    'Position', [530 0 610 60]);
+add_part(lib, 'VoltageSourceConverter', [sys '/Converter'], [530 0 610 60]);
 if isa(mdl.machine, 'motulator.drive.model.InductionMachine')
     pos = [680 0 780 80];
 else
     pos = [680 0 780 120];
 end
-add_block([lib '/' mdl.machine.block()], [sys '/Machine'], 'Position', pos);
+add_part(lib, mdl.machine.block(), [sys '/Machine'], pos);
 external = isa(mdl.mechanics, 'motulator.drive.model.ExternalRotorSpeed');
 if external
     mechanics = 'ExternalRotorSpeed';
 else
     mechanics = 'MechanicalSystem';
 end
-add_block([lib '/' mechanics], [sys '/Mechanics'], 'Position', [890 0 990 80]);
+add_part(lib, mechanics, [sys '/Mechanics'], [890 0 990 80]);
 y = port_y(sys, cs, 'Outport', 1);
 for blk = {'Delay', 'PWM', 'Converter', 'Machine'}
     align(sys, blk{1}, 'Inport', 1, y);

@@ -1,41 +1,42 @@
-function add_mfunction(blk, pos, folder, name, sample_time, widths, param, embed)
-%ADD_MFUNCTION MATLAB Function block calling a function of a file.
-%   ADD_MFUNCTION(BLK, POS, FOLDER, NAME, SAMPLE_TIME, WIDTHS) adds the MATLAB
-%   Function block BLK at the position POS, calling the function NAME (the file
-%   FOLDER/NAME.m, written by motulator_export.simulink), with the sample time
+function add_mfunction(blk, pos, folder, name, sample_time, widths, param)
+%ADD_MFUNCTION MATLAB Function block with the code of a function of a file.
+%   ADD_MFUNCTION(BLK, POS, FOLDER, NAME, SAMPLE_TIME, WIDTHS, PARAM) adds the
+%   MATLAB Function block BLK at the position POS, with the sample time
 %   SAMPLE_TIME (an expression, or '' for an inherited sample time) and the widths
-%   WIDTHS of the outputs. The block has the arguments of the function (the first
-%   line of the file), and the model needs the file on the MATLAB path (the folder
-%   of the library, which motulator.setup adds to the path). Each MATLAB Function
-%   block has its own copy of the persistent variables of the function. The
-%   argument p of the function is a nontunable parameter, the struct of the
-%   parameters from the mask (see motulator.internal.add_netlist).
+%   WIDTHS of the outputs. The block contains a copy of the code of the function
+%   NAME (the file FOLDER/NAME.m, written by motulator_export.simulink), so that
+%   the model does not need the file: the function of the block has the arguments
+%   of the function NAME (the first line of the file) and calls it. Each MATLAB
+%   Function block has its own copy of the persistent variables of the function.
+%   The global variables of the code are Data Store Memory blocks of the model.
 %
-%   ADD_MFUNCTION(..., PARAM) names the parameter PARAM instead of p ([] for p).
-%
-%   ADD_MFUNCTION(..., PARAM, EMBED) with EMBED true copies the code of the function
-%   into the block instead, so that the model does not need the file. The global
-%   variables of the code are Data Store Memory blocks of the model.
-if nargin < 7 || isempty(param)
-    param = 'p';
-end
-if nargin < 8
-    embed = false;
-end
+%   The last argument of the function is the struct of its parameters, which is
+%   the expression PARAM of a variable of the model, e.g., 'ctrl_par.SpeedController'
+%   of the struct ctrl_par of the parameters of the blocks of a control system (see
+%   motulator.internal.add_netlist). The variable (e.g., ctrl_par) is a nontunable
+%   parameter of the block, which passes the struct to the function. With PARAM
+%   empty, the function has no parameters.
 source = fileread(fullfile(folder, [name '.m']));
-if embed
-    script = source;
-else
-    % The signature of the function, e.g., 'y = name(u, p)'
-    signature = regexp(source, '^function\s+([^\r\n]*)', 'tokens', 'once');
-    signature = signature{1};
-    script = strjoin({
-        ['function ' strrep(signature, [name '('], 'fcn(')]
-        ['% Calls the function of the file ' name '.m of the folder of the library']
-        [signature ';']
-        'end'
-        }', newline);
+% The signature of the function, e.g., 'y = name(u, p)', as the function of the
+% block, e.g., 'y = fcn(u, ctrl_par)', calling 'y = name(u, ctrl_par.SpeedController)'
+signature = regexp(source, '^function\s+([^\r\n]*)', 'tokens', 'once');
+parts = regexp(signature{1}, '^(.*\()(.*)\)\s*$', 'tokens', 'once');
+[head, args] = parts{:};
+args = strtrim(strsplit(args, ','));
+variable = strtok(param, '.');
+call_args = args;
+if ~isempty(param)
+    args{end} = variable;
+    call_args{end} = param;
 end
+script = strjoin({
+    ['function ' strrep(head, [name '('], 'fcn(') strjoin(args, ', ') ')']
+    ['% Calls the function ' name ' below (a copy of the file ' name '.m)']
+    [head strjoin(call_args, ', ') ');']
+    'end'
+    ''
+    source
+    }', newline);
 add_block('simulink/User-Defined Functions/MATLAB Function', blk, 'Position', pos);
 config = get_param(blk, 'MATLABFunctionConfiguration');
 config.FunctionScript = script;
@@ -46,7 +47,7 @@ else
     config.SampleTime = sample_time;
 end
 chart = sfroot().find('-isa', 'Stateflow.EMChart', 'Path', blk);
-data = chart.find('-isa', 'Stateflow.Data', 'Name', param);
+data = chart.find('-isa', 'Stateflow.Data', 'Name', variable);
 if ~isempty(data)
     data.Scope = 'Parameter';
     data.Tunable = false;

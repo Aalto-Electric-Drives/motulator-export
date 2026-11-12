@@ -3,7 +3,7 @@ MATLAB scripts that build the Simulink models of motulator systems.
 
 A script builds the system with the MATLAB classes of motulator (the package
 `+motulator` of this folder), as a motulator script does, and the Simulink model
-from the blocks of the library of motulator (`Simulation.build`). The arguments are
+(`Simulation.build`). The arguments are
 written only where they differ from the defaults of the classes, which are those of
 motulator, and the references are the constants or the step signals of the motulator
 objects (the model samples the references of the control system at its sampling
@@ -465,18 +465,11 @@ def _vhz_control_system(values: dict[str, Any]) -> str:
 
 # %%
 def write_script(
-    path: str | Path,
-    mdl: Any,
-    ctrl: Any,
-    t_stop: float,
-    code: str,
-    control_block: str | None = None,
+    path: str | Path, mdl: Any, ctrl: Any, t_stop: float, code: str
 ) -> Path:
     """
     Write the script `build_<model>.m` that builds the Simulink model `path` (.slx)
-    of the system, in the folder of the model, and return its path. The control
-    system is the block `control_block` of another library if given (see
-    `Simulation.build`).
+    of the system, in the folder of the model, and return its path.
     """
     path = Path(path)
     kind = system_type(mdl, ctrl)
@@ -494,14 +487,10 @@ def write_script(
         else "the blocks of the control system are MATLAB Function blocks"
     )
     code_arg = "" if code == "c" else ", code='matlab'"
-    block_arg = (
-        "" if control_block is None else f", control_block={_value(control_block)}"
-    )
     text = (
         f"% Build the Simulink model {path.stem}.slx in the folder of this script.\n"
         "% Written by motulator_export.simulink from motulator: the system is built\n"
-        "% with the MATLAB classes of motulator, as in a motulator script, and the\n"
-        "% model from the blocks of the library of motulator.\n"
+        "% with the MATLAB classes of motulator, as in a motulator script.\n"
         "\n"
         "here = fileparts(mfilename('fullpath'));\n"
         f"addpath({folder});\n" + imports + "\n"
@@ -512,7 +501,7 @@ def write_script(
         f"%% Simulink model ({blocks})\n"
         "simulation = Simulation(mdl, ctrl);\n"
         f"simulation.build('{path.stem}', t_stop={_value(t_stop)}, folder=here"
-        f"{code_arg}{block_arg});\n"
+        f"{code_arg});\n"
         "% Simulate the model and plot the results:\n"
         "%   res = simulation.simulate();\n"
         "%   res.plot();\n"

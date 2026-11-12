@@ -15,8 +15,7 @@ PLECS (`block_params`).
 
 import re
 from collections import ChainMap
-from collections.abc import Callable, Iterator, MutableMapping
-from contextlib import contextmanager
+from collections.abc import Callable, MutableMapping
 from math import expm1, inf, nan, pi, sqrt
 from typing import Any
 
@@ -237,19 +236,6 @@ BUILTINS: dict[str, Callable[..., Any]] = {
     "sqrt": sqrt,
     "expm1": expm1,
 }
-
-
-@contextmanager
-def using(functions: dict[str, Callable[..., Any]]) -> Iterator[None]:
-    """Replace functions of the m-files (`FUNCTIONS`) temporarily, e.g., by
-    surrogates whose results show how the results depend on the arguments."""
-    saved = dict(FUNCTIONS)
-    FUNCTIONS.update(functions)
-    try:
-        yield
-    finally:
-        FUNCTIONS.clear()
-        FUNCTIONS.update(saved)
 
 
 def _call(name: str, args: list[Any]) -> Any:

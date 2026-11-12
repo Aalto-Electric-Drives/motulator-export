@@ -8,10 +8,10 @@ of motulator (`motulator_export/matlab`) used by the code are appended as local
 functions, so that the file of the function is self-contained. The function runs
 the code sections as the S-function runs the C-Script code: the outputs are
 computed from the inputs of the same sampling instant, and then the state is
-updated. The file is in the folder of the library, and the MATLAB Function block
-only calls the function (see `motulator.internal.add_mfunction`), so that the code of
-the block is in the file, as that of an S-function is in its C source. Each MATLAB
-Function block has its own copy of the persistent variables.
+updated. The file is in the folder `library` of the package, and the MATLAB Function
+block contains a copy of its code (see `motulator.internal.add_mfunction`), so that a
+model does not need the file. Each MATLAB Function block has its own copy of the
+persistent variables.
 
 A MATLAB Function block has direct feedthrough from all its inputs, unlike the
 S-functions, whose inputs used only in the update of the state are not direct
@@ -21,11 +21,13 @@ and the update is deferred to the start of the next call, which gives the same
 result: the update of the sampling instant k with the inputs of k is done before
 the outputs of k + 1.
 
-The parameters of the block are expressions in the workspace of its mask, or of the
-masks of the subsystems containing it. The mask initialization of the block collects
-them into the struct p (`mask_init`), an empty parameter ([], None in motulator)
-being NaN, since a MATLAB Function block does not accept empty parameters, and checks
-them.
+The blocks have no masks. The parameters of a block are the fields of its struct in
+the struct `ctrl_par` of the parameters of the blocks of the control system, nested as
+the blocks (e.g., `ctrl_par.FluxVectorController.ReferenceGenerator`), to which the
+MATLAB Function block refers. The struct is computed by the function of the
+parameters of the control system (`params_mfunction`, e.g., `fvc_params.m`) from the
+arguments of the top-level class of motulator; it is generated from the masks of the
+netlist, so that it computes the parameters as the masks of the S-functions do.
 
 """
 
@@ -36,14 +38,14 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
+from motulator_export.plecs._common import ControlBlock
 from motulator_export.plecs._netlist import (
     COMPLEX,
     CBlock,
-    Mask,
     MCode,
-    Param,
     SignalVector,
     Subsystem,
+    leaves,
     m_variable,
 )
 
@@ -63,8 +65,6 @@ M_FILES = (
     "gfm_observer.m",
     "sm_machine.m",
 )
-# Type of the masks of the blocks without a mask in the C-Script code
-PARAMS_MASK = "Parameters (motulator_export)"
 
 
 @dataclass
@@ -73,7 +73,7 @@ class MFunction:
     MATLAB function of a block: its name and source, the widths of its outputs, the
     parameters (the fields of p and their expressions), the sample time (the field
     of p, or None for an inherited sample time), the inputs through unit delays
-    (zero-based indices), and the argument of the parameters (`MCode.param`).
+    (zero-based indices).
     """
 
     name: str
@@ -82,7 +82,6 @@ class MFunction:
     params: list[tuple[str, str]]
     sample_time: str | None
     delayed: list[int] = field(default_factory=list)
-    param: str = "p"
 
     def write(self, folder: str | Path) -> Path:
         """Write the source of the function in the folder."""
@@ -256,7 +255,7 @@ def block_mfunction(block: CBlock) -> MFunction:
     args = [_arg(p.name, m.inputs, "in") for p in block.inputs]
     outs = [_arg(p.name, m.outputs, "out") for p in block.outputs]
     current = [k for k in range(len(block.inputs)) if k not in delayed]
-    body = m.header + _state(m, delayed)
+    body = _state(m, delayed)
     if delayed:
         names = ", ".join(block.inputs[k].name for k in delayed)
         body += (
@@ -267,7 +266,6 @@ def block_mfunction(block: CBlock) -> MFunction:
             + "end\n"
             "pending = true;\n"
         )
-    body += m.prologue
     body += _conversions(block, args, current) + m.output
     body += "".join(
         f"{outs[k]} = {_to_signal(m.outputs[p.name], m_variable(p.name))};\n"
@@ -276,7 +274,7 @@ def block_mfunction(block: CBlock) -> MFunction:
     )
     if not delayed:
         body += m.update
-    arguments = ", ".join(args + ([m.param] if params else []))
+    arguments = ", ".join(args + (["p"] if params else []))
     signature = f"function {_outputs(outs)}{name}({arguments})"
     main = f"{signature}\n{_header(block, name, delayed)}{body}end\n"
     available = functions(m.functions)
@@ -291,7 +289,6 @@ def block_mfunction(block: CBlock) -> MFunction:
         params,
         None if block.sample_time is None else param_field(block.sample_time),
         delayed,
-        m.param,
     )
 
 
@@ -338,12 +335,14 @@ def _header(block: CBlock, name: str, delayed: list[int]) -> str:
     text = (
         "" if block.mask is None else f"{block.mask.type.split(' (')[0]} of motulator. "
     )
-    param = "p" if block.mcode is None else block.mcode.param
     text += (
-        "Generated by motulator_export from the MATLAB port of motulator and called "
-        "by the MATLAB Function block of the library of motulator, whose folder "
-        "motulator.setup adds to the MATLAB path. The parameters are the fields of "
-        f"the struct {param} (from the mask, [] as NaN)."
+        "Generated by motulator_export from the MATLAB port of motulator; the MATLAB "
+        "Function block of a model contains a copy of this file. The parameters are "
+        "the fields of "
+        "the struct p, the struct of the block in the struct ctrl_par of the "
+        "parameters of the blocks of its control system (e.g., "
+        "ctrl_par.SpeedController, see the function of the parameters of the control "
+        "system, e.g., fvc_params; [] as NaN)."
     )
     if block.mcode is not None and block.mcode.start:
         text += (
@@ -380,9 +379,8 @@ def gradnet_machine_mfunction() -> MFunction:
         f"%{name.upper()} Synchronous machine with a GradNet current map with\n"
         "%   spatial harmonics (SpatialSaturatedSynchronousMachinePars) in rotor\n"
         "%   coordinates, as SynchronousMachine of motulator. Generated by\n"
-        "%   motulator_export from the MATLAB port of motulator and called by the\n"
-        "%   MATLAB Function block of the machine model of the library of motulator,\n"
-        "%   whose folder motulator.setup adds to the MATLAB path.\n"
+        "%   motulator_export from the MATLAB port of motulator; the MATLAB Function\n"
+        "%   block of the machine model of a model contains a copy of this file.\n"
         "persistent par\n"
         "if isempty(par)\n"
         "    g = machine.current_map;\n"
@@ -411,8 +409,9 @@ def reference_luts_mfunction() -> MFunction:
     """
     MATLAB function `sm_reference_luts.m` of the lookup tables of the reference
     generator of synchronous machines (ReferenceGenerator), called by the mask
-    initialization of the block in Simulink (`Mask.simulink_init`), so that the
-    block does not compute the loci at its start (which matters on real-time
+    initialization of the block in Simulink (`Mask.simulink_init`) and by the
+    functions of the parameters of the control systems (`params_mfunction`), so that
+    the block does not compute the loci at its start (which matters on real-time
     targets). The arguments are the machine model `par` of the model initialization
     and the maximum current.
     """
@@ -428,8 +427,10 @@ def reference_luts_mfunction() -> MFunction:
         "%   initialization: the fields n_p, R_s, L_d, L_q, and psi_f of\n"
         "%   SynchronousMachinePars, or n_p, R_s, and the GradNet flux map\n"
         "%   psi_s_dq_fcn of SaturatedSynchronousMachinePars. Called by the mask\n"
-        "%   initialization of the block ReferenceGenerator, so this file must be on\n"
-        "%   the MATLAB path (in the folder of the library, see motulator.setup).\n"
+        "%   initialization of the block ReferenceGenerator (S-functions) and by the\n"
+        "%   functions of the parameters of the control systems (MATLAB Function\n"
+        "%   blocks, e.g., fvc_params), so this file must be on the MATLAB path (in\n"
+        "%   the folder of the library, see motulator.setup).\n"
         "%   Generated by motulator_export from the MATLAB port of motulator.\n"
         "if isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n"
         "    g = par.psi_s_dq_fcn;\n"
@@ -478,50 +479,168 @@ def path_functions(top: Subsystem) -> list[MFunction]:
 
 
 # %%
-# Masks
-def mask_init(block: CBlock) -> str:
+# Parameters of the blocks
+# Variables of the generated function of the parameters, which the variables of the
+# masks must not shadow
+RESERVED = ("ctrl_par", "s", "p")
+
+NUMERIC_FIELDS = (
+    "function p = numeric_fields(p)\n"
+    "%NUMERIC_FIELDS Fields of the struct p as doubles, [] (None) as NaN.\n"
+    "names = fieldnames(p);\n"
+    "for k = 1:numel(names)\n"
+    "    if isempty(p.(names{k}))\n"
+    "        p.(names{k}) = NaN;\n"
+    "    else\n"
+    "        p.(names{k}) = double(p.(names{k}));\n"
+    "    end\n"
+    "end\n"
+    "end\n"
+)
+
+
+def struct_field(name: str) -> str:
+    """Field of the struct of the parameters of a block, e.g., Monitored_signals."""
+    return re.sub(r"\W+", "_", name).strip("_")
+
+
+def struct_path(path: str) -> str:
     """
-    Initialization commands collecting the parameters of a block into the struct p,
-    [] (None) as NaN, and checking them.
+    Struct of the parameters of the block at a path of the control system, e.g.,
+    ctrl_par.FluxVectorController.ReferenceGenerator.
     """
+    return ".".join(["ctrl_par", *map(struct_field, path.split("/"))])
+
+
+def params_name(block: ControlBlock) -> str:
+    """
+    Name of the function of the parameters of a control system, e.g., fvc_params,
+    or fvc_torque_params in the torque-control mode.
+    """
+    names = {b.name: b for _, b in leaves(block.netlist())}
+    prefix = function_name(next(iter(names.values()))).split("_")[1]
+    return f"{prefix}{'_torque' if 'torque_reference' in names else ''}_params"
+
+
+def _block_struct(block: CBlock, var: str) -> str:
+    """Code collecting the parameters of a block into the struct `var`."""
     m = block.mcode
     assert m is not None
-    params = block_params(block)
-    text = (
-        "% Parameters of the MATLAB function: the struct p, [] (None) as NaN\n"
-        "p = struct();\n"
-        + "".join(f"p.{f} = {f};\n" for f, _ in params)
-        + "for f_ = fieldnames(p)'\n"
-        "  if isempty(p.(f_{1}))\n"
-        "    p.(f_{1}) = NaN;\n"
-        "  else\n"
-        "    p.(f_{1}) = double(p.(f_{1}));\n"
-        "  end\n"
-        "end\n"
+    text = "p = struct();\n" + "".join(
+        f"p.{f} = {e};\n" for f, e in block_params(block)
     )
-    text += "".join(f"if {cond}\n  error('{msg}');\nend\n" for cond, msg in m.checks)
-    if m.param != "p":
-        text += f"% The argument of the parameters of the function\n{m.param} = p;\n"
+    text += "p = numeric_fields(p);\n"
+    text += "".join(
+        f"if {cond}\n    error('{block.name}: {msg}');\nend\n" for cond, msg in m.checks
+    )
+    return text + (f"{var} = p;\n" if var != "p" else "")
+
+
+def _mask_code(init: str) -> str:
+    """Initialization commands of a mask, indented as the generated code."""
+    lines = init.splitlines()
+    return "".join(
+        " " * (2 * (len(x) - len(x.lstrip(" ")))) + x.lstrip(" ") + "\n" for x in lines
+    )
+
+
+def _scope(sub: Subsystem, var: str, path: str, funcs: list[str]) -> str:
+    """
+    Code setting the fields of the struct `var` of a subsystem: the structs of the
+    parameters of its blocks. A block with a mask gets a local function of the
+    arguments of its mask (appended to `funcs`), since the variables of a mask are
+    those of its class.
+    """
+    text = f"{var} = struct();\n"
+    for b in sub.blocks:
+        if not isinstance(b, (CBlock, Subsystem)):
+            continue
+        field = f"{var}.{struct_field(b.name)}"
+        child = f"{path}_{struct_field(b.name)}" if path else struct_field(b.name)
+        if b.mask is not None:
+            variables = [p.variable for p in b.mask.params]
+            if set(variables) & set(RESERVED):
+                raise ValueError(f"{b.name}: reserved variables in {variables}")
+            k = len(funcs)  # Before the functions of the blocks in it
+            funcs.append("")
+            init = _mask_code(b.mask.init + b.mask.simulink_init)
+            if isinstance(b, CBlock):
+                body = init + _block_struct(b, "p")
+                out = "p"
+            else:
+                body = init + _scope(b, "s", child, funcs)
+                out = "s"
+            cls = b.mask.type.split(" (")[0]
+            help_text = textwrap.wrap(
+                f"{child.upper()} Parameters of the block {b.name} ({cls} of "
+                "motulator) from the arguments of its class.",
+                84,
+                subsequent_indent="   ",
+            )
+            signature = _wrap_call(f"function {out} = {child}(", ", ".join(variables))
+            funcs[k] = (
+                signature.replace(");\n", ")\n")
+                + "".join(f"%{line}\n" for line in help_text)
+                + f"{body}end\n"
+            )
+            values = ", ".join(p.value for p in b.mask.params)
+            text += _wrap_call(f"{field} = {child}(", values)
+        elif isinstance(b, CBlock):
+            text += _block_struct(b, field)
+        else:
+            raise ValueError(f"{b.name}: a subsystem without a mask")
     return text
 
 
-def block_mask(block: CBlock) -> Mask:
+def _wrap_call(start: str, args: str) -> str:
+    """A function call wrapped into lines with continuations."""
+    lines = textwrap.wrap(f"{start}{args});", 80, break_long_words=False)
+    return " ...\n    ".join(lines) + "\n"
+
+
+def params_mfunction(block: ControlBlock) -> MFunction:
     """
-    Mask of the MATLAB Function block of a block: its mask, or the parameters of
-    the block, with the initialization collecting the parameters into p.
+    MATLAB function of the parameters of the blocks of a control system, e.g.,
+    `ctrl_par = fvc_params(vector_ctrl, speed_ctrl, pwm)`.
+
+    The arguments are those of the top-level class of motulator as structs (the
+    variables of the mask of the control-system block), and the output is a struct
+    with a struct of the parameters for each block, nested as the blocks (e.g.,
+    `ctrl_par.FluxVectorController.ReferenceGenerator`). The function is generated from
+    the masks of the netlist: each block with a mask is a local function of the
+    arguments of its class, which runs the initialization commands of the mask and
+    collects the parameters of the block (or of the blocks in it), an empty
+    parameter ([], None in motulator) being NaN, since a MATLAB Function block does
+    not accept empty parameters, and checks them.
     """
-    init = mask_init(block)
-    if block.mask is not None:
-        prefix = block.mask.init + block.mask.simulink_init
-        prefix += "\n" if prefix else ""
-        return Mask(
-            block.mask.type, block.mask.description, block.mask.params, prefix + init
-        )
-    params = [Param(f, f"{f}: {e}", e) for f, e in block_params(block)]
-    return Mask(
-        PARAMS_MASK,
-        f"Parameters of the block {block.name}, collected into the struct p of its "
-        "MATLAB function.",
-        params,
-        init,
+    name = params_name(block)
+    args = [m.variable for m in block.mask_params]
+    if set(args) & set(RESERVED):
+        raise ValueError(f"{block.name}: reserved variables in {args}")
+    funcs: list[str] = []
+    scope = _scope(block.netlist(), "ctrl_par", "", funcs)
+    period = "ctrl_par = struct();\n% Sampling period\nctrl_par.T_s = T_s;\n"
+    body = _mask_code(block.mask_init) + scope.replace(
+        "ctrl_par = struct();\n", period, 1
     )
+    help_text = textwrap.wrap(
+        f"CTRL_PAR = {name.upper()}({', '.join(a.upper() for a in args)}) gives the "
+        "struct CTRL_PAR with a struct of the parameters for each block of the control "
+        "system, nested as the blocks, and the sampling period T_s, from the "
+        "arguments of the top-level class of "
+        "motulator as structs (see the method params of the MATLAB classes of "
+        "motulator). The MATLAB Function blocks of the control system refer to the "
+        "variable ctrl_par of the model, e.g., to ctrl_par.PWM.compute_output. An "
+        "empty parameter ([], None in motulator) is NaN in the structs of the blocks. "
+        "Generated by motulator_export from the masks of the blocks of the control "
+        "system.",
+        80,
+    )
+    main = (
+        f"function ctrl_par = {name}({', '.join(args)})\n"
+        f"%{name.upper()} Parameters of the blocks of the control system\n"
+        f"%   {block.name}.\n"
+        + "".join(f"%   {line}\n" for line in help_text)
+        + f"{body}end\n"
+    )
+    return MFunction(name, "\n".join([main, *funcs, NUMERIC_FIELDS]), [], [], None)

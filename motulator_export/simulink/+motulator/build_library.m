@@ -1,11 +1,11 @@
-function build_library(code)
+function build_library()
 %BUILD_LIBRARY Build the Simulink library of the blocks of motulator.
 %   MOTULATOR.BUILD_LIBRARY builds the library motulator_lib, whose control
 %   systems run the C port of motulator in S-functions, which are compiled with
 %   mex (it needs a C99 compiler with complex.h: gcc, clang, or MinGW-w64, not
-%   MSVC, see mex -setup C). MOTULATOR.BUILD_LIBRARY('matlab') builds the library
-%   motulator_lib_matlab, whose control systems run the MATLAB port of motulator
-%   in MATLAB Function blocks, which need no compiler.
+%   MSVC, see mex -setup C). The models with MATLAB Function blocks, which run the
+%   MATLAB port of motulator and need no compiler, are built without a library
+%   (see Simulation.build).
 %
 %   Each class of motulator is a block with a mask of the arguments of its class:
 %   the control systems (e.g., VectorControlSystem with FluxVectorController),
@@ -13,13 +13,10 @@ function build_library(code)
 %   models (e.g., SynchronousMachine and MechanicalSystem). The library is saved
 %   in the folder library of the package and shown in the Library Browser.
 %   Simulation builds it when needed, so it rarely needs to be built by hand.
-if nargin < 1
-    code = 'c';
-end
 motulator.setup();
 folder = motulator.internal.library_folder();
-lib = motulator.internal.library_name(code);
-[controls, version] = feval(['control_blocks_' code]);
+lib = 'motulator_lib';
+[controls, version] = control_blocks_c();
 if bdIsLoaded(lib)
     close_system(lib, 0);
 end
@@ -29,15 +26,13 @@ if exist(file, 'file')
 end
 
 % The S-functions of the control systems and the GradNet machine
-if strcmp(code, 'c')
-    sfunctions = {'sfun_gradnet_machine'};
-    for k = 1:numel(controls)
-        sfunctions = [sfunctions, cellstr(controls{k}.sfunction)]; %#ok<AGROW>
-    end
-    for k = 1:numel(sfunctions)
-        fprintf('Compiling %s\n', sfunctions{k});
-        motulator.internal.compile(sfunctions{k}, folder);
-    end
+sfunctions = {'sfun_gradnet_machine'};
+for k = 1:numel(controls)
+    sfunctions = [sfunctions, cellstr(controls{k}.sfunction)]; %#ok<AGROW>
+end
+for k = 1:numel(sfunctions)
+    fprintf('Compiling %s\n', sfunctions{k});
+    motulator.internal.compile(sfunctions{k}, folder);
 end
 
 new_system(lib, 'Library');
@@ -54,7 +49,7 @@ end
 column(lib, 300, {
     @(blk, pos) motulator.internal.add_synchronous_machine(blk, pos), ...
         'SynchronousMachine', 120
-    @(blk, pos) motulator.internal.add_gradnet_machine(blk, pos, code, folder), ...
+    @(blk, pos) motulator.internal.add_gradnet_machine(blk, pos, 'c', folder), ...
         'SynchronousMachine (GradNet)', 120
     @(blk, pos) motulator.internal.add_induction_machine(blk, pos), ...
         'InductionMachine', 80
@@ -90,21 +85,14 @@ end
 end
 
 function write_slblocks(folder)
-% Register the built libraries in the Library Browser
-names = {'motulator_lib', 'motulator (S-functions)'
-    'motulator_lib_matlab', 'motulator (MATLAB Function blocks)'};
+% Register the library in the Library Browser
 lines = {'function blkStruct = slblocks'
-    '%SLBLOCKS Libraries of motulator in the Library Browser.'
-    '%   Written by motulator.build_library.'};
-n = 0;
-for k = 1:size(names, 1)
-    if exist(fullfile(folder, [names{k, 1} '.slx']), 'file')
-        n = n + 1;
-        lines = [lines; {sprintf('Browser(%d).Library = ''%s'';', n, names{k, 1})
-            sprintf('Browser(%d).Name = ''%s'';', n, names{k, 2})}]; %#ok<AGROW>
-    end
-end
-lines = [lines; {'blkStruct.Browser = Browser;'; 'end'}];
+    '%SLBLOCKS Library of motulator in the Library Browser.'
+    '%   Written by motulator.build_library.'
+    'Browser.Library = ''motulator_lib'';'
+    'Browser.Name = ''motulator'';'
+    'blkStruct.Browser = Browser;'
+    'end'};
 fid = fopen(fullfile(folder, 'slblocks.m'), 'w');
 fprintf(fid, '%s\n', lines{:});
 fclose(fid);

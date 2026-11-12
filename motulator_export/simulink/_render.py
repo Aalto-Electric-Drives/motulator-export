@@ -10,10 +10,12 @@ layout (since Simulink places the ports itself), and draws the lines through the
 corners of the wires. The contents of all subsystems are given as rows with the
 paths of the blocks relative to the control-system subsystem.
 
-A MATLAB Function block has the mask of its C block, or a mask of its parameters,
-whose initialization collects the parameters into the struct p of the function. A
-block with inputs without direct feedthrough is a masked subsystem containing the
-MATLAB Function block and the unit delays of these inputs, laid out as a netlist.
+With MATLAB Function blocks, the blocks have no masks: a MATLAB Function block
+refers to the struct of its parameters in the struct `ctrl_par` of the parameters of the
+blocks of the control system (e.g., `ctrl_par.SpeedController`, see
+`_mfunction.params_mfunction`), and the subsystems have the descriptions of their
+classes. A block with inputs without direct feedthrough is a subsystem containing
+the MATLAB Function block and the unit delays of these inputs, laid out as a netlist.
 
 """
 
@@ -23,7 +25,6 @@ from typing import Any
 from motulator_export.plecs._netlist import (
     SIMULINK,
     CBlock,
-    Constant,
     Delay,
     Layout,
     Mask,
@@ -36,13 +37,7 @@ from motulator_export.plecs._netlist import (
     layout,
     leaves,
 )
-from motulator_export.simulink._mfunction import (
-    PARAMS_MASK,
-    MFunction,
-    block_mask,
-    block_mfunction,
-    function_name,
-)
+from motulator_export.simulink._mfunction import MFunction, block_mfunction, struct_path
 from motulator_export.simulink._sfunction import SFunction, block_sfunction
 
 # ASCII replacements in the mask prompts
@@ -60,7 +55,7 @@ CODES = ("c", "matlab")
 class Wrapped(CBlock):
     """
     MATLAB Function block of a block with delayed inputs, in the subsystem of the
-    block (`block`), which has the mask.
+    block (`block`).
     """
 
     block: CBlock | None = None
@@ -107,10 +102,11 @@ def mfunctions(top: Subsystem) -> list[MFunction]:
     return list(out.values())
 
 
-def wrapper(b: CBlock, fun: MFunction) -> Subsystem:
+def wrapper(b: CBlock, fun: MFunction, params: str = "p") -> Subsystem:
     """
     Subsystem of a block with delayed inputs: the MATLAB Function block, named by
-    its function, and the unit delays of the inputs without direct feedthrough.
+    its function, and the unit delays of the inputs without direct feedthrough. The
+    struct of the parameters of the block is the expression `params`.
     """
     name = fun.name
     inner = Wrapped(
@@ -118,7 +114,7 @@ def wrapper(b: CBlock, fun: MFunction) -> Subsystem:
         | {"name": name, "mask": None, "feedthrough": None},
         block=b,
     )
-    sample_time = f"p.{fun.sample_time}"
+    sample_time = f"{params}.{fun.sample_time}"
     delays = [
         Delay(f"Delay {b.inputs[k].name}", b.inputs[k].width, sample_time)
         for k in fun.delayed
@@ -208,7 +204,7 @@ def netlist_rows(
     Rows of the blocks, the alignments, the lines, and the masks of a subsystem and
     its subsystems (see `motulator.internal.add_netlist`), the paths relative to the
     subsystem. The C blocks are S-functions (`code` "c") or MATLAB Function blocks
-    ("matlab").
+    ("matlab"), which have no masks.
     """
     if code not in CODES:
         raise ValueError(f"Unknown code {code}, not in {CODES}")
@@ -264,37 +260,47 @@ def _netlist_block(
     added to `children`.
     """
     if code == "matlab" and isinstance(block, CBlock):
-        return _mfunction_block(block, children, path)
+        return *_mfunction_block(block, children, path), None
     typ, params = _block(block)
     if isinstance(block, Subsystem):
         children.append((block, path))
     mask = block.mask if isinstance(block, (CBlock, Subsystem)) else None
+    if code == "matlab" and mask is not None:
+        # The description of the class instead of its mask
+        return typ, [*params, "Description", mask.description], None
     return typ, params, mask
 
 
 def _mfunction_block(
     b: CBlock, children: list[tuple[Subsystem, str]], path: str
-) -> tuple[str, list[Any], Mask | None]:
+) -> tuple[str, list[Any]]:
     """
-    Type, parameters, and mask of the MATLAB Function block of a C block, or of its
+    Type and parameters of the MATLAB Function block of a C block, or of its
     subsystem with the unit delays, which is added to `children`. The parameters of
-    a MATLAB Function block are its function, its sample time, and the widths of
-    its outputs (see `motulator.internal.add_mfunction`).
+    a MATLAB Function block are its function, its sample time, the widths of its
+    outputs, and the struct of its parameters, an expression of the struct ctrl_par, or
+    "" for a function without parameters (see `motulator.internal.add_mfunction`).
     """
     if isinstance(b, Wrapped):
         assert b.block is not None
         fun = block_mfunction(b.block)
-        mask = None
+        params = struct_path(path.rpartition("/")[0])
     else:
         fun = block_mfunction(b)
-        mask = block_mask(b)
+        params = struct_path(path)
         if fun.delayed:
-            children.append((wrapper(b, fun), path))
-            return "Subsystem", ["ContentPreviewEnabled", "off"], mask
-    sample_time = "" if fun.sample_time is None else f"p.{fun.sample_time}"
+            children.append((wrapper(b, fun, params), path))
+            description = [] if b.mask is None else ["Description", b.mask.description]
+            return "Subsystem", ["ContentPreviewEnabled", "off", *description]
+    sample_time = "" if fun.sample_time is None else f"{params}.{fun.sample_time}"
     widths = [float(w) for w in fun.output_widths]
-    param = [] if fun.param == "p" else [fun.param]
-    return "MATLAB Function", [fun.name, sample_time, widths, *param], mask
+    # A function without parameters has no struct of them
+    return "MATLAB Function", [
+        fun.name,
+        sample_time,
+        widths,
+        params if fun.params else "",
+    ]
 
 
 def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
@@ -308,9 +314,6 @@ def _mask(path: str, b: CBlock | Subsystem, mask: Mask) -> list[Any]:
         for k, p in enumerate(ports)
     ]
     display = "\n".join([f"disp('{b.name}');", *labels])
-    if mask.type == PARAMS_MASK and isinstance(b, CBlock):
-        # The name of the function, as an S-function shows its name
-        display = f"disp('{function_name(b)}');"
     params = [[m.variable, m.prompt.translate(ASCII), m.value] for m in mask.params]
     init = mask.init + mask.simulink_init
     return [path, mask.type, mask.description, init, params, display]
@@ -339,19 +342,7 @@ def _block(b: Any) -> tuple[str, list[str]]:  # noqa: PLR0911
     if isinstance(b, Delay):
         sample_time = "-1" if b.sample_time is None else b.sample_time
         return "UnitDelay", ["SampleTime", sample_time]
-    # The names of the tags, the multiplexers, and the constants are not shown (the
-    # value of a constant is)
-    if isinstance(b, Constant):
-        return "Constant", [
-            "Value",
-            b.value,
-            "SampleTime",
-            b.sample_time,
-            "OutDataTypeStr",
-            "double",
-            "ShowName",
-            "off",
-        ]
+    # The names of the tags and the multiplexers are not shown
     if isinstance(b, Tag):
         params = ["GotoTag", b.tag, "ShowName", "off"]
         visibility = ["TagVisibility", "local"] if b.goto else []

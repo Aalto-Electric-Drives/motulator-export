@@ -4,10 +4,13 @@ Data and code of the blocks of the Simulink library of motulator.
 The library is built in MATLAB by `motulator.build_library` from the files of the
 folder `library` of this package, which `write_library` writes: the data of the
 blocks of the control systems (`control_blocks_c.m` and `control_blocks_matlab.m`:
-the netlists of the control systems with their masks, as for `add_netlist.m`, and
-their inputs and monitored signals), the S-functions (`sfun_*.c`) and the MATLAB
-functions (`mfun_*.m`) of the blocks of the classes and of the GradNet machine, and
-the functions called by the masks (`sm_reference_luts.m`). The blocks of the system
+the netlists of the control systems, as for `add_netlist.m`, with their masks
+(S-functions) or the functions of the parameters of their blocks (MATLAB Function
+blocks), and their inputs and monitored signals), the S-functions (`sfun_*.c`) and
+the MATLAB functions (`mfun_*.m`) of the blocks of the classes and of the GradNet
+machine, the functions of the parameters of the blocks of the control systems with
+MATLAB Function blocks (e.g., `fvc_params.m`), and the functions that they and the
+masks call (`sm_reference_luts.m`). The blocks of the system
 models are built by the MATLAB functions of the package `+motulator/+internal`.
 
 The files are part of the package, so that the library can be built without
@@ -28,6 +31,7 @@ from motulator_export.plecs._library import CONTROL_BLOCKS
 from motulator_export.simulink._common import _m, control_fields
 from motulator_export.simulink._mfunction import (
     gradnet_machine_mfunction,
+    params_mfunction,
     path_functions,
 )
 from motulator_export.simulink._render import CODES, mfunctions, sfunctions
@@ -84,7 +88,7 @@ def library_files() -> dict[str, str]:
         netlist = b.netlist()
         for f in [*sfunctions(netlist), gradnet_machine_sfunction()]:
             files[f"{f.name}.c"] = f.source()
-        for f in [*mfunctions(netlist), *path_functions(netlist)]:
+        for f in [*mfunctions(netlist), *path_functions(netlist), params_mfunction(b)]:
             files[f"{f.name}.m"] = f.source
     f = gradnet_machine_mfunction()
     files[f"{f.name}.m"] = f.source

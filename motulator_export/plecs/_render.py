@@ -15,7 +15,6 @@ from motulator_export.plecs._netlist import (
     PLECS,
     Block,
     CBlock,
-    Constant,
     Delay,
     Mask,
     Placed,
@@ -156,8 +155,6 @@ def _block(sch: _Schematic, b: Block, p: Placed) -> None:
     elif isinstance(b, Tag):
         params = {"Tag": b.tag, "Visibility": "2"}  # Schematic
         sch.component("Goto" if b.goto else "From", b.name, pos, params, show=False)
-    elif isinstance(b, Constant):
-        sch.component("Constant", b.name, pos, {"Value": b.value}, show=False)
     elif isinstance(b, Selector):
         params = {
             "InputWidth": str(b.width),

@@ -1,7 +1,6 @@
 % Build the Simulink model pmsyrm_6kw_gn_fvc_matlab.slx in the folder of this script.
 % Written by motulator_export.simulink from motulator: the system is built
-% with the MATLAB classes of motulator, as in a motulator script, and the
-% model from the blocks of the library of motulator.
+% with the MATLAB classes of motulator, as in a motulator script.
 
 here = fileparts(mfilename('fullpath'));
 addpath(fullfile(here, '..', '..', 'motulator_export', 'simulink'));

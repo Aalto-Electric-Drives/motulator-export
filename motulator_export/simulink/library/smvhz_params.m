@@ -1,0 +1,440 @@
+function ctrl_par = smvhz_params(vhz_ctrl, slew_rate, pwm)
+%SMVHZ_PARAMS Parameters of the blocks of the control system
+%   Observer-based VHz control (SM).
+%   CTRL_PAR = SMVHZ_PARAMS(VHZ_CTRL, SLEW_RATE, PWM) gives the struct CTRL_PAR with
+%   a struct of the parameters for each block of the control system, nested as the
+%   blocks, and the sampling period T_s, from the arguments of the top-level class
+%   of motulator as structs (see the method params of the MATLAB classes of
+%   motulator). The MATLAB Function blocks of the control system refer to the
+%   variable ctrl_par of the model, e.g., to ctrl_par.PWM.compute_output. An empty
+%   parameter ([], None in motulator) is NaN in the structs of the blocks. Generated
+%   by motulator_export from the masks of the blocks of the control system.
+T_s = vhz_ctrl.cfg.T_s;
+ctrl_par = struct();
+% Sampling period
+ctrl_par.T_s = T_s;
+p = struct();
+p.T_s = T_s;
+p = numeric_fields(p);
+ctrl_par.get_measurement = p;
+ctrl_par.RateLimiter = RateLimiter(slew_rate, T_s);
+ctrl_par.PWM = PWM(T_s, pwm.t_d, pwm.u_th, pwm.i_0, pwm.feedforward, pwm.d_min, ...
+    pwm.single_update, pwm.overmodulation);
+ctrl_par.ObserverBasedVHzController = ObserverBasedVHzController(vhz_ctrl.par, ...
+    vhz_ctrl.cfg);
+p = struct();
+p.T_s = T_s;
+p = numeric_fields(p);
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('modulate: T_s must be a scalar.');
+end
+ctrl_par.modulate = p;
+p = struct();
+p.T_s = T_s;
+p = numeric_fields(p);
+ctrl_par.Monitored_signals = p;
+end
+
+function p = RateLimiter(rate_limit, T_s)
+%RATELIMITER Parameters of the block RateLimiter (RateLimiter of motulator) from the
+%   arguments of its class.
+p = struct();
+p.rate_limit = rate_limit;
+p.T_s = T_s;
+p = numeric_fields(p);
+if ~isscalar(p.rate_limit) || isnan(p.rate_limit)
+    error('RateLimiter: rate_limit must be a scalar.');
+end
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('RateLimiter: T_s must be a scalar.');
+end
+end
+
+function s = PWM(T_s, t_d, u_th, i_0, feedforward, d_min, single_update, ...
+    overmodulation)
+%PWM Parameters of the block PWM (PWM of motulator) from the arguments of its class.
+% MME overmodulation, or MPE
+mme = strcmp(overmodulation, 'MME');
+s = struct();
+p = struct();
+p.T_s = T_s;
+p.t_d = t_d;
+p.u_th = u_th;
+p.i_0 = i_0;
+p.feedforward = feedforward;
+p.d_min = d_min;
+p.single_update = single_update;
+p.mme = mme;
+p = numeric_fields(p);
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('compute_output: T_s must be a scalar.');
+end
+if ~isscalar(p.t_d) || isnan(p.t_d)
+    error('compute_output: t_d must be a scalar.');
+end
+if ~isscalar(p.u_th) || isnan(p.u_th)
+    error('compute_output: u_th must be a scalar.');
+end
+if ~isscalar(p.i_0) || isnan(p.i_0)
+    error('compute_output: i_0 must be a scalar.');
+end
+if ~isscalar(p.feedforward) || isnan(p.feedforward)
+    error('compute_output: feedforward must be a scalar.');
+end
+if ~isscalar(p.d_min) || isnan(p.d_min)
+    error('compute_output: d_min must be a scalar.');
+end
+if ~isscalar(p.single_update) || isnan(p.single_update)
+    error('compute_output: single_update must be a scalar.');
+end
+if ~isscalar(p.mme) || isnan(p.mme)
+    error('compute_output: mme must be a scalar.');
+end
+s.compute_output = p;
+p = struct();
+p.T_s = T_s;
+p.t_d = t_d;
+p.u_th = u_th;
+p.i_0 = i_0;
+p.feedforward = feedforward;
+p.d_min = d_min;
+p.single_update = single_update;
+p.mme = mme;
+p = numeric_fields(p);
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('get_realized_voltage: T_s must be a scalar.');
+end
+if ~isscalar(p.t_d) || isnan(p.t_d)
+    error('get_realized_voltage: t_d must be a scalar.');
+end
+if ~isscalar(p.u_th) || isnan(p.u_th)
+    error('get_realized_voltage: u_th must be a scalar.');
+end
+if ~isscalar(p.i_0) || isnan(p.i_0)
+    error('get_realized_voltage: i_0 must be a scalar.');
+end
+if ~isscalar(p.feedforward) || isnan(p.feedforward)
+    error('get_realized_voltage: feedforward must be a scalar.');
+end
+if ~isscalar(p.d_min) || isnan(p.d_min)
+    error('get_realized_voltage: d_min must be a scalar.');
+end
+if ~isscalar(p.single_update) || isnan(p.single_update)
+    error('get_realized_voltage: single_update must be a scalar.');
+end
+if ~isscalar(p.mme) || isnan(p.mme)
+    error('get_realized_voltage: mme must be a scalar.');
+end
+s.get_realized_voltage = p;
+end
+
+function s = ObserverBasedVHzController(par, cfg)
+%OBSERVERBASEDVHZCONTROLLER Parameters of the block ObserverBasedVHzController
+%   (ObserverBasedVHzController of motulator) from the arguments of its class.
+% First-order angle estimation, the pole matched to the sampling period
+% (matched_pole)
+k_theta = -expm1(-cfg.alpha_o*cfg.T_s)/cfg.T_s;
+% Default observer gain of create_vhz_observer, k_o(w_m) = k0 + k1*abs(w_m)
+% (k0 = NaN: sigma0 of the machine model, see the FluxObserver)
+k_o = cfg.k_o;
+if isempty(k_o)
+    k_o = [NaN 0.2];
+end
+% Flux and torque controller without the integral action
+alpha_psi = cfg.alpha_psi;
+alpha_i = 0;
+s = struct();
+s.FluxObserver = ObserverBasedVHzController_FluxObserver(par, k_theta, k_o, ...
+    cfg.T_s);
+p = struct();
+p.alpha_f = cfg.alpha_f;
+p.T_s = cfg.T_s;
+p = numeric_fields(p);
+if ~isscalar(p.alpha_f) || isnan(p.alpha_f)
+    error('tau_M_lpf: alpha_f must be a scalar.');
+end
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('tau_M_lpf: T_s must be a scalar.');
+end
+s.tau_M_lpf = p;
+s.ReferenceGenerator = ObserverBasedVHzController_ReferenceGenerator(par, ...
+    cfg.i_s_max, cfg.psi_s_min, cfg.psi_s_max, cfg.k_u, cfg.k_mtpv);
+p = struct();
+p = numeric_fields(p);
+s.compute_standby_output = p;
+s.FluxTorqueController = ObserverBasedVHzController_FluxTorqueController(par, ...
+    alpha_psi, cfg.alpha_tau, alpha_i, cfg.T_s);
+end
+
+function p = ObserverBasedVHzController_FluxObserver(par, k_theta, k_o, T_s)
+%OBSERVERBASEDVHZCONTROLLER_FLUXOBSERVER Parameters of the block FluxObserver
+%   (FluxObserver of motulator) from the arguments of its class.
+% Fields of the machine model par for the C-Script: SynchronousMachinePars, or
+% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn
+par_n_p = par.n_p;
+par_R_s = par.R_s;
+if isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)
+    par_L_d = [];
+    par_L_q = [];
+    par_psi_f = [];
+    gn_in_dim = par.psi_s_dq_fcn.in_dim;
+    gn_mu_dim = par.psi_s_dq_fcn.mu_dim;
+    gn_W = par.psi_s_dq_fcn.W;
+    gn_b = par.psi_s_dq_fcn.b;
+    gn_mu_log = par.psi_s_dq_fcn.mu_log;
+    gn_bias = par.psi_s_dq_fcn.bias;
+    gn_activation = par.psi_s_dq_fcn.activation;
+    gn_beta_log = par.psi_s_dq_fcn.beta_log;
+    gn_p = par.psi_s_dq_fcn.p;
+    gn_in_base = par.psi_s_dq_fcn.in_base;
+    gn_out_base = par.psi_s_dq_fcn.out_base;
+else
+    par_L_d = par.L_d;
+    par_L_q = par.L_q;
+    par_psi_f = par.psi_f;
+    gn_in_dim = [];
+    gn_mu_dim = [];
+    gn_W = [];
+    gn_b = [];
+    gn_mu_log = [];
+    gn_bias = [];
+    gn_activation = [];
+    gn_beta_log = [];
+    gn_p = [];
+    gn_in_base = [];
+    gn_out_base = [];
+end
+p = struct();
+p.k_theta = k_theta;
+p.k_o = k_o;
+p.T_s = T_s;
+p.par_n_p = par_n_p;
+p.par_R_s = par_R_s;
+p.par_L_d = par_L_d;
+p.par_L_q = par_L_q;
+p.par_psi_f = par_psi_f;
+p.gn_in_dim = gn_in_dim;
+p.gn_mu_dim = gn_mu_dim;
+p.gn_W = gn_W;
+p.gn_b = gn_b;
+p.gn_mu_log = gn_mu_log;
+p.gn_bias = gn_bias;
+p.gn_activation = gn_activation;
+p.gn_beta_log = gn_beta_log;
+p.gn_p = gn_p;
+p.gn_in_base = gn_in_base;
+p.gn_out_base = gn_out_base;
+p = numeric_fields(p);
+if ~isscalar(p.k_theta) || isnan(p.k_theta)
+    error('FluxObserver: k_theta must be a scalar.');
+end
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('FluxObserver: T_s must be a scalar.');
+end
+if numel(p.k_o) ~= 2
+    error('FluxObserver: k_o must be [k0 k1].');
+end
+if ~isscalar(p.par_n_p) || isnan(p.par_n_p)
+    error('FluxObserver: par_n_p must be a scalar.');
+end
+if ~isscalar(p.par_R_s) || isnan(p.par_R_s)
+    error('FluxObserver: par_R_s must be a scalar.');
+end
+if isnan(p.gn_in_dim) && any(isnan([p.par_L_d(:); p.par_L_q(:); p.par_psi_f(:)]))
+    error('FluxObserver: L_d, L_q, and psi_f needed without a flux map.');
+end
+end
+
+function p = ObserverBasedVHzController_ReferenceGenerator(par, i_s_max, ...
+    psi_s_min, psi_s_max, k_u, k_mtpv)
+%OBSERVERBASEDVHZCONTROLLER_REFERENCEGENERATOR Parameters of the block
+%   ReferenceGenerator (ReferenceGenerator of motulator) from the arguments of its
+%   class.
+% Fields of the machine model par for the C-Script: SynchronousMachinePars, or
+% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn
+par_n_p = par.n_p;
+par_R_s = par.R_s;
+if isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)
+    par_L_d = [];
+    par_L_q = [];
+    par_psi_f = [];
+    gn_in_dim = par.psi_s_dq_fcn.in_dim;
+    gn_mu_dim = par.psi_s_dq_fcn.mu_dim;
+    gn_W = par.psi_s_dq_fcn.W;
+    gn_b = par.psi_s_dq_fcn.b;
+    gn_mu_log = par.psi_s_dq_fcn.mu_log;
+    gn_bias = par.psi_s_dq_fcn.bias;
+    gn_activation = par.psi_s_dq_fcn.activation;
+    gn_beta_log = par.psi_s_dq_fcn.beta_log;
+    gn_p = par.psi_s_dq_fcn.p;
+    gn_in_base = par.psi_s_dq_fcn.in_base;
+    gn_out_base = par.psi_s_dq_fcn.out_base;
+else
+    par_L_d = par.L_d;
+    par_L_q = par.L_q;
+    par_psi_f = par.psi_f;
+    gn_in_dim = [];
+    gn_mu_dim = [];
+    gn_W = [];
+    gn_b = [];
+    gn_mu_log = [];
+    gn_bias = [];
+    gn_activation = [];
+    gn_beta_log = [];
+    gn_p = [];
+    gn_in_base = [];
+    gn_out_base = [];
+end
+% Lookup tables of the loci, computed by the block at its start if empty
+luts = [];
+% Lookup tables of the loci by sm_reference_luts.m of the library
+luts = sm_reference_luts(par, i_s_max);
+p = struct();
+p.i_s_max = i_s_max;
+p.psi_s_min = psi_s_min;
+p.psi_s_max = psi_s_max;
+p.k_u = k_u;
+p.k_mtpv = k_mtpv;
+p.par_n_p = par_n_p;
+p.par_R_s = par_R_s;
+p.par_L_d = par_L_d;
+p.par_L_q = par_L_q;
+p.par_psi_f = par_psi_f;
+p.gn_in_dim = gn_in_dim;
+p.gn_mu_dim = gn_mu_dim;
+p.gn_W = gn_W;
+p.gn_b = gn_b;
+p.gn_mu_log = gn_mu_log;
+p.gn_bias = gn_bias;
+p.gn_activation = gn_activation;
+p.gn_beta_log = gn_beta_log;
+p.gn_p = gn_p;
+p.gn_in_base = gn_in_base;
+p.gn_out_base = gn_out_base;
+p.luts = luts;
+p = numeric_fields(p);
+if ~isscalar(p.i_s_max) || isnan(p.i_s_max)
+    error('ReferenceGenerator: i_s_max must be a scalar.');
+end
+if ~isscalar(p.psi_s_max) || isnan(p.psi_s_max)
+    error('ReferenceGenerator: psi_s_max must be a scalar.');
+end
+if ~isscalar(p.k_u) || isnan(p.k_u)
+    error('ReferenceGenerator: k_u must be a scalar.');
+end
+if ~isscalar(p.k_mtpv) || isnan(p.k_mtpv)
+    error('ReferenceGenerator: k_mtpv must be a scalar.');
+end
+if ~isscalar(p.par_n_p) || isnan(p.par_n_p)
+    error('ReferenceGenerator: par_n_p must be a scalar.');
+end
+if ~isscalar(p.par_R_s) || isnan(p.par_R_s)
+    error('ReferenceGenerator: par_R_s must be a scalar.');
+end
+if isnan(p.gn_in_dim) && any(isnan([p.par_L_d(:); p.par_L_q(:); p.par_psi_f(:)]))
+    error('ReferenceGenerator: L_d, L_q, and psi_f needed without a flux map.');
+end
+if ~isequal(size(p.luts), [16, 6])
+    error('ReferenceGenerator: luts must be a 16-by-6 matrix (sm_reference_luts.m).');
+end
+if p.par_psi_f == 0 && ~(p.psi_s_min > 0)
+    error('ReferenceGenerator: psi_s_min must be positive for machines without PMs.');
+end
+end
+
+function p = ObserverBasedVHzController_FluxTorqueController(par, alpha_psi, ...
+    alpha_tau, alpha_i, T_s)
+%OBSERVERBASEDVHZCONTROLLER_FLUXTORQUECONTROLLER Parameters of the block
+%   FluxTorqueController (FluxTorqueController of motulator) from the arguments of
+%   its class.
+% Fields of the machine model par for the C-Script: SynchronousMachinePars, or
+% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn
+par_n_p = par.n_p;
+par_R_s = par.R_s;
+if isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)
+    par_L_d = [];
+    par_L_q = [];
+    par_psi_f = [];
+    gn_in_dim = par.psi_s_dq_fcn.in_dim;
+    gn_mu_dim = par.psi_s_dq_fcn.mu_dim;
+    gn_W = par.psi_s_dq_fcn.W;
+    gn_b = par.psi_s_dq_fcn.b;
+    gn_mu_log = par.psi_s_dq_fcn.mu_log;
+    gn_bias = par.psi_s_dq_fcn.bias;
+    gn_activation = par.psi_s_dq_fcn.activation;
+    gn_beta_log = par.psi_s_dq_fcn.beta_log;
+    gn_p = par.psi_s_dq_fcn.p;
+    gn_in_base = par.psi_s_dq_fcn.in_base;
+    gn_out_base = par.psi_s_dq_fcn.out_base;
+else
+    par_L_d = par.L_d;
+    par_L_q = par.L_q;
+    par_psi_f = par.psi_f;
+    gn_in_dim = [];
+    gn_mu_dim = [];
+    gn_W = [];
+    gn_b = [];
+    gn_mu_log = [];
+    gn_bias = [];
+    gn_activation = [];
+    gn_beta_log = [];
+    gn_p = [];
+    gn_in_base = [];
+    gn_out_base = [];
+end
+p = struct();
+p.alpha_psi = alpha_psi;
+p.alpha_tau = alpha_tau;
+p.alpha_i = alpha_i;
+p.T_s = T_s;
+p.par_n_p = par_n_p;
+p.par_R_s = par_R_s;
+p.par_L_d = par_L_d;
+p.par_L_q = par_L_q;
+p.par_psi_f = par_psi_f;
+p.gn_in_dim = gn_in_dim;
+p.gn_mu_dim = gn_mu_dim;
+p.gn_W = gn_W;
+p.gn_b = gn_b;
+p.gn_mu_log = gn_mu_log;
+p.gn_bias = gn_bias;
+p.gn_activation = gn_activation;
+p.gn_beta_log = gn_beta_log;
+p.gn_p = gn_p;
+p.gn_in_base = gn_in_base;
+p.gn_out_base = gn_out_base;
+p = numeric_fields(p);
+if ~isscalar(p.alpha_psi) || isnan(p.alpha_psi)
+    error('FluxTorqueController: alpha_psi must be a scalar.');
+end
+if ~isscalar(p.alpha_tau) || isnan(p.alpha_tau)
+    error('FluxTorqueController: alpha_tau must be a scalar.');
+end
+if ~isscalar(p.alpha_i) || isnan(p.alpha_i)
+    error('FluxTorqueController: alpha_i must be a scalar.');
+end
+if ~isscalar(p.T_s) || isnan(p.T_s)
+    error('FluxTorqueController: T_s must be a scalar.');
+end
+if ~isscalar(p.par_n_p) || isnan(p.par_n_p)
+    error('FluxTorqueController: par_n_p must be a scalar.');
+end
+if ~isscalar(p.par_R_s) || isnan(p.par_R_s)
+    error('FluxTorqueController: par_R_s must be a scalar.');
+end
+if isnan(p.gn_in_dim) && any(isnan([p.par_L_d(:); p.par_L_q(:); p.par_psi_f(:)]))
+    error('FluxTorqueController: L_d, L_q, and psi_f needed without a flux map.');
+end
+end
+
+function p = numeric_fields(p)
+%NUMERIC_FIELDS Fields of the struct p as doubles, [] (None) as NaN.
+names = fieldnames(p);
+for k = 1:numel(names)
+    if isempty(p.(names{k}))
+        p.(names{k}) = NaN;
+    else
+        p.(names{k}) = double(p.(names{k}));
+    end
+end
+end
