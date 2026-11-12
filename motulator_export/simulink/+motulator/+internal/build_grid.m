@@ -4,10 +4,10 @@ function scope = build_grid(sys, mdl, c, lib, info)
 %   library LIB (with LIB empty, the blocks themselves instead of links to the
 %   library, see add_part and add_control_block): the control system C (see
 %   control_system), whose block INFO is described by the data of the library (see
-%   block_info), the computational delay
-%   of one sampling period, the carrier comparison, the converter, the AC filter,
-%   and the grid of the grid converter system MDL, with the references. The masks
-%   of the blocks refer to the parameters of the model. The root-level output
+%   block_info), the computational delay of one sampling period, the carrier
+%   comparison, the converter, the AC filter, and the grid of the grid converter
+%   system MDL, with the references. The blocks refer to the parameters of the
+%   model. The root-level output
 %   ports 'mdl' and 'ctrl' give the converter currents [i_c_a i_c_b i_c_c] (and the
 %   grid currents [i_g_a i_g_b i_g_c] with the LCL filter) and the monitored
 %   signals of the control system, which are also shown in a scope, whose groups

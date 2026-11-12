@@ -4,14 +4,14 @@ function scope = build_drive(sys, mdl, c, lib, info)
 %   library LIB (with LIB empty, the blocks themselves instead of links to the
 %   library, see add_part and add_control_block): the control system C (see
 %   control_system), whose block INFO is described by the data of the library (see
-%   block_info), the computational delay
-%   of one sampling period, the carrier comparison, the converter, the machine,
-%   and the mechanics of the drive MDL, with the references and the load torque
-%   (or the external rotor speed of ExternalRotorSpeed). The measured rotor angle
+%   block_info), the computational delay of one sampling period, the carrier
+%   comparison, the converter, the machine, and the mechanics of the drive MDL,
+%   with the references and the load torque (or the external rotor speed of
+%   ExternalRotorSpeed). The measured rotor angle
 %   (synchronous machine) or speed (induction machine) comes from the sensor of
 %   the drive (mdl.sensors); without the sensor, the input of the sensorless
 %   control system is zero.
-%   The masks of the blocks refer to the parameters of the model. The root-level
+%   The blocks refer to the parameters of the model. The root-level
 %   output ports 'mdl' and 'ctrl' give the machine signals [i_a i_b i_c w_M
 %   theta_M tau_M] and the monitored signals of the control system, which are also
 %   shown in a scope, whose groups SCOPE {name, indices in [mdl; ctrl]} are

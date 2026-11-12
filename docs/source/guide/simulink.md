@@ -1,6 +1,6 @@
 # Simulink models
 
-The Simulink models are built from a library of the blocks of *motulator*: each class is a block with a mask of the arguments of its class, nested as in *motulator*. A model is built in MATLAB by a script that builds the system with the MATLAB classes of *motulator* (the package `+motulator` of *motulator-export*), as a *motulator* script does:
+By default, the Simulink models are built from a library of the blocks of *motulator*: each class is a block with a mask of the arguments of its class, nested as in *motulator*. The models can also be built with [MATLAB Function blocks](#matlab-function-blocks), without the library. A model is built in MATLAB by a script that builds the system with the MATLAB classes of *motulator* (the package `+motulator` of *motulator-export*), as a *motulator* script does:
 
 ```matlab
 addpath('motulator-export/motulator_export/simulink')  % The package, see Setup
@@ -47,7 +47,7 @@ class: only-dark
 
 ## Setup
 
-Add the folder `motulator_export/simulink` of the package (see [](getting_started.md#installation)) to the MATLAB path, e.g., `addpath('motulator-export/motulator_export/simulink')` for a clone of the repository. The first model builds the library of the blocks (`motulator.build_library`), which takes a few minutes, since it compiles the blocks of the control systems into S-functions; this needs a C compiler, see [](getting_started.md#requirements). The library is built again only when the package changes.
+Add the folder `motulator_export/simulink` of the package (see [](getting_started.md#installation)) to the MATLAB path, e.g., `addpath('motulator-export/motulator_export/simulink')` for a clone of the repository. The first model with S-functions (the default) builds the library of the blocks (`motulator.build_library`), which takes a few minutes, since it compiles the blocks of the control systems into S-functions; this needs a C compiler, see [](getting_started.md#requirements). The library is built again only when the package changes.
 
 The MATLAB classes have the names of the classes of *motulator*, in the same packages, e.g., `motulator.drive.control.sm.FluxVectorController`, and the arguments that the export supports, with the defaults of *motulator* (`[]` means `None`). They are listed in [](supported.md), and their help shows their arguments, e.g., `help motulator.drive.control.sm.FluxVectorControllerCfg`. The references and the load torque are constants or step signals (`StepSignal`).
 
@@ -100,6 +100,7 @@ The signals are those of the [PLECS models](plecs.md#simulating-from-python). In
 ## Good to know
 
 - The script of `write_model` refers to the package by a path relative to the folder of the model. If you move the files, write the model again.
+- The initialization script of a model with MATLAB Function blocks defines its variables (`ctrl`, `machine`, etc.) in the base workspace, replacing the variables of the same names, e.g., the objects of the build script.
 - A model with S-functions needs the library: a model opened in a new MATLAB session finds it if the folder `motulator_export/simulink` is on the MATLAB path.
 - The models agree with *motulator* as the PLECS models do, see [](plecs.md#accuracy).
 - As in the PLECS models, the measured rotor angle (synchronous machine) or speed (induction machine) comes from the sensor of the drive, which sensored control needs (`DriveSensors(theta_M=Sensor())` or `DriveSensors(w_M=Sensor())`). Without the sensor, this input of the sensorless control system is zero.
