@@ -1,8 +1,8 @@
 """
 Export of motulator systems to Simulink, for all the supported system types.
 
-The model is built in MATLAB from the blocks of the library of motulator, by a
-script that builds the system with the MATLAB classes of motulator (see `_script`).
+The model is built in MATLAB by a script that builds the system with the MATLAB
+classes of motulator (see `_script`).
 The supported systems are those of the PLECS export (which supports a superset,
 see `plecs._sm`, `plecs._im`, and `plecs._grid`) with the converter modeled by the
 carrier comparison with a stiff DC bus, without the dead time, the threshold
