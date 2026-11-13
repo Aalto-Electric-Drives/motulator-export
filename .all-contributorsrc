@@ -1,0 +1,54 @@
+{
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 50,
+  "commit": false,
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "mhinkkan",
+      "name": "Marko Hinkkanen",
+      "avatar_url": "https://avatars.githubusercontent.com/u/76600872?v=4",
+      "profile": "https://research.aalto.fi/en/persons/marko-hinkkanen",
+      "contributions": [
+        "code",
+        "ideas"
+      ]
+    },
+    {
+      "login": "MiSaren",
+      "name": "Mikko Sarén",
+      "avatar_url": "https://avatars.githubusercontent.com/u/166725462?v=4",
+      "profile": "https://github.com/MiSaren",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "HannuHar",
+      "name": "Hannu Hartikainen",
+      "avatar_url": "https://avatars.githubusercontent.com/u/96597650?v=4",
+      "profile": "https://github.com/HannuHar",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "lefterisg4",
+      "name": "Eleftherios Kontodinas",
+      "avatar_url": "https://avatars.githubusercontent.com/u/43557907?v=4",
+      "profile": "https://github.com/lefterisg4",
+      "contributions": [
+        "ideas"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "skipCi": true,
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "projectName": "motulator-export",
+  "projectOwner": "Aalto-Electric-Drives",
+  "commitType": "docs"
+}
