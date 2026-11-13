@@ -42,3 +42,28 @@ pip install motulator-export
 On Windows, the environment is created and activated with `py -m venv .venv` and `.venv\Scripts\activate`. The requirements of PLECS, Simulink, and the native simulation, e.g., a C compiler, and the examples of the repository are described in [Getting started](https://aalto-electric-drives.github.io/motulator-export/guide/getting_started.html).
 
 For development, clone the repository and install the package with `pip install -e ".[dev]"`; see [Development](https://aalto-electric-drives.github.io/motulator-export/guide/development.html).
+
+## Contributors
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+
+<!-- prettier-ignore-start -->
+
+<!-- markdownlint-disable -->
+
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://research.aalto.fi/en/persons/marko-hinkkanen"><img src="https://avatars.githubusercontent.com/u/76600872?v=4?s=50" width="50px;" alt="Marko Hinkkanen"/><br /><sub><b>Marko Hinkkanen</b></sub></a><br /><a href="https://github.com/Aalto-Electric-Drives/motulator-export/commits?author=mhinkkan" title="Code">💻</a> <a href="#ideas-mhinkkan" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/MiSaren"><img src="https://avatars.githubusercontent.com/u/166725462?v=4?s=50" width="50px;" alt="Mikko Sarén"/><br /><sub><b>Mikko Sarén</b></sub></a><br /><a href="#ideas-MiSaren" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/HannuHar"><img src="https://avatars.githubusercontent.com/u/96597650?v=4?s=50" width="50px;" alt="Hannu Hartikainen"/><br /><sub><b>Hannu Hartikainen</b></sub></a><br /><a href="#ideas-HannuHar" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/lefterisg4"><img src="https://avatars.githubusercontent.com/u/43557907?v=4?s=50" width="50px;" alt="Eleftherios Kontodinas"/><br /><sub><b>Eleftherios Kontodinas</b></sub></a><br /><a href="#ideas-lefterisg4" title="Ideas, Planning, & Feedback">🤔</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
