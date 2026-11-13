@@ -15,15 +15,17 @@ classdef Simulation < handle
     %
     %   With CODE 'matlab', the control system runs MATLAB Function blocks, and the
     %   model needs neither the library nor this package: the blocks are in the
-    %   model, and the MATLAB Function blocks contain their code. The blocks of the
-    %   control system have no masks: each refers to its struct in the struct ctrl_par
-    %   of the parameters of the blocks (e.g., ctrl_par.SpeedController), which is
-    %   computed from the arguments of CTRL by the function of the parameters of
-    %   the control system (e.g., fvc_params.m in the folder library of the
-    %   package). The parameters of the model, i.e., ctrl_par and the arguments of the
-    %   parts of MDL as structs, are in the script init_NAME.m, saved next to the
-    %   model, which runs it at the start of a simulation (its callback InitFcn). A
-    %   block copied to another model needs only the variables of the script.
+    %   model, and the functions that the MATLAB Function blocks call are m-files
+    %   in the folder of the model (e.g., mfun_fvc_speed_controller.m). The
+    %   parameters of the model, i.e., the arguments of the parts of MDL and CTRL
+    %   as structs, are in the script init_NAME.m in the same folder, which the
+    %   model runs at the start of a simulation (its callback InitFcn). The blocks
+    %   of the control system have no masks: each refers to its struct in the
+    %   struct ctrl_par of the parameters of the blocks (e.g.,
+    %   ctrl_par.SpeedController), which the script computes from the arguments of
+    %   CTRL by the function of the parameters of the control system (e.g.,
+    %   fvc_params.m). A block copied to another model needs the variables of the
+    %   script and the m-files.
     %
     %   RES = SIM.SIMULATE(t_stop=...) simulates the built model, by default to its
     %   stop time, and returns the results (SimulationResults).
@@ -66,13 +68,13 @@ classdef Simulation < handle
                 % The parameters in the initialization script, which the model
                 % runs at each start, and the blocks in the model
                 lib = '';
-                ctrl_params = motulator.internal.control_params(info, c.variables);
                 c.T_s_expr = 'ctrl_par.T_s';
                 init = ['init_' name];
                 motulator.internal.write_init(fullfile(folder, [init '.m']), name, ...
-                    {'System model', variables
-                    ['Blocks of the control system (' info.params ')'], ...
-                    struct('ctrl_par', ctrl_params)});
+                    {'System model', variables; 'Control system', c.variables}, ...
+                    'Parameters of the blocks of the control system', ...
+                    {sprintf('ctrl_par = %s(%s);', info.params, ...
+                    strjoin(cellstr(info.params_args), ', '))});
                 init_fcn = sprintf( ...
                     'run(fullfile(fileparts(get_param(bdroot, ''FileName'')), ''%s.m''));', ...
                     init);
@@ -91,6 +93,9 @@ classdef Simulation < handle
             motulator.internal.new_model(name, folder, variables, c.T_s, ...
                 opts.t_stop, init_fcn);
             obj.scope = builder(name, obj.mdl, c, lib, info);
+            if strcmp(code, 'matlab')
+                motulator.internal.copy_functions(name, folder, info.params);
+            end
             obj.ctrl_signals = info.signals;
             obj.file = fullfile(folder, [name '.slx']);
             save_system(name, obj.file);

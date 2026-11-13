@@ -65,13 +65,27 @@ Without a C compiler, build the model with MATLAB Function blocks:
 simulation.build('ipmsm', t_stop=1.2, code='matlab');
 ```
 
-The blocks then run a MATLAB port of the same control code, copied from the files `mfun_*.m` of the folder `motulator_export/simulink/library`, so you can read it without MATLAB. The results are the same as with the S-functions, to the rounding errors. The first simulation compiles the MATLAB Function blocks, which takes up to a minute.
+The blocks then run a MATLAB port of the same control code. The results are the same as with the S-functions, to the rounding errors. The first simulation compiles the MATLAB Function blocks, which takes up to half a minute.
 
-The model then needs no library and no compiler, and not even *motulator-export*: its blocks are in the model itself, and the MATLAB Function blocks contain their code, so you can copy the model, or a single subsystem of its control system, to another computer, e.g., to a model of a real-time target in the laboratory.
+The model then needs no library and no compiler, and not even *motulator-export*. `Simulation.build` saves next to the model the files that it needs:
 
-The blocks of the control system have no masks. Each block reads its parameters from its struct in the struct `ctrl_par`, e.g., `ctrl_par.SpeedController` and `ctrl_par.FluxVectorController.ReferenceGenerator`, nested as the blocks. The parameters of the model, i.e., `ctrl_par` and the parts of the system model (e.g., `machine` and `mechanics`), are in the script `init_ipmsm.m`, saved next to the model, which runs it at the start of a simulation (its callback `InitFcn`). A block copied to another model needs only the variables of this script.
+- `mfun_*.m`: the functions of the blocks, e.g., `mfun_fvc_speed_controller.m`. Each MATLAB Function block only calls its function, so you can read the code, also without MATLAB, and keep it under version control.
+- `init_ipmsm.m`: the parameters of the model, which the model runs at the start of a simulation (its callback `InitFcn`).
+- `fvc_params.m` (flux-vector control): the function of the parameters of the blocks, which the initialization script calls, and `sm_reference_luts.m` (synchronous machines), which it calls.
 
-`Simulation.build` computes `ctrl_par` from the arguments of the control system with the function of the parameters of the control system, e.g., `ctrl_par = fvc_params(vector_ctrl, speed_ctrl, pwm)` of flux-vector control. These functions are the files `*_params.m` of the same folder as the code of the blocks, and they show how the parameters of each block follow from the arguments, e.g., the gains of the observer from `cfg.alpha_o`. To change a parameter, change the build script and build the model again, or change a parameter of a block in the initialization script.
+The initialization script has the arguments of the classes once, as the build script does, and computes the parameters of the blocks from them:
+
+```matlab
+vector_ctrl.par.n_p = 3;
+vector_ctrl.cfg.i_s_max = 6.5;
+speed_ctrl.J = 0.015;
+% ...
+ctrl_par = fvc_params(vector_ctrl, speed_ctrl, pwm);
+```
+
+The blocks of the control system have no masks. Each block reads its parameters from its struct in the struct `ctrl_par`, e.g., `ctrl_par.SpeedController` and `ctrl_par.FluxVectorController.ReferenceGenerator`, nested as the blocks, and `fvc_params.m` shows how the parameters of each block follow from the arguments, e.g., the gains of the observer from `cfg.alpha_o`. To change a parameter, change it in the initialization script, or change the build script and build the model again.
+
+To use the model, or a single subsystem of its control system, elsewhere, e.g., in a model of a real-time target in the laboratory, copy it with these files.
 
 ## From Python
 
@@ -100,7 +114,8 @@ The signals are those of the [PLECS models](plecs.md#simulating-from-python). In
 ## Good to know
 
 - The script of `write_model` refers to the package by a path relative to the folder of the model. If you move the files, write the model again.
-- The initialization script of a model with MATLAB Function blocks defines its variables (`ctrl_par`, `machine`, etc.) in the base workspace, replacing the variables of the same names, e.g., the objects `machine` and `mechanics` of the build script (`mdl` and `ctrl` are kept).
+- The initialization script of a model with MATLAB Function blocks adds its folder to the MATLAB path and defines its variables (`machine`, `vector_ctrl`, `ctrl_par`, etc.) in the base workspace, replacing the variables of the same names, e.g., the objects `machine` and `vector_ctrl` of the build script (`mdl` and `ctrl` are kept).
+- MATLAB finds the functions of a model with MATLAB Function blocks by their names: first in the current folder and then on the MATLAB path, where the initialization script puts the folder of the model first. Keep no other copies of the files, e.g., those of a model built with another version of the package, in the current folder.
 - A model with S-functions needs the library: a model opened in a new MATLAB session finds it if the folder `motulator_export/simulink` is on the MATLAB path.
 - The models agree with *motulator* as the PLECS models do, see [](plecs.md#accuracy).
 - As in the PLECS models, the measured rotor angle (synchronous machine) or speed (induction machine) comes from the sensor of the drive, which sensored control needs (`DriveSensors(theta_M=Sensor())` or `DriveSensors(w_M=Sensor())`). Without the sensor, this input of the sensorless control system is zero.

@@ -19,9 +19,9 @@ function add_netlist(blk, net)
 %              struct ctrl_par of the parameters of the blocks instead)
 %     sfunctions  Parameters of the S-functions {path, parameters} (only with
 %              S-functions)
-%     folder   Folder of the files of the functions of the MATLAB Function blocks,
-%              whose code is copied into the blocks (only with MATLAB Function
-%              blocks, see motulator.internal.add_mfunction)
+%     folder   Folder of the files of the functions that the MATLAB Function
+%              blocks call (only with MATLAB Function blocks, see
+%              motulator.internal.add_mfunction)
 %
 %   The layout is computed by motulator_export, but Simulink places the ports of
 %   the blocks itself, so the blocks are aligned with the ports. The unconnected

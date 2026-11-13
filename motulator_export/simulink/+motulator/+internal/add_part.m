@@ -4,7 +4,7 @@ function add_part(lib, name, blk, pos)
 %   'SynchronousMachine', the name of its block in the library of motulator) at
 %   the position POS: a link to the block of the library LIB, or, with LIB empty,
 %   the block itself, built as that of the library (the GradNet machine with a
-%   MATLAB Function block containing its code), so that the model does not need
+%   MATLAB Function block calling its function), so that the model does not need
 %   the library.
 import motulator.internal.*
 if ~isempty(lib)

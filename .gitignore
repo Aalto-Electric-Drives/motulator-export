@@ -24,6 +24,12 @@ motulator_export/simulink/library/slblocks.m
 *.slxc
 slprj/
 
+# Functions of the Simulink models with MATLAB Function blocks (copied by
+# Simulation.build)
+examples/simulink/mfun_*.m
+examples/simulink/*_params.m
+examples/simulink/sm_reference_luts.m
+
 # Sphinx documentation (the build, the API reference, and the gallery)
 docs/build/
 docs/source/autoapi/
