@@ -82,11 +82,13 @@ def write_model(
     Write the MATLAB script that builds the Simulink model of the system.
 
     The script `build_<model>.m` builds the system with the MATLAB classes of
-    motulator, as a motulator script does, and the model from the blocks of the
-    library of motulator, and saves the model in the same folder. The parameters of
-    the model are in its model workspace. The references are read from `mdl` and
-    `ctrl` as in `plecs.write_model`, but the gate enable must be 1, since the system
-    model of Simulink does not block the gates.
+    motulator, as a motulator script does, and saves the model in the same folder.
+    With S-functions, the model is built from the blocks of the library of motulator,
+    and its parameters are in its model workspace. With MATLAB Function blocks, the
+    model needs no library: the functions of its blocks and the script of its
+    parameters, `init_<model>.m`, are saved next to it. The references are read from
+    `mdl` and `ctrl` as in `plecs.write_model`, but the gate enable must be 1, since
+    the system model of Simulink does not block the gates.
 
     Parameters
     ----------

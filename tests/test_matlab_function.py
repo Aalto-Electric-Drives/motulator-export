@@ -679,8 +679,8 @@ def test_reference_luts_error(harnesses: Harnesses) -> None:
 def test_init_script(harnesses: Harnesses, tmp_path: Path) -> None:
     """
     The initialization script of a model should give the values of its parameters
-    exactly: nested structs, real and complex scalars and matrices, empty values, and
-    character vectors.
+    exactly (nested structs, real and complex scalars and matrices, empty values, and
+    character vectors), run its commands, and add its folder to the MATLAB path.
     """
     eng = harnesses.eng
     file = tmp_path / "init_values.m"
@@ -688,11 +688,15 @@ def test_init_script(harnesses: Harnesses, tmp_path: Path) -> None:
         "motulator.setup();\n"
         "values = struct('a', struct('x', 0.1, 'u', 100 + 50j, 'e', [], "
         "'b', struct('s', 'it''s', 'm', [1/3 -2e-9; pi 4], 'z', [1j; 0.1 - 2j])));\n"
-        f"motulator.internal.write_init('{file}', 'values', {{'Values', values}});\n"
-        f"clear a\nrun('{file}');\nequal = isequal(a, values.a);",
+        f"motulator.internal.write_init('{file}', 'values', {{'Values', values}}, "
+        "'Commands', {'c = 2*a.x;'});\n"
+        f"clear a c\nrun('{file}');\n"
+        "equal = isequal(a, values.a) && c == 0.2;\n"
+        f"on_path = any(strcmp(strsplit(path, pathsep), '{tmp_path}'));\n"
+        f"rmpath('{tmp_path}');",
         nargout=0,
     )
-    assert eng.eval("equal")
+    assert eng.eval("equal") and eng.eval("on_path")
 
 
 def test_sensored_control_needs_sensor(harnesses: Harnesses) -> None:
@@ -829,4 +833,10 @@ def test_example(
         assert eng.eval(f"numel({masks})") == 0
         assert eng.get_param(path.stem, "PreLoadFcn") == ""
         init = path.with_name(f"init_{path.stem}.m").read_text(encoding="utf-8")
-        assert "\nctrl_par.T_s = " in init
+        assert re.search(r"^ctrl_par = \w+_params\(.*\);$", init, re.M)
+        # The functions that the blocks and the initialization script call are
+        # next to the model
+        tags = eng.eval(f"get_param({find}'RegExp', 'on', 'Tag', '^mfun_'), 'Tag')")
+        functions = {*tags, *re.findall(r"= (\w+_params)\(", init)}
+        assert len(functions) > 1
+        assert all(path.with_name(f"{f}.m").exists() for f in functions)

@@ -1,13 +1,16 @@
-function write_init(file, model, sections)
+function write_init(file, model, sections, title, commands)
 %WRITE_INIT Write the initialization script of a model.
-%   WRITE_INIT(FILE, MODEL, SECTIONS) writes the script FILE, which defines the
-%   parameters of the model MODEL in the base workspace: the fields of the structs
-%   of the rows {title, struct} of SECTIONS as variables, their values (nested
-%   structs, numeric arrays, and character vectors) as assignments, e.g.,
-%   ctrl_par.SpeedController.J = 0.015. The variables are cleared first, so that no
-%   fields of other models are left. The model runs the script at the start of a
+%   WRITE_INIT(FILE, MODEL, SECTIONS, TITLE, COMMANDS) writes the script FILE,
+%   which defines the parameters of the model MODEL in the base workspace: the
+%   fields of the structs of the rows {title, struct} of SECTIONS as variables,
+%   their values (nested structs, numeric arrays, and character vectors) as
+%   assignments, e.g., speed_ctrl.J = 0.015, and then the commands COMMANDS under
+%   the title TITLE, which compute further variables from them (e.g., ctrl_par =
+%   fvc_params(vector_ctrl, speed_ctrl, pwm)). The variables are cleared first, so
+%   that no fields of other models are left, and the folder of the script, which
+%   has the functions of the model, is added to the MATLAB path. The model runs the script at the start of a
 %   simulation (see Simulation.build).
-names = {};
+names = regexp(commands(:), '^\w+', 'match', 'once');
 for k = 1:size(sections, 1)
     names = [names; fieldnames(sections{k, 2})]; %#ok<AGROW>
 end
@@ -15,15 +18,18 @@ fid = fopen(file, 'w');
 fprintf(fid, ['%% Parameters of the Simulink model %s, which runs this\n' ...
     '%% script at the start of a simulation (its callback InitFcn). Written by\n' ...
     '%% Simulation.build of motulator.\n'], model);
-fprintf(fid, 'clear %s\n', strjoin(names', ' '));
+fprintf(fid, 'clear %s\n', strjoin(unique(names, 'stable')', ' '));
+fprintf(fid, ['%% The functions of the blocks are the m-files of this folder\n' ...
+    'addpath(fileparts(mfilename(''fullpath'')));\n']);
 for k = 1:size(sections, 1)
-    [title, variables] = sections{k, :};
-    fprintf(fid, '\n%%%% %s\n', title);
+    [heading, variables] = sections{k, :};
+    fprintf(fid, '\n%%%% %s\n', heading);
     fields = fieldnames(variables);
     for j = 1:numel(fields)
         write_value(fid, fields{j}, variables.(fields{j}));
     end
 end
+fprintf(fid, '\n%%%% %s\n%s\n', title, strjoin(commands', newline));
 fclose(fid);
 end
 

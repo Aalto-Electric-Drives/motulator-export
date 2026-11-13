@@ -1,14 +1,14 @@
 function add_mfunction(blk, pos, folder, name, sample_time, widths, param)
-%ADD_MFUNCTION MATLAB Function block with the code of a function of a file.
+%ADD_MFUNCTION MATLAB Function block calling a function of a file.
 %   ADD_MFUNCTION(BLK, POS, FOLDER, NAME, SAMPLE_TIME, WIDTHS, PARAM) adds the
 %   MATLAB Function block BLK at the position POS, with the sample time
 %   SAMPLE_TIME (an expression, or '' for an inherited sample time) and the widths
-%   WIDTHS of the outputs. The block contains a copy of the code of the function
-%   NAME (the file FOLDER/NAME.m, written by motulator_export.simulink), so that
-%   the model does not need the file: the function of the block has the arguments
-%   of the function NAME (the first line of the file) and calls it. Each MATLAB
-%   Function block has its own copy of the persistent variables of the function.
-%   The global variables of the code are Data Store Memory blocks of the model.
+%   WIDTHS of the outputs. The function of the block has the arguments of the
+%   function NAME (the first line of the file FOLDER/NAME.m, written by
+%   motulator_export.simulink) and calls it, so the model needs the file on the
+%   MATLAB path (see motulator.internal.copy_functions). The tag of the block is
+%   the name of the function. Each MATLAB Function block has its own copy of the
+%   persistent variables of the function.
 %
 %   The last argument of the function is the struct of its parameters, which is
 %   the expression PARAM of a variable of the model, e.g., 'ctrl_par.SpeedController'
@@ -31,13 +31,12 @@ if ~isempty(param)
 end
 script = strjoin({
     ['function ' strrep(head, [name '('], 'fcn(') strjoin(args, ', ') ')']
-    ['% Calls the function ' name ' below (a copy of the file ' name '.m)']
+    ['% Calls the function of the file ' name '.m']
     [head strjoin(call_args, ', ') ');']
     'end'
-    ''
-    source
     }', newline);
-add_block('simulink/User-Defined Functions/MATLAB Function', blk, 'Position', pos);
+add_block('simulink/User-Defined Functions/MATLAB Function', blk, ...
+    'Position', pos, 'Tag', name);
 config = get_param(blk, 'MATLABFunctionConfiguration');
 config.FunctionScript = script;
 if isempty(sample_time)
@@ -57,17 +56,6 @@ outputs = chart.find('-isa', 'Stateflow.Data', 'Scope', 'Output');
 outputs = outputs(order);
 for k = 1:numel(widths)
     outputs(k).Props.Array.Size = num2str(widths(k));
-end
-lines = regexp(script, '^\s*global\s+([\w ]+)', 'tokens', 'lineanchors');
-for k = 1:numel(lines)
-    for store = strsplit(strtrim(lines{k}{1}))
-        data = chart.find('-isa', 'Stateflow.Data', 'Name', store{1});
-        if isempty(data)
-            data = Stateflow.Data(chart);
-            data.Name = store{1};
-        end
-        data.Scope = 'Data Store Memory';
-    end
 end
 % Simulink resizes the block when its code is set (by an amount depending on the
 % code), so its size is restored to that of the layout, at which the blocks are

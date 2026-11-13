@@ -25,7 +25,7 @@ res = native.Simulation(mdl, ctrl).simulate(t_stop=1.2)  # Native simulation
 
 - **One control code everywhere.** The control algorithms of *motulator* are ported to C. The same code runs in PLECS, in Simulink, and in the native simulation.
 - **The structure of *motulator*.** Each class of the control system is a block, nested as in *motulator*, by default with a mask of the arguments of its class. The parameters are set as in a *motulator* script, and they can be changed without Python. The blocks are also in libraries for PLECS and Simulink, and the Simulink models are built from the library by MATLAB scripts that read as *motulator* scripts.
-- **Self-contained Simulink models.** With MATLAB Function blocks, a Simulink model needs no C compiler, no library, and not even this package: the model, or a single subsystem of its control system, can be copied, e.g., to a model of a real-time target in the laboratory.
+- **Self-contained Simulink models.** With MATLAB Function blocks, a Simulink model needs no C compiler, no library, and not even this package, only the m-files of its functions and parameters saved next to it: the model, or a single subsystem of its control system, can be copied with them, e.g., to a model of a real-time target in the laboratory.
 - **Verified.** In the comparisons of the examples, the PLECS and Simulink models agree with *motulator* to about 1e-6 relative to the signal magnitudes, and the native simulation to the rounding errors.
 - **Fast.** The native simulation is 30 to 40 times faster than *motulator*, which is useful, e.g., for parameter sweeps.
 
