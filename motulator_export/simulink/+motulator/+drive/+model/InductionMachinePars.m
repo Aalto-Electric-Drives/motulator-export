@@ -1,9 +1,9 @@
 classdef InductionMachinePars < motulator.internal.Object
     %INDUCTIONMACHINEPARS Gamma-model parameters of an induction machine.
     %   PAR = INDUCTIONMACHINEPARS(n_p=..., R_s=..., R_r=..., L_ell=..., L_s=...) as
-    %   in motulator, with constant parameters. As in motulator, PAR also provides
-    %   the corresponding inverse-Gamma-model parameters. The core losses are not
-    %   modeled (G_c = 0).
+    %   in motulator, with constant parameters. PAR also provides the corresponding
+    %   inverse-Gamma-model parameters (gamma, L_M, L_sgm, and R_R). The core losses
+    %   are not modeled (G_c = 0).
 
     properties
         n_p       % Number of pole pairs

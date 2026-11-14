@@ -65,7 +65,7 @@ typedef struct {
 /* Induction machine with constant parameters, whose magnetic model is the inverse-Γ
  * model (InductionMachineInvGammaPars) or the Γ model (InductionMachinePars). Its
  * rotor quantities are scaled as in the parameters, and so is the rotor resistance
- * R_r, which is the cage of the parameters (R_R of the inverse-Γ model). */
+ * R_r, which is the resistive cage of the model (R_R of the inverse-Γ model). */
 typedef struct {
     double n_p;
     double R_s;

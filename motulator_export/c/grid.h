@@ -64,10 +64,12 @@ static void grid_init(GridConverterSystem *self);
  * (ThreePhaseSource.generate_space_vector) */
 static double complex source_voltage(const ThreePhaseSource *self, double t,
                                      double complex exp_j_theta_g);
-/* Measured converter current (abc2complex(ac_filter.meas_currents())) */
+/* Measured converter current of the ideal current sensor
+ * (GridConverterControlSystem.get_measurement) */
 static double complex grid_meas_current(const GridConverterSystem *self,
                                         const double complex *x);
-/* Measured PCC voltage (line2complex(ac_filter.meas_pcc_voltages())) at the time t */
+/* Measured PCC voltage of the ideal voltage sensor at the time t
+ * (GridConverterControlSystem.get_measurement) */
 static double complex grid_meas_pcc_voltage(const GridConverterSystem *self, double t,
                                             const double complex *x);
 
