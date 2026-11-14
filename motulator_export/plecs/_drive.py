@@ -104,7 +104,8 @@ def _check_initial_drive_states(
     the speed and the angle of the mechanics and the DC-bus voltage, which are
     exported) is not at its initial value. The synchronous machine model has its own
     rotor angle, which must be n_p times that of the mechanics (modulo 2*pi), as in
-    the exported models.
+    the exported models. The initial rotor angle of the induction machine model does
+    not affect its stator quantities, since its flux linkages start from zero.
     """
     machine = mdl.machine
     mech = mdl.mechanics.state
@@ -126,8 +127,8 @@ def _check_initial_drive_states(
         ]
     else:
         states = [
-            ("machine.state.psi_s_ab", machine.state.psi_s_ab, 0j),
-            ("machine.state.psi_r_ab", machine.state.psi_r_ab, 0j),
+            ("machine.state.psi_s_dq", machine.state.psi_s_dq, 0j),
+            ("machine.state.psi_r_dq", machine.state.psi_r_dq, 0j),
         ]
     dc_bus = mdl.dc_bus
     if dc_bus is not None:

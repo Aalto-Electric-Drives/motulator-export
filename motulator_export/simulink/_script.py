@@ -26,9 +26,13 @@ from motulator.drive.control import im as im_control
 from motulator.drive.control import sm as sm_control
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._common import SpeedController
-from motulator.drive.model import Drive, ExternalRotorSpeed, MechanicalSystem
+from motulator.drive.model import (
+    Drive,
+    ExternalRotorSpeed,
+    InductionMachine,
+    MechanicalSystem,
+)
 from motulator.drive.utils._parameters import (
-    InductionMachineInvGammaPars,
     InductionMachinePars,
     SpatialSaturatedSynchronousMachinePars,
     SynchronousMachinePars,
@@ -344,17 +348,18 @@ def _im_script(
     mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem
 ) -> tuple[list[str], list[str]]:
     """The system model and the control system of an induction machine drive."""
-    par = mdl.machine.par
-    if isinstance(par, InductionMachinePars):
-        gamma = ["n_p", "R_s", "R_r", "L_ell", "L_s"]
-        machine = f"par = {_par_call('InductionMachinePars', par, gamma)};"
+    im = cast(InductionMachine, mdl.machine)
+    if isinstance(im.par, InductionMachinePars):
+        gamma = {f: getattr(im.par, f) for f in ("n_p", "R_s", "R_r", "L_ell", "L_s")}
+        # The rotor resistance of the cage of the model, as in plant_pars
+        gamma["R_r"] = float(im.cage.R[0])
+        machine = f"par = {_call('InductionMachinePars', [], list(gamma.items()))};"
         plant_values = None
     else:
-        par = cast(InductionMachineInvGammaPars, par)
-        machine = (
-            f"par = {_par_call('InductionMachineInvGammaPars', par, IM_PAR_FIELDS)};"
-        )
-        plant_values = [getattr(par, f) for f in IM_PAR_FIELDS]
+        plant = _im.plant_pars(im)
+        call = _call("InductionMachineInvGammaPars", [], list(plant.items()))
+        machine = f"par = {call};"
+        plant_values = list(plant.values())
     model = _drive_model(mdl, [machine, "machine = InductionMachine(par);"])
     if isinstance(ctrl, VHzControlSystem):
         values = _im.export_vhz_values(ctrl)

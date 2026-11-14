@@ -19,31 +19,72 @@ static void sm_magnetic_map(const SynchronousMachine *self, double complex psi_s
     *tau_M = self->n_p * tau_m;
 }
 
-/* Stator current (A) in stator coordinates and the torque (Nm) of the machine, at the
- * states x[0] and x[1] of the machine, theta_m being the wrapped angle of a
- * synchronous machine (SynchronousMachine.compute_outputs or
- * InductionMachine.compute_outputs). The rotor current of the induction machine is
- * given in i_r_ab (if not NULL). */
+static void im_magnetic_map(const InductionMachine *self, double complex psi_s_dq,
+                            double complex psi_r_dq, double complex *i_s_dq,
+                            double complex *i_r_dq, double *tau_M)
+{
+    if (self->inv_gamma) {
+        *i_s_dq = (psi_s_dq - psi_r_dq) / self->L_sgm;
+        *i_r_dq = psi_r_dq / self->L_M - *i_s_dq;
+    } else {
+        *i_r_dq = (psi_r_dq - psi_s_dq) / self->L_ell;
+        *i_s_dq = psi_s_dq / self->L_s - *i_r_dq;
+    }
+    double tau_m = 1.5 * cimag(*i_s_dq * conj(psi_s_dq)); /* Torque per pole pair */
+    *tau_M = self->n_p * tau_m;
+}
+
+/* Indices of the electrical rotor angle and of the mechanical rotor angle and speed,
+ * which follow it, after the states of the DC bus */
+static int drive_theta_m(const Drive *self)
+{
+    return self->induction ? 2 : 1;
+}
+
+static int drive_theta_M(const Drive *self)
+{
+    return drive_theta_m(self) + 1;
+}
+
+static int drive_w_M(const Drive *self)
+{
+    return drive_theta_m(self) + 2;
+}
+
+/* Stator current (A) in rotor coordinates as a function of the stator flux linkage
+ * psi_s_dq (Vs) in rotor coordinates and the electrical rotor angle theta_m (rad), at
+ * the rotor flux linkage psi_r_dq (Vs) of the induction machine */
+static double complex drive_stator_current(const Drive *self, double complex psi_s_dq,
+                                           double complex psi_r_dq, double theta_m)
+{
+    double complex i_s_dq, i_r_dq;
+    double tau_M;
+    if (self->induction) {
+        im_magnetic_map(&self->im, psi_s_dq, psi_r_dq, &i_s_dq, &i_r_dq, &tau_M);
+    } else {
+        sm_magnetic_map(&self->sm, psi_s_dq, theta_m, &i_s_dq, &tau_M);
+    }
+    return i_s_dq;
+}
+
+/* Outputs of the machine at the states x of the machine, theta_m being the wrapped
+ * electrical rotor angle (SynchronousMachine._compute_outputs or
+ * InductionMachine._compute_outputs): the stator current i_s_dq (A) in rotor
+ * coordinates, the rotor current i_r_dq (A) in rotor coordinates of the induction
+ * machine (zero for the synchronous machine), and the torque tau_M (Nm). Returns the
+ * stator current in stator coordinates. */
 static double complex drive_machine_outputs(const Drive *self, const double complex *x,
-                                            double theta_m, double *tau_M,
-                                            double complex *i_r_ab)
+                                            double theta_m, double complex *i_s_dq,
+                                            double complex *i_r_dq, double *tau_M)
 {
     if (self->induction) {
-        const InductionMachine *im = &self->im;
-        double complex psi_s_ab = x[DRIVE_psi_s];
-        double complex i_r = (x[DRIVE_psi_r] - psi_s_ab) / im->L_ell;
-        /* Current into the magnetic circuit, equal to the stator current without the
-         * core losses */
-        double complex i_m_ab = psi_s_ab / im->L_s - i_r;
-        *tau_M = 1.5 * im->n_p * cimag(i_m_ab * conj(psi_s_ab));
-        if (i_r_ab != NULL) {
-            *i_r_ab = i_r;
-        }
-        return i_m_ab;
+        im_magnetic_map(&self->im, x[DRIVE_psi_s], x[DRIVE_psi_r], i_s_dq, i_r_dq,
+                        tau_M);
+    } else {
+        sm_magnetic_map(&self->sm, x[DRIVE_psi_s], theta_m, i_s_dq, tau_M);
+        *i_r_dq = 0.0;
     }
-    double complex i_s_dq;
-    sm_magnetic_map(&self->sm, x[DRIVE_psi_s], theta_m, &i_s_dq, tau_M);
-    return i_s_dq * cexp(I * theta_m);
+    return *i_s_dq * cexp(I * theta_m);
 }
 
 /* Stator current (A) in stator coordinates, at the states set by set_states (the
@@ -52,8 +93,10 @@ static double complex drive_current(const Model *base, const double complex *x)
 {
     const Drive *self = (const Drive *)base;
     const double complex *x_m = x + dc_bus_states(&base->dc_bus);
+    double complex i_s_dq, i_r_dq;
     double tau_M;
-    return drive_machine_outputs(self, x_m, creal(x_m[DRIVE_theta_m]), &tau_M, NULL);
+    double theta_m = creal(x_m[drive_theta_m(self)]);
+    return drive_machine_outputs(self, x_m, theta_m, &i_s_dq, &i_r_dq, &tau_M);
 }
 
 /* Mechanical rotor speed at the time t: the state of MechanicalSystem, or the
@@ -63,13 +106,23 @@ static double drive_speed(const Drive *self, double t, const double complex *x_m
     if (self->mechanics.external) {
         return signal_value(&self->mechanics.w_M, t);
     }
-    return creal(x_m[DRIVE_w_M]);
+    return creal(x_m[drive_w_M(self)]);
+}
+
+/* Number of pole pairs and stator resistance (Ohm) of the machine */
+static double drive_n_p(const Drive *self)
+{
+    return self->induction ? self->im.n_p : self->sm.n_p;
+}
+
+static double drive_R_s(const Drive *self)
+{
+    return self->induction ? self->im.R_s : self->sm.R_s;
 }
 
 /* State derivatives (DCBus.rhs, SynchronousMachine.rhs or InductionMachine.rhs, and
- * MechanicalSystem.rhs or ExternalRotorSpeed.rhs). The angle of the synchronous
- * machine is wrapped, as Subsystem.set_states does before the outputs are computed.
- */
+ * MechanicalSystem.rhs or ExternalRotorSpeed.rhs). The electrical rotor angle is
+ * wrapped, as Subsystem.set_states does before the outputs are computed. */
 static void drive_rhs(const Model *base, double t, const double complex *x,
                       double complex *dx)
 {
@@ -81,38 +134,31 @@ static void drive_rhs(const Model *base, double t, const double complex *x,
     double complex u_s_ab = model_converter_voltage(base, t, x, NULL);
     double w_M = drive_speed(self, t, x_m);
 
-    /* Machine */
+    /* Machine, in rotor coordinates */
+    int k_theta_m = drive_theta_m(self);
+    double theta_m = wrap(creal(x_m[k_theta_m]));
+    double complex i_s_dq, i_r_dq;
     double tau_M;
-    double complex i_s_ab;
+    double complex i_s_ab =
+        drive_machine_outputs(self, x_m, theta_m, &i_s_dq, &i_r_dq, &tau_M);
+    double complex u_s_dq = u_s_ab * cexp(-I * theta_m);
+    double w_m = drive_n_p(self) * w_M;
+    dx_m[DRIVE_psi_s] =
+        u_s_dq - drive_R_s(self) * i_s_dq - I * w_m * x_m[DRIVE_psi_s];
     if (self->induction) {
-        const InductionMachine *im = &self->im;
-        double complex i_r_ab;
-        i_s_ab = drive_machine_outputs(self, x_m, 0.0, &tau_M, &i_r_ab);
-        dx_m[DRIVE_psi_s] = u_s_ab - im->R_s * i_s_ab;
-        dx_m[DRIVE_psi_r] =
-            -im->R_r * i_r_ab + I * im->n_p * w_M * x_m[DRIVE_psi_r];
-    } else {
-        /* In rotor coordinates */
-        const SynchronousMachine *sm = &self->sm;
-        double theta_m = wrap(creal(x_m[DRIVE_theta_m]));
-        double complex psi_s_dq = x_m[DRIVE_psi_s];
-        double complex i_s_dq;
-        sm_magnetic_map(sm, psi_s_dq, theta_m, &i_s_dq, &tau_M);
-        i_s_ab = i_s_dq * cexp(I * theta_m);
-        double complex u_s_dq = u_s_ab * cexp(-I * theta_m);
-        double w_m = sm->n_p * w_M;
-        dx_m[DRIVE_psi_s] = u_s_dq - sm->R_s * i_s_dq - I * w_m * psi_s_dq;
-        dx_m[DRIVE_theta_m] = w_m;
+        /* The rotor winding is short-circuited, so only the cage remains */
+        dx_m[DRIVE_psi_r] = -self->im.R_r * i_r_dq;
     }
+    dx_m[k_theta_m] = w_m;
 
     /* Mechanics */
     if (mechanics->external) {
-        dx_m[DRIVE_theta_M] = w_M;
+        dx_m[drive_theta_M(self)] = w_M;
     } else {
         double tau_L_tot = signal_value(&mechanics->B_L, w_M) * w_M +
                            signal_value(&mechanics->tau_L, t);
-        dx_m[DRIVE_theta_M] = x_m[DRIVE_w_M];
-        dx_m[DRIVE_w_M] = (tau_M - tau_L_tot) / mechanics->J;
+        dx_m[drive_theta_M(self)] = x_m[drive_w_M(self)];
+        dx_m[drive_w_M(self)] = (tau_M - tau_L_tot) / mechanics->J;
     }
 
     /* DC bus */
@@ -125,41 +171,8 @@ static void drive_set_states(const Model *base, double complex *x)
     const Drive *self = (const Drive *)base;
     dc_bus_set_states(&base->dc_bus, x);
     double complex *x_m = x + dc_bus_states(&base->dc_bus);
-    if (!self->induction) {
-        x_m[DRIVE_theta_m] = wrap(creal(x_m[DRIVE_theta_m]));
-    }
-    x_m[DRIVE_theta_M] = wrap(creal(x_m[DRIVE_theta_M]));
-}
-
-/* Step of the central differences of the Jacobians (jacobian of _ac_port.py) */
-#define DRIVE_JACOBIAN_STEP 1e-4
-
-/* Jacobian of the stator current with respect to the stator flux linkage, acting on
- * the real and imaginary parts (jacobian of _ac_port.py): of the synchronous machine
- * in rotor coordinates at the angle theta_m, or of the induction machine in stator
- * coordinates at the rotor flux linkage psi_r_ab */
-static void drive_current_jacobian(const Drive *self, double complex psi_s,
-                                   double theta_m, double complex psi_r_ab,
-                                   double J[2][2])
-{
-    const double h = DRIVE_JACOBIAN_STEP;
-    double complex points[4] = {psi_s + h, psi_s - h, psi_s + I * h, psi_s - I * h};
-    double complex i[4];
-    for (int k = 0; k < 4; k++) {
-        if (self->induction) {
-            const InductionMachine *im = &self->im;
-            i[k] = points[k] / im->L_s + (points[k] - psi_r_ab) / im->L_ell;
-        } else {
-            double tau_M;
-            sm_magnetic_map(&self->sm, points[k], theta_m, &i[k], &tau_M);
-        }
-    }
-    double complex d_x = (i[0] - i[1]) / (2.0 * h);
-    double complex d_y = (i[2] - i[3]) / (2.0 * h);
-    J[0][0] = creal(d_x);
-    J[0][1] = creal(d_y);
-    J[1][0] = cimag(d_x);
-    J[1][1] = cimag(d_y);
+    x_m[drive_theta_m(self)] = wrap(creal(x_m[drive_theta_m(self)]));
+    x_m[drive_theta_M(self)] = wrap(creal(x_m[drive_theta_M(self)]));
 }
 
 /* Solution of the 2-by-2 system J v = z, the vectors as complex numbers */
@@ -171,6 +184,67 @@ static double complex drive_solve(const double J[2][2], double complex z)
     return complex_from(b[0], b[1]);
 }
 
+/* States of the machine at which its AC port is computed: the stator flux linkage,
+ * the rotor flux linkage of the induction machine, and the electrical rotor angle with
+ * its complex exponential */
+typedef struct {
+    const Drive *drive;
+    double complex psi_s_dq;
+    double complex psi_r_dq;
+    double theta_m;
+    double complex exp_j_theta_m;
+} DriveACPortStates;
+
+/* Stator current in stator coordinates after a step d_psi_s_ab of the stator flux
+ * linkage in stator coordinates, the other states being constant (i_s_ab of
+ * _compute_ac_port) */
+static double complex drive_i_s_ab(const void *data, double complex d_psi_s_ab)
+{
+    const DriveACPortStates *s = data;
+    double complex psi = s->psi_s_dq + d_psi_s_ab * conj(s->exp_j_theta_m);
+    return drive_stator_current(s->drive, psi, s->psi_r_dq, s->theta_m) *
+           s->exp_j_theta_m;
+}
+
+/* Stator current in rotor coordinates as a function of the electrical rotor angle (the
+ * real part of theta_m), the other states being constant */
+static double complex drive_i_s_theta_m(const void *data, double complex theta_m)
+{
+    const DriveACPortStates *s = data;
+    return drive_stator_current(s->drive, s->psi_s_dq, s->psi_r_dq, creal(theta_m));
+}
+
+/* Stator current in rotor coordinates as a function of the rotor flux linkage of the
+ * induction machine, the other states being constant */
+static double complex drive_i_s_psi_r(const void *data, double complex psi_r_dq)
+{
+    const DriveACPortStates *s = data;
+    return drive_stator_current(s->drive, s->psi_s_dq, psi_r_dq, s->theta_m);
+}
+
+/* AC port of the machine in stator coordinates at the states s, the electrical rotor
+ * speed w_m, and the rate of change d_i_s_dq of the stator current in rotor
+ * coordinates due to the other states (_compute_ac_port) */
+static void drive_compute_ac_port(const DriveACPortStates *s, double w_m,
+                                  double complex d_i_s_dq, ACPort *port)
+{
+    double complex exp_j_theta_m = s->exp_j_theta_m;
+    double complex i_s_dq =
+        drive_stator_current(s->drive, s->psi_s_dq, s->psi_r_dq, s->theta_m);
+    /* Inverse differential inductance in stator coordinates */
+    jacobian(drive_i_s_ab, s, 0.0, AC_PORT_H, port->Y);
+    /* Current derivative at a constant stator flux linkage in rotor coordinates, i.e.,
+     * at u_s = R_s*i_s + 1j*w_m*psi_s, due to the other states, the spatial harmonics,
+     * and the rotation of the coordinates */
+    d_i_s_dq += derivative(drive_i_s_theta_m, s, s->theta_m, w_m, AC_PORT_H);
+    double complex d_i_s_ab = (d_i_s_dq + I * w_m * i_s_dq) * exp_j_theta_m;
+    /* The current derivative is Y (u_s - e), which gives the EMF e */
+    double complex u = drive_solve(port->Y, d_i_s_ab);
+    double R_s = drive_R_s(s->drive);
+    port->i = i_s_dq * exp_j_theta_m;
+    port->e = (R_s * i_s_dq + I * w_m * s->psi_s_dq) * exp_j_theta_m - u;
+}
+
 /* AC port of the machine for the converter with blocked gates
  * (SynchronousMachine.compute_ac_port or InductionMachine.compute_ac_port) */
 static void drive_ac_port(const Model *base, double t, const double complex *x,
@@ -178,67 +252,32 @@ static void drive_ac_port(const Model *base, double t, const double complex *x,
 {
     const Drive *self = (const Drive *)base;
     const double complex *x_m = x + dc_bus_states(&base->dc_bus);
-    double w_M = drive_speed(self, t, x_m);
+    double w_m = drive_n_p(self) * drive_speed(self, t, x_m);
+    double theta_m = wrap(creal(x_m[drive_theta_m(self)]));
+    DriveACPortStates s = {self, x_m[DRIVE_psi_s], 0.0, theta_m, cexp(I * theta_m)};
+    double complex d_i_s_dq = 0.0;
     if (self->induction) {
-        const InductionMachine *im = &self->im;
+        /* Current derivative due to the rotor flux linkage, driven by the cage */
+        s.psi_r_dq = x_m[DRIVE_psi_r];
+        double complex i_s_dq, i_r_dq;
         double tau_M;
-        double complex i_r_ab;
-        double complex i_s_ab = drive_machine_outputs(self, x_m, 0.0, &tau_M, &i_r_ab);
-        double complex psi_r_ab = x_m[DRIVE_psi_r];
-        /* The stator current derivative is Y*(u_s - R_s*i_s) - d_psi_r/dt/L_ell */
-        drive_current_jacobian(self, x_m[DRIVE_psi_s], 0.0, psi_r_ab, port->Y);
-        double complex d_psi_r_ab = -im->R_r * i_r_ab + I * im->n_p * w_M * psi_r_ab;
-        double complex e = drive_solve(port->Y, d_psi_r_ab) / im->L_ell;
-        port->i = i_s_ab;
-        port->e = im->R_s * i_s_ab + e;
-        return;
+        im_magnetic_map(&self->im, s.psi_s_dq, s.psi_r_dq, &i_s_dq, &i_r_dq, &tau_M);
+        double complex d_psi_r_dq = -self->im.R_r * i_r_dq;
+        d_i_s_dq = derivative(drive_i_s_psi_r, &s, s.psi_r_dq, d_psi_r_dq, AC_PORT_H);
     }
-    const SynchronousMachine *sm = &self->sm;
-    const double h = DRIVE_JACOBIAN_STEP;
-    double theta_m = wrap(creal(x_m[DRIVE_theta_m]));
-    double complex exp_j_theta_m = cexp(I * theta_m);
-    double w_m = sm->n_p * w_M;
-    double complex psi_s_dq = x_m[DRIVE_psi_s];
-    double complex i_s_dq, i_plus, i_minus;
-    double tau_M;
-    sm_magnetic_map(sm, psi_s_dq, theta_m, &i_s_dq, &tau_M);
-    /* Inverse differential inductance in rotor coordinates and the current derivative
-     * due to the spatial harmonics at a constant flux */
-    double J[2][2];
-    drive_current_jacobian(self, psi_s_dq, theta_m, 0.0, J);
-    sm_magnetic_map(sm, psi_s_dq, theta_m + h, &i_plus, &tau_M);
-    sm_magnetic_map(sm, psi_s_dq, theta_m - h, &i_minus, &tau_M);
-    double complex d_i_s_theta = (i_plus - i_minus) / (2.0 * h);
-    /* The stator current derivative in stator coordinates is J*(u_s - R_s*i_s -
-     * 1j*w_m*psi_s) + w_m*(d_i_s_theta + 1j*i_s), in rotor coordinates */
-    double complex i_rot = w_m * (d_i_s_theta + I * i_s_dq);
-    double complex v = drive_solve(J, i_rot);
-    double complex e_dq = sm->R_s * i_s_dq + I * w_m * psi_s_dq - v;
-    double c = creal(exp_j_theta_m), s = cimag(exp_j_theta_m);
-    double R[2][2] = {{c, -s}, {s, c}}, RJ[2][2];
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 2; j++) {
-            RJ[i][j] = R[i][0] * J[0][j] + R[i][1] * J[1][j];
-        }
-    }
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 2; j++) {
-            port->Y[i][j] = RJ[i][0] * R[j][0] + RJ[i][1] * R[j][1];
-        }
-    }
-    port->i = i_s_dq * exp_j_theta_m;
-    port->e = e_dq * exp_j_theta_m;
+    drive_compute_ac_port(&s, w_m, d_i_s_dq, port);
 }
 
 static void drive_init_states(Model *base)
 {
     Drive *self = (Drive *)base;
     const char *names;
+    /* The states of the machine and of the mechanics after those of the DC bus */
+    base->n = dc_bus_states(&base->dc_bus) + drive_theta_M(self) + 1;
     if (self->mechanics.external) {
-        base->n = dc_bus_states(&base->dc_bus) + 3;
         names = self->induction ? IM_DRIVE_STATES_EXT : SM_DRIVE_STATES_EXT;
     } else {
-        base->n = dc_bus_states(&base->dc_bus) + 4;
+        base->n += 1; /* The speed */
         names = self->induction ? IM_DRIVE_STATES : SM_DRIVE_STATES;
     }
     model_state_names(base, names, self->state_names, (int)sizeof(self->state_names));
@@ -277,10 +316,10 @@ static double drive_meas_speed(const Drive *self, double t, const double complex
 
 static double drive_meas_position(const Drive *self, const double complex *x)
 {
-    /* The angle of the state, wrapped by set_states, is wrapped by both
-     * MechanicalSystem.meas_position and VectorControlSystem.get_measurement */
-    double theta_M = creal(x[dc_bus_states(&self->base.dc_bus) + DRIVE_theta_M]);
-    return wrap(wrap(theta_M));
+    /* The angle of the state, wrapped by set_states, is wrapped again by
+     * VectorControlSystem.get_measurement */
+    const double complex *x_m = x + dc_bus_states(&self->base.dc_bus);
+    return wrap(creal(x_m[drive_theta_M(self)]));
 }
 
 /* API for Python (motulator_export.native) --------------------------------- */
@@ -356,7 +395,24 @@ void set_machine_current_map(Simulation *self, double n_p, double R_s, int k)
     drive_init_states(&drive->base);
 }
 
-/* InductionMachine with the parameters of the Γ model (InductionMachinePars) */
+/* InductionMachine with InductionMachineInvGammaPars */
+void set_induction_machine_inv_gamma(Simulation *self, double n_p, double R_s,
+                                     double R_R, double L_sgm, double L_M)
+{
+    Drive *drive = drive_of(self);
+    InductionMachine *machine = &drive->im;
+    drive->induction = 1;
+    machine->n_p = n_p;
+    machine->R_s = R_s;
+    machine->R_r = R_R;
+    machine->inv_gamma = 1;
+    machine->L_sgm = L_sgm;
+    machine->L_M = L_M;
+    drive_init_states(&drive->base);
+}
+
+/* InductionMachine with InductionMachinePars, whose stator inductance L_s is constant
+ * and whose cage is the rotor resistance R_r */
 void set_induction_machine(Simulation *self, double n_p, double R_s, double R_r,
                            double L_ell, double L_s)
 {
@@ -366,6 +422,7 @@ void set_induction_machine(Simulation *self, double n_p, double R_s, double R_r,
     machine->n_p = n_p;
     machine->R_s = R_s;
     machine->R_r = R_r;
+    machine->inv_gamma = 0;
     machine->L_ell = L_ell;
     machine->L_s = L_s;
     drive_init_states(&drive->base);

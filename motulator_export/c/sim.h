@@ -8,8 +8,8 @@
  *   motulator/common/model/_pwm.py         ZOH, CarrierComparison
  *   motulator/common/utils/_dead_time.py   averaged_gate_signals
  *   motulator/common/model/_converter.py   VoltageSourceConverter, DCBus
- *   motulator/common/model/_ac_port.py     ACPort, leg_voltages, diode_margin,
- *                                          update_diodes
+ *   motulator/common/model/_ac_port.py     ACPort, derivative, jacobian,
+ *                                          leg_voltages, diode_margin, update_diodes
  *   motulator_export/plecs/_common.py      StepSignal
  *   scipy/integrate/_ivp/rk.py             RK45 (used by solve_ivp in Simulation)
  *
@@ -172,6 +172,22 @@ typedef struct {
     double complex e; /* Voltage (V) at which the current derivative is zero */
     double Y[2][2];   /* Inverse differential inductance matrix (1/H) */
 } ACPort;
+
+/* Complex-valued function of a real or complex variable x, with its data */
+typedef double complex (*ComplexFunction)(const void *data, double complex x);
+
+/* Step of the central differences of derivative and jacobian (h of _ac_port.py) */
+#define AC_PORT_H 1e-4
+
+/* Rate of change of the value of f when its argument x changes at the rate v
+ * (derivative of _ac_port.py): the central differences with a step of the length h in
+ * the direction of v */
+static double complex derivative(ComplexFunction f, const void *data, double complex x,
+                                 double complex v, double h);
+/* Jacobian of f at x, acting on the real and imaginary parts (jacobian of
+ * _ac_port.py) */
+static void jacobian(ComplexFunction f, const void *data, double complex x, double h,
+                     double J[2][2]);
 
 /* Three-phase voltage-source converter with a constant DC-bus voltage, the dead time
  * resolved by the current directions given by the signum function, a current within

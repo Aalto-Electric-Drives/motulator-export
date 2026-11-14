@@ -34,12 +34,16 @@ from motulator_export.plecs._drive import _add_mechanics
 from motulator_export.plecs._schematic import _Schematic
 from motulator_export.simulink._export import model_path
 from motulator_export.simulink._render import CODES
+from motulator_export.simulink._script import _value
 from tests.systems import (
     BASE,
     CURRENT_MAP,
     EXAMPLE_SYSTEMS,
     EXAMPLES,
+    IM_PAR,
+    SM_PAR,
     example_system,
+    gamma_pars,
     im_system,
     sm_system,
     torque_system,
@@ -458,8 +462,8 @@ def test_unsupported_initial_states(tmp_path: Path, case: str) -> None:
         elif case == "sm_angle":  # Not n_p times the angle of the mechanics
             mdl.mechanics.state.theta_M = complex(0.5 * pi)
         else:
-            mdl.machine.state.psi_r_ab = 0.1 + 0j
-        match = {"sm_flux": "psi_s_dq", "sm_angle": "theta_m"}.get(case, "psi_r_ab")
+            mdl.machine.state.psi_r_dq = 0.1 + 0j
+        match = {"sm_flux": "psi_s_dq", "sm_angle": "theta_m"}.get(case, "psi_r_dq")
     else:
         mdl, ctrl = _grid(gfl=True)
         if case == "grid_current":
@@ -471,6 +475,110 @@ def test_unsupported_initial_states(tmp_path: Path, case: str) -> None:
         with pytest.raises(NotImplementedError, match=match):
             tool.write_model(tmp_path / path, mdl, ctrl, 0.1)
     assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+def test_gamma_pars(tmp_path: Path) -> None:
+    """The induction machine model with the Γ-model parameters (`InductionMachinePars`)
+    should be exported to PLECS with the equivalent inverse-Γ parameters and to
+    Simulink with its own parameters, also with the rotor resistance given as a cage
+    impedance without inductances."""
+    mdl, ctrl = _drive(sm=False)
+    inv = cast(model.InductionMachineInvGammaPars, mdl.machine.par)
+    scripts = []
+    for cage in (False, True):
+        machine = model.InductionMachine(gamma_pars(inv, cage))
+        drive = model.Drive(machine, mdl.mechanics, mdl.converter)
+        plecs.write_model(tmp_path / "drive.plecs", drive, ctrl, T_STOP)
+        text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+        for name in ("R_R", "L_sgm", "L_M"):
+            value = re.search(rf"machine\.{name} = ([^;]+);", text)
+            assert value is not None
+            assert np.isclose(float(value[1]), getattr(inv, name), rtol=1e-12)
+        script = simulink.write_model(tmp_path / "drive.slx", drive, ctrl, T_STOP)
+        scripts.append(script.read_text(encoding="utf-8"))
+    assert "par = InductionMachinePars(n_p=2, R_s=3.7, R_r=" in scripts[0]
+    assert scripts[1] == scripts[0]
+
+
+@pytest.mark.parametrize("case", ["L_s", "cage", "map"])
+def test_unsupported_induction_machine(tmp_path: Path, case: str) -> None:
+    """Only the induction machine models with constant parameters and a resistive cage
+    are supported in the exports and the native simulation, not a stator inductance
+    depending on the flux linkage, a cage impedance with inductances, or a general
+    magnetic map."""
+    mdl, ctrl = _drive(sm=False)
+    par: Any = gamma_pars(cast(model.InductionMachineInvGammaPars, mdl.machine.par))
+    match = "constant parameters"
+    if case == "L_s":
+        L_s = par.L_s
+        par.L_s = lambda psi_s: L_s
+    elif case == "cage":
+        # The cage of the deep-bar machine of plot_6kw_im_deep_bars_dol.py of motulator
+        par.R_r = model.CageImpedance(R=[0.64, 2.1], L=[3.6e-3])
+        match = "resistive cage"
+    else:
+        linear = par
+        par = model.SaturatedInductionMachinePars(
+            n_p=linear.n_p,
+            R_s=linear.R_s,
+            R_r=linear.R_r,
+            current_map_fcn=lambda psi_s, psi_r: linear.magnetic_map(psi_s, psi_r)[:2],
+        )
+    drive = model.Drive(model.InductionMachine(par), mdl.mechanics, mdl.converter)
+    for tool, path in TOOLS:
+        with pytest.raises(NotImplementedError, match=match):
+            tool.write_model(tmp_path / path, drive, ctrl, T_STOP)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+    with pytest.raises(NotImplementedError, match=match):
+        native.Simulation(drive, ctrl)
+
+
+def test_unsupported_parameter_subclass(tmp_path: Path) -> None:
+    """Subclasses of the parameters of the machine models are not supported in the
+    exports and the native simulation, since they could override the magnetic map,
+    whose formulas are exported."""
+
+    class SMPars(model.SynchronousMachinePars):
+        pass
+
+    class IMPars(model.InductionMachineInvGammaPars):
+        pass
+
+    cases = [
+        (True, model.SynchronousMachine(SMPars(**SM_PAR)), "SynchronousMachinePars"),
+        (False, model.InductionMachine(IMPars(**IM_PAR)), "constant parameters"),
+    ]
+    for sm, machine, match in cases:
+        mdl, ctrl = _drive(sm=sm)
+        drive = model.Drive(machine, mdl.mechanics, mdl.converter)
+        for tool, path in TOOLS:
+            with pytest.raises(NotImplementedError, match=match):
+                tool.write_model(tmp_path / path, drive, ctrl, T_STOP)
+        with pytest.raises(NotImplementedError, match=match):
+            native.Simulation(drive, ctrl)
+    assert not list(tmp_path.iterdir())  # Nothing is written
+
+
+@pytest.mark.parametrize("gamma", [False, True], ids=["inv_gamma", "gamma"])
+def test_rotor_resistance_of_cage(tmp_path: Path, gamma: bool) -> None:
+    """The exports should take the rotor resistance from the cage of the induction
+    machine model, which the model uses, also if it differs from the parameters."""
+    mdl, ctrl = _drive(sm=False)
+    inv = cast(model.InductionMachineInvGammaPars, mdl.machine.par)
+    machine = model.InductionMachine(gamma_pars(inv) if gamma else inv)
+    machine.cage.R[0] *= 2
+    drive = model.Drive(machine, mdl.mechanics, mdl.converter)
+    plecs.write_model(tmp_path / "drive.plecs", drive, ctrl, T_STOP)
+    text = (tmp_path / "drive.plecs").read_text(encoding="utf-8")
+    value = re.search(r"machine\.R_R = ([^;]+);", text)
+    assert value is not None
+    assert np.isclose(float(value[1]), 2 * inv.R_R, rtol=1e-12)
+    script = simulink.write_model(tmp_path / "drive.slx", drive, ctrl, T_STOP)
+    text = script.read_text(encoding="utf-8")
+    name = "R_r" if gamma else "R_R"
+    assert f"{name}={_value(float(machine.cage.R[0]))}," in text
+    # The control system has its own parameters
+    assert "est_par = InductionMachineInvGammaPars(" in text
 
 
 @pytest.mark.parametrize("case", ["sm_flux", "mechanics_speed", "lcl_voltage"])
