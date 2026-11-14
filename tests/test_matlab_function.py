@@ -87,6 +87,7 @@ from tests.systems import (
     EXAMPLE_SYSTEMS,
     EXAMPLES,
     IM_FVC_RTOL,
+    IM_PAR,
     SM_CVC_D_MIN,
     SM_KEYS,
     SM_PAR,
@@ -96,6 +97,7 @@ from tests.systems import (
     VHZ_IDS,
     VHZ_RTOL,
     example_system,
+    gamma_pars,
     gfl_system,
     gfm_system,
     gradnet_control_system,
@@ -731,6 +733,34 @@ def test_sensored_control_needs_sensor(harnesses: Harnesses) -> None:
         "sensors=sensors));",
         nargout=0,
     )
+
+
+def test_induction_machine_pars(harnesses: Harnesses) -> None:
+    """
+    The MATLAB class of the Γ-model parameters should provide the inverse-Γ parameters
+    of motulator, which the induction machine model takes from either parameter class.
+    """
+    eng = harnesses.eng
+    m = "motulator.drive.model"
+    inv = model.InductionMachineInvGammaPars(**IM_PAR)
+    par = gamma_pars(inv)
+    gamma_args = [(f, getattr(par, f)) for f in ("n_p", "R_s", "R_r", "L_ell", "L_s")]
+    eng.eval(
+        f"gamma_par = {m}.InductionMachinePars("
+        + ", ".join(f"{f}={v!r}" for f, v in gamma_args)
+        + f");\ninv_par = {m}.InductionMachineInvGammaPars("
+        + ", ".join(f"{f}={v!r}" for f, v in IM_PAR.items())
+        + f");\ngamma_params = {m}.InductionMachine(gamma_par).params();\n"
+        f"inv_params = {m}.InductionMachine(inv_par).params();",
+        nargout=0,
+    )
+    for name in ("gamma", "R_R", "L_sgm", "L_M"):
+        value = eng.eval(f"gamma_par.{name}")
+        assert value == pytest.approx(getattr(par, name), rel=1e-15)
+    for name in ("n_p", "R_s", "R_R", "L_sgm", "L_M", "G_c"):
+        value = eng.eval(f"gamma_params.par.{name}")
+        assert value == pytest.approx(getattr(par, name), rel=1e-15)
+        assert eng.eval(f"inv_params.par.{name}") == getattr(inv, name)
 
 
 def test_library(harnesses: Harnesses) -> None:

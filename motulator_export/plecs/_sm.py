@@ -215,10 +215,12 @@ def check_supported(
     Raise an error if the drive system, fed from the diode bridge `front` if given,
     is not supported.
     """
-    # System model
+    # System model, not with subclasses of the parameters, which could override the
+    # magnetic map, whose formulas are exported
     par = mdl.machine.par
-    if not isinstance(mdl.machine, SynchronousMachine) or not isinstance(
-        par, (SynchronousMachinePars, SpatialSaturatedSynchronousMachinePars)
+    if type(mdl.machine) is not SynchronousMachine or type(par) not in (
+        SynchronousMachinePars,
+        SpatialSaturatedSynchronousMachinePars,
     ):
         raise NotImplementedError(
             "Only SynchronousMachinePars and SpatialSaturatedSynchronousMachinePars"

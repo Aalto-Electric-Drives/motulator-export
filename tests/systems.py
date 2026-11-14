@@ -170,6 +170,25 @@ def sm_cvc_system(
     return build, signals
 
 
+def gamma_pars(
+    par: model.InductionMachineInvGammaPars, cage: bool = False
+) -> model.InductionMachinePars:
+    """
+    Γ-model parameters equivalent to the inverse-Γ parameters `par`, the rotor
+    resistance given as a cage impedance without inductances if `cage` is True.
+    """
+    L_s = par.L_M + par.L_sgm
+    gamma = par.L_M / L_s
+    R_r = par.R_R / gamma**2
+    return model.InductionMachinePars(
+        n_p=par.n_p,
+        R_s=par.R_s,
+        R_r=model.CageImpedance([R_r]) if cage else R_r,
+        L_ell=par.L_sgm / gamma,
+        L_s=L_s,
+    )
+
+
 def im_system(
     sensorless: bool,
     t_d: float,

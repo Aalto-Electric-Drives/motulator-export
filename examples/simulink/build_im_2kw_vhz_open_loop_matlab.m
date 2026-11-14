@@ -9,7 +9,7 @@ import motulator.drive.control.im.*
 import motulator.drive.utils.*
 
 %% System model
-par = InductionMachinePars(n_p=2, R_s=3.7, R_r=2.5122070312499996, L_ell=0.02296875, L_s=0.245);
+par = InductionMachineInvGammaPars(n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224);
 machine = InductionMachine(par);
 mechanics = MechanicalSystem(J=0.015);
 converter = VoltageSourceConverter(u_dc=540);

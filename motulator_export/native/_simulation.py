@@ -245,7 +245,7 @@ def _save(system: NativeSystem, mdl: Model, ctrl: ControlSystem) -> None:
         model._t.extend(data[:, 0])
     index = 0
     for subsystem in mdl.subsystems.values():
-        index = subsystem.extend_state_history(z.T, index)  # type: ignore
+        index = subsystem.extend_state_history(z.T, index)
     for converter in mdl.converters:
         if isinstance(converter, VoltageSourceConverter):
             history = converter._history

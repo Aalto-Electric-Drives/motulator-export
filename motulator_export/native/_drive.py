@@ -6,8 +6,9 @@ Supported:
 - Synchronous machine (`SynchronousMachine`): `SynchronousMachinePars`, or
   `SpatialSaturatedSynchronousMachinePars` with a GradNet current map with spatial
   harmonics (`CurrentMapWithHarmonics`), without core losses
-- Induction machine (`InductionMachine`) with constant parameters, without core
-  losses
+- Induction machine (`InductionMachine`) with constant parameters
+  (`InductionMachineInvGammaPars`, or `InductionMachinePars` with a constant `L_s`)
+  and a resistive cage, without core losses
 - Mechanical system (`MechanicalSystem`), the friction coefficient being constant or
   a function of the speed, or the external rotor speed (`ExternalRotorSpeed`),
   constant or a function of time
@@ -34,6 +35,7 @@ from motulator.drive.model import (
     SynchronousMachine,
 )
 from motulator.drive.utils._parameters import (
+    InductionMachineInvGammaPars,
     InductionMachinePars,
     SpatialSaturatedSynchronousMachinePars,
     SynchronousMachinePars,
@@ -50,6 +52,7 @@ from motulator_export.native._system import (
     c_void_p,
     check_supported_converter,
 )
+from motulator_export.plecs._im import check_supported_machine
 from motulator_export.plecs._sm import export_gradnet
 
 # Functions of the libraries of the drives setting the parameters of the model
@@ -57,6 +60,7 @@ DRIVE_API: Signatures = {
     "set_machine": (None, [c_void_p] + [c_double] * 5),
     "machine_current_map": (c_void_p, [c_void_p]),
     "set_machine_current_map": (None, [c_void_p, c_double, c_double, c_int]),
+    "set_induction_machine_inv_gamma": (None, [c_void_p] + [c_double] * 5),
     "set_induction_machine": (None, [c_void_p] + [c_double] * 5),
     "set_mechanics": (None, [c_void_p, c_double]),
     "set_external_rotor_speed": (None, [c_void_p]),
@@ -81,8 +85,16 @@ def set_drive(
     lib, h = system.lib, system.handle
     machine = mdl.machine
     if isinstance(machine, InductionMachine):
-        im = cast(InductionMachinePars, machine.par)
-        lib.set_induction_machine(h, im.n_p, im.R_s, im.R_r, im.L_ell, im.L_s)
+        # The rotor resistance is the resistive cage, scaled as in the parameters
+        im, R_r = machine.par, float(machine.cage.R[0])
+        if isinstance(im, InductionMachineInvGammaPars):
+            lib.set_induction_machine_inv_gamma(
+                h, im.n_p, im.R_s, R_r, im.L_sgm, im.L_M
+            )
+        else:
+            im = cast(InductionMachinePars, im)
+            L_s = cast(float, im.L_s)
+            lib.set_induction_machine(h, im.n_p, im.R_s, R_r, im.L_ell, L_s)
     elif isinstance(machine.par, SpatialSaturatedSynchronousMachinePars):
         par = machine.par
         g = export_gradnet(current_map(par))
@@ -170,17 +182,18 @@ def current_map(par: SpatialSaturatedSynchronousMachinePars) -> Any:
 def check_supported_drive(mdl: Drive, front: GridConverterSystem | None = None) -> None:
     """
     Raise an error if the machine, the mechanics, or the converter (with the diode
-    bridge `front` feeding its DC bus if given) is not supported.
+    bridge `front` feeding its DC bus if given) is not supported. Subclasses of the
+    parameters of the machine are not supported, since they could override the
+    magnetic map, whose formulas are exported.
     """
     machine = mdl.machine
     par = machine.par
     if type(machine) is InductionMachine:
-        if not isinstance(par, InductionMachinePars) or callable(par.L_s):
-            raise NotImplementedError("Only InductionMachine with constant parameters")
+        check_supported_machine(machine)
     elif type(machine) is SynchronousMachine:
-        if isinstance(par, SpatialSaturatedSynchronousMachinePars):
+        if type(par) is SpatialSaturatedSynchronousMachinePars:
             export_gradnet(current_map(par))  # Raises if not supported
-        elif not isinstance(par, SynchronousMachinePars):
+        elif type(par) is not SynchronousMachinePars:
             raise NotImplementedError(
                 "Only SynchronousMachinePars and "
                 "SpatialSaturatedSynchronousMachinePars supported in the machine model"

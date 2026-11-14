@@ -390,6 +390,27 @@ static int modulator_modulate(Modulator *self, double T_s, const double d_abc[3]
 #define AC_PORT_I_TOL 1e-4
 #define AC_PORT_U_TOL 1e-3
 
+static double complex derivative(ComplexFunction f, const void *data, double complex x,
+                                 double complex v, double h)
+{
+    if (v == 0.0) {
+        return 0.0;
+    }
+    double complex step = h * v / cabs(v);
+    return cabs(v) * (f(data, x + step) - f(data, x - step)) / (2.0 * h);
+}
+
+static void jacobian(ComplexFunction f, const void *data, double complex x, double h,
+                     double J[2][2])
+{
+    double complex d_x = derivative(f, data, x, 1.0, h);
+    double complex d_y = derivative(f, data, x, I, h);
+    J[0][0] = creal(d_x);
+    J[0][1] = creal(d_y);
+    J[1][0] = cimag(d_x);
+    J[1][1] = cimag(d_y);
+}
+
 static double current_direction(double i)
 {
     return (fabs(i) > AC_PORT_I_TOL) ? sign(i) : 0.0;

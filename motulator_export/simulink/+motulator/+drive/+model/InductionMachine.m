@@ -1,9 +1,9 @@
 classdef InductionMachine < motulator.internal.Object
     %INDUCTIONMACHINE Induction machine model.
     %   MACHINE = INDUCTIONMACHINE(PAR) as in motulator, with constant parameters
-    %   (InductionMachinePars or InductionMachineInvGammaPars). The machine is
-    %   modeled with the inverse-Gamma model, which is equivalent to the Gamma
-    %   model, with the stator and rotor flux linkages as the states.
+    %   (InductionMachineInvGammaPars or InductionMachinePars). The block models the
+    %   machine with the inverse-Gamma parameters, which both classes provide, in
+    %   stator coordinates with the stator and rotor flux linkages as the states.
 
     properties
         par  % Machine model parameters
@@ -22,10 +22,8 @@ classdef InductionMachine < motulator.internal.Object
         function s = params(obj)
             %PARAMS Arguments as a struct, with the inverse-Gamma parameters.
             par = obj.par;
-            if isa(par, 'motulator.drive.model.InductionMachinePars')
-                par = motulator.drive.model.InductionMachineInvGammaPars.from_gamma_pars(par);
-            end
-            s = struct('par', par.params());
+            s = struct('par', struct('n_p', par.n_p, 'R_s', par.R_s, ...
+                'R_R', par.R_R, 'L_sgm', par.L_sgm, 'L_M', par.L_M, 'G_c', par.G_c));
         end
     end
 end

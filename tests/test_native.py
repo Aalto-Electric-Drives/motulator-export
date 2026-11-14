@@ -45,6 +45,7 @@ from tests.systems import (
     SM_CVC_D_MIN,
     Build,
     blocked_drive,
+    gamma_pars,
     gfl_system,
     gfm_system,
     im_fvc_system,
@@ -881,6 +882,27 @@ def test_gate_blocking_n_eval() -> None:
     """The events of the diode transitions with the evenly spaced points (N_eval)."""
     build = sm_system(sensorless=True, t_d=0.0, blocked=True)[0]
     check(*simulate(build, 0.2, N_eval=4), rtol=1e-9)
+
+
+@pytest.mark.parametrize("cage", [False, True], ids=["resistance", "cage"])
+def test_gamma_pars(cage: bool) -> None:
+    """
+    The induction machine model with the Γ-model parameters (`InductionMachinePars`),
+    whose rotor quantities are scaled accordingly, the rotor resistance given as a
+    resistance or as a cage impedance without inductances, here with the gates blocked
+    at the start and during the operation, so that the AC port is also compared.
+    """
+    build = im_system(sensorless=True, t_d=0.0, i_0=0.0, blocked=True)[0]
+
+    def build_gamma() -> tuple[model.Drive, Any]:
+        mdl, ctrl = build()
+        inv = cast(model.InductionMachineInvGammaPars, mdl.machine.par)
+        machine = model.InductionMachine(gamma_pars(inv, cage))
+        return model.Drive(machine, mdl.mechanics, mdl.converter), ctrl
+
+    res_py, res_c = simulate(build_gamma, 0.3)
+    assert not np.all(res_c.mdl.converter.enabled)
+    check(res_py, res_c, rtol=1e-9)
 
 
 def test_unsupported() -> None:

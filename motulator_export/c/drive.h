@@ -4,26 +4,32 @@
  *
  * Python counterparts:
  *   motulator/drive/model/_drive.py       Drive
- *   motulator/drive/model/_machine.py     SynchronousMachine, InductionMachine
+ *   motulator/drive/model/_machine.py     SynchronousMachine, InductionMachine,
+ *                                         _compute_ac_port
  *   motulator/drive/model/_mechanics.py   MechanicalSystem, ExternalRotorSpeed
  *   motulator/drive/utils/_parameters.py  SynchronousMachinePars,
  *                                         SpatialSaturatedSynchronousMachinePars,
+ *                                         InductionMachineInvGammaPars,
  *                                         InductionMachinePars
  *
  * The machine is a synchronous machine, whose magnetic model has constant inductances
  * (SynchronousMachinePars) or is a GradNet current map with spatial harmonics
  * (CurrentMapWithHarmonics in SpatialSaturatedSynchronousMachinePars), or an
- * induction machine with constant parameters (the Γ model of InductionMachinePars).
- * The core losses are not modeled (G_c = 0), and the measurements are ideal. The
- * converter has a constant DC-bus voltage, or it is fed by a DC-bus model (see
- * sim.h).
+ * induction machine with constant parameters, whose magnetic model is the inverse-Γ
+ * model (InductionMachineInvGammaPars) or the Γ model (InductionMachinePars with a
+ * constant L_s) and whose rotor cage is a resistance. Both machines are modeled in
+ * rotor coordinates, and the rotor quantities of the induction machine are scaled as
+ * in its parameters. The core losses are not modeled (G_c = 0), and the measurements
+ * are ideal. The converter has a constant DC-bus voltage, or it is fed by a DC-bus
+ * model (see sim.h).
  *
  * The states are those of motulator, in the same order: the states of the DC bus,
- * the stator flux linkage in rotor coordinates and the electrical rotor angle of the
- * synchronous machine (or the stator and rotor flux linkages in stator coordinates of
- * the induction machine), and the mechanical rotor angle and speed of the mechanics
+ * the states of the machine (the stator flux linkage in rotor coordinates, the rotor
+ * flux linkage in rotor coordinates of the induction machine, and the electrical
+ * rotor angle), and the mechanical rotor angle and speed of the mechanics
  * (MechanicalSystem), or the mechanical rotor angle (ExternalRotorSpeed, whose speed
- * is a function of time).
+ * is a function of time). The cage of the induction machine, being a resistance, has
+ * no states.
  */
 
 #ifndef MOTULATOR_DRIVE_H
@@ -33,17 +39,16 @@
 #include "gradnet.h"
 #include "sim.h"
 
-/* Indices of the states after those of the DC bus */
-#define DRIVE_psi_s 0   /* psi_s_dq (synchronous) or psi_s_ab (induction machine) */
-#define DRIVE_theta_m 1 /* Synchronous machine */
-#define DRIVE_psi_r 1   /* psi_r_ab (induction machine) */
-#define DRIVE_theta_M 2
-#define DRIVE_w_M 3
+/* Indices of the flux linkages after the states of the DC bus. The electrical rotor
+ * angle follows them, and the states of the mechanics follow the angle (see
+ * drive_theta_m). */
+#define DRIVE_psi_s 0 /* psi_s_dq */
+#define DRIVE_psi_r 1 /* psi_r_dq of the induction machine */
 #define SM_DRIVE_STATES "psi_s_dq theta_m theta_M w_M"
-#define IM_DRIVE_STATES "psi_s_ab psi_r_ab theta_M w_M"
+#define IM_DRIVE_STATES "psi_s_dq psi_r_dq theta_m theta_M w_M"
 /* The states with the external rotor speed (ExternalRotorSpeed) */
 #define SM_DRIVE_STATES_EXT "psi_s_dq theta_m theta_M"
-#define IM_DRIVE_STATES_EXT "psi_s_ab psi_r_ab theta_M"
+#define IM_DRIVE_STATES_EXT "psi_s_dq psi_r_dq theta_m theta_M"
 
 typedef struct {
     double n_p;
@@ -57,12 +62,18 @@ typedef struct {
     int k;               /* Order of the spatial harmonics */
 } SynchronousMachine;
 
-/* Γ model with constant parameters (InductionMachinePars) */
+/* Induction machine with constant parameters, whose magnetic model is the inverse-Γ
+ * model (InductionMachineInvGammaPars) or the Γ model (InductionMachinePars). Its
+ * rotor quantities are scaled as in the parameters, and so is the rotor resistance
+ * R_r, which is the cage of the parameters (R_R of the inverse-Γ model). */
 typedef struct {
     double n_p;
     double R_s;
     double R_r;
-    double L_ell;
+    int inv_gamma; /* Inverse-Γ model (else Γ model) */
+    double L_sgm;  /* Inverse-Γ model */
+    double L_M;
+    double L_ell;  /* Γ model */
     double L_s;
 } InductionMachine;
 
@@ -94,14 +105,22 @@ typedef struct {
 static void drive_init(Drive *self);
 /* Stator current (A) in rotor coordinates and the electromagnetic torque (Nm) as
  * functions of the stator flux linkage (Vs) in rotor coordinates and the electrical
- * rotor angle (SynchronousMachine.compute_outputs) */
+ * rotor angle (magnetic_map of the parameters of the synchronous machine) */
 static void sm_magnetic_map(const SynchronousMachine *self, double complex psi_s_dq,
                             double theta_m, double complex *i_s_dq, double *tau_M);
-/* Measured converter current (abc2complex(machine.meas_currents())) */
+/* Stator and rotor currents (A) in rotor coordinates and the electromagnetic torque
+ * (Nm) as functions of the stator and rotor flux linkages (Vs) in rotor coordinates
+ * (magnetic_map of the parameters of the induction machine) */
+static void im_magnetic_map(const InductionMachine *self, double complex psi_s_dq,
+                            double complex psi_r_dq, double complex *i_s_dq,
+                            double complex *i_r_dq, double *tau_M);
+/* Measured converter current of the ideal current sensor
+ * (VectorControlSystem.get_measurement) */
 static double complex drive_meas_current(const Drive *self, const double complex *x);
-/* Measured mechanical rotor speed (mechanics.meas_speed()) at the time t */
+/* Measured mechanical rotor speed of the ideal speed sensor at the time t */
 static double drive_meas_speed(const Drive *self, double t, const double complex *x);
-/* Measured mechanical rotor angle (wrap(mechanics.meas_position())) */
+/* Measured mechanical rotor angle of the ideal position sensor, wrapped
+ * (VectorControlSystem.get_measurement) */
 static double drive_meas_position(const Drive *self, const double complex *x);
 
 #endif

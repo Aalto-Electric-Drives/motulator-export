@@ -17,7 +17,8 @@ model equivalent to the inverse-Γ model of motulator.
 Currently supported:
 
 - Induction machine with constant parameters (`InductionMachineInvGammaPars`, or
-  `InductionMachinePars` with a constant `L_s`) without core losses
+  `InductionMachinePars` with a constant `L_s`) and a resistive cage, without core
+  losses
 - Mechanical system (`MechanicalSystem` without friction), the converter, and the DC
   bus as in `motulator_export.plecs._sm`
 - Current-vector control (`CurrentVectorController`, also with the direct
@@ -123,18 +124,35 @@ def check_supported(
     Raise an error if the drive system, fed from the diode bridge `front` if given,
     is not supported.
     """
-    par = mdl.machine.par
-    if (
-        not isinstance(mdl.machine, InductionMachine)
-        or not isinstance(par, InductionMachinePars)
-        or callable(par.L_s)
-    ):
-        raise NotImplementedError("Only InductionMachine with constant parameters")
-    if par.G_c != 0:
+    check_supported_machine(mdl.machine)
+    if mdl.machine.par.G_c != 0:
         raise NotImplementedError("Core losses not supported")
     _check_supported_plant(mdl, dead_time=True, front=front)
     _check_supported_control(ctrl)
     check_mechanical_sensor(mdl, ctrl)
+
+
+def check_supported_machine(machine: Any) -> None:
+    """
+    Raise an error if the induction machine model does not have constant parameters
+    (`InductionMachineInvGammaPars`, or `InductionMachinePars` with a constant `L_s`)
+    and a resistive cage (`CageImpedance` without inductances). Subclasses are not
+    supported, since they could override the magnetic map, whose formulas are
+    exported.
+    """
+    par = machine.par if type(machine) is InductionMachine else None
+    if type(par) is not InductionMachineInvGammaPars and (
+        type(par) is not InductionMachinePars or callable(par.L_s)
+    ):
+        raise NotImplementedError(
+            "Only InductionMachine with constant parameters "
+            "(InductionMachineInvGammaPars, or InductionMachinePars with a constant "
+            "L_s) supported"
+        )
+    if machine.cage.L.size > 0:
+        raise NotImplementedError(
+            "Only a resistive cage supported (CageImpedance without inductances)"
+        )
 
 
 def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
@@ -256,14 +274,25 @@ def _fields(obj: Any, names: list[str]) -> dict[str, Any]:
     return {name: getattr(obj, name) for name in names}
 
 
+def plant_pars(machine: InductionMachine) -> dict[str, Any]:
+    """
+    Inverse-Γ parameters (`PAR_FIELDS`) of the induction machine model, which both
+    `InductionMachineInvGammaPars` and `InductionMachinePars` provide, with the rotor
+    resistance of the cage of the model (`machine.cage`).
+    """
+    par = machine.par
+    R_R = float(machine.cage.R[0])  # Scaled as in the parameters
+    if type(par) is InductionMachinePars:
+        R_R *= par.gamma**2
+    return _fields(par, PAR_FIELDS) | {"R_R": R_R}
+
+
 def export_plant_variables(
     mdl: Drive, front: GridConverterSystem | None = None
 ) -> list[tuple[str, Any]]:
-    """Workspace variables of the system model (inverse-Γ machine parameters)."""
-    par = InductionMachineInvGammaPars.from_gamma_pars(
-        cast(InductionMachinePars, mdl.machine.par)
-    )
-    variables = [(f"machine.{n}", v) for n, v in _fields(par, PAR_FIELDS).items()]
+    """Workspace variables of the system model (`plant_pars` of the machine)."""
+    pars = plant_pars(cast(InductionMachine, mdl.machine))
+    variables = [(f"machine.{n}", v) for n, v in pars.items()]
     return variables + mechanics_and_converter_variables(mdl, front)
 
 

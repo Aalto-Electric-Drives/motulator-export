@@ -254,11 +254,14 @@ class NativeSystem:
         Start the simulation from the time and the states of the model, with the first
         sampling instant `t_start` and the controller time `t_ctrl`.
         """
+        # The names of the entries of the state vector, with an entry per element of
+        # an array state (e.g., none for the empty array of a resistive cage)
         names = [
             n
             for s in mdl.subsystems.values()
             if s.state is not None
-            for n in vars(s.state)
+            for n, x in vars(s.state).items()
+            for _ in range(np.size(x))
         ]
         if names != self.fields(control=False):
             raise NotImplementedError(
