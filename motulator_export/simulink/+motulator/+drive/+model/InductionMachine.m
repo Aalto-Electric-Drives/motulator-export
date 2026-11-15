@@ -21,7 +21,7 @@ classdef InductionMachine < motulator.internal.Object
 
         function s = params(obj)
             %PARAMS Arguments as a struct, with the inverse-Gamma parameters.
-            par = obj.par;
+            par = obj.par.inv_gamma_pars(0);
             s = struct('par', struct('n_p', par.n_p, 'R_s', par.R_s, ...
                 'R_R', par.R_R, 'L_sgm', par.L_sgm, 'L_M', par.L_M, 'G_c', par.G_c));
         end

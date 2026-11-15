@@ -125,17 +125,23 @@ if ~isempty(in(meas))
     end
 end
 
-% Output ports and the scope: the speed and the torque of the control system and
-% of the machine, the phase currents, and the flux linkages of the control system
+% Output ports and the scope: the speed and the torque of the control system (none
+% in open-loop V/Hz control) and of the machine, the phase currents, and the flux
+% linkages or, in open-loop V/Hz control, the voltages of the control system
 groups = info.outputs;
 n_mdl = 6;
 signals = @(names) n_mdl + cellfun(@(n) find(strcmp(info.signals, n)), names);
-flux = find(strncmp(info.signals, 'psi', 3)) + n_mdl;
+named = @(prefix) strncmp(groups(:, 1), prefix, numel(prefix));
+torque = [];
+if any(named('Torque'))
+    torque = signals(groups{named('Torque'), 2});
+end
+last = find(named('Flux') | named('Voltage'), 1);
 scope = {
     'Speed', [signals(groups{1, 2}), 4]
-    'Torque', [signals(groups{2, 2}), 6]
+    'Torque', [torque, 6]
     'Current', [1 2 3]
-    'Flux', flux
+    strtok(groups{last, 1}), signals(groups{last, 2})
     };
 add_outputs(sys, cs, scope, 1120, y_ctrl);
 end

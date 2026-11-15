@@ -306,7 +306,7 @@ def check_supported_vhz_ctrl(vhz: Any) -> None:
         raise NotImplementedError("Only ObserverBasedVHzController supported")
     if vhz.cfg.k_o is not None:
         fit_speed_dependent_gain(vhz.cfg.k_o, "k_o")  # Raises if not supported
-    _check_supported_par(vhz.reference_gen.par)
+    _check_supported_par(vhz.par)
 
 
 def _check_supported_par(par: Any) -> None:
@@ -440,7 +440,7 @@ def vhz_values(
     as [k0, k1]), with the GradNet flux map.
     """
     cfg: ObserverBasedVHzControllerCfg = vhz.cfg
-    values, flux_map = _par_values(vhz.reference_gen.par)
+    values, flux_map = _par_values(vhz.par)
     values |= {n: getattr(cfg, n) for n in VHZ_CFG_FIELDS}
     values["k_o"] = (
         None if cfg.k_o is None else fit_speed_dependent_gain(cfg.k_o, "k_o")

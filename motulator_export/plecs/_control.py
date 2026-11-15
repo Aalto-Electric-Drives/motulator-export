@@ -1500,7 +1500,7 @@ def vhz_control_system(
     name: str,
     inputs: list[Port],
     measurement: CBlock,
-    vhz_ctrl: Subsystem,
+    vhz_ctrl: Subsystem | CBlock,
     signals: CBlock,
 ) -> Subsystem:
     """
@@ -1509,14 +1509,15 @@ def vhz_control_system(
 
     The inputs are `enable`, the speed reference `w_M_ref`, and the inputs of the
     measurements. The speed reference is limited by the rate limiter. The V/Hz
-    controller has the inputs `enable`, the rate-limited speed reference `w_M`,
-    `meas`, `u_c_ab`, and optionally `u_c_zoh_ab`, and the outputs `fbk` and `ref`.
-    The inputs of the monitored signals are `enable`, `fbk`, `ref`, and `w_M_ref`
-    (the rate-limited speed reference).
+    controller has the inputs `w_M` (the rate-limited speed reference), `meas`,
+    `u_c_ab`, and optionally `enable` and `u_c_zoh_ab`, and the outputs `fbk` and
+    `ref`. The inputs of the monitored signals are `enable`, `fbk`, `ref`, and
+    `w_M_ref` (the rate-limited speed reference).
 
     """
     vc = vhz_ctrl.name
-    zoh = "u_c_zoh_ab" in [p.name for p in vhz_ctrl.inputs]
+    names = [p.name for p in vhz_ctrl.inputs]
+    zoh = "u_c_zoh_ab" in names
     fbk, ref = sig.width("fbk"), sig.width("ref")
     # The feedback signals, the references, and the rate-limited speed reference to
     # the monitored signals by tags
@@ -1544,7 +1545,7 @@ def vhz_control_system(
         ],
         [
             (ENABLE, "PWM:enable"),
-            (ENABLE, f"{vc}:enable"),
+            *([(ENABLE, f"{vc}:enable")] if ENABLE in names else []),
             ("w_M_ref", "RateLimiter:u"),
             ("RateLimiter:y", f"{vc}:w_M"),
             ("RateLimiter:y", "Goto w_M"),
@@ -1624,14 +1625,20 @@ TOP_ARGS = {
     ),
     "VHzControlSystem": (
         [
-            ("vhz_ctrl", "vhz_ctrl: V/Hz controller ({}) as a struct: par, cfg"),
+            ("vhz_ctrl", "vhz_ctrl: V/Hz controller ({}) as a struct of its arguments"),
             (
                 "slew_rate",
                 "slew_rate: Slew rate of the speed reference (mechanical rad/s²)",
             ),
             ("pwm", "pwm: PWM as a struct"),
         ],
-        "T_s = vhz_ctrl.cfg.T_s;\n",
+        "% Sampling period (cfg.T_s of ObserverBasedVHzController, or T_s of\n"
+        "% OpenLoopVHzController)\n"
+        "if isfield(vhz_ctrl, 'cfg')\n"
+        "  T_s = vhz_ctrl.cfg.T_s;\n"
+        "else\n"
+        "  T_s = vhz_ctrl.T_s;\n"
+        "end\n",
     ),
     "GridConverterControlSystem": (
         [

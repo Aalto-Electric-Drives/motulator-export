@@ -7519,7 +7519,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "CurrentController (motulator)"
-      MaskDescription "Flux-linkage-based current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller (DiscreteCurrentController), the currents mapped to the flux linkages by the machine model. The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskDescription "Flux-linkage-based current controller (current_ctrl of CurrentVectorController): the currents are mapped to the flux linkages by the machine model, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
       MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -10371,7 +10371,7 @@ Plecs {
       CodeGenTarget "Generic"
       MaskType      "CurrentVectorController (motulator)"
       MaskDescription "Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as CurrentVectorController. The inputs u_c_lim_ab (the limited voltage reference of the PWM) and enable (the gate enable) are used by the direct discrete-time current controller. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
-      MaskInit      "% Default of alpha_i (CurrentController.__init__)\nalpha_i = cfg.alpha_i;\nif isempty(alpha_i)\n  alpha_i = cfg.alpha_c;\nend\n"
+      MaskInit      "% Default of alpha_i (CurrentVectorController.__init__)\nalpha_i = cfg.alpha_i;\nif isempty(alpha_i)\n  alpha_i = cfg.alpha_c;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -11981,7 +11981,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "CurrentController (motulator)"
-      MaskDescription "Current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller of the leakage flux linkages L_sgm*i (DiscreteCurrentController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
+      MaskDescription "Current controller (current_ctrl of CurrentVectorController): the currents are mapped to the leakage flux linkages L_sgm*i, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -17249,14 +17249,14 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "Observer-based VHz control (motulator)"
-      MaskDescription "Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
-      MaskInit      "T_s = vhz_ctrl.cfg.T_s;\n"
+      MaskDescription "Observer-based V/Hz control of an induction machine drive (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "% Sampling period (cfg.T_s of ObserverBasedVHzController, or T_s of\n% OpenLoopVHzController)\nif isfield(vhz_ctrl, 'cfg')\n  T_s = vhz_ctrl.cfg.T_s;\nelse\n  T_s = vhz_ctrl.T_s;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
         Variable      "vhz_ctrl"
-        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct: par, cfg"
+        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct of its arguments"
         Type          FreeText
         Value         "vhz_ctrl"
         Show          off
@@ -18346,8 +18346,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ObserverBasedVHzController (motulator)"
-      MaskDescription "Observer-based V/Hz controller (ObserverBasedVHzController), or pure open-loop V/Hz control if par.L_M = inf. The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization passes the parameters to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
-      MaskInit      "% Pure open-loop V/Hz control with L_M = inf (ObserverBasedVHzController):\n% the unit observer gain with the weight h = 1, which disables the model-based\n% correction (create_vhz_observer), the initial flux estimate, and k_u = inf\nif isinf(par.L_M)\n  k_o = 1;\n  h = 1;\n  psi_s0 = cfg.psi_s_nom;\n  k_u = inf;\nelse\n  k_o = [];\n  h = 0;\n  psi_s0 = 0;\n  k_u = cfg.k_u;\nend\n"
+      MaskDescription "Observer-based V/Hz controller (ObserverBasedVHzController). The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The parameters are passed to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -18556,7 +18555,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver), created by create_vhz_observer: the rotor speed w_M is the rate-limited speed reference, and the external speed error signal is zero, with the weight h (1 in pure open-loop V/Hz control, which disables the model-based correction). The initial stator flux estimate is psi_s0. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars. L_M = inf in pure open-loop V/Hz control."
+      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver), created by create_vhz_observer with the default observer gain: the rotor speed w_M is the rate-limited speed reference, without the external speed error signal. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -18566,33 +18565,6 @@ Plecs {
         Prompt        "par: Machine model (InductionMachineInvGammaPars) as a struct"
         Type          FreeText
         Value         "par"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
-        Variable      "k_o"
-        Prompt        "k_o: Observer gain k_o(w_m), [] = the default of create_vhz_observer, 1 = unity"
-        Type          FreeText
-        Value         "k_o"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
-        Variable      "h"
-        Prompt        "h: Weight of the external speed error signal"
-        Type          FreeText
-        Value         "h"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
-        Variable      "psi_s0"
-        Prompt        "psi_s0: Initial stator flux estimate (Vs)"
-        Type          FreeText
-        Value         "psi_s0"
         Show          off
         Tunable       on
         TabName       ""
@@ -18783,7 +18755,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_o, h, psi_s0, T_s, par_n_p, par_R_s, par_R_R, par_L_sgm, par_L_M"
+        Value         "T_s, par_n_p, par_R_s, par_R_R, par_L_sgm, par_L_M"
         Show          off
       }
       Parameter {
@@ -18803,17 +18775,17 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_current_vector.c\"\n#include \"../c/im_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic IMFluxObserver self;\nstatic double T_s; /* Sampling period */\nstatic double h;\nstatic IMObserverOutputs out;\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_current_vector.c\"\n#include \"../c/im_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic IMFluxObserver self;\nstatic double T_s; /* Sampling period */\nstatic IMObserverOutputs out;\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(1) != 1) {\n    SetErrorMessage(\"h must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"psi_s0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(0) > 0 && (PDIM(0) != 1 || P(0, 0) != 1.0)) {\n    SetErrorMessage(\"Only k_o = [] (the default) or 1 supported.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"par_n_p must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"par_R_s must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"par_R_R must be a scalar.\");\n    return;\n}\nif (PDIM(7) != 1) {\n    SetErrorMessage(\"par_L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(8) != 1) {\n    SetErrorMessage(\"par_L_M must be a scalar.\");\n    return;\n}\n/* Machine model (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {P(4, 0), P(5, 0), P(6, 0),\n                                    P(7, 0), P(8, 0)};\nim_flux_observer_init(&self, par, 1);\nself.unit_gain = PDIM(0) > 0;\nself.psi_s = P(2, 0);\nT_s = P(3, 0);\nh = P(1, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"par_n_p must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"par_R_s must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"par_R_R must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"par_L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"par_L_M must be a scalar.\");\n    return;\n}\n/* Machine model (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {P(1, 0), P(2, 0), P(3, 0),\n                                    P(4, 0), P(5, 0)};\nim_flux_observer_init(&self, par, 1);\nT_s = P(0, 0);\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\n/* The rotor speed is the speed reference, without the external speed\n * error signal */\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n                                InputSignal(3, 0), 0.0, h, &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n * open-circuit voltage of the observer if unknown */\ndouble complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\nout.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n                               : cexp(-I * out.theta_c) * u_s_ab;\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\n/* The rotor speed is the speed reference, without the external speed\n * error signal */\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n                                InputSignal(3, 0), 0.0, 0.0, &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n * open-circuit voltage of the observer if unknown */\ndouble complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\nout.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n                               : cexp(-I * out.theta_c) * u_s_ab;\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -19044,7 +19016,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ReferenceGenerator (motulator)"
-      MaskDescription "Reference generator with field weakening and torque limits (ReferenceGenerator). The inputs are the DC-bus voltage, the torque reference, and the feedback signals fbk (the synchronous angular frequency fbk.w_s and the rotor flux estimate fbk.psi_R). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars. L_M = inf in pure open-loop V/Hz control."
+      MaskDescription "Reference generator with field weakening and torque limits (ReferenceGenerator). The inputs are the DC-bus voltage, the torque reference, and the feedback signals fbk (the synchronous angular frequency fbk.w_s and the rotor flux estimate fbk.psi_R). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -19089,7 +19061,7 @@ Plecs {
         Variable      "k_u"
         Prompt        "k_u: Voltage utilization factor"
         Type          FreeText
-        Value         "k_u"
+        Value         "cfg.k_u"
         Show          off
         Tunable       on
         TabName       ""
@@ -19471,7 +19443,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxTorqueController (motulator)"
-      MaskDescription "Flux and torque controller (FluxTorqueController) without the integral action. The input ref is [psi_s tau_M], the flux and torque references, and the output is the stator voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars. L_M = inf in pure open-loop V/Hz control."
+      MaskDescription "Flux and torque controller (FluxTorqueController) without the integral action. The input ref is [psi_s tau_M], the flux and torque references, and the output is the stator voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -20549,7 +20521,7 @@ Plecs {
     }
     Component {
       Type          Subsystem
-      Name          "Observer-based VHz control (SM)"
+      Name          "Open-loop VHz control"
       Show          on
       Position      [100, 610]
       Direction     up
@@ -20559,15 +20531,2060 @@ Plecs {
       SampleTime    "-1"
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
-      MaskType      "Observer-based VHz control (SM) (motulator)"
-      MaskDescription "Observer-based V/Hz control of a synchronous machine drive (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
-      MaskInit      "T_s = vhz_ctrl.cfg.T_s;\n"
+      MaskType      "Open-loop VHz control (motulator)"
+      MaskDescription "Open-loop V/Hz control of an induction machine drive (VHzControlSystem with OpenLoopVHzController). The speed reference is in mechanical rad/s, and the monitored current is in the coordinates of the controller. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "% Sampling period (cfg.T_s of ObserverBasedVHzController, or T_s of\n% OpenLoopVHzController)\nif isfield(vhz_ctrl, 'cfg')\n  T_s = vhz_ctrl.cfg.T_s;\nelse\n  T_s = vhz_ctrl.T_s;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
         Variable      "vhz_ctrl"
-        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct: par, cfg"
+        Prompt        "vhz_ctrl: V/Hz controller (OpenLoopVHzController) as a struct of its arguments"
+        Type          FreeText
+        Value         "vhz_ctrl"
+        Show          off
+        Tunable       on
+        TabName       "VHzControlSystem"
+      }
+      Parameter {
+        Variable      "slew_rate"
+        Prompt        base64 "c2xld19yYXRlOiBTbGV3IHJhdGUgb2YgdGhlIHNwZWVkIHJlZmVyZW5jZSAobWVjaGFuaWNhbCByYWQvc8KyKQ=="
+        Type          FreeText
+        Value         "slew_rate"
+        Show          off
+        Tunable       on
+        TabName       "VHzControlSystem"
+      }
+      Parameter {
+        Variable      "pwm"
+        Prompt        "pwm: PWM as a struct"
+        Type          FreeText
+        Value         "pwm"
+        Show          off
+        Tunable       on
+        TabName       "VHzControlSystem"
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -15]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 15]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 0]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 970, 370]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "enable"
+      Show          on
+      Position      [40, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "w_M_ref"
+      Show          on
+      Position      [40, 100]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "i_s_abc"
+      Show          on
+      Position      [40, 140]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_dc"
+      Show          on
+      Position      [40, 180]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "d_abc"
+      Show          on
+      Position      [585, 235]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "get_measurement"
+      Show          on
+      Position      [230, 135]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -20; 50, 20]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[3 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[3]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n/* Lower limit (V) of the measured DC-bus voltage, which avoids the division by\n * zero in the PWM if the DC bus is not charged */\n#define U_DC_MIN 1.0\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double i_s_abc[3] = {InputSignal(0, 0), InputSignal(0, 1),\n    InputSignal(0, 2)};\nIMOpenLoopVHzMeasurements meas;\n/* Measurements, the DC-bus voltage limited to U_DC_MIN */\nmeas.i_c_ab = abc2complex(i_s_abc);\nmeas.u_dc = fmax(InputSignal(1, 0), U_DC_MIN);\ndouble y[OLVHZ_MEAS_WIDTH];\nim_open_loop_vhz_measurements_pack(&meas, y);\nfor (int k = 0; k < OLVHZ_MEAS_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "RateLimiter"
+      Show          on
+      Position      [230, 70]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -15; 50, 15]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "RateLimiter (motulator)"
+      MaskDescription "Rate limiter (RateLimiter): the rising and falling rates of the signal are limited to rate_limit, e.g., the slew rate of the speed reference (mechanical rad/s²) in VHzControlSystem."
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "rate_limit"
+        Prompt        "rate_limit: Rate limit, inf = none"
+        Type          FreeText
+        Value         "slew_rate"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "T_s"
+        Prompt        "T_s: Sampling period (s)"
+        Type          FreeText
+        Value         "T_s"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 0]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 0]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 250, 100]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "u"
+      Show          on
+      Position      [40, 35]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "y"
+      Show          on
+      Position      [200, 45]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "C-Script"
+      Show          on
+      Position      [125, 45]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-30, -15; 30, 15]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "rate_limit, T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic RateLimiter self;\nstatic double T_s; /* Sampling period */\nstatic double y;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"rate_limit must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nrate_limiter_init(&self, P(0, 0));\nT_s = P(1, 0);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "y = rate_limiter_compute_output(&self, T_s, InputSignal(0, 0));\nOutputSignal(0, 0) = y;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         "rate_limiter_update(&self, y);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u"
+      SrcTerminal   1
+      Points        [70, 35; 70, 45]
+      DstComponent  "C-Script"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   2
+      DstComponent  "y"
+      DstTerminal   1
+    }
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "PWM"
+      Show          on
+      Position      [460, 215]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -50; 50, 50]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "PWM (motulator)"
+      MaskDescription "Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system."
+      MaskInit      "% MME overmodulation, or MPE\nmme = strcmp(overmodulation, 'MME');\n"
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "T_s"
+        Prompt        "T_s: Sampling period (s)"
+        Type          FreeText
+        Value         "T_s"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "t_d"
+        Prompt        "t_d: Dead time (s) in d_err = InverterNonlinearity(t_d, u_th, sign)"
+        Type          FreeText
+        Value         "pwm.t_d"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "u_th"
+        Prompt        "u_th: Threshold voltage (V) in InverterNonlinearity (d_err = None if t_d = u_th = 0)"
+        Type          FreeText
+        Value         "pwm.u_th"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "i_0"
+        Prompt        "i_0: Current scale (A) of sign = tanh(i/i_0) in InverterNonlinearity, 0 = np.sign"
+        Type          FreeText
+        Value         "pwm.i_0"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "feedforward"
+        Prompt        "feedforward: Compensate for d_err (1) or not (0)"
+        Type          FreeText
+        Value         "pwm.feedforward"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "d_min"
+        Prompt        "d_min: Minimum duty ratio of a switching leg, 0 = no limit"
+        Type          FreeText
+        Value         "pwm.d_min"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "single_update"
+        Prompt        "single_update: Duty ratios updated once (1) or twice (0) per carrier period"
+        Type          FreeText
+        Value         "pwm.single_update"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "overmodulation"
+        Prompt        "overmodulation: Overmodulation, 'MPE' or 'MME'"
+        Type          FreeText
+        Value         "pwm.overmodulation"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -30]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 10]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 30]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, -20]
+        Direction     right
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 0]
+        Direction     right
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 20]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 595, 220]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "enable"
+      Show          on
+      Position      [40, 175]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "meas"
+      Show          on
+      Position      [40, 55]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_c_ref_ab"
+      Show          on
+      Position      [40, 95]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "w"
+      Show          on
+      Position      [40, 135]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "u_c_ab"
+      Show          on
+      Position      [545, 50]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "u_c_zoh_ab"
+      Show          on
+      Position      [545, 90]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "6"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "d_abc"
+      Show          on
+      Position      [545, 130]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "7"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "compute_output"
+      Show          on
+      Position      [230, 100]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -25; 50, 25]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[3 2 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[3]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "T_s, t_d, u_th, i_0, feedforward, d_min, single_update, mme"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic PWM self;\nstatic double T_s; /* Sampling period */\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"u_th must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"single_update must be a scalar.\");\n    return;\n}\nif (PDIM(7) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5); /* k_pred */\npwm_set_overmodulation(&self, (int)P(7, 0));\npwm_set_nonlinearity(&self, P(1, 0), P(2, 0), P(3, 0), (int)P(4, 0));\npwm_set_min_pulse(&self, P(5, 0));\npwm_set_single_update(&self, (int)P(6, 0));\nT_s = P(0, 0);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double meas_u[OLVHZ_MEAS_WIDTH];\nfor (int k = 0; k < OLVHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMOpenLoopVHzMeasurements meas;\nim_open_loop_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_c_ref_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\ndouble d_abc[3];\npwm_compute_output(&self, T_s, u_c_ref_ab, meas.u_dc, InputSignal(2, 0),\n                   meas.i_c_ab, d_abc, NULL);\nfor (int k = 0; k < 3; k++) {\n    OutputSignal(0, k) = d_abc[k];\n}\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "get_realized_voltage"
+      Show          on
+      Position      [430, 55]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -25; 50, 25]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[1 3 3]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[2 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1 0]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "T_s, t_d, u_th, i_0, feedforward, d_min, single_update, mme"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic PWM self;\nstatic double T_s; /* Sampling period */\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"t_d must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"u_th must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"i_0 must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"feedforward must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"d_min must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"single_update must be a scalar.\");\n    return;\n}\nif (PDIM(7) != 1) {\n    SetErrorMessage(\"mme must be a scalar.\");\n    return;\n}\npwm_init(&self, 1.5); /* k_pred */\npwm_set_overmodulation(&self, (int)P(7, 0));\npwm_set_nonlinearity(&self, P(1, 0), P(2, 0), P(3, 0), (int)P(4, 0));\npwm_set_min_pulse(&self, P(5, 0));\npwm_set_single_update(&self, (int)P(6, 0));\nT_s = P(0, 0);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double meas_u[OLVHZ_MEAS_WIDTH];\nfor (int k = 0; k < OLVHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nIMOpenLoopVHzMeasurements meas;\nim_open_loop_vhz_measurements_unpack(meas_u, &meas);\n/* Average of the previous and the ongoing periods, and of the ongoing\n * period, or while the gates are blocked, unknown (NAN) */\ndouble complex u_c_ab = NAN;\ndouble complex u_c_zoh_ab = NAN;\nif (InputSignal(0, 0) > 0.0) {\n    u_c_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 1);\n    u_c_zoh_ab = pwm_realized_voltage(&self, meas.i_c_ab, meas.u_dc, 0);\n}\nOutputSignal(0, 0) = creal(u_c_ab);\nOutputSignal(0, 1) = cimag(u_c_ab);\nOutputSignal(1, 0) = creal(u_c_zoh_ab);\nOutputSignal(1, 1) = cimag(u_c_zoh_ab);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         "/* The duty ratios of the next period */\ndouble d_abc[3];\nfor (int k = 0; k < 3; k++) {\n    d_abc[k] = InputSignal(2, k);\n}\npwm_update(&self, T_s, d_abc);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
+      Type          From
+      Name          "From get_realized_voltage.enable"
+      Show          off
+      Position      [341, 45]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "enable"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto enable"
+      Show          off
+      Position      [100, 175]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "enable"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From get_realized_voltage.enable"
+      SrcTerminal   1
+      DstComponent  "get_realized_voltage"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "meas"
+      SrcTerminal   1
+      Points        [155, 55]
+      Branch {
+        Points        [155, 90]
+        DstComponent  "compute_output"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "get_realized_voltage"
+        DstTerminal   2
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_c_ref_ab"
+      SrcTerminal   1
+      Points        [135, 95; 135, 100]
+      DstComponent  "compute_output"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "w"
+      SrcTerminal   1
+      Points        [145, 135; 145, 110]
+      DstComponent  "compute_output"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "compute_output"
+      SrcTerminal   4
+      Points        [300, 100]
+      Branch {
+        Points        [500, 100; 500, 130]
+        DstComponent  "d_abc"
+        DstTerminal   1
+      }
+      Branch {
+        Points        [300, 65]
+        DstComponent  "get_realized_voltage"
+        DstTerminal   3
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "get_realized_voltage"
+      SrcTerminal   4
+      DstComponent  "u_c_ab"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "get_realized_voltage"
+      SrcTerminal   5
+      Points        [510, 60; 510, 90]
+      DstComponent  "u_c_zoh_ab"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "enable"
+      SrcTerminal   1
+      DstComponent  "Goto enable"
+      DstTerminal   1
+    }
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "OpenLoopVHzController"
+      Show          on
+      Position      [625, 85]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -30; 50, 30]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "OpenLoopVHzController (motulator)"
+      MaskDescription "Open-loop V/Hz controller (OpenLoopVHzController): the stator voltage reference is given by the V/Hz curve u_s_ref as a function of the stator angular frequency w_s = n_p*w_M, where w_M is the rate-limited speed reference, in coordinates rotating at w_s. The curve is affine, u_s_ref = u_0 + k*w_s, given by the voltage u_0 at zero frequency and the slope k. The output fbk.u_s is the converter voltage u_c_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback)."
+      MaskInit      "% Coefficients of the V/Hz curve u_s_ref for the C-Script\nu_s_ref_u_0 = u_s_ref.u_0;\nu_s_ref_k = u_s_ref.k;\n"
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "n_p"
+        Prompt        "n_p: Number of pole pairs"
+        Type          FreeText
+        Value         "vhz_ctrl.n_p"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "u_s_ref"
+        Prompt        "u_s_ref: V/Hz curve u_0 + k*w_s as a struct of the coefficients u_0 (V) and k (Vs), each [real part, imaginary part]"
+        Type          FreeText
+        Value         "vhz_ctrl.u_s_ref"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Parameter {
+        Variable      "T_s"
+        Prompt        "T_s: Sampling period (s)"
+        Type          FreeText
+        Value         "vhz_ctrl.T_s"
+        Show          off
+        Tunable       on
+        TabName       ""
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -15]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, -5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 5]
+        Direction     left
+      }
+      Terminal {
+        Type          Input
+        Position      [-50, 15]
+        Direction     left
+      }
+      Terminal {
+        Type          Output
+        Position      [54, -5]
+        Direction     right
+      }
+      Terminal {
+        Type          Output
+        Position      [54, 5]
+        Direction     right
+      }
+      Schematic {
+        Location      [0, 0; 330, 200]
+        ZoomFactor    1
+        SliderPosition [0, 0]
+        ShowBrowser   off
+        BrowserWidth  100
+    Component {
+      Type          Input
+      Name          "w_M"
+      Show          on
+      Position      [40, 35]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "1"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "meas"
+      Show          on
+      Position      [40, 75]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_c_ab"
+      Show          on
+      Position      [40, 115]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "3"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Input
+      Name          "u_c_zoh_ab"
+      Show          on
+      Position      [40, 155]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "4"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "fbk"
+      Show          on
+      Position      [280, 55]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "5"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          Output
+      Name          "ref"
+      Show          on
+      Position      [280, 95]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Index"
+        Value         "6"
+        Show          off
+      }
+      Parameter {
+        Variable      "Width"
+        Value         "-1"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "C-Script"
+      Show          on
+      Position      [175, 60]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -30; 50, 30]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[1 3 2 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[10 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1 1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "n_p, T_s, u_s_ref_u_0, u_s_ref_k"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic IMOpenLoopVHzController self;\nstatic double T_s; /* Sampling period */\nstatic IMOpenLoopVHzFeedbacks fbk;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"n_p must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 2 || PDIM(3) != 2) {\n    SetErrorMessage(\"u_s_ref.u_0 and u_s_ref.k must be [real part, imaginary part].\");\n    return;\n}\nT_s = P(1, 0);\nim_open_loop_vhz_ctrl_init(&self, P(0, 0),\n                           complex_from(P(2, 0), P(2, 1)),\n                           complex_from(P(3, 0), P(3, 1)), T_s);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double meas_u[OLVHZ_MEAS_WIDTH];\nfor (int k = 0; k < OLVHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(1, k);\n}\nIMOpenLoopVHzMeasurements meas;\nim_open_loop_vhz_measurements_unpack(meas_u, &meas);\n/* Feedback signals, the voltage of the ongoing period NAN if unknown */\nim_open_loop_vhz_ctrl_get_feedback(&self, complex_from(InputSignal(3, 0), InputSignal(3, 1)),\n                                   meas.i_c_ab, InputSignal(0, 0), &fbk);\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or\n * u_s_zoh if unknown */\ndouble complex u_c_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\nfbk.u_s = isnan(creal(u_c_ab)) ? fbk.u_s_zoh\n                               : cexp(-I * fbk.theta_c) * u_c_ab;\ndouble y[OLVHZ_FBK_WIDTH];\nim_open_loop_vhz_feedbacks_pack(&fbk, y);\nfor (int k = 0; k < OLVHZ_FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n/* Stator voltage reference (ref.u_s) */\ndouble complex u_s_ref = im_open_loop_vhz_ctrl_compute_output(&self, &fbk);\nOutputSignal(1, 0) = creal(u_s_ref);\nOutputSignal(1, 1) = cimag(u_s_ref);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         "im_open_loop_vhz_ctrl_update(&self, T_s, &fbk);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "w_M"
+      SrcTerminal   1
+      Points        [70, 35; 70, 45]
+      DstComponent  "C-Script"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "meas"
+      SrcTerminal   1
+      Points        [80, 75; 80, 55]
+      DstComponent  "C-Script"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_c_ab"
+      SrcTerminal   1
+      Points        [90, 115; 90, 65]
+      DstComponent  "C-Script"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_c_zoh_ab"
+      SrcTerminal   1
+      Points        [100, 155; 100, 75]
+      DstComponent  "C-Script"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   5
+      DstComponent  "fbk"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "C-Script"
+      SrcTerminal   6
+      Points        [245, 65; 245, 95]
+      DstComponent  "ref"
+      DstTerminal   1
+    }
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto w_M"
+      Show          off
+      Position      [430, 35]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "w_M"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto fbk"
+      Show          off
+      Position      [745, 45]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "fbk"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto ref"
+      Show          off
+      Position      [745, 170]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "ref"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          From
+      Name          "From fbk"
+      Show          off
+      Position      [745, 210]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "fbk"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          From
+      Name          "From ref"
+      Show          off
+      Position      [745, 250]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "ref"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          From
+      Name          "From w_M"
+      Show          off
+      Position      [745, 290]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "w_M"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          SignalSelector
+      Name          "ref.u_s"
+      Show          on
+      Position      [740, 125]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "InputWidth"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputIndices"
+        Value         "[1 2]"
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "modulate"
+      Show          on
+      Position      [880, 85]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -20; 50, 20]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[10 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[2 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic double T_s; /* Sampling period */\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         "T_s = P(0, 0);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double fbk_u[OLVHZ_FBK_WIDTH];\nfor (int k = 0; k < OLVHZ_FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nIMOpenLoopVHzFeedbacks fbk;\nim_open_loop_vhz_feedbacks_unpack(fbk_u, &fbk);\n/* Voltage reference in stationary coordinates, its angle advanced by\n * k_comp*T_s*w_c (k_comp = 1.5 of the controller) */\ndouble complex u_c_ref_ab = cexp(I * fbk.theta_c) * complex_from(InputSignal(1, 0), InputSignal(1, 1));\nu_c_ref_ab *= cexp(I * 1.5 * T_s * fbk.w_c);\nOutputSignal(0, 0) = creal(u_c_ref_ab);\nOutputSignal(0, 1) = cimag(u_c_ref_ab);\nOutputSignal(1, 0) = fbk.w_c;\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
+      Type          CScript
+      Name          "Monitored signals"
+      Show          on
+      Position      [880, 220]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -25; 50, 25]
+      Parameter {
+        Variable      "DialogGeometry"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "NumInputs"
+        Value         "[10 2 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumOutputs"
+        Value         "[2 2 2]"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumContStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumDiscStates"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "NumZCSignals"
+        Value         "0"
+        Show          off
+      }
+      Parameter {
+        Variable      "DirectFeedthrough"
+        Value         "[1 1 1]"
+        Show          off
+      }
+      Parameter {
+        Variable      "Ts"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "Parameters"
+        Value         "T_s"
+        Show          off
+      }
+      Parameter {
+        Variable      "LangStandard"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "GnuExtensions"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "RuntimeCheck"
+        Value         "2"
+        Show          off
+      }
+      Parameter {
+        Variable      "Declarations"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../c/common.c\"\n#include \"../c/im_open_loop_vhz.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "StartFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "OutputFcn"
+        Value         "double fbk_u[OLVHZ_FBK_WIDTH];\nfor (int k = 0; k < OLVHZ_FBK_WIDTH; k++) {\n    fbk_u[k] = InputSignal(0, k);\n}\nIMOpenLoopVHzFeedbacks fbk;\nim_open_loop_vhz_feedbacks_unpack(fbk_u, &fbk);\ndouble ref_u[OLVHZ_REF_WIDTH];\nfor (int k = 0; k < OLVHZ_REF_WIDTH; k++) {\n    ref_u[k] = InputSignal(1, k);\n}\nIMOpenLoopVHzReferences ref;\nim_open_loop_vhz_references_unpack(ref_u, &ref);\n/* Monitored signals */\nOutputSignal(0, 0) = InputSignal(2, 0);\nOutputSignal(0, 1) = fbk.w_s;\nOutputSignal(1, 0) = cabs(ref.u_s);\nOutputSignal(1, 1) = cabs(fbk.u_s);\nOutputSignal(2, 0) = creal(fbk.i_s);\nOutputSignal(2, 1) = cimag(fbk.i_s);\n"
+        Show          off
+      }
+      Parameter {
+        Variable      "UpdateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "DerivativeFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "TerminateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "StoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+      Parameter {
+        Variable      "RestoreCustomStateFcn"
+        Value         ""
+        Show          off
+      }
+    }
+    Component {
+      Type          From
+      Name          "From PWM.enable"
+      Show          off
+      Position      [371, 185]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "enable"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Component {
+      Type          Goto
+      Name          "Goto enable"
+      Show          off
+      Position      [100, 60]
+      Direction     right
+      Flipped       off
+      LabelPosition south
+      Parameter {
+        Variable      "Tag"
+        Value         "enable"
+        Show          off
+      }
+      Parameter {
+        Variable      "Visibility"
+        Value         "2"
+        Show          off
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From PWM.enable"
+      SrcTerminal   1
+      DstComponent  "PWM"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "w_M_ref"
+      SrcTerminal   1
+      Points        [145, 100; 145, 70]
+      DstComponent  "RateLimiter"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "RateLimiter"
+      SrcTerminal   2
+      Points        [300, 70]
+      Branch {
+        DstComponent  "OpenLoopVHzController"
+        DstTerminal   1
+      }
+      Branch {
+        Points        [300, 35]
+        DstComponent  "Goto w_M"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "i_s_abc"
+      SrcTerminal   1
+      Points        [135, 140; 135, 130]
+      DstComponent  "get_measurement"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "u_dc"
+      SrcTerminal   1
+      Points        [155, 180; 155, 140]
+      DstComponent  "get_measurement"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "get_measurement"
+      SrcTerminal   3
+      Points        [310, 135]
+      Branch {
+        Points        [310, 205]
+        DstComponent  "PWM"
+        DstTerminal   2
+      }
+      Branch {
+        Points        [530, 135; 530, 80]
+        DstComponent  "OpenLoopVHzController"
+        DstTerminal   2
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "PWM"
+      SrcTerminal   5
+      Points        [540, 195; 540, 90]
+      DstComponent  "OpenLoopVHzController"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "PWM"
+      SrcTerminal   6
+      Points        [550, 215; 550, 100]
+      DstComponent  "OpenLoopVHzController"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "PWM"
+      SrcTerminal   7
+      DstComponent  "d_abc"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "OpenLoopVHzController"
+      SrcTerminal   5
+      Points        [690, 80]
+      Branch {
+        Points        [690, 45]
+        DstComponent  "Goto fbk"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "modulate"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "OpenLoopVHzController"
+      SrcTerminal   6
+      Points        [700, 90; 700, 125]
+      Branch {
+        Points        [700, 170]
+        DstComponent  "Goto ref"
+        DstTerminal   1
+      }
+      Branch {
+        DstComponent  "ref.u_s"
+        DstTerminal   1
+      }
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "ref.u_s"
+      SrcTerminal   2
+      Points        [795, 125; 795, 90]
+      DstComponent  "modulate"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "modulate"
+      SrcTerminal   3
+      Points        [960, 80; 960, 330; 320, 330; 320, 225]
+      DstComponent  "PWM"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "modulate"
+      SrcTerminal   4
+      Points        [950, 90; 950, 320; 330, 320; 330, 245]
+      DstComponent  "PWM"
+      DstTerminal   4
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From fbk"
+      SrcTerminal   1
+      DstComponent  "Monitored signals"
+      DstTerminal   1
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From ref"
+      SrcTerminal   1
+      Points        [785, 250; 785, 220]
+      DstComponent  "Monitored signals"
+      DstTerminal   2
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "From w_M"
+      SrcTerminal   1
+      Points        [805, 290; 805, 230]
+      DstComponent  "Monitored signals"
+      DstTerminal   3
+    }
+    Connection {
+      Type          Signal
+      SrcComponent  "enable"
+      SrcTerminal   1
+      DstComponent  "Goto enable"
+      DstTerminal   1
+    }
+      }
+      MaskProbe {
+        Name          "Duty ratios (d_abc)"
+        Probe {
+          Component     "compute_output"
+          Path          "PWM"
+          Signals       {"Output"}
+        }
+      }
+      MaskProbe {
+        Name          "Speed (w_M_ref, w_s)"
+        Probe {
+          Component     "Monitored signals"
+          Path          ""
+          Signals       {"Output 1"}
+        }
+      }
+      MaskProbe {
+        Name          "Voltage (u_s_ref, u_s)"
+        Probe {
+          Component     "Monitored signals"
+          Path          ""
+          Signals       {"Output 2"}
+        }
+      }
+      MaskProbe {
+        Name          "Current (i_sd, i_sq)"
+        Probe {
+          Component     "Monitored signals"
+          Path          ""
+          Signals       {"Output 3"}
+        }
+      }
+    }
+    Component {
+      Type          Subsystem
+      Name          "Observer-based VHz control (SM)"
+      Show          on
+      Position      [100, 720]
+      Direction     up
+      Flipped       off
+      LabelPosition south
+      Frame         [-50, -30; 50, 30]
+      SampleTime    "-1"
+      CodeGenDiscretizationMethod "2"
+      CodeGenTarget "Generic"
+      MaskType      "Observer-based VHz control (SM) (motulator)"
+      MaskDescription "Observer-based V/Hz control of a synchronous machine drive (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "% Sampling period (cfg.T_s of ObserverBasedVHzController, or T_s of\n% OpenLoopVHzController)\nif isfield(vhz_ctrl, 'cfg')\n  T_s = vhz_ctrl.cfg.T_s;\nelse\n  T_s = vhz_ctrl.T_s;\nend\n"
+      MaskIconFrame on
+      MaskIconOpaque off
+      MaskIconRotates on
+      Parameter {
+        Variable      "vhz_ctrl"
+        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct of its arguments"
         Type          FreeText
         Value         "vhz_ctrl"
         Show          off
@@ -23942,7 +25959,7 @@ Plecs {
       Type          Subsystem
       Name          "Grid-following control"
       Show          on
-      Position      [100, 720]
+      Position      [100, 830]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -26942,7 +28959,7 @@ Plecs {
       Type          Subsystem
       Name          "Grid-forming control"
       Show          on
-      Position      [100, 830]
+      Position      [100, 940]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -30172,7 +32189,7 @@ Plecs {
       Type          Subsystem
       Name          "Flux-vector control (torque)"
       Show          on
-      Position      [100, 940]
+      Position      [100, 1050]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -33907,7 +35924,7 @@ Plecs {
       Type          Subsystem
       Name          "Current-vector control (SM, torque)"
       Show          on
-      Position      [100, 1050]
+      Position      [100, 1160]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -36942,7 +38959,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "CurrentController (motulator)"
-      MaskDescription "Flux-linkage-based current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller (DiscreteCurrentController), the currents mapped to the flux linkages by the machine model. The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskDescription "Flux-linkage-based current controller (current_ctrl of CurrentVectorController): the currents are mapped to the flux linkages by the machine model, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
       MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -38044,7 +40061,7 @@ Plecs {
       Type          Subsystem
       Name          "Current-vector control (torque)"
       Show          on
-      Position      [100, 1160]
+      Position      [100, 1270]
       Direction     up
       Flipped       off
       LabelPosition south
@@ -39379,7 +41396,7 @@ Plecs {
       CodeGenTarget "Generic"
       MaskType      "CurrentVectorController (motulator)"
       MaskDescription "Current-vector controller (CurrentVectorController). The configuration cfg is a struct with the fields of CurrentVectorControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as CurrentVectorController. The inputs u_c_lim_ab (the limited voltage reference of the PWM) and enable (the gate enable) are used by the direct discrete-time current controller. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
-      MaskInit      "% Default of alpha_i (CurrentController.__init__)\nalpha_i = cfg.alpha_i;\nif isempty(alpha_i)\n  alpha_i = cfg.alpha_c;\nend\n"
+      MaskInit      "% Default of alpha_i (CurrentVectorController.__init__)\nalpha_i = cfg.alpha_i;\nif isempty(alpha_i)\n  alpha_i = cfg.alpha_c;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -40989,7 +43006,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "CurrentController (motulator)"
-      MaskDescription "Current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller of the leakage flux linkages L_sgm*i (DiscreteCurrentController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
+      MaskDescription "Current controller (current_ctrl of CurrentVectorController): the currents are mapped to the leakage flux linkages L_sgm*i, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -42132,7 +44149,7 @@ Plecs {
       Type          Subsystem
       Name          "Flux-vector control (IM, torque)"
       Show          on
-      Position      [100, 1270]
+      Position      [100, 1380]
       Direction     up
       Flipped       off
       LabelPosition south

@@ -129,25 +129,24 @@ self.w_c = w_c;
 end
 
 function self = im_current_ctrl_init(par, alpha_c, alpha_i, discrete, T_s)
-%IM_CURRENT_CTRL_INIT Current controller: a 2DOF PI controller with the gains from
-%   the bandwidths and the leakage inductance (CurrentController) or, if discrete is
-%   true, the direct discrete-time controller of the leakage flux linkages L_sgm*i
-%   (DiscreteCurrentController).
-k_t = alpha_c*par.L_sgm;
-k_i = alpha_c*alpha_i*par.L_sgm;
-k_p = (alpha_c + alpha_i)*par.L_sgm;
+%IM_CURRENT_CTRL_INIT Current controller (current_ctrl of CurrentVectorController):
+%   the currents are mapped to the leakage flux linkages L_sgm*i, which are
+%   controlled by the 2DOF PI controller (ComplexPIController) or, if discrete is
+%   true, by the direct discrete-time controller (DiscreteComplexController).
+pi_ctrl = complex_pi_init(alpha_c + alpha_i, alpha_c*alpha_i, alpha_c);
 self = struct('L_sgm', par.L_sgm, 'discrete', logical(discrete), ...
-    'pi', complex_pi_init(k_p, k_i, k_t), 'dc', discrete_complex_init(alpha_c, T_s));
+    'pi', pi_ctrl, 'dc', discrete_complex_init(alpha_c, T_s));
 end
 
 function [self, u] = im_current_ctrl_compute_output(self, i_ref, i)
 %IM_CURRENT_CTRL_COMPUTE_OUTPUT Voltage reference.
+% The currents mapped to the leakage flux linkages
+psi_ref = self.L_sgm*i_ref;
+psi = self.L_sgm*i;
 if self.discrete
-    % The currents mapped to the leakage flux linkages
-    [self.dc, u] = discrete_complex_compute_output(self.dc, self.L_sgm*i_ref, ...
-        self.L_sgm*i);
+    [self.dc, u] = discrete_complex_compute_output(self.dc, psi_ref, psi);
 else
-    [self.pi, u] = complex_pi_compute_output(self.pi, i_ref, i, 0);
+    [self.pi, u] = complex_pi_compute_output(self.pi, psi_ref, psi, 0);
 end
 end
 

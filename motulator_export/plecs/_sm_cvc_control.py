@@ -213,23 +213,24 @@ def _reference_generator() -> CBlock:
 
 def _current_controller() -> CBlock:
     """
-    Current controller (CurrentController, or DiscreteCurrentController with the
-    parameter `discrete`).
+    Current controller (current_ctrl of CurrentVectorController): ComplexPIController,
+    or DiscreteComplexController with the parameter `discrete`.
     """
     mask = Mask(
         "CurrentController (motulator)",
-        "Flux-linkage-based current controller: the 2DOF PI controller "
-        "(CurrentController) or, if discrete = 1, the direct discrete-time controller "
-        "(DiscreteCurrentController), the currents mapped to the flux linkages by the "
-        "machine model. The inputs are the current reference, the feedback signals "
-        "fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular "
-        "speed fbk.w_c of the coordinates for the update), and for the update of the "
-        "discrete-time controller, the limited voltage reference u_c_lim_ab of the "
-        "PWM in stationary coordinates, used while the gates are enabled (the input "
-        "enable nonzero), as in CurrentVectorController.update. The output is the "
-        "voltage reference. When the observer catches the machine (fbk.caught), the "
-        "integral state is preset to the back-EMF of the caught speed."
-        + PAR_DESCRIPTION,
+        "Flux-linkage-based current controller (current_ctrl of "
+        "CurrentVectorController): the currents are mapped to the flux linkages by the "
+        "machine model, which are controlled by the 2DOF PI controller "
+        "(ComplexPIController) or, if discrete = 1, by the direct discrete-time "
+        "controller (DiscreteComplexController). The inputs are the current "
+        "reference, the feedback signals fbk (the current fbk.i_s, and the realized "
+        "voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the "
+        "update), and for the update of the discrete-time controller, the limited "
+        "voltage reference u_c_lim_ab of the PWM in stationary coordinates, used "
+        "while the gates are enabled (the input enable nonzero), as in "
+        "CurrentVectorController.update. The output is the voltage reference. When "
+        "the observer catches the machine (fbk.caught), the integral state is preset "
+        "to the back-EMF of the caught speed." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(

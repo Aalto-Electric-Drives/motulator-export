@@ -13,7 +13,7 @@ static double im_alpha(const InductionMachineInvGammaPars *par)
 
 static double im_w_rb(const InductionMachineInvGammaPars *par)
 {
-    return (par->L_sgm > 0.0) ? par->R_R * (1.0 / par->L_sgm + 1.0 / par->L_M) : 0.0;
+    return par->R_R * (1.0 / par->L_sgm + 1.0 / par->L_M);
 }
 
 /* Configuration ------------------------------------------------------------ */
@@ -44,7 +44,6 @@ static void im_flux_observer_init(IMFluxObserver *self,
 {
     self->par = par;
     self->sensorless = sensorless;
-    self->unit_gain = 0;
     self->psi_s = 0.0;
     self->theta_c = 0.0;
     self->T_s_old = 0.0;
@@ -56,9 +55,6 @@ static void im_flux_observer_init(IMFluxObserver *self,
 static double complex im_observer_gain(const IMFluxObserver *self, double w_m)
 {
     double alpha = im_alpha(&self->par);
-    if (self->unit_gain) {
-        return 1.0;
-    }
     if (self->sensorless) {
         return (0.5 * alpha + 0.2 * fabs(w_m)) / (alpha - I * w_m);
     }
@@ -123,8 +119,7 @@ static void im_flux_observer_compute_output(const IMFluxObserver *self,
                                      : 0.0;
 
     /* Torque estimate */
-    out->tau_M =
-        (par->L_sgm > 0.0) ? 1.5 * par->n_p * cimag(out->i_s * conj(out->psi_s)) : 0.0;
+    out->tau_M = 1.5 * par->n_p * cimag(out->i_s * conj(out->psi_s));
 
     /* Rotor speed error signal for the speed observer. The model-based part is
      * faded out as the external error signal takes over. */
@@ -274,7 +269,7 @@ static void im_reference_gen_update(IMCurrentReferenceGenerator *self, double T_
     self->i_sd_ref = clip(self->i_sd_ref, -self->i_s_max, self->i_sd_nom);
 }
 
-/* CurrentController and DiscreteCurrentController -------------------------- */
+/* IMCurrentController ------------------------------------------------------ */
 
 static void im_current_ctrl_init(IMCurrentController *self,
                                  const InductionMachineInvGammaPars *par,
@@ -283,10 +278,7 @@ static void im_current_ctrl_init(IMCurrentController *self,
 {
     self->L_sgm = par->L_sgm;
     self->discrete = discrete;
-    double k_t = alpha_c * par->L_sgm;
-    double k_i = alpha_c * alpha_i * par->L_sgm;
-    double k_p = (alpha_c + alpha_i) * par->L_sgm;
-    complex_pi_init(&self->pi, k_p, k_i, k_t);
+    complex_pi_init(&self->pi, alpha_c + alpha_i, alpha_c * alpha_i, alpha_c);
     discrete_complex_init(&self->dc, alpha_c, T_s);
 }
 
@@ -294,12 +286,13 @@ static double complex im_current_ctrl_compute_output(IMCurrentController *self,
                                                      double complex i_ref,
                                                      double complex i)
 {
+    /* The currents mapped to the leakage flux linkages */
+    double complex psi_ref = self->L_sgm * i_ref;
+    double complex psi = self->L_sgm * i;
     if (self->discrete) {
-        /* The currents mapped to the leakage flux linkages */
-        return discrete_complex_compute_output(&self->dc, self->L_sgm * i_ref,
-                                               self->L_sgm * i);
+        return discrete_complex_compute_output(&self->dc, psi_ref, psi);
     }
-    return complex_pi_compute_output(&self->pi, i_ref, i, 0.0);
+    return complex_pi_compute_output(&self->pi, psi_ref, psi, 0.0);
 }
 
 static void im_current_ctrl_update(IMCurrentController *self, double T_s,

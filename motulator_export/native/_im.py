@@ -1,6 +1,6 @@
 """
 Native simulation of induction machine drives with current-vector control,
-flux-vector control, or observer-based V/Hz control.
+flux-vector control, or observer-based or open-loop V/Hz control.
 
 The system is simulated by the library `c/native_im.c`. Supported are the drive
 models of `motulator_export.native._drive` with an induction machine, and
@@ -8,8 +8,9 @@ models of `motulator_export.native._drive` with an induction machine, and
 - current-vector control (`CurrentVectorController`) or flux-vector control
   (`FluxVectorController`) in `VectorControlSystem` with a speed controller, or in
   the torque-control mode without it (`speed_ctrl=None`), or
-- observer-based V/Hz control (`ObserverBasedVHzController`) in `VHzControlSystem`,
-  including open-loop V/Hz control (`L_M = inf`),
+- observer-based V/Hz control (`ObserverBasedVHzController`) or open-loop V/Hz
+  control (`OpenLoopVHzController` with an affine V/Hz curve, see `_im.vhz_curve`) in
+  `VHzControlSystem`,
 
 with the features of the C port (see `motulator_export.plecs._im`) and the duty-ratio
 error model of the PWM, also with the gates blocked (`ControlSystem.set_enable`, a
@@ -22,6 +23,7 @@ from typing import Any, cast
 from motulator.drive.control._base import VectorControlSystem, VHzControlSystem
 from motulator.drive.control._im_current_vector import CurrentVectorController
 from motulator.drive.control._im_flux_vector import FluxVectorController
+from motulator.drive.control._im_open_loop_vhz import OpenLoopVHzController
 from motulator.drive.model import Drive, InductionMachine
 
 from motulator_export._common import check_mechanical_sensor
@@ -57,7 +59,7 @@ from motulator_export.plecs._im_vhz_control import CFG_FIELDS as VHZ_CFG_FIELDS
 
 # Functions of the library setting the parameters of the control system, the
 # arguments in the order of PAR_FIELDS and CFG_FIELDS (and the slew rate of V/Hz
-# control)
+# control), or of the arguments of OpenLoopVHzController
 API: Signatures = {
     "set_control_machine": (None, [c_void_p] + [c_double] * 5),
     "set_current_vector_controller": (
@@ -69,6 +71,7 @@ API: Signatures = {
         [c_void_p] + [c_double] * 10 + [c_int, c_double],
     ),
     "set_vhz_controller": (None, [c_void_p] + [c_double] * 9),
+    "set_open_loop_vhz_controller": (None, [c_void_p] + [c_double] * 7),
     **PWM_API,
 }
 
@@ -76,7 +79,7 @@ API: Signatures = {
 class InductionMachineDriveSystem(NativeSystem):
     """
     Induction machine drive with current-vector control, flux-vector control, or
-    observer-based V/Hz control in the native library.
+    observer-based or open-loop V/Hz control in the native library.
 
     Parameters
     ----------
@@ -96,8 +99,12 @@ class InductionMachineDriveSystem(NativeSystem):
         # Control system
         if isinstance(ctrl, VHzControlSystem):
             v = export_vhz_values(ctrl)
-            lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
-            lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
+            if isinstance(ctrl.vhz_ctrl, OpenLoopVHzController):
+                fields = ["n_p", "u_0", "k", "T_s", "slew_rate"]
+                lib.set_open_loop_vhz_controller(h, *c_args(v, fields))
+            else:
+                lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
+                lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
         else:
             ctrl = cast(VectorControlSystem, ctrl)
             if isinstance(ctrl.vector_ctrl, FluxVectorController):

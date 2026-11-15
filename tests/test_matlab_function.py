@@ -46,7 +46,6 @@ from motulator_export.plecs import (
     _im,
     _im_control,
     _im_fvc_control,
-    _im_vhz_control,
     _sm,
     _sm_control,
     _sm_cvc_control,
@@ -350,8 +349,9 @@ def case(name: str) -> Case:  # noqa: PLR0911
         vhz_args = VHZ_CASES[VHZ_IDS.index(name.removeprefix("vhz_"))]
         build, signals = vhz_system(*vhz_args)
         values = _im.export_vhz_values(build()[1])
-        run = drive_run(build, signals, _im_vhz_control.VHZ_BLOCK, 1.0, VHZ_RTOL)
-        return "vhz", values, None, run, VHZ_INPUTS
+        key = "olvhz" if vhz_args[0] else "vhz"
+        run = drive_run(build, signals, SYSTEMS[key][0], 1.0, VHZ_RTOL)
+        return key, values, None, run, VHZ_INPUTS
     if name.startswith("gfl"):
         build, signals = gfl_system(name == "gfl_blocked")
         values = _grid.export_values(build()[1])
@@ -446,8 +446,10 @@ class Harnesses:
             self.eng.addpath(str(folder), nargout=0)
             # Without the Engine API, pyright takes the module tests/matlab.py
             widths = matlab.double([float(w) for w in block.input_widths])  # pyright: ignore[reportAttributeAccessIssue]
+            # The sampling period of the open-loop V/Hz controller is its argument
+            T_s = "vhz_ctrl.T_s" if key == "olvhz" else T_S_EXPR
             self.eng.build_harness(
-                name, str(folder), block.name, f"init_{name}", widths, T_S_EXPR,
+                name, str(folder), block.name, f"init_{name}", widths, T_s,
                 nargout=0,
             )  # fmt: skip
             self.models[key] = folder / f"{name}.slx"
@@ -738,7 +740,8 @@ def test_sensored_control_needs_sensor(harnesses: Harnesses) -> None:
 def test_induction_machine_pars(harnesses: Harnesses) -> None:
     """
     The MATLAB class of the Γ-model parameters should provide the inverse-Γ parameters
-    of motulator, which the induction machine model takes from either parameter class.
+    of motulator (`inv_gamma_pars`), which the induction machine model takes from
+    either parameter class.
     """
     eng = harnesses.eng
     m = "motulator.drive.model"
@@ -754,12 +757,13 @@ def test_induction_machine_pars(harnesses: Harnesses) -> None:
         f"inv_params = {m}.InductionMachine(inv_par).params();",
         nargout=0,
     )
-    for name in ("gamma", "R_R", "L_sgm", "L_M"):
-        value = eng.eval(f"gamma_par.{name}")
-        assert value == pytest.approx(getattr(par, name), rel=1e-15)
+    expected = par.inv_gamma_pars(0.0)
+    eng.eval("gamma_inv = gamma_par.inv_gamma_pars(0);", nargout=0)
     for name in ("n_p", "R_s", "R_R", "L_sgm", "L_M", "G_c"):
+        value = eng.eval(f"gamma_inv.{name}")
+        assert value == pytest.approx(getattr(expected, name), rel=1e-15)
         value = eng.eval(f"gamma_params.par.{name}")
-        assert value == pytest.approx(getattr(par, name), rel=1e-15)
+        assert value == pytest.approx(getattr(expected, name), rel=1e-15)
         assert eng.eval(f"inv_params.par.{name}") == getattr(inv, name)
 
 

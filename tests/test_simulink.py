@@ -91,6 +91,13 @@ def vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 
 @pytest.fixture(scope="module")
+def open_loop_vhz(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
+    return compile_sfunction(
+        monolithic.OPEN_LOOP_VHZ, tmp_path_factory.mktemp("open_loop_vhz")
+    )
+
+
+@pytest.fixture(scope="module")
 def sm_cvc(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     return compile_sfunction(monolithic.SM_CVC, tmp_path_factory.mktemp("sm_cvc"))
 
@@ -225,19 +232,27 @@ def test_im_flux_vector_control(
     ("open_loop", "t_d", "d_min", "blocked"), VHZ_CASES, ids=VHZ_IDS
 )
 def test_vhz_control(
-    vhz: ctypes.CDLL, open_loop: bool, t_d: float, d_min: float, blocked: bool
+    vhz: ctypes.CDLL,
+    open_loop_vhz: ctypes.CDLL,
+    open_loop: bool,
+    t_d: float,
+    d_min: float,
+    blocked: bool,
 ) -> None:
     """The S-function of observer-based or open-loop V/Hz control should agree with
     motulator, also with the dead-time compensation, the minimum pulses, and the
     gates blocked."""
     build, signals = vhz_system(open_loop, t_d, d_min, blocked)
     values = _im.export_vhz_values(build()[1])
-    params = sfunction_params(monolithic.VHZ, values)
-    assert start(vhz, params) is None
-    sfun = drive_sfun(vhz, monolithic.VHZ)
+    dll, block = (vhz, monolithic.VHZ)
+    if open_loop:
+        dll, block = (open_loop_vhz, monolithic.OPEN_LOOP_VHZ)
+    params = sfunction_params(block, values)
+    assert start(dll, params) is None
+    sfun = drive_sfun(dll, block)
     compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
-    check_dc_bus_limit(vhz, monolithic.VHZ, VHZ_INPUTS, restarter(vhz, params))
-    vhz.sfun_terminate()
+    check_dc_bus_limit(dll, block, VHZ_INPUTS, restarter(dll, params))
+    dll.sfun_terminate()
 
 
 @pytest.mark.parametrize(

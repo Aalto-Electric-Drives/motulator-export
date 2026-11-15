@@ -13,17 +13,11 @@ with a mask of the arguments of its class (see `_control`):
   the `ReferenceGenerator`, the `FluxTorqueController`, and the low-pass filter of
   the torque estimate (its state `tau_M_lpf`)
 
-Pure open-loop V/Hz control is the special case ``L_M = inf`` of the machine model
-(with ``R_s = R_R = L_sgm = 0`` and zero gains, see `plot_2kw_im_diode_vhz.py` of
-motulator): the mask initialization of the ObserverBasedVHzController then sets the
-unit observer gain, the weight h = 1 of the external speed error (which disables the
-model-based correction), the initial stator flux estimate psi_s_nom, and k_u = inf,
-as `ObserverBasedVHzController.__init__` does. The mask of the VHzControlSystem has
-its arguments from the model initialization (`init_script`): the V/Hz controller
-`vhz_ctrl` (the machine model `par` and the configuration `cfg`), the slew rate
-`slew_rate` of the speed reference, and the PWM `pwm`. The signal vectors are
-defined in `im_flux_vector.h` (the measurements and the references) and
-`im_current_vector.h` (the feedback signals).
+The mask of the VHzControlSystem has its arguments from the model initialization
+(`init_script`): the V/Hz controller `vhz_ctrl` (the machine model `par` and the
+configuration `cfg`), the slew rate `slew_rate` of the speed reference, and the PWM
+`pwm`. The signal vectors are defined in `im_flux_vector.h` (the measurements and the
+references) and `im_current_vector.h` (the feedback signals).
 
 """
 
@@ -93,7 +87,6 @@ CTRL_OUTPUTS = {
     "Flux linkage (psi_s_ref, psi_s, psi_R)": ["psi_s_ref", "psi_s", "psi_R"],
     "Current (i_sd, i_sq)": ["i_sd", "i_sq"],
 }
-VHZ_PAR_DESCRIPTION = PAR_DESCRIPTION + " L_M = inf in pure open-loop V/Hz control."
 
 
 # %%
@@ -103,47 +96,32 @@ def _flux_observer() -> CBlock:
     mask = Mask(
         "FluxObserver (motulator)",
         "Reduced-order flux observer in synchronous coordinates (FluxObserver), "
-        "created by create_vhz_observer: the rotor speed w_M is the rate-limited "
-        "speed reference, and the external speed error signal is zero, with the "
-        "weight h (1 in pure open-loop V/Hz control, which disables the model-based "
-        "correction). The initial stator flux estimate is psi_s0. The observer uses "
-        "the voltage u_s_zoh_ab of the ongoing sampling period, and the output "
-        "fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods "
-        "(DriveControlSystem.get_feedback)." + VHZ_PAR_DESCRIPTION,
+        "created by create_vhz_observer with the default observer gain: the rotor "
+        "speed w_M is the rate-limited speed reference, without the external speed "
+        "error signal. The observer uses the voltage u_s_zoh_ab of the ongoing "
+        "sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over "
+        "the previous and ongoing periods (DriveControlSystem.get_feedback)."
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
-            Param(
-                "k_o",
-                "k_o: Observer gain k_o(w_m), [] = the default of create_vhz_observer, "
-                "1 = unity",
-                "k_o",
-            ),
-            Param("h", "h: Weight of the external speed error signal", "h"),
-            Param("psi_s0", "psi_s0: Initial stator flux estimate (Vs)", "psi_s0"),
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),
         ],
         init=PAR_INIT,
     )
     params = mask_params(mask, PAR)
     i = {p: k for k, p in enumerate(params)}
-    k_o = i["k_o"]
     start = (
-        checks(params, ["h", "psi_s0", "T_s"])
-        + f"if (PDIM({k_o}) > 0 && (PDIM({k_o}) != 1 || P({k_o}, 0) != 1.0)) {{\n"
-        '    SetErrorMessage("Only k_o = [] (the default) or 1 supported.");\n'
-        "    return;\n"
-        "}\n" + _par_code(params) + "im_flux_observer_init(&self, par, 1);\n"
-        f"self.unit_gain = PDIM({k_o}) > 0;\n"
-        f"self.psi_s = P({i['psi_s0']}, 0);\n"
+        checks(params, ["T_s"])
+        + _par_code(params)
+        + "im_flux_observer_init(&self, par, 1);\n"
         f"T_s = P({i['T_s']}, 0);\n"
-        f"h = P({i['h']}, 0);\n"
     )
     output = (
         SIGNALS.read(0, "meas") + f"double complex u_s_zoh_ab = {complex_in(2)};\n"
         "/* The rotor speed is the speed reference, without the external speed\n"
         " * error signal */\n"
         "im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n"
-        "                                InputSignal(3, 0), 0.0, h, &out);\n"
+        "                                InputSignal(3, 0), 0.0, 0.0, &out);\n"
         "/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n"
         " * open-circuit voltage of the observer if unknown */\n"
         f"double complex u_s_ab = {complex_in(1)};\n"
@@ -165,21 +143,18 @@ def _flux_observer() -> CBlock:
             start,
             output,
             "im_flux_observer_update(&self, T_s, &out);\n",
-            workspace=SAMPLING + "static double h;\nstatic IMObserverOutputs out;\n",
+            workspace=SAMPLING + "static IMObserverOutputs out;\n",
         ),
         params,
         SIGNALS.sfunction("flux_observer"),
         mask=mask,
         mcode=MCode(
-            start=M_PAR + "self = im_flux_observer_init(par, true);\n"
-            "% Unit observer gain if k_o = 1, else the default\n"
-            "self.unit_gain = ~isnan(p.k_o);\n"
-            "self.psi_s = complex(p.psi_s0);\n",
+            start=M_PAR + "self = im_flux_observer_init(par, true);\n",
             output="% The rotor speed is the speed reference, without the external "
             "speed\n"
             "% error signal\n"
             "out = im_flux_observer_compute_output(self, u_s_zoh_ab, meas.i_c_ab, "
-            "w_M, 0, p.h);\n"
+            "w_M, 0, 0);\n"
             "% Voltage for the control laws (DriveControlSystem.get_feedback), or "
             "the\n"
             "% open-circuit voltage of the observer if unknown\n"
@@ -195,14 +170,7 @@ def _flux_observer() -> CBlock:
                 "u_s_zoh_ab": COMPLEX,
             },
             outputs={"out": SIGNALS.vector("fbk")},
-            checks=(
-                *required("h", "psi_s0", "T_s"),
-                (
-                    "~isnan(p.k_o(1)) && (numel(p.k_o) ~= 1 || p.k_o(1) ~= 1)",
-                    "Only k_o = [] (the default) or 1 supported.",
-                ),
-                *M_PAR_CHECKS,
-            ),
+            checks=(*required("T_s"), *M_PAR_CHECKS),
         ),
     )
 
@@ -219,7 +187,7 @@ def _reference_generator(sig: Signals = SIGNALS, fvc: bool = False) -> CBlock:
         "reference, and the feedback signals fbk (the synchronous angular frequency "
         "fbk.w_s and the rotor flux estimate fbk.psi_R). The output ref is [psi_s "
         "tau_M], the flux reference and the limited torque reference."
-        + (PAR_DESCRIPTION if fvc else VHZ_PAR_DESCRIPTION),
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -233,9 +201,7 @@ def _reference_generator(sig: Signals = SIGNALS, fvc: bool = False) -> CBlock:
                 "tau_M_max: Maximum torque reference (Nm)",
                 "cfg.tau_M_max" if fvc else "inf",
             ),
-            Param(
-                "k_u", "k_u: Voltage utilization factor", "cfg.k_u" if fvc else "k_u"
-            ),
+            Param("k_u", "k_u: Voltage utilization factor", "cfg.k_u"),
             Param("k_b", "k_b: Breakdown torque margin", "cfg.k_b"),
         ],
         init=PAR_INIT,
@@ -311,8 +277,7 @@ def _flux_torque_controller(sig: Signals = SIGNALS, fvc: bool = False) -> CBlock
             else "without the integral action"
         )
         + ". The input ref is [psi_s tau_M], the flux and torque references, and "
-        "the output is the stator voltage reference."
-        + (PAR_DESCRIPTION if fvc else VHZ_PAR_DESCRIPTION),
+        "the output is the stator voltage reference." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param(
@@ -390,26 +355,6 @@ def _flux_torque_controller(sig: Signals = SIGNALS, fvc: bool = False) -> CBlock
     )
 
 
-# Mask initialization of the ObserverBasedVHzController:
-# ObserverBasedVHzController.__init__ and create_vhz_observer
-VHZ_INIT = (
-    "% Pure open-loop V/Hz control with L_M = inf (ObserverBasedVHzController):\n"
-    "% the unit observer gain with the weight h = 1, which disables the model-based\n"
-    "% correction (create_vhz_observer), the initial flux estimate, and k_u = inf\n"
-    "if isinf(par.L_M)\n"
-    "  k_o = 1;\n"
-    "  h = 1;\n"
-    "  psi_s0 = cfg.psi_s_nom;\n"
-    "  k_u = inf;\n"
-    "else\n"
-    "  k_o = [];\n"
-    "  h = 0;\n"
-    "  psi_s0 = 0;\n"
-    "  k_u = cfg.k_u;\n"
-    "end\n"
-)
-
-
 def _vhz_controller() -> Subsystem:
     """Observer-based V/Hz controller (ObserverBasedVHzController)."""
     layout = [SIGNALS.index("ref", n) for n in ("psi_s", "tau_M", "u_s")]
@@ -417,13 +362,13 @@ def _vhz_controller() -> Subsystem:
         raise RuntimeError("The layout of ref does not match its multiplexer")
     mask = Mask(
         "ObserverBasedVHzController (motulator)",
-        "Observer-based V/Hz controller (ObserverBasedVHzController), or pure "
-        "open-loop V/Hz control if par.L_M = inf. The configuration cfg is a struct "
-        "with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the "
-        "default; the default observer gain k_o only). The mask initialization "
-        "passes the parameters to the blocks inside it, as "
-        "ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of "
-        "the torque estimate, whose output is the torque reference." + PAR_DESCRIPTION,
+        "Observer-based V/Hz controller (ObserverBasedVHzController). The "
+        "configuration cfg is a struct with the fields of "
+        "ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default "
+        "observer gain k_o only). The parameters are passed to the blocks inside "
+        "it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass "
+        "filter of the torque estimate, whose output is the torque reference."
+        + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "vhz_ctrl.par"),
             Param(
@@ -432,7 +377,6 @@ def _vhz_controller() -> Subsystem:
                 "vhz_ctrl.cfg",
             ),
         ],
-        init=VHZ_INIT,
     )
     return Subsystem(
         "ObserverBasedVHzController",
@@ -549,8 +493,8 @@ def control_system() -> Subsystem:
 
 VHZ_BLOCK = control_block(
     NAME,
-    "Observer-based V/Hz control of an induction machine drive, or pure open-loop "
-    "V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). "
+    "Observer-based V/Hz control of an induction machine drive (VHzControlSystem "
+    "with ObserverBasedVHzController). "
     "The speed reference is in mechanical rad/s.",
     CTRL_INPUTS,
     CTRL_OUTPUTS,
@@ -576,11 +520,9 @@ def init_script(
     control system (par, cfg, vhz_ctrl, slew_rate, and pwm) from the parameter
     values of the control system (`_im.export_vhz_values`).
     """
-    open_loop = values["L_M"] == float("inf")
     return (
         init_header(variables, comment)
-        + "% Machine model of the control system (InductionMachineInvGammaPars"
-        + (", L_M = inf: pure open-loop V/Hz control)\n" if open_loop else ")\n")
+        + "% Machine model of the control system (InductionMachineInvGammaPars)\n"
         + "".join(assign(f"par.{n}", values[n]) for n in PAR_FIELDS)
         + "% Observer-based V/Hz control (ObserverBasedVHzControllerCfg)\n"
         + "".join(assign(f"cfg.{n}", values[n]) for n in CFG_FIELDS)

@@ -7,9 +7,8 @@ control, corresponding to the example examples/drive/vhz/plot_2kw_im_ovhz.py, ex
 it to a PLECS model (im_2kw_vhz.plecs), and, if PLECS Standalone is running with the
 RPC interface enabled, simulates both and compares the results.
 
-With --open-loop, the control system is pure open-loop V/Hz control, i.e., the
-observer-based V/Hz controller with the machine model L_M = inf (and R_s = R_R =
-L_sgm = 0) and zero gains, as in examples/drive/grid_connection/plot_2kw_im_diode_vhz.py
+With --open-loop, the control system is open-loop V/Hz control with the linear V/Hz
+curve, as in examples/drive/grid_connection/plot_2kw_im_diode_vhz.py
 (im_2kw_vhz_open_loop.plecs).
 
 Run from the repository root:
@@ -20,8 +19,9 @@ Run from the repository root:
 
 # %%
 import sys
-from math import inf, pi
+from math import pi
 from pathlib import Path
+from typing import Any
 
 import motulator.drive.control.im as control
 import numpy as np
@@ -61,29 +61,41 @@ def build_system(
         ),
     )
     if open_loop:
-        est_par = control.InductionMachineInvGammaPars(
-            n_p=2, R_s=0, R_R=0, L_sgm=0, L_M=inf
+        vhz_ctrl = control.OpenLoopVHzController(
+            n_p=2, u_s_ref=lambda w_s: 1j * w_s * base.psi
         )
-        cfg = control.ObserverBasedVHzControllerCfg(
-            psi_s_nom=base.psi, i_s_max=inf, alpha_f=0, alpha_tau=0, alpha_psi=0
-        )
-        slew_rate = 2 * pi * 60
-    else:
-        est_par = control.InductionMachineInvGammaPars(
-            n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
-        )
-        cfg = control.ObserverBasedVHzControllerCfg(
-            psi_s_nom=base.psi, i_s_max=1.5 * base.i
-        )
-        slew_rate = 2 * pi * 120
+        return mdl, control.VHzControlSystem(vhz_ctrl, slew_rate=2 * pi * 60)
+    est_par = control.InductionMachineInvGammaPars(
+        n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224
+    )
+    cfg = control.ObserverBasedVHzControllerCfg(
+        psi_s_nom=base.psi, i_s_max=1.5 * base.i
+    )
     vhz_ctrl = control.ObserverBasedVHzController(est_par, cfg)
-    ctrl = control.VHzControlSystem(vhz_ctrl, slew_rate=slew_rate)
-    return mdl, ctrl
+    return mdl, control.VHzControlSystem(vhz_ctrl, slew_rate=2 * pi * 120)
+
+
+def control_signals(res: Any, open_loop: bool) -> dict[str, np.ndarray]:
+    """Compared signals of the control system, the monitored signals of its block."""
+    fbk, ref = res.ctrl.fbk, res.ctrl.ref
+    if open_loop:
+        return {
+            "w_s": fbk.w_s,
+            "u_s_ref": np.abs(ref.u_s),
+            "i_sd": np.real(fbk.i_s),
+            "i_sq": np.imag(fbk.i_s),
+        }
+    return {
+        "w_s": fbk.w_s,
+        "tau_M": fbk.tau_M,
+        "tau_M_ref": ref.tau_M,
+        "psi_s": np.abs(fbk.psi_s),
+    }
 
 
 # %%
 if __name__ == "__main__":
-    open_loop = "--open-loop" in sys.argv  # Pure open-loop V/Hz control
+    open_loop = "--open-loop" in sys.argv  # Open-loop V/Hz control
     mdl, ctrl = build_system(open_loop)
     ctrl.set_speed_ref(W_M_REF)
     mdl.mechanics.set_external_load_torque(TAU_L)
@@ -96,12 +108,6 @@ if __name__ == "__main__":
     res = simulate_motulator(mdl, ctrl, T_STOP)
     cmp = Comparison(res, T_STOP)
     plecs_signals = simulate_plecs(tmp, cmp.t_eval, mdl, ctrl)
-    fbk, ref = res.ctrl.fbk, res.ctrl.ref
-    ctrl_signals = {
-        "w_s": fbk.w_s,
-        "tau_M": fbk.tau_M,
-        "tau_M_ref": ref.tau_M,
-        "psi_s": np.abs(fbk.psi_s),
-    }
+    ctrl_signals = control_signals(res, open_loop)
     cmp.print_differences("PLECS", plecs_signals, drive_signals(res), ctrl_signals)
     plot_drive(cmp, res, plecs_signals[0], "PLECS")

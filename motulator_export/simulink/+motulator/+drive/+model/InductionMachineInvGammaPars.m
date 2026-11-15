@@ -20,5 +20,10 @@ classdef InductionMachineInvGammaPars < motulator.internal.Object
             obj.set_args(varargin, [args, {'G_c'}], args);
             motulator.internal.check_zero(obj, 'G_c', 'Core losses');
         end
+
+        function inv = inv_gamma_pars(obj, ~)
+            %INV_GAMMA_PARS Inverse-Gamma-model parameters, the parameters themselves.
+            inv = obj;
+        end
     end
 end

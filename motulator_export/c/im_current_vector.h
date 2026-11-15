@@ -5,13 +5,13 @@
  *   motulator/drive/utils/_parameters.py          InductionMachineInvGammaPars
  *   motulator/drive/control/_im_observers.py      FluxObserver, SpeedFluxObserver,
  *                                                 create_speed_flux_observer
- *   motulator/drive/control/_im_current_vector.py CurrentController,
- *                                                 DiscreteCurrentController,
- *                                                 CurrentReferenceGenerator,
+ *   motulator/drive/control/_im_current_vector.py CurrentReferenceGenerator,
  *                                                 CurrentVectorController
  *   motulator/drive/control/_base.py              DriveControlSystem,
  *                                                 VectorControlSystem
  *   motulator/drive/control/_common.py            SpeedController, SpeedObserver
+ *   motulator/common/control/_controllers.py      ComplexPIController,
+ *                                                 DiscreteComplexController
  *
  * The machine model parameters are the constant inverse-Γ parameters, and the
  * default observer gains k_o of motulator are used. The control loop follows
@@ -60,7 +60,6 @@ typedef struct {
 typedef struct {
     InductionMachineInvGammaPars par;
     int sensorless; /* Selects the default observer gain k_o(w_m) */
-    int unit_gain;  /* k_o = 1 (create_vhz_observer with L_M = inf) */
     /* States */
     double complex psi_s;
     double theta_c;
@@ -102,10 +101,10 @@ typedef struct {
     int discrete;
 } IMCurrentVectorControllerCfg;
 
-/* Current controller: a 2DOF PI controller with the gains from the bandwidths and
- * the leakage inductance (CurrentController) or, if discrete is nonzero, the direct
- * discrete-time controller of the leakage flux linkages L_sgm*i
- * (DiscreteCurrentController) */
+/* Current controller (current_ctrl of CurrentVectorController): the currents are
+ * mapped to the leakage flux linkages L_sgm*i, which are controlled by the 2DOF PI
+ * controller (ComplexPIController) or, if discrete is nonzero, by the direct
+ * discrete-time controller (DiscreteComplexController) */
 typedef struct {
     double L_sgm;
     int discrete;

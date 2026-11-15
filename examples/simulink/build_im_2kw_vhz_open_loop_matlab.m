@@ -16,9 +16,7 @@ converter = VoltageSourceConverter(u_dc=540);
 mdl = Drive(machine, mechanics, converter);
 
 %% Control system ([] = None, the default)
-est_par = InductionMachineInvGammaPars(n_p=2, R_s=0, R_R=0, L_sgm=0, L_M=inf);
-cfg = ObserverBasedVHzControllerCfg(psi_s_nom=1.0395957349782348, i_s_max=inf, alpha_psi=0, alpha_tau=0, alpha_f=0);
-vhz_ctrl = ObserverBasedVHzController(est_par, cfg);
+vhz_ctrl = OpenLoopVHzController(2, @(w_s) complex(0, 1.0395957349782348)*w_s);
 ctrl = VHzControlSystem(vhz_ctrl, slew_rate=2*pi*60);
 ctrl.set_speed_ref(StepSignal(time=0.2, after=2*pi*25));
 mdl.mechanics.set_external_load_torque(StepSignal(time=0.8, after=14.6));

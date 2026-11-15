@@ -7,7 +7,7 @@ motulator, and the signals compared with those of the exported control systems.
 # %%
 import importlib
 from collections.abc import Callable
-from math import inf, pi
+from math import pi
 from pathlib import Path
 from typing import Any, cast
 
@@ -322,8 +322,6 @@ IM_FVC_RTOL = {"tau_M_ref": 1e-6, "d_a": 1e-6, "d_b": 1e-6, "d_c": 1e-6}
 
 IM_NOM = utils.NominalValues(U=400, I=5, f=50, P=2.2e3, tau=14.6)
 IM_BASE = utils.BaseValues.from_nominal(IM_NOM, n_p=2)
-# Pure open-loop V/Hz control, as in plot_2kw_im_diode_vhz.py of motulator
-OPEN_LOOP_PAR = {"n_p": 2, "R_s": 0, "R_R": 0, "L_sgm": 0, "L_M": inf}
 
 
 def vhz_system(
@@ -331,8 +329,10 @@ def vhz_system(
 ) -> tuple[Build, Signals]:
     """
     Induction machine drive with observer-based or open-loop V/Hz control, see
-    `sm_system`.
+    `sm_system`. The V/Hz curve of open-loop V/Hz control includes the resistive
+    voltage drop at no load.
     """
+    par = im_control.InductionMachineInvGammaPars(**IM_PAR)
 
     def build() -> tuple[model.Drive, VHzControlSystem]:
         mdl = model.Drive(
@@ -342,36 +342,44 @@ def vhz_system(
         )
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.6) * 0.5 * IM_NOM.tau)
         if open_loop:
-            par = im_control.InductionMachineInvGammaPars(**OPEN_LOOP_PAR)
-            cfg = im_control.ObserverBasedVHzControllerCfg(
-                psi_s_nom=IM_BASE.psi, i_s_max=inf, alpha_f=0, alpha_tau=0, alpha_psi=0
-            )
+            L_s = par.L_M + par.L_sgm
+
+            def u_s_ref(w_s: float) -> complex:
+                return (par.R_s / L_s + 1j * w_s) * IM_BASE.psi
+
+            vhz_ctrl: Any = im_control.OpenLoopVHzController(par.n_p, u_s_ref)
         else:
-            par = im_control.InductionMachineInvGammaPars(**IM_PAR)
             cfg = im_control.ObserverBasedVHzControllerCfg(
                 psi_s_nom=IM_BASE.psi, i_s_max=1.5 * IM_BASE.i
             )
+            vhz_ctrl = im_control.ObserverBasedVHzController(par, cfg)
         d_err = None
         if t_d > 0:
             d_err = im_control.InverterNonlinearity(t_d, sign=smooth_sign)
         pwm = im_control.PWM(overmodulation="MME", d_err=d_err, d_min=d_min)
-        ctrl = VHzControlSystem(
-            im_control.ObserverBasedVHzController(par, cfg),
-            slew_rate=2 * pi * 120,
-            pwm=pwm,
-        )
+        ctrl = VHzControlSystem(vhz_ctrl, slew_rate=2 * pi * 120, pwm=pwm)
         ctrl.set_speed_ref(lambda t: (t > 0.1) * 0.8 * IM_BASE.w_M)
         if blocked:
             ctrl.set_enable(lambda t: 0.01 <= t < 0.7 or t >= 0.72)
         return mdl, ctrl
 
-    signals = {
+    signals: Signals = {
         "w_M_ref": lambda _, ref: ref.w_M,
         "w_s": lambda fbk, _: fbk.w_s,
-        "tau_M_ref": lambda _, ref: ref.tau_M,
-        "psi_s_ref": lambda _, ref: ref.psi_s,
-        "psi_s": lambda fbk, _: np.abs(fbk.psi_s),
     }
+    if open_loop:
+        signals |= {
+            "u_s_ref": lambda _, ref: np.abs(ref.u_s),
+            "u_s": lambda fbk, _: np.abs(fbk.u_s),
+            "i_sd": lambda fbk, _: np.real(fbk.i_s),
+            "i_sq": lambda fbk, _: np.imag(fbk.i_s),
+        }
+    else:
+        signals |= {
+            "tau_M_ref": lambda _, ref: ref.tau_M,
+            "psi_s_ref": lambda _, ref: ref.psi_s,
+            "psi_s": lambda fbk, _: np.abs(fbk.psi_s),
+        }
     return build, signals
 
 
@@ -505,6 +513,7 @@ VHZ_CASES = [
     (False, 2e-6, 0.0, False),
     (True, 2e-6, 0.04, False),
     (False, 0.0, 0.0, True),
+    (True, 0.0, 0.0, True),
 ]
 VHZ_IDS = [
     "ovhz",
@@ -512,6 +521,7 @@ VHZ_IDS = [
     "ovhz_dead_time",
     "open_loop_dead_time_min_pulse",
     "ovhz_blocked",
+    "open_loop_blocked",
 ]
 # Cases of V/Hz control of synchronous machines: the dead time, the minimum duty ratio
 # (above the smallest duty ratios at the speed reference), and the gates blocked. The

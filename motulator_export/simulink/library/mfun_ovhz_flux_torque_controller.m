@@ -58,12 +58,8 @@ function [self, u_s_ref] = im_flux_torque_ctrl_compute_output(self, psi_s_ref, .
 %   torque references.
 par = self.par;
 psi_s_abs = abs(fbk.psi_s);
-% Auxiliary current (L_sgm = 0 in open-loop V/Hz control, where only the flux is
-% controlled)
-i_a = complex(0);
-if par.L_sgm > 0
-    i_a = fbk.psi_R/par.L_sgm;
-end
+% Auxiliary current
+i_a = fbk.psi_R/par.L_sgm;
 % Torque-production factor and directions
 c_tau = 1.5*par.n_p*real(i_a*conj(fbk.psi_s));
 t_psi = complex(1);

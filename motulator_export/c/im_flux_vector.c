@@ -78,9 +78,8 @@ static double complex im_flux_torque_ctrl_compute_output(IMFluxTorqueController 
     const InductionMachineInvGammaPars *par = &self->par;
     double psi_s_abs = cabs(fbk->psi_s);
 
-    /* Auxiliary current (L_sgm = 0 in open-loop V/Hz control, where only the flux is
-     * controlled) */
-    double complex i_a = (par->L_sgm > 0.0) ? fbk->psi_R / par->L_sgm : 0.0;
+    /* Auxiliary current */
+    double complex i_a = fbk->psi_R / par->L_sgm;
 
     /* Torque-production factor and directions */
     double c_tau = 1.5 * par->n_p * creal(i_a * conj(fbk->psi_s));
@@ -150,27 +149,24 @@ static void im_reference_gen_flux_and_torque(const IMReferenceGenerator *self,
     double psi = py_min(py_min(psi_s_max, self->psi_s_nom), psi_s_cl);
 
     /* Torque reference limiting */
-    if (par->L_sgm > 0.0) { /* L_sgm = 0 in open-loop V/Hz control */
-        /* Breakdown torque limit */
-        double k = self->k_b * par->L_M / (par->L_M + par->L_sgm);
-        double tau_b = 0.75 * par->n_p * k * (psi * psi) / par->L_sgm;
-        /* Current limit: the stator flux on the circle psi stays within the circle
-         * L_sgm*i_s_max around the rotor flux, which gives the maximum q-component
-         * of the stator flux in rotor flux coordinates */
-        double tau_M_cl = 0.0;
-        if (psi_R > 0.0) {
-            double psi_cl = par->L_sgm * self->i_s_max;
-            double psi_sd =
-                (psi * psi + psi_R * psi_R - psi_cl * psi_cl) / (2.0 * psi_R);
-            psi_sd = py_max(psi_sd, 0.0);
-            double psi_sq = sqrt(py_max(psi * psi - psi_sd * psi_sd, 0.0));
-            tau_M_cl = 1.5 * par->n_p * psi_R * psi_sq / par->L_sgm;
-        }
-        /* Limited torque reference */
-        double tau =
-            py_min(py_min(py_min(fabs(tau_M_ref), self->tau_M_max), tau_b), tau_M_cl);
-        tau_M_ref = tau * sign(tau_M_ref);
+    /* Breakdown torque limit */
+    double k = self->k_b * par->L_M / (par->L_M + par->L_sgm);
+    double tau_b = 0.75 * par->n_p * k * (psi * psi) / par->L_sgm;
+    /* Current limit: the stator flux on the circle psi stays within the circle
+     * L_sgm*i_s_max around the rotor flux, which gives the maximum q-component of
+     * the stator flux in rotor flux coordinates */
+    double tau_M_cl = 0.0;
+    if (psi_R > 0.0) {
+        double psi_cl = par->L_sgm * self->i_s_max;
+        double psi_sd = (psi * psi + psi_R * psi_R - psi_cl * psi_cl) / (2.0 * psi_R);
+        psi_sd = py_max(psi_sd, 0.0);
+        double psi_sq = sqrt(py_max(psi * psi - psi_sd * psi_sd, 0.0));
+        tau_M_cl = 1.5 * par->n_p * psi_R * psi_sq / par->L_sgm;
     }
+    /* Limited torque reference */
+    double tau =
+        py_min(py_min(py_min(fabs(tau_M_ref), self->tau_M_max), tau_b), tau_M_cl);
+    tau_M_ref = tau * sign(tau_M_ref);
     *psi_s_ref = psi;
     *tau_M_ref_lim = tau_M_ref;
 }
@@ -279,22 +275,12 @@ static void im_vhz_ctrl_init(IMVHzController *self, InductionMachineInvGammaPars
     self->T_s = cfg->T_s;
     self->alpha_f = cfg->alpha_f;
     self->tau_M_lpf = 0.0;
-    self->h = 0.0;
-    IMReferenceGenerator *gen = &self->reference_gen;
-    im_flux_reference_gen_init(gen, par, cfg->psi_s_nom, cfg->i_s_max, INFINITY,
-                               cfg->k_u, cfg->k_b);
+    im_flux_reference_gen_init(&self->reference_gen, par, cfg->psi_s_nom,
+                               cfg->i_s_max, INFINITY, cfg->k_u, cfg->k_b);
     im_flux_torque_ctrl_init(&self->flux_torque_ctrl, par, cfg->alpha_psi,
                              cfg->alpha_tau, 0.0);
     /* Sensorless observer with the default gain of create_vhz_observer */
     im_flux_observer_init(&self->observer, par, 1);
-    if (isinf(par.L_M) && par.L_M > 0.0) {
-        /* Pure open-loop V/Hz control: unit observer gain with h = 1, which disables
-         * the model-based correction */
-        self->observer.unit_gain = 1;
-        self->observer.psi_s = cfg->psi_s_nom;
-        gen->k_u = INFINITY;
-        self->h = 1.0;
-    }
 }
 
 /* IMVHzControlSystem ----------------------------------------------------------- */
@@ -336,7 +322,7 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
 
     /* The rotor speed of the observer is the speed reference */
     im_flux_observer_compute_output(&ctrl->observer, u_c_ab_zoh, meas->i_c_ab, w_M_ref,
-                                    0.0, ctrl->h, fbk);
+                                    0.0, 0.0, fbk);
     fbk->u_s = enabled ? cexp(-I * fbk->theta_c) * u_c_ab : fbk->u_s_zoh;
     fbk->u_dc = meas->u_dc;
 

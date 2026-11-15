@@ -52,14 +52,23 @@ elseif isa(ctrl, 'motulator.drive.control.VHzControlSystem')
     elseif isa(vhz, 'motulator.drive.control.im.ObserverBasedVHzController')
         c.name = 'Observer-based VHz control';
         plant = {'machine', 'motulator.drive.model.InductionMachine'};
+    elseif isa(vhz, 'motulator.drive.control.im.OpenLoopVHzController')
+        c.name = 'Open-loop VHz control';
+        plant = {'machine', 'motulator.drive.model.InductionMachine'};
     else
-        error('motulator:unsupported', ['Only ObserverBasedVHzController ' ...
-            'supported in VHzControlSystem.']);
+        error('motulator:unsupported', ['Only ObserverBasedVHzController and ' ...
+            'OpenLoopVHzController supported in VHzControlSystem.']);
     end
     c.variables = struct('vhz_ctrl', vhz.params(), 'slew_rate', ctrl.slew_rate, ...
         'pwm', ctrl.pwm.params());
-    c.T_s = vhz.cfg.T_s;
-    c.T_s_expr = 'vhz_ctrl.cfg.T_s';
+    % The sampling period, T_s of OpenLoopVHzController or cfg.T_s of the others
+    if isprop(vhz, 'cfg')
+        c.T_s = vhz.cfg.T_s;
+        c.T_s_expr = 'vhz_ctrl.cfg.T_s';
+    else
+        c.T_s = vhz.T_s;
+        c.T_s_expr = 'vhz_ctrl.T_s';
+    end
     c.refs = {'w_M_ref', required(ctrl.w_M_ref, 'speed reference', 'set_speed_ref')};
 elseif isa(ctrl, 'motulator.grid.control.GridConverterControlSystem')
     inner = ctrl.inner_ctrl;

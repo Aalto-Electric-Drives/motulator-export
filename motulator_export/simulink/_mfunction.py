@@ -62,6 +62,7 @@ M_FILES = (
     "sm_current_vector.m",
     "im_current_vector.m",
     "im_flux_vector.m",
+    "im_open_loop_vhz.m",
     "gfl_current_vector.m",
     "gfm_observer.m",
     "sm_machine.m",

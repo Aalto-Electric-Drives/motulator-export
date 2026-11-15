@@ -5,9 +5,9 @@ function [blocks, version, plant] = control_blocks_matlab()
 %   version of the data, and the parameters of the S-function of the GradNet
 %   machine. Written by motulator_export.simulink._library from the
 %   netlists of the control systems; do not edit.
-version = 'cac834a92b7cc2f8';
+version = '26f6eec2cfdacb8d';
 plant.gradnet_params = {'double(machine.n_p)', 'double(machine.R_s)', 'double(machine.k)', 'double(machine.current_map.in_dim)', 'double(machine.current_map.mu_dim)', 'double(machine.current_map.W)', 'double(machine.current_map.b)', 'double(machine.current_map.mu_log)', 'double(machine.current_map.bias)', 'double(machine.current_map.activation)', 'double(machine.current_map.beta_log)', 'double(machine.current_map.p)', 'double(machine.current_map.in_base)', 'double(machine.current_map.out_base)'};
-blocks = cell(1, 12);
+blocks = cell(1, 13);
 
 % Flux-vector control
 c = struct();
@@ -343,7 +343,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [265.0 145.0 405.0 265.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/meas.u_dc', 'Selector', [465.0 115.0 515.0 145.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'CurrentVectorController/ReferenceGenerator', 'MATLAB Function', [590.0 40.0 730.0 130.0], {'mfun_smcvc_reference_generator', 'ctrl_par.CurrentVectorController.ReferenceGenerator.T_s', [2.0 2.0], 'ctrl_par.CurrentVectorController.ReferenceGenerator'}
-    'CurrentVectorController/CurrentController', 'Subsystem', [910.0 93.0 1050.0 213.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-linkage-based current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller (DiscreteCurrentController), the currents mapped to the flux linkages by the machine model. The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
+    'CurrentVectorController/CurrentController', 'Subsystem', [910.0 93.0 1050.0 213.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-linkage-based current controller (current_ctrl of CurrentVectorController): the currents are mapped to the flux linkages by the machine model, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/Mux ref', 'Mux', [1128.0 78.0 1133.0 168.0], {'Inputs', '[2 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/From CurrentController.u_c_lim_ab', 'From', [815.0 161.0 885.0 175.0], {'GotoTag', 'u_c_lim_ab', 'ShowName', 'off'}
     'CurrentVectorController/From CurrentController.enable', 'From', [815.0 191.0 885.0 205.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -646,7 +646,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/meas.u_dc', 'Selector', [465.0 145.0 515.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'CurrentVectorController/fbk.psi_R', 'Selector', [465.0 220.0 515.0 250.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[9 10]', 'InputPortWidth', '21'}
     'CurrentVectorController/CurrentReferenceGenerator', 'Subsystem', [610.0 40.0 750.0 160.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current reference generator with field weakening (CurrentReferenceGenerator). The inputs are the torque reference, the unlimited voltage reference ref.u_s and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux estimate fbk.psi_R. The outputs are the limited torque reference and the current reference, transformed to the coordinates of the feedback signals (CurrentVectorController.compute_output). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
-    'CurrentVectorController/CurrentController', 'Subsystem', [930.0 115.0 1070.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller of the leakage flux linkages L_sgm*i (DiscreteCurrentController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
+    'CurrentVectorController/CurrentController', 'Subsystem', [930.0 115.0 1070.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current controller (current_ctrl of CurrentVectorController): the currents are mapped to the leakage flux linkages L_sgm*i, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'CurrentVectorController/Mux ref', 'Mux', [1158.0 100.0 1163.0 190.0], {'Inputs', '[1 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/Goto u_s', 'Goto', [1160.0 233.0 1230.0 247.0], {'GotoTag', 'u_s', 'ShowName', 'off', 'TagVisibility', 'local'}
     'CurrentVectorController/From CurrentController.u_c_lim_ab', 'From', [835.0 183.0 905.0 197.0], {'GotoTag', 'u_c_lim_ab', 'ShowName', 'off'}
@@ -1130,7 +1130,7 @@ c = struct();
 c.name = 'Observer-based VHz control';
 c.sfunction = [];
 c.mask_type = 'Observer-based VHz control (motulator)';
-c.description = 'Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
+c.description = 'Observer-based V/Hz control of an induction machine drive (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
 c.params = 'ovhz_params';
 c.params_args = {'vhz_ctrl', 'slew_rate', 'pwm'};
 c.inputs = {'enable', 'w_M_ref', 'i_s_abc', 'u_dc'};
@@ -1144,7 +1144,7 @@ c.netlist.blocks = { ...
     'get_measurement', 'MATLAB Function', [250.0 155.0 390.0 215.0], {'mfun_ovhz_get_measurement', 'ctrl_par.get_measurement.T_s', [3.0], 'ctrl_par.get_measurement'}
     'RateLimiter', 'MATLAB Function', [250.0 70.0 390.0 130.0], {'mfun_ovhz_rate_limiter', 'ctrl_par.RateLimiter.T_s', [1.0], 'ctrl_par.RateLimiter'}
     'PWM', 'Subsystem', [585.0 215.0 725.0 375.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
-    'ObserverBasedVHzController', 'Subsystem', [905.0 40.0 1045.0 240.0], {'ContentPreviewEnabled', 'off', 'Description', 'Observer-based V/Hz controller (ObserverBasedVHzController), or pure open-loop V/Hz control if par.L_M = inf. The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization passes the parameters to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
+    'ObserverBasedVHzController', 'Subsystem', [905.0 40.0 1045.0 240.0], {'ContentPreviewEnabled', 'off', 'Description', 'Observer-based V/Hz controller (ObserverBasedVHzController). The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The parameters are passed to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'Goto w_M', 'Goto', [585.0 48.0 655.0 62.0], {'GotoTag', 'w_M', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto fbk', 'Goto', [1120.0 38.0 1190.0 52.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
     'Goto ref', 'Goto', [1120.0 203.0 1190.0 217.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
@@ -1321,6 +1321,137 @@ c.outputs = { ...
     'Current (i_sd, i_sq)', {'i_sd', 'i_sq'}
     };
 blocks{5} = c;
+
+% Open-loop VHz control
+c = struct();
+c.name = 'Open-loop VHz control';
+c.sfunction = [];
+c.mask_type = 'Open-loop VHz control (motulator)';
+c.description = 'Open-loop V/Hz control of an induction machine drive (VHzControlSystem with OpenLoopVHzController). The speed reference is in mechanical rad/s, and the monitored current is in the coordinates of the controller. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator.';
+c.params = 'olvhz_params';
+c.params_args = {'vhz_ctrl', 'slew_rate', 'pwm'};
+c.inputs = {'enable', 'w_M_ref', 'i_s_abc', 'u_dc'};
+c.netlist.blocks = { ...
+    'enable', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '1'}
+    'w_M_ref', 'Inport', [40.0 113.0 70.0 127.0], {'Port', '2'}
+    'i_s_abc', 'Inport', [40.0 168.0 70.0 182.0], {'Port', '3'}
+    'u_dc', 'Inport', [40.0 223.0 70.0 237.0], {'Port', '4'}
+    'd_abc', 'Outport', [830.0 331.0 860.0 345.0], {'Port', '1'}
+    'signals', 'Outport', [1470.0 303.0 1500.0 317.0], {'Port', '2'}
+    'get_measurement', 'MATLAB Function', [265.0 145.0 405.0 205.0], {'mfun_olvhz_get_measurement', 'ctrl_par.get_measurement.T_s', [3.0], 'ctrl_par.get_measurement'}
+    'RateLimiter', 'MATLAB Function', [265.0 60.0 405.0 120.0], {'mfun_olvhz_rate_limiter', 'ctrl_par.RateLimiter.T_s', [1.0], 'ctrl_par.RateLimiter'}
+    'PWM', 'Subsystem', [600.0 205.0 740.0 365.0], {'ContentPreviewEnabled', 'off', 'Description', 'Space-vector PWM with the minimum-phase-error (MPE) or the minimum-magnitude-error (MME) overmodulation (PWM), with the duty-ratio error model d_err = InverterNonlinearity(t_d, u_th, sign) and its compensation, the minimum pulses, and the single update. The blocks inside are its methods compute_output and get_realized_voltage. While the gates are blocked (the input enable is zero), the realized voltage is unknown (NaN), so the observers run on their open-circuit model, as in get_feedback of the control system.'}
+    'OpenLoopVHzController', 'MATLAB Function', [830.0 75.0 970.0 195.0], {'mfun_olvhz_vhz_controller', 'ctrl_par.OpenLoopVHzController.T_s', [10.0 2.0], 'ctrl_par.OpenLoopVHzController'}
+    'Goto w_M', 'Goto', [600.0 38.0 670.0 52.0], {'GotoTag', 'w_M', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto fbk', 'Goto', [1045.0 53.0 1115.0 67.0], {'GotoTag', 'fbk', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'Goto ref', 'Goto', [1045.0 218.0 1115.0 232.0], {'GotoTag', 'ref', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'From fbk', 'From', [1045.0 273.0 1115.0 287.0], {'GotoTag', 'fbk', 'ShowName', 'off'}
+    'From ref', 'From', [1045.0 328.0 1115.0 342.0], {'GotoTag', 'ref', 'ShowName', 'off'}
+    'From w_M', 'From', [1045.0 383.0 1115.0 397.0], {'GotoTag', 'w_M', 'ShowName', 'off'}
+    'ref.u_s', 'Selector', [1045.0 165.0 1095.0 195.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[1 2]', 'InputPortWidth', '2'}
+    'modulate', 'MATLAB Function', [1205.0 90.0 1345.0 150.0], {'mfun_olvhz_modulate', 'ctrl_par.modulate.T_s', [2.0 1.0], 'ctrl_par.modulate'}
+    'Monitored signals', 'MATLAB Function', [1205.0 265.0 1345.0 355.0], {'mfun_olvhz_monitored_signals', 'ctrl_par.Monitored_signals.T_s', [2.0 2.0 2.0], 'ctrl_par.Monitored_signals'}
+    'Mux signals', 'Mux', [1418.0 265.0 1423.0 355.0], {'Inputs', '[2 2 2]', 'ShowName', 'off'}
+    'From PWM.enable', 'From', [505.0 218.0 575.0 232.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'Goto enable', 'Goto', [110.0 78.0 180.0 92.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'PWM/enable', 'Inport', [40.0 243.0 70.0 257.0], {'Port', '1'}
+    'PWM/meas', 'Inport', [40.0 78.0 70.0 92.0], {'Port', '2'}
+    'PWM/u_c_ref_ab', 'Inport', [40.0 133.0 70.0 147.0], {'Port', '3'}
+    'PWM/w', 'Inport', [40.0 188.0 70.0 202.0], {'Port', '4'}
+    'PWM/u_c_ab', 'Outport', [755.0 56.0 785.0 70.0], {'Port', '1'}
+    'PWM/u_c_zoh_ab', 'Outport', [755.0 113.0 785.0 127.0], {'Port', '2'}
+    'PWM/d_abc', 'Outport', [755.0 153.0 785.0 167.0], {'Port', '3'}
+    'PWM/compute_output', 'MATLAB Function', [265.0 115.0 405.0 205.0], {'mfun_olvhz_pwm', 'ctrl_par.PWM.compute_output.T_s', [3.0], 'ctrl_par.PWM.compute_output'}
+    'PWM/get_realized_voltage', 'Subsystem', [555.0 40.0 695.0 130.0], {'ContentPreviewEnabled', 'off'}
+    'PWM/From get_realized_voltage.enable', 'From', [460.0 48.0 530.0 62.0], {'GotoTag', 'enable', 'ShowName', 'off'}
+    'PWM/Goto enable', 'Goto', [110.0 243.0 180.0 257.0], {'GotoTag', 'enable', 'ShowName', 'off', 'TagVisibility', 'local'}
+    'PWM/get_realized_voltage/enable', 'Inport', [40.0 48.0 70.0 62.0], {'Port', '1'}
+    'PWM/get_realized_voltage/meas', 'Inport', [40.0 83.0 70.0 97.0], {'Port', '2'}
+    'PWM/get_realized_voltage/d_abc', 'Inport', [40.0 118.0 70.0 132.0], {'Port', '3'}
+    'PWM/get_realized_voltage/u_c_ab', 'Outport', [410.0 55.0 440.0 69.0], {'Port', '1'}
+    'PWM/get_realized_voltage/u_c_zoh_ab', 'Outport', [410.0 101.0 440.0 115.0], {'Port', '2'}
+    'PWM/get_realized_voltage/mfun_olvhz_pwm_realized_voltage', 'MATLAB Function', [225.0 40.0 365.0 130.0], {'mfun_olvhz_pwm_realized_voltage', 'ctrl_par.PWM.get_realized_voltage.T_s', [2.0 2.0], 'ctrl_par.PWM.get_realized_voltage'}
+    'PWM/get_realized_voltage/Delay d_abc', 'UnitDelay', [133.0 100.0 168.0 130.0], {'SampleTime', 'ctrl_par.PWM.get_realized_voltage.T_s'}
+    };
+c.netlist.aligns = { ...
+    '', 'Goto fbk', 'Inport', 1.0, 'OpenLoopVHzController', 'Outport', 1.0, -45.0
+    '', 'modulate', 'Inport', 1.0, 'OpenLoopVHzController', 'Outport', 1.0, 0.0
+    '', 'RateLimiter', 'Outport', 1.0, 'OpenLoopVHzController', 'Inport', 1.0, 0.0
+    '', 'Goto w_M', 'Inport', 1.0, 'RateLimiter', 'Outport', 1.0, -45.0
+    '', 'PWM', 'Inport', 2.0, 'get_measurement', 'Outport', 1.0, 90.0
+    '', 'd_abc', 'Inport', 1.0, 'PWM', 'Outport', 3.0, 0.0
+    '', 'ref.u_s', 'Outport', 1.0, 'modulate', 'Inport', 2.0, 45.0
+    '', 'Goto ref', 'Inport', 1.0, 'ref.u_s', 'Inport', 1.0, 45.0
+    '', 'Monitored signals', 'Inport', 1.0, 'From fbk', 'Outport', 1.0, 0.0
+    '', 'Mux signals', 'Inport', 1.0, 'Monitored signals', 'Outport', 1.0, 0.0
+    '', 'signals', 'Inport', 1.0, 'Mux signals', 'Outport', 1.0, 0.0
+    '', 'From PWM.enable', 'Outport', 1.0, 'PWM', 'Inport', 1.0, 0.0
+    '', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
+    'PWM', 'get_realized_voltage', 'Inport', 3.0, 'compute_output', 'Outport', 1.0, -45.0
+    'PWM', 'u_c_ab', 'Inport', 1.0, 'get_realized_voltage', 'Outport', 1.0, 0.0
+    'PWM', 'd_abc', 'Inport', 1.0, 'compute_output', 'Outport', 1.0, 0.0
+    'PWM', 'meas', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 2.0, 0.0
+    'PWM', 'From get_realized_voltage.enable', 'Outport', 1.0, 'get_realized_voltage', 'Inport', 1.0, 0.0
+    'PWM', 'Goto enable', 'Inport', 1.0, 'enable', 'Outport', 1.0, 0.0
+    'PWM/get_realized_voltage', 'u_c_ab', 'Inport', 1.0, 'mfun_olvhz_pwm_realized_voltage', 'Outport', 1.0, 0.0
+    'PWM/get_realized_voltage', 'u_c_zoh_ab', 'Inport', 1.0, 'mfun_olvhz_pwm_realized_voltage', 'Outport', 2.0, 0.0
+    'PWM/get_realized_voltage', 'enable', 'Outport', 1.0, 'mfun_olvhz_pwm_realized_voltage', 'Inport', 1.0, 0.0
+    'PWM/get_realized_voltage', 'Delay d_abc', 'Outport', 1.0, 'mfun_olvhz_pwm_realized_voltage', 'Inport', 3.0, 0.0
+    };
+c.netlist.lines = { ...
+    '', 'From PWM.enable/1', 'PWM/1', []
+    '', 'w_M_ref/1', 'RateLimiter/1', {'x', 215.0}
+    '', 'RateLimiter/1', 'OpenLoopVHzController/1', []
+    '', 'RateLimiter/1', 'Goto w_M/1', {'x', 430.0}
+    '', 'i_s_abc/1', 'get_measurement/1', {'x', 200.0}
+    '', 'u_dc/1', 'get_measurement/2', {'x', 230.0}
+    '', 'get_measurement/1', 'PWM/2', {'x', 445.0}
+    '', 'get_measurement/1', 'OpenLoopVHzController/2', {'x', 765.0}
+    '', 'PWM/1', 'OpenLoopVHzController/3', {'x', 780.0}
+    '', 'PWM/2', 'OpenLoopVHzController/4', {'x', 795.0}
+    '', 'PWM/3', 'd_abc/1', []
+    '', 'OpenLoopVHzController/1', 'Goto fbk/1', {'x', 995.0}
+    '', 'OpenLoopVHzController/1', 'modulate/1', []
+    '', 'OpenLoopVHzController/2', 'Goto ref/1', {'x', 1010.0}
+    '', 'OpenLoopVHzController/2', 'ref.u_s/1', {'x', 1010.0}
+    '', 'ref.u_s/1', 'modulate/2', {'x', 1155.0}
+    '', 'modulate/1', 'PWM/3', {'x', 1385.0, 'y', 450.0, 'x', 460.0}
+    '', 'modulate/2', 'PWM/4', {'x', 1370.0, 'y', 435.0, 'x', 475.0}
+    '', 'From fbk/1', 'Monitored signals/1', []
+    '', 'From ref/1', 'Monitored signals/2', {'x', 1140.0}
+    '', 'From w_M/1', 'Monitored signals/3', {'x', 1170.0}
+    '', 'Monitored signals/1', 'Mux signals/1', []
+    '', 'Monitored signals/2', 'Mux signals/2', []
+    '', 'Monitored signals/3', 'Mux signals/3', []
+    '', 'Mux signals/1', 'signals/1', []
+    '', 'enable/1', 'Goto enable/1', []
+    'PWM', 'From get_realized_voltage.enable/1', 'get_realized_voltage/1', []
+    'PWM', 'meas/1', 'compute_output/1', {'x', 230.0}
+    'PWM', 'meas/1', 'get_realized_voltage/2', []
+    'PWM', 'u_c_ref_ab/1', 'compute_output/2', {'x', 215.0}
+    'PWM', 'w/1', 'compute_output/3', {'x', 200.0}
+    'PWM', 'compute_output/1', 'd_abc/1', []
+    'PWM', 'compute_output/1', 'get_realized_voltage/3', {'x', 430.0}
+    'PWM', 'get_realized_voltage/1', 'u_c_ab/1', []
+    'PWM', 'get_realized_voltage/2', 'u_c_zoh_ab/1', {'x', 720.0}
+    'PWM', 'enable/1', 'Goto enable/1', []
+    'PWM/get_realized_voltage', 'enable/1', 'mfun_olvhz_pwm_realized_voltage/1', []
+    'PWM/get_realized_voltage', 'meas/1', 'mfun_olvhz_pwm_realized_voltage/2', {'x', 190.0}
+    'PWM/get_realized_voltage', 'd_abc/1', 'Delay d_abc/1', {'x', 95.0}
+    'PWM/get_realized_voltage', 'Delay d_abc/1', 'mfun_olvhz_pwm_realized_voltage/3', []
+    'PWM/get_realized_voltage', 'mfun_olvhz_pwm_realized_voltage/1', 'u_c_ab/1', []
+    'PWM/get_realized_voltage', 'mfun_olvhz_pwm_realized_voltage/2', 'u_c_zoh_ab/1', []
+    };
+c.netlist.masks = [];
+c.sfunctions = [];
+c.input_widths = [1.0 1.0 3.0 1.0];
+c.signals = {'w_M_ref', 'w_s', 'u_s_ref', 'u_s', 'i_sd', 'i_sq'};
+c.outputs = { ...
+    'Speed (w_M_ref, w_s)', {'w_M_ref', 'w_s'}
+    'Voltage (u_s_ref, u_s)', {'u_s_ref', 'u_s'}
+    'Current (i_sd, i_sq)', {'i_sd', 'i_sq'}
+    };
+blocks{6} = c;
 
 % Observer-based VHz control (SM)
 c = struct();
@@ -1524,7 +1655,7 @@ c.outputs = { ...
     'Flux linkage (psi_s_ref, psi_s)', {'psi_s_ref', 'psi_s'}
     'Angle and current (theta_m, i_d, i_q)', {'theta_m', 'i_d', 'i_q'}
     };
-blocks{6} = c;
+blocks{7} = c;
 
 % Grid-following control
 c = struct();
@@ -1709,7 +1840,7 @@ c.outputs = { ...
     'Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)', {'i_c_d_ref', 'i_c_d', 'i_c_q_ref', 'i_c_q'}
     'PLL (u_g, w_g, theta_c)', {'u_g', 'w_g', 'theta_c'}
     };
-blocks{7} = c;
+blocks{8} = c;
 
 % Grid-forming control
 c = struct();
@@ -1926,7 +2057,7 @@ c.outputs = { ...
     'Current (i_c_d_ref, i_c_d, i_c_q_ref, i_c_q)', {'i_c_d_ref', 'i_c_d', 'i_c_q_ref', 'i_c_q'}
     'Angle (theta_c)', {'theta_c'}
     };
-blocks{8} = c;
+blocks{9} = c;
 
 % Flux-vector control (torque)
 c = struct();
@@ -2147,7 +2278,7 @@ c.outputs = { ...
     'Flux linkage (psi_s_ref, psi_s)', {'psi_s_ref', 'psi_s'}
     'Angle and current (theta_m, i_d, i_q)', {'theta_m', 'i_d', 'i_q'}
     };
-blocks{9} = c;
+blocks{10} = c;
 
 % Current-vector control (SM, torque)
 c = struct();
@@ -2217,7 +2348,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/SpeedFluxObserver', 'Subsystem', [265.0 145.0 405.0 265.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux observer with speed estimation, created by create_speed_flux_observer. The mask initialization resolves the defaults of create_speed_flux_observer and computes the gains of the SpeedObserver and the FluxObserver inside it, as in SpeedFluxObserver. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/meas.u_dc', 'Selector', [465.0 115.0 515.0 145.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'CurrentVectorController/ReferenceGenerator', 'MATLAB Function', [590.0 40.0 730.0 130.0], {'mfun_smcvc_reference_generator', 'ctrl_par.CurrentVectorController.ReferenceGenerator.T_s', [2.0 2.0], 'ctrl_par.CurrentVectorController.ReferenceGenerator'}
-    'CurrentVectorController/CurrentController', 'Subsystem', [910.0 93.0 1050.0 213.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-linkage-based current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller (DiscreteCurrentController), the currents mapped to the flux linkages by the machine model. The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
+    'CurrentVectorController/CurrentController', 'Subsystem', [910.0 93.0 1050.0 213.0], {'ContentPreviewEnabled', 'off', 'Description', 'Flux-linkage-based current controller (current_ctrl of CurrentVectorController): the currents are mapped to the flux linkages by the machine model, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. When the observer catches the machine (fbk.caught), the integral state is preset to the back-EMF of the caught speed. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars.'}
     'CurrentVectorController/Mux ref', 'Mux', [1128.0 78.0 1133.0 168.0], {'Inputs', '[2 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/From CurrentController.u_c_lim_ab', 'From', [815.0 161.0 885.0 175.0], {'GotoTag', 'u_c_lim_ab', 'ShowName', 'off'}
     'CurrentVectorController/From CurrentController.enable', 'From', [815.0 191.0 885.0 205.0], {'GotoTag', 'enable', 'ShowName', 'off'}
@@ -2417,7 +2548,7 @@ c.outputs = { ...
     'Flux linkage (psi_s_ref, psi_s)', {'psi_s_ref', 'psi_s'}
     'Current (i_d_ref, i_d, i_q_ref, i_q)', {'i_d_ref', 'i_d', 'i_q_ref', 'i_q'}
     };
-blocks{10} = c;
+blocks{11} = c;
 
 % Current-vector control (torque)
 c = struct();
@@ -2489,7 +2620,7 @@ c.netlist.blocks = { ...
     'CurrentVectorController/meas.u_dc', 'Selector', [465.0 145.0 515.0 175.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[3]', 'InputPortWidth', '4'}
     'CurrentVectorController/fbk.psi_R', 'Selector', [465.0 220.0 515.0 250.0], {'NumberOfDimensions', '1', 'IndexOptions', 'Index vector (dialog)', 'Indices', '[9 10]', 'InputPortWidth', '21'}
     'CurrentVectorController/CurrentReferenceGenerator', 'Subsystem', [610.0 40.0 750.0 160.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current reference generator with field weakening (CurrentReferenceGenerator). The inputs are the torque reference, the unlimited voltage reference ref.u_s and the DC-bus voltage meas.u_dc for the field weakening, and the rotor flux estimate fbk.psi_R. The outputs are the limited torque reference and the current reference, transformed to the coordinates of the feedback signals (CurrentVectorController.compute_output). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
-    'CurrentVectorController/CurrentController', 'Subsystem', [930.0 115.0 1070.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current controller: the 2DOF PI controller (CurrentController) or, if discrete = 1, the direct discrete-time controller of the leakage flux linkages L_sgm*i (DiscreteCurrentController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
+    'CurrentVectorController/CurrentController', 'Subsystem', [930.0 115.0 1070.0 235.0], {'ContentPreviewEnabled', 'off', 'Description', 'Current controller (current_ctrl of CurrentVectorController): the currents are mapped to the leakage flux linkages L_sgm*i, which are controlled by the 2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct discrete-time controller (DiscreteComplexController). The inputs are the current reference, the feedback signals fbk (the current fbk.i_s, and the realized voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the update), and for the update of the discrete-time controller, the limited voltage reference u_c_lim_ab of the PWM in stationary coordinates, used while the gates are enabled (the input enable nonzero), as in CurrentVectorController.update. The output is the voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars.'}
     'CurrentVectorController/Mux ref', 'Mux', [1158.0 100.0 1163.0 190.0], {'Inputs', '[1 2 2]', 'ShowName', 'off'}
     'CurrentVectorController/Goto u_s', 'Goto', [1160.0 233.0 1230.0 247.0], {'GotoTag', 'u_s', 'ShowName', 'off', 'TagVisibility', 'local'}
     'CurrentVectorController/From CurrentController.u_c_lim_ab', 'From', [835.0 183.0 905.0 197.0], {'GotoTag', 'u_c_lim_ab', 'ShowName', 'off'}
@@ -2706,7 +2837,7 @@ c.outputs = { ...
     'Flux linkage (psi_s, psi_R)', {'psi_s', 'psi_R'}
     'Current (i_sd_ref, i_sd, i_sq_ref, i_sq)', {'i_sd_ref', 'i_sd', 'i_sq_ref', 'i_sq'}
     };
-blocks{11} = c;
+blocks{12} = c;
 
 % Flux-vector control (IM, torque)
 c = struct();
@@ -2918,5 +3049,5 @@ c.outputs = { ...
     'Flux linkage (psi_s_ref, psi_s, psi_R)', {'psi_s_ref', 'psi_s', 'psi_R'}
     'Current (i_sd, i_sq)', {'i_sd', 'i_sq'}
     };
-blocks{12} = c;
+blocks{13} = c;
 end

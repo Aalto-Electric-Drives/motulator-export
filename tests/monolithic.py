@@ -21,6 +21,7 @@ from motulator_export.plecs import (
     _grid_control,
     _im_control,
     _im_fvc_control,
+    _im_open_loop_vhz_control,
     _im_vhz_control,
     _sm_control,
     _sm_cvc_control,
@@ -772,6 +773,79 @@ VHZ = MonolithicBlock(
     outputs=_im_vhz_control.CTRL_OUTPUTS,
     mask_params=VHZ_MASK_PARAMS,
     code=_vhz_code,
+)
+
+
+# %%
+# Open-loop V/Hz control of induction machine drives
+TAB = "Open-loop V/Hz control"
+OPEN_LOOP_VHZ_MASK_PARAMS = [
+    MaskParam("n_p", "n_p", TAB, "", True),
+    MaskParam("u_0", "u_0", TAB, ""),
+    MaskParam("k", "k", TAB, ""),
+    MaskParam("T_s", "T_s", TAB, "", True),
+    MaskParam("slew_rate", "slew_rate", TAB, "", True),
+    *PWM_MASK_PARAMS,
+]
+
+
+def _open_loop_vhz_code() -> dict[str, str]:
+    """Code sections of the C-Script of open-loop V/Hz control."""
+    declarations = _declarations(
+        ["common.c", "im_open_loop_vhz.c"], "IMOpenLoopVHzControlSystem"
+    )
+    i = {m.variable: k for k, m in enumerate(OPEN_LOOP_VHZ_MASK_PARAMS)}
+    u_0, k = i["u_0"], i["k"]
+    start = (
+        parameter_checks(OPEN_LOOP_VHZ_MASK_PARAMS)
+        + f"if (PDIM({u_0}) != 2 || PDIM({k}) != 2) {{\n"
+        '    SetErrorMessage("u_0 and k must be [real part, imaginary part].");\n'
+        "    return;\n"
+        "}\n"
+        "/* V/Hz curve u_0 + k*w_s */\n"
+        "IMOpenLoopVHzController vhz_ctrl;\n"
+        f"im_open_loop_vhz_ctrl_init(&vhz_ctrl, P({i['n_p']}, 0),\n"
+        f"                           complex_from(P({u_0}, 0), P({u_0}, 1)),\n"
+        f"                           complex_from(P({k}, 0), P({k}, 1)), "
+        f"P({i['T_s']}, 0));\n"
+        "im_open_loop_vhz_control_system_init(&ctrl, &vhz_ctrl, "
+        f"P({i['slew_rate']}, 0));\n" + pwm_code(i)
+    )
+    monitored = {
+        "w_M_ref": "ctrl.ref.w_M",
+        "w_s": "ctrl.fbk.w_s",
+        "u_s_ref": "cabs(ctrl.ref.u_s)",
+        "u_s": "cabs(ctrl.fbk.u_s)",
+        "i_sd": "creal(ctrl.fbk.i_s)",
+        "i_sq": "cimag(ctrl.fbk.i_s)",
+    }
+    output = (
+        "double w_M_ref = InputSignal(1, 0);\n"
+        "double i_s_abc[3] = {InputSignal(2, 0), InputSignal(2, 1),\n"
+        "                     InputSignal(2, 2)};\n"
+        "double u_dc = fmax(InputSignal(3, 0), U_DC_MIN);\n"
+        "IMOpenLoopVHzMeasurements meas = {abc2complex(i_s_abc), u_dc};\n"
+        "/* The gate enable */\n"
+        "im_open_loop_vhz_control_system_compute_output(&ctrl, &meas, w_M_ref,\n"
+        "                                               InputSignal(0, 0) > 0.0);\n"
+        + DUTY_RATIO_CODE
+        + monitored_code(_im_open_loop_vhz_control.CTRL_OUTPUTS, monitored)
+    )
+    return {
+        "Declarations": declarations,
+        "StartFcn": start,
+        "OutputFcn": output,
+        "UpdateFcn": "im_open_loop_vhz_control_system_update(&ctrl);\n",
+    }
+
+
+OPEN_LOOP_VHZ = MonolithicBlock(
+    name="Open-loop VHz control",
+    inputs=_names(_im_open_loop_vhz_control.CTRL_INPUTS),
+    input_widths=_widths(_im_open_loop_vhz_control.CTRL_INPUTS),
+    outputs=_im_open_loop_vhz_control.CTRL_OUTPUTS,
+    mask_params=OPEN_LOOP_VHZ_MASK_PARAMS,
+    code=_open_loop_vhz_code,
 )
 
 

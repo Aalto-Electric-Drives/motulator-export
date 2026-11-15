@@ -20,9 +20,8 @@
  * Flux-vector control uses the speed and flux observer of im_current_vector.h, with
  * the measurements and the feedback signals of current-vector control. In V/Hz
  * control, its flux observer is used without speed estimation, the rotor speed being
- * the rate-limited speed reference. Pure open-loop V/Hz control is the special case
- * L_M = inf (with R_s = R_R = L_sgm = 0 and zero gains), as in motulator. The
- * observer gain k_o is the default of motulator. The PWM of V/Hz control uses the MME
+ * the rate-limited speed reference. The observer gain k_o is the default of
+ * motulator. The PWM of V/Hz control uses the MME
  * overmodulation (the default PWM of VHzControlSystem). As in the other control
  * systems, the output function has no side effects (apart from workspace variables),
  * and all states are updated in the update function.
@@ -125,7 +124,6 @@ typedef struct {
 typedef struct {
     double T_s;
     double alpha_f;
-    double h; /* Weight of the external speed error signal: 1 in open-loop V/Hz */
     IMReferenceGenerator reference_gen;
     IMFluxTorqueController flux_torque_ctrl;
     IMFluxObserver observer;

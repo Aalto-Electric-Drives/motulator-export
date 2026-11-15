@@ -39,6 +39,7 @@ from motulator_export.plecs import (
     _im,
     _im_control,
     _im_fvc_control,
+    _im_open_loop_vhz_control,
     _im_vhz_control,
     _sm,
     _sm_control,
@@ -99,6 +100,7 @@ SYSTEMS: dict[str, tuple[ControlBlock, MonolithicBlock]] = {
     "cvc": (_im_control.CVC_BLOCK, monolithic.CVC),
     "imfvc": (_im_fvc_control.FVC_BLOCK, monolithic.IM_FVC),
     "vhz": (_im_vhz_control.VHZ_BLOCK, monolithic.VHZ),
+    "olvhz": (_im_open_loop_vhz_control.VHZ_BLOCK, monolithic.OPEN_LOOP_VHZ),
     "smvhz": (_sm_vhz_control.VHZ_BLOCK, monolithic.SM_VHZ),
     "gfl": (_grid_control.GFL_BLOCK, monolithic.GFL),
     "gfm": (_grid_control.GFM_BLOCK, monolithic.GFM),
@@ -167,6 +169,8 @@ def init_script(key: str, values: dict[str, Any], flux_map: Any = None) -> str:
         return _im_fvc_control.init_script([], values, "")
     if key == "vhz":
         return _im_vhz_control.init_script([], values, "")
+    if key == "olvhz":
+        return _im_open_loop_vhz_control.init_script([], values, "")
     return _grid_control.init_script([], values, "", gfl=key == "gfl")
 
 
@@ -351,12 +355,13 @@ def test_vhz_control(
     exactly with the monolithic control system."""
     build, signals = vhz_system(open_loop, t_d, d_min, blocked)
     values = _im.export_vhz_values(build()[1])
+    key = "olvhz" if open_loop else "vhz"
 
     def run(net: Netlist) -> list[list[float]]:
-        sfun = drive_sfun(net, _im_vhz_control.VHZ_BLOCK)
+        sfun = drive_sfun(net, SYSTEMS[key][0])
         return compare(build, model.Simulation, sfun, signals, 1.0, VHZ_RTOL)
 
-    check(compiled, "vhz", values, run, VHZ_INPUTS)
+    check(compiled, key, values, run, VHZ_INPUTS)
 
 
 @pytest.mark.parametrize(

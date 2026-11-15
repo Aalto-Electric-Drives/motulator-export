@@ -1,8 +1,9 @@
 classdef VHzControlSystem < motulator.internal.Object
     %VHZCONTROLSYSTEM V/Hz control system of a machine drive.
     %   CTRL = VHZCONTROLSYSTEM(VHZ_CTRL, slew_rate=..., pwm=...) as in motulator,
-    %   with the V/Hz controller VHZ_CTRL (ObserverBasedVHzController), the slew
-    %   rate of the speed reference (mechanical rad/s^2), and the PWM (by default
+    %   with the V/Hz controller VHZ_CTRL (ObserverBasedVHzController, or
+    %   OpenLoopVHzController of an induction machine), the slew rate of the speed
+    %   reference (mechanical rad/s^2), and the PWM (by default
     %   PWM(overmodulation='MME')). SET_SPEED_REF(W_M_REF) sets the speed reference
     %   (mechanical rad/s): a constant or a StepSignal.
 

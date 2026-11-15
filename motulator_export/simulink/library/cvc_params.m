@@ -171,7 +171,7 @@ end
 function s = CurrentVectorController(par, cfg, observer)
 %CURRENTVECTORCONTROLLER Parameters of the block CurrentVectorController
 %   (CurrentVectorController of motulator) from the arguments of its class.
-% Default of alpha_i (CurrentController.__init__)
+% Default of alpha_i (CurrentVectorController.__init__)
 alpha_i = cfg.alpha_i;
 if isempty(alpha_i)
     alpha_i = cfg.alpha_c;
