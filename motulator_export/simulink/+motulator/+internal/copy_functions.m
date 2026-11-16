@@ -6,11 +6,16 @@ function copy_functions(sys, folder, params)
 %   motulator.internal.add_mfunction), the function PARAMS of the parameters of
 %   the blocks of the control system (e.g., 'fvc_params'), and the functions that
 %   it calls (e.g., sm_reference_luts). With the files, the model needs neither
-%   the library nor the package.
+%   the library nor the package. With SYS empty, only the function PARAMS and the
+%   functions that it calls are copied.
 import motulator.internal.*
 source = library_folder();
-blocks = find_system(sys, 'LookUnderMasks', 'all', 'RegExp', 'on', 'Tag', '^mfun_');
-names = unique([{params}; get_param(blocks, 'Tag')]);
+names = {params};
+if ~isempty(sys)
+    blocks = find_system(sys, 'LookUnderMasks', 'all', 'RegExp', 'on', 'Tag', ...
+        '^mfun_');
+    names = unique([names; get_param(blocks, 'Tag')]);
+end
 % The other functions of the folder that the function of the parameters calls
 code = fileread(fullfile(source, [params '.m']));
 files = dir(fullfile(source, '*.m'));

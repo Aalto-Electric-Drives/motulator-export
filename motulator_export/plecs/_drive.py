@@ -365,13 +365,22 @@ def _add_drive_outputs(
     """
     Add the scope and its probes, and optionally the output ports.
 
-    The first three monitored signal groups of the block (the speed, the torque, and
-    the flux linkage) are shown in the scope with the machine signals. The probes are
-    below the sources of the control system, the last of which is at `y_sources`.
-    Returns the y-coordinate of the last probe.
+    The scope shows the first monitored signal group of the block (the speed) and the
+    torque group (none in open-loop V/Hz control) with the machine signals, the phase
+    currents, and the flux-linkage group or, in open-loop V/Hz control, the voltage
+    group. The probes are below the sources of the control system, the last of which
+    is at `y_sources`. Returns the y-coordinate of the last probe.
 
     """
-    speed, torque, flux = list(block.outputs)[:3]
+    groups = list(block.outputs)
+    speed = groups[0]
+    torque = next((g for g in groups if g.startswith("Torque")), None)
+    last = next(g for g in groups if g.startswith(("Flux", "Voltage")))
+    last_axis = (
+        ("Flux linkage", "Flux linkage (Vs)")
+        if last.startswith("Flux")
+        else ("Voltage", "Voltage (V)")
+    )
     if outputs:  # Output ports for scripted simulations: machine and controller signals
         probe = _probe("Machine", MACHINE_PROBES)
         sch.component("PlecsProbe", "Machine signals", (400, 300), extra=probe)
@@ -382,39 +391,45 @@ def _add_drive_outputs(
     # system (not shifted by sch.dx, since the probes have no wires)
     dx, sch.dx = sch.dx, 0
     x, y = 80, max(270, y_sources + 50)  # Position of the first probe
+    # The probes in their slots, without the torque of the control system if none
     probes = [
         ("Speed (ctrl)", block.name, [speed]),
         ("Speed", "Machine", [MACHINE_PROBES[1]]),
         ("Torque (ctrl)", block.name, [torque]),
         ("Torque", "Machine", [MACHINE_PROBES[3]]),
         ("Currents", "Machine", [MACHINE_PROBES[0]]),
-        ("Flux (ctrl)", block.name, [flux]),
+        (f"{last.split()[0]} (ctrl)", block.name, [last]),
     ]
     for k, (name, comp, signals) in enumerate(probes):
-        extra = _probe(comp, signals)
-        sch.component("PlecsProbe", name, (x, y + 40 * k), extra=extra)
+        if None not in signals:
+            extra = _probe(comp, signals)
+            sch.component("PlecsProbe", name, (x, y + 40 * k), extra=extra)
     # The controller signals (also without the speed reference in torque control)
     # with the machine signal
-    for name, group, y_mux in [("speed", speed, y + 40), ("torque", torque, y + 60)]:
+    muxed = [("speed", speed, y + 40)]
+    muxed += [("torque", torque, y + 60)] if torque is not None else []
+    for name, group, y_mux in muxed:
         mux = {"Width": f"[{len(block.outputs[group])} 1]"}
         sch.component("SignalMux", f"Mux {name}", (x + 100, y_mux), mux, show=False)
     sch.signal(("Speed (ctrl)", 1), ("Mux speed", 2), [(x + 40, y), (x + 40, y + 35)])
     sch.signal(("Speed", 1), ("Mux speed", 3), [(x + 50, y + 40), (x + 50, y + 45)])
-    sch.signal(
-        ("Torque (ctrl)", 1), ("Mux torque", 2), [(x + 60, y + 80), (x + 60, y + 55)]
-    )
-    sch.signal(("Torque", 1), ("Mux torque", 3), [(x + 70, y + 120), (x + 70, y + 65)])
+    if torque is not None:
+        points = [(x + 60, y + 80), (x + 60, y + 55)]
+        sch.signal(("Torque (ctrl)", 1), ("Mux torque", 2), points)
+        points = [(x + 70, y + 120), (x + 70, y + 65)]
+        sch.signal(("Torque", 1), ("Mux torque", 3), points)
     axes = [
         ("Speed", "Speed (rad/s)"),
         ("Torque", "Torque (Nm)"),
         ("Current", "Current (A)"),
-        ("Flux linkage", "Flux linkage (Vs)"),
+        last_axis,
     ]
     scope = (x + 180, y + 60)
     sch.component("Scope", "Scope", scope, extra=_scope(axes), direction="up")
     # Scope inputs at y + 45, y + 55, y + 65, and y + 75
-    sources = [("Mux speed", y + 40), ("Mux torque", y + 60)]
-    sources += [("Currents", y + 160), ("Flux (ctrl)", y + 200)]
+    sources = [("Mux speed", y + 40)]
+    sources += [("Mux torque", y + 60)] if torque is not None else [("Torque", y + 120)]
+    sources += [("Currents", y + 160), (f"{last.split()[0]} (ctrl)", y + 200)]
     for k, (src, y_src) in enumerate(sources):
         x_jog = x + 130 + 5 * k
         points = [(x_jog, y_src), (x_jog, y + 45 + 10 * k)]

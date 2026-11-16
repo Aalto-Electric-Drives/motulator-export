@@ -4,16 +4,16 @@
 % (mfun_*.m) by motulator_export.simulink.
 %
 % Python counterpart:
-%   motulator/drive/control/_sm_current_vector.py  CurrentController,
-%                                                  DiscreteCurrentController
+%   motulator/drive/control/_sm_current_vector.py  CurrentVectorController
 %
 % The observer and the reference generator are those of flux-vector control
 % (sm_flux_vector.m).
 
 function self = sm_current_ctrl_init(par, alpha_c, alpha_i, discrete, T_s)
-%SM_CURRENT_CTRL_INIT Current controller: a complex-vector PI controller of the flux
-%   linkages (CurrentController; alpha_i = NaN means alpha_c) or, if discrete is
-%   true, the direct discrete-time controller (DiscreteCurrentController).
+%SM_CURRENT_CTRL_INIT Current controller (current_ctrl of CurrentVectorController):
+%   the 2DOF PI controller of the flux linkages (ComplexPIController; alpha_i = NaN
+%   means alpha_c) or, if discrete is true, the direct discrete-time controller
+%   (DiscreteComplexController).
 if isnan(alpha_i)
     alpha_i = alpha_c;
 end

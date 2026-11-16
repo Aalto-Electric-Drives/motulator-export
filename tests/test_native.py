@@ -541,6 +541,16 @@ def test_failed_interval(N_eval: int) -> None:
 # %%
 # Induction machine drives, DC buses, and grid converter systems, mostly with the
 # systems of tests/systems.py
+def open_loop_vhz_at_standstill() -> tuple[model.Drive, Any]:
+    """
+    Open-loop V/Hz control with the zero speed reference: the resistive voltage drop
+    of the V/Hz curve magnetizes the machine at standstill.
+    """
+    mdl, ctrl = vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0]()
+    ctrl.set_speed_ref(0.0)
+    return mdl, ctrl
+
+
 @pytest.mark.parametrize(
     "build",
     [
@@ -555,6 +565,7 @@ def test_failed_interval(N_eval: int) -> None:
         im_fvc_system(sensorless=True, t_d=2e-6, d_min=0.2)[0],
         vhz_system(open_loop=False, t_d=0.0, d_min=0.0)[0],
         vhz_system(open_loop=True, t_d=0.0, d_min=0.0)[0],
+        open_loop_vhz_at_standstill,
         vhz_system(open_loop=False, t_d=0.0, d_min=0.1)[0],
     ],
     ids=[
@@ -569,12 +580,14 @@ def test_failed_interval(N_eval: int) -> None:
         "fvc_d_err_d_min",
         "vhz",
         "vhz_open_loop",
+        "vhz_open_loop_standstill",
         "vhz_d_min",
     ],
 )
 def test_induction_machine(build: Build) -> None:
-    """Current-vector control, flux-vector control, and observer-based V/Hz control,
-    also with the minimum pulses and the compensation of the duty-ratio error."""
+    """Current-vector control, flux-vector control, and observer-based or open-loop V/Hz
+    control, also with the minimum pulses and the compensation of the duty-ratio
+    error."""
     check(*simulate(build, 0.3), rtol=1e-9)
 
 

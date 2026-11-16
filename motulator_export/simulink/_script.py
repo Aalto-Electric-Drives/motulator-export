@@ -361,6 +361,10 @@ def _im_script(
         machine = f"par = {call};"
         plant_values = list(plant.values())
     model = _drive_model(mdl, [machine, "machine = InductionMachine(par);"])
+    if isinstance(ctrl, VHzControlSystem) and isinstance(
+        ctrl.vhz_ctrl, im_control.OpenLoopVHzController
+    ):
+        return model, [*_open_loop_vhz_script(ctrl), *_drive_references(mdl, ctrl)]
     if isinstance(ctrl, VHzControlSystem):
         values = _im.export_vhz_values(ctrl)
         cls, fields = im_control.ObserverBasedVHzControllerCfg, VHZ_CFG_FIELDS
@@ -389,6 +393,23 @@ def _im_script(
     else:
         control += _vector_control_system(ctrl, est, values)
     return model, [*control, *_drive_references(mdl, ctrl)]
+
+
+def _open_loop_vhz_script(ctrl: VHzControlSystem) -> list[str]:
+    """
+    The control system with the open-loop V/Hz controller, whose affine V/Hz curve
+    (`_im.vhz_curve`) is an anonymous function.
+    """
+    values = _im.export_vhz_values(ctrl)
+    u_0, k = _im.vhz_curve(cast(im_control.OpenLoopVHzController, ctrl.vhz_ctrl))
+    curve = f"{_value(k)}*w_s" if u_0 == 0 else f"{_value(u_0)} + {_value(k)}*w_s"
+    vhz_ctrl = _call(
+        "OpenLoopVHzController",
+        [_value(values["n_p"]), f"@(w_s) {curve}"],
+        [("T_s", values["T_s"])],
+        _defaults(im_control.OpenLoopVHzController),
+    )
+    return [f"vhz_ctrl = {vhz_ctrl};", _vhz_control_system(values)]
 
 
 def _grid_script(

@@ -39,7 +39,6 @@
 
 static IMFluxObserver self;
 static double T_s; /* Sampling period */
-static double h;
 static IMObserverOutputs out;
 
 /* Ports and parameters of the C-Script */
@@ -48,7 +47,7 @@ static const int FEEDTHROUGH[] = {1, 1, 1, 1};
 static const int OUTPUT_WIDTHS[] = {21};
 #define NUM_INPUTS 4
 #define NUM_OUTPUTS 1
-#define NUM_PARAMS 9
+#define NUM_PARAMS 6
 
 static void mdlInitializeSizes(SimStruct *S)
 {
@@ -85,11 +84,11 @@ static void mdlInitializeSizes(SimStruct *S)
         ssSetSFcnParamTunable(S, k, SS_PRM_NOT_TUNABLE);
     }
     if (ssGetSimMode(S) == SS_SIMMODE_SIZES_CALL_ONLY
-        && mxIsEmpty(ssGetSFcnParam(S, 3))) {
+        && mxIsEmpty(ssGetSFcnParam(S, 0))) {
         return; /* Not evaluated yet, e.g., in a library */
     }
-    if (ParamDim(3, 0) * ParamDim(3, 1) != 1
-        || !(ParamRealData(3, 0) > 0.0)) {
+    if (ParamDim(0, 0) * ParamDim(0, 1) != 1
+        || !(ParamRealData(0, 0) > 0.0)) {
         SetErrorMessage("The sampling period must be a positive scalar.");
         return;
     }
@@ -98,57 +97,42 @@ static void mdlInitializeSizes(SimStruct *S)
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, ParamRealData(3, 0));
+    ssSetSampleTime(S, 0, ParamRealData(0, 0));
     ssSetOffsetTime(S, 0, 0.0);
 }
 
 #define MDL_START
 static void mdlStart(SimStruct *S)
 {
-    if (PDIM(1) != 1) {
-        SetErrorMessage("h must be a scalar.");
-        return;
-    }
-    if (PDIM(2) != 1) {
-        SetErrorMessage("psi_s0 must be a scalar.");
-        return;
-    }
-    if (PDIM(3) != 1) {
+    if (PDIM(0) != 1) {
         SetErrorMessage("T_s must be a scalar.");
         return;
     }
-    if (PDIM(0) > 0 && (PDIM(0) != 1 || P(0, 0) != 1.0)) {
-        SetErrorMessage("Only k_o = [] (the default) or 1 supported.");
-        return;
-    }
-    if (PDIM(4) != 1) {
+    if (PDIM(1) != 1) {
         SetErrorMessage("par_n_p must be a scalar.");
         return;
     }
-    if (PDIM(5) != 1) {
+    if (PDIM(2) != 1) {
         SetErrorMessage("par_R_s must be a scalar.");
         return;
     }
-    if (PDIM(6) != 1) {
+    if (PDIM(3) != 1) {
         SetErrorMessage("par_R_R must be a scalar.");
         return;
     }
-    if (PDIM(7) != 1) {
+    if (PDIM(4) != 1) {
         SetErrorMessage("par_L_sgm must be a scalar.");
         return;
     }
-    if (PDIM(8) != 1) {
+    if (PDIM(5) != 1) {
         SetErrorMessage("par_L_M must be a scalar.");
         return;
     }
     /* Machine model (InductionMachineInvGammaPars) */
-    InductionMachineInvGammaPars par = {P(4, 0), P(5, 0), P(6, 0),
-                                        P(7, 0), P(8, 0)};
+    InductionMachineInvGammaPars par = {P(1, 0), P(2, 0), P(3, 0),
+                                        P(4, 0), P(5, 0)};
     im_flux_observer_init(&self, par, 1);
-    self.unit_gain = PDIM(0) > 0;
-    self.psi_s = P(2, 0);
-    T_s = P(3, 0);
-    h = P(1, 0);
+    T_s = P(0, 0);
 }
 
 static void mdlOutputs(SimStruct *S, int_T tid)
@@ -164,7 +148,7 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     /* The rotor speed is the speed reference, without the external speed
      * error signal */
     im_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,
-                                    InputSignal(3, 0), 0.0, h, &out);
+                                    InputSignal(3, 0), 0.0, 0.0, &out);
     /* Voltage for the control laws (DriveControlSystem.get_feedback), or the
      * open-circuit voltage of the observer if unknown */
     double complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));

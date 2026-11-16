@@ -79,7 +79,9 @@ classdef Simulation < handle
                     'run(fullfile(fileparts(get_param(bdroot, ''FileName'')), ''%s.m''));', ...
                     init);
                 variables = struct();
-                % The parameters for the build
+                % The parameters for the build, by the function of the parameters
+                % copied into the folder first (replacing an earlier copy)
+                motulator.internal.copy_functions('', folder, info.params);
                 evalin('base', sprintf('run(''%s'');', ...
                     strrep(fullfile(folder, [init '.m']), '''', '''''')));
             else

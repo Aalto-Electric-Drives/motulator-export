@@ -7,8 +7,7 @@
 %   motulator/drive/utils/_parameters.py        InductionMachineInvGammaPars
 %   motulator/drive/control/_im_observers.py    FluxObserver
 %   motulator/drive/control/_im_current_vector.py  CurrentReferenceGenerator,
-%                                               CurrentController,
-%                                               DiscreteCurrentController
+%                                               CurrentVectorController
 %
 % The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M
 % (InductionMachineInvGammaPars).
@@ -20,28 +19,21 @@ end
 
 function w_rb = im_w_rb(par)
 %IM_W_RB Breakdown slip angular frequency (w_rb of InductionMachineInvGammaPars).
-if par.L_sgm > 0
-    w_rb = par.R_R*(1/par.L_sgm + 1/par.L_M);
-else
-    w_rb = 0;
-end
+w_rb = par.R_R*(1/par.L_sgm + 1/par.L_M);
 end
 
 function self = im_flux_observer_init(par, sensorless)
 %IM_FLUX_OBSERVER_INIT Reduced-order flux observer in synchronous coordinates
-%   (FluxObserver). The flag sensorless selects the default observer gain k_o(w_m),
-%   and unit_gain = true gives k_o = 1 (create_vhz_observer with L_M = inf).
-self = struct('par', par, 'sensorless', sensorless, 'unit_gain', false, ...
-    'psi_s', complex(0), 'theta_c', 0, 'T_s_old', 0, 'psi_R_pred', complex(0));
+%   (FluxObserver). The flag sensorless selects the default observer gain k_o(w_m).
+self = struct('par', par, 'sensorless', sensorless, 'psi_s', complex(0), ...
+    'theta_c', 0, 'T_s_old', 0, 'psi_R_pred', complex(0));
 end
 
 function k_o = im_observer_gain(self, w_m)
 %IM_OBSERVER_GAIN Default observer gain of create_speed_flux_observer
 %   (default_sensorless_k_o in the sensorless mode).
 alpha = im_alpha(self.par);
-if self.unit_gain
-    k_o = complex(1);
-elseif self.sensorless
+if self.sensorless
     k_o = (0.5*alpha + 0.2*abs(w_m))/(alpha - 1i*w_m);
 else
     k_o = 1 + 0.2*abs(w_m)/(alpha - 1i*w_m);
@@ -96,11 +88,7 @@ else
     e_o = complex(0);
 end
 % Torque estimate
-if par.L_sgm > 0
-    tau_M = 1.5*par.n_p*imag(i_s*conj(psi_s));
-else
-    tau_M = 0;
-end
+tau_M = 1.5*par.n_p*imag(i_s*conj(psi_s));
 % Rotor speed error signal for the speed observer. The model-based part is faded
 % out as the external error signal takes over.
 if abs(psi_R) > 0
@@ -185,25 +173,24 @@ self.i_sd_ref = clip(self.i_sd_ref, -self.i_s_max, self.i_sd_nom);
 end
 
 function self = im_current_ctrl_init(par, alpha_c, alpha_i, discrete, T_s)
-%IM_CURRENT_CTRL_INIT Current controller: a 2DOF PI controller with the gains from
-%   the bandwidths and the leakage inductance (CurrentController) or, if discrete is
-%   true, the direct discrete-time controller of the leakage flux linkages L_sgm*i
-%   (DiscreteCurrentController).
-k_t = alpha_c*par.L_sgm;
-k_i = alpha_c*alpha_i*par.L_sgm;
-k_p = (alpha_c + alpha_i)*par.L_sgm;
+%IM_CURRENT_CTRL_INIT Current controller (current_ctrl of CurrentVectorController):
+%   the currents are mapped to the leakage flux linkages L_sgm*i, which are
+%   controlled by the 2DOF PI controller (ComplexPIController) or, if discrete is
+%   true, by the direct discrete-time controller (DiscreteComplexController).
+pi_ctrl = complex_pi_init(alpha_c + alpha_i, alpha_c*alpha_i, alpha_c);
 self = struct('L_sgm', par.L_sgm, 'discrete', logical(discrete), ...
-    'pi', complex_pi_init(k_p, k_i, k_t), 'dc', discrete_complex_init(alpha_c, T_s));
+    'pi', pi_ctrl, 'dc', discrete_complex_init(alpha_c, T_s));
 end
 
 function [self, u] = im_current_ctrl_compute_output(self, i_ref, i)
 %IM_CURRENT_CTRL_COMPUTE_OUTPUT Voltage reference.
+% The currents mapped to the leakage flux linkages
+psi_ref = self.L_sgm*i_ref;
+psi = self.L_sgm*i;
 if self.discrete
-    % The currents mapped to the leakage flux linkages
-    [self.dc, u] = discrete_complex_compute_output(self.dc, self.L_sgm*i_ref, ...
-        self.L_sgm*i);
+    [self.dc, u] = discrete_complex_compute_output(self.dc, psi_ref, psi);
 else
-    [self.pi, u] = complex_pi_compute_output(self.pi, i_ref, i, 0);
+    [self.pi, u] = complex_pi_compute_output(self.pi, psi_ref, psi, 0);
 end
 end
 

@@ -11,9 +11,10 @@ with a mask of the arguments of its class (see `_control`):
   the `CurrentController`, and the `SpeedFluxObserver`, which contains the
   `SpeedObserver` and the `FluxObserver`
 
-The mask initialization of the CurrentVectorController resolves the defaults of
-`CurrentController`, and that of the SpeedFluxObserver resolves the defaults of
-`create_speed_flux_observer` and computes the gains of `SpeedFluxObserver.__init__`.
+The mask initialization of the CurrentVectorController resolves the default of
+alpha_i of the current controller, and that of the SpeedFluxObserver resolves the
+defaults of `create_speed_flux_observer` and computes the gains of
+`SpeedFluxObserver.__init__`.
 The mask of the VectorControlSystem has its arguments, structs of the model
 initialization (`init_script`): the vector controller `vector_ctrl` (the machine
 model `par` and the configuration `cfg`), the speed controller `speed_ctrl`, and the
@@ -431,14 +432,16 @@ def _current_reference_generator() -> CBlock:
 
 def _current_controller() -> CBlock:
     """
-    Current controller (CurrentController, or DiscreteCurrentController with the
-    parameter `discrete`).
+    Current controller (current_ctrl of CurrentVectorController): ComplexPIController,
+    or DiscreteComplexController with the parameter `discrete`.
     """
     mask = Mask(
         "CurrentController (motulator)",
-        "Current controller: the 2DOF PI controller (CurrentController) or, if "
-        "discrete = 1, the direct discrete-time controller of the leakage flux "
-        "linkages L_sgm*i (DiscreteCurrentController). The inputs are the current "
+        "Current controller (current_ctrl of CurrentVectorController): the currents "
+        "are mapped to the leakage flux linkages L_sgm*i, which are controlled by the "
+        "2DOF PI controller (ComplexPIController) or, if discrete = 1, by the direct "
+        "discrete-time controller (DiscreteComplexController). The inputs are the "
+        "current "
         "reference, the feedback signals fbk (the current fbk.i_s, and the realized "
         "voltage fbk.u_s and the angular speed fbk.w_c of the coordinates for the "
         "update), and for the update of the discrete-time controller, the limited "
@@ -521,9 +524,9 @@ def _current_controller() -> CBlock:
     )
 
 
-# Mask initialization of the CurrentVectorController: CurrentController.__init__
+# Mask initialization of the CurrentVectorController: CurrentVectorController.__init__
 CVC_INIT = (
-    "% Default of alpha_i (CurrentController.__init__)\n"
+    "% Default of alpha_i (CurrentVectorController.__init__)\n"
     "alpha_i = cfg.alpha_i;\n"
     "if isempty(alpha_i)\n"
     "  alpha_i = cfg.alpha_c;\n"

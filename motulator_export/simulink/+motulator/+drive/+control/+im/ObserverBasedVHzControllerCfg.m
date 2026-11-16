@@ -3,8 +3,7 @@ classdef ObserverBasedVHzControllerCfg < motulator.internal.Object
     %   controller.
     %   CFG = OBSERVERBASEDVHZCONTROLLERCFG(psi_s_nom=..., i_s_max=..., ...) as in
     %   motulator, [] meaning None (the default). The default observer gain k_o
-    %   only; pure open-loop V/Hz control is given by L_M = inf of the machine
-    %   model, as in motulator.
+    %   only.
 
     properties
         psi_s_nom              % Nominal stator flux linkage (Vs)

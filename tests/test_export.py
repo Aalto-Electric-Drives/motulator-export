@@ -16,6 +16,7 @@ from math import inf, pi
 from pathlib import Path
 from typing import Any, cast
 
+import motulator.drive.control.im as im_control
 import motulator.drive.control.sm as sm_control
 import motulator.drive.gradnet as gn
 import motulator.grid.control as grid_control
@@ -40,6 +41,7 @@ from tests.systems import (
     CURRENT_MAP,
     EXAMPLE_SYSTEMS,
     EXAMPLES,
+    IM_BASE,
     IM_PAR,
     SM_PAR,
     example_system,
@@ -47,6 +49,7 @@ from tests.systems import (
     im_system,
     sm_system,
     torque_system,
+    vhz_system,
 )
 
 TOOLS = [(plecs, "model.plecs"), (simulink, "model.slx")]
@@ -531,6 +534,32 @@ def test_unsupported_induction_machine(tmp_path: Path, case: str) -> None:
     assert not list(tmp_path.iterdir())  # Nothing is written
     with pytest.raises(NotImplementedError, match=match):
         native.Simulation(drive, ctrl)
+
+
+def test_open_loop_vhz_curve(tmp_path: Path) -> None:
+    """
+    Open-loop V/Hz control is exported with any speed reference, also zero, and only
+    with an affine V/Hz curve, not, e.g., with the linear curve limited to the base
+    voltage.
+    """
+    mdl, ctrl = vhz_system(True, 0.0, 0.0)[0]()
+    mdl.converter.modulator = model.CarrierComparison()
+    mdl.mechanics.set_external_load_torque(0.0)
+    ctrl.set_speed_ref(0.0)
+    for tool, path in TOOLS:
+        tool.write_model(tmp_path / path, mdl, ctrl, T_STOP)
+    native.Simulation(mdl, ctrl)
+
+    def u_s_ref(w_s: float) -> complex:
+        return 1j * float(np.clip(w_s * IM_BASE.psi, -IM_BASE.u, IM_BASE.u))
+
+    ctrl.vhz_ctrl = im_control.OpenLoopVHzController(2, u_s_ref)
+    for tool, path in TOOLS:
+        with pytest.raises(NotImplementedError, match="affine"):
+            tool.write_model(tmp_path / f"limited_{path}", mdl, ctrl, T_STOP)
+    with pytest.raises(NotImplementedError, match="affine"):
+        native.Simulation(mdl, ctrl)
+    assert not list(tmp_path.glob("limited_*"))  # Nothing is written
 
 
 def test_unsupported_parameter_subclass(tmp_path: Path) -> None:

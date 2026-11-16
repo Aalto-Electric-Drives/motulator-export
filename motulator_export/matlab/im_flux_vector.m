@@ -7,9 +7,6 @@
 %   motulator/drive/control/_im_flux_vector.py  ReferenceGenerator,
 %                                               FluxTorqueController
 %
-% Pure open-loop V/Hz control is the special case L_M = inf of the machine model
-% (with R_s = R_R = L_sgm = 0), see im_current_vector.m for the observer.
-
 function y = py_min(a, b)
 %PY_MIN Minimum as the built-in min of Python: the first argument unless the second
 %   one is smaller, so that a NaN argument is skipped unless it is the first one.
@@ -43,12 +40,8 @@ function [self, u_s_ref] = im_flux_torque_ctrl_compute_output(self, psi_s_ref, .
 %   torque references.
 par = self.par;
 psi_s_abs = abs(fbk.psi_s);
-% Auxiliary current (L_sgm = 0 in open-loop V/Hz control, where only the flux is
-% controlled)
-i_a = complex(0);
-if par.L_sgm > 0
-    i_a = fbk.psi_R/par.L_sgm;
-end
+% Auxiliary current
+i_a = fbk.psi_R/par.L_sgm;
 % Torque-production factor and directions
 c_tau = 1.5*par.n_p*real(i_a*conj(fbk.psi_s));
 t_psi = complex(1);
@@ -113,24 +106,22 @@ psi_s_cl = par.L_sgm*self.i_s_max + psi_R;
 % Stator flux reference
 psi = py_min(py_min(psi_s_max, self.psi_s_nom), psi_s_cl);
 % Torque reference limiting
-if par.L_sgm > 0 % L_sgm = 0 in open-loop V/Hz control
-    % Breakdown torque limit
-    k = self.k_b*par.L_M/(par.L_M + par.L_sgm);
-    tau_b = 0.75*par.n_p*k*(psi*psi)/par.L_sgm;
-    % Current limit: the stator flux on the circle psi stays within the circle
-    % L_sgm*i_s_max around the rotor flux, which gives the maximum q-component of
-    % the stator flux in rotor flux coordinates
-    tau_M_cl = 0;
-    if psi_R > 0
-        psi_cl = par.L_sgm*self.i_s_max;
-        psi_sd = (psi*psi + psi_R*psi_R - psi_cl*psi_cl)/(2*psi_R);
-        psi_sd = py_max(psi_sd, 0);
-        psi_sq = sqrt(py_max(psi*psi - psi_sd*psi_sd, 0));
-        tau_M_cl = 1.5*par.n_p*psi_R*psi_sq/par.L_sgm;
-    end
-    % Limited torque reference
-    tau = py_min(py_min(py_min(abs(tau_M_ref), self.tau_M_max), tau_b), tau_M_cl);
-    tau_M_ref = tau*sign(tau_M_ref);
+% Breakdown torque limit
+k = self.k_b*par.L_M/(par.L_M + par.L_sgm);
+tau_b = 0.75*par.n_p*k*(psi*psi)/par.L_sgm;
+% Current limit: the stator flux on the circle psi stays within the circle
+% L_sgm*i_s_max around the rotor flux, which gives the maximum q-component of the
+% stator flux in rotor flux coordinates
+tau_M_cl = 0;
+if psi_R > 0
+    psi_cl = par.L_sgm*self.i_s_max;
+    psi_sd = (psi*psi + psi_R*psi_R - psi_cl*psi_cl)/(2*psi_R);
+    psi_sd = py_max(psi_sd, 0);
+    psi_sq = sqrt(py_max(psi*psi - psi_sd*psi_sd, 0));
+    tau_M_cl = 1.5*par.n_p*psi_R*psi_sq/par.L_sgm;
 end
+% Limited torque reference
+tau = py_min(py_min(py_min(abs(tau_M_ref), self.tau_M_max), tau_b), tau_M_cl);
+tau_M_ref = tau*sign(tau_M_ref);
 psi_s_ref = psi;
 end

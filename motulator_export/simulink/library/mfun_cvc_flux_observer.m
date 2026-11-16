@@ -110,28 +110,21 @@ end
 
 function w_rb = im_w_rb(par)
 %IM_W_RB Breakdown slip angular frequency (w_rb of InductionMachineInvGammaPars).
-if par.L_sgm > 0
-    w_rb = par.R_R*(1/par.L_sgm + 1/par.L_M);
-else
-    w_rb = 0;
-end
+w_rb = par.R_R*(1/par.L_sgm + 1/par.L_M);
 end
 
 function self = im_flux_observer_init(par, sensorless)
 %IM_FLUX_OBSERVER_INIT Reduced-order flux observer in synchronous coordinates
-%   (FluxObserver). The flag sensorless selects the default observer gain k_o(w_m),
-%   and unit_gain = true gives k_o = 1 (create_vhz_observer with L_M = inf).
-self = struct('par', par, 'sensorless', sensorless, 'unit_gain', false, ...
-    'psi_s', complex(0), 'theta_c', 0, 'T_s_old', 0, 'psi_R_pred', complex(0));
+%   (FluxObserver). The flag sensorless selects the default observer gain k_o(w_m).
+self = struct('par', par, 'sensorless', sensorless, 'psi_s', complex(0), ...
+    'theta_c', 0, 'T_s_old', 0, 'psi_R_pred', complex(0));
 end
 
 function k_o = im_observer_gain(self, w_m)
 %IM_OBSERVER_GAIN Default observer gain of create_speed_flux_observer
 %   (default_sensorless_k_o in the sensorless mode).
 alpha = im_alpha(self.par);
-if self.unit_gain
-    k_o = complex(1);
-elseif self.sensorless
+if self.sensorless
     k_o = (0.5*alpha + 0.2*abs(w_m))/(alpha - 1i*w_m);
 else
     k_o = 1 + 0.2*abs(w_m)/(alpha - 1i*w_m);
@@ -186,11 +179,7 @@ else
     e_o = complex(0);
 end
 % Torque estimate
-if par.L_sgm > 0
-    tau_M = 1.5*par.n_p*imag(i_s*conj(psi_s));
-else
-    tau_M = 0;
-end
+tau_M = 1.5*par.n_p*imag(i_s*conj(psi_s));
 % Rotor speed error signal for the speed observer. The model-based part is faded
 % out as the external error signal takes over.
 if abs(psi_R) > 0

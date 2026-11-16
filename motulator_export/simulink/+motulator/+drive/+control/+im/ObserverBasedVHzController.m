@@ -3,8 +3,7 @@ classdef ObserverBasedVHzController < motulator.internal.Object
     %   machine.
     %   VHZ_CTRL = OBSERVERBASEDVHZCONTROLLER(PAR, CFG) as in motulator, with the
     %   machine model PAR (InductionMachineInvGammaPars) and the configuration CFG
-    %   (ObserverBasedVHzControllerCfg). With L_M = inf (and R_s = R_R = L_sgm =
-    %   0), the controller is pure open-loop V/Hz control.
+    %   (ObserverBasedVHzControllerCfg).
 
     properties
         par  % Machine model parameters (InductionMachineInvGammaPars)

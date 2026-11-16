@@ -279,9 +279,10 @@ L = struct('L_dd', jac(1, 1), 'L_dq', jac(1, 2), 'L_qq', jac(2, 2));
 end
 
 function self = sm_current_ctrl_init(par, alpha_c, alpha_i, discrete, T_s)
-%SM_CURRENT_CTRL_INIT Current controller: a complex-vector PI controller of the flux
-%   linkages (CurrentController; alpha_i = NaN means alpha_c) or, if discrete is
-%   true, the direct discrete-time controller (DiscreteCurrentController).
+%SM_CURRENT_CTRL_INIT Current controller (current_ctrl of CurrentVectorController):
+%   the 2DOF PI controller of the flux linkages (ComplexPIController; alpha_i = NaN
+%   means alpha_c) or, if discrete is true, the direct discrete-time controller
+%   (DiscreteComplexController).
 if isnan(alpha_i)
     alpha_i = alpha_c;
 end

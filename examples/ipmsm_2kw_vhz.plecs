@@ -120,13 +120,13 @@ Plecs {
       CodeGenTarget "Generic"
       MaskType      "Observer-based VHz control (SM) (motulator)"
       MaskDescription "Observer-based V/Hz control of a synchronous machine drive (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
-      MaskInit      "T_s = vhz_ctrl.cfg.T_s;\n"
+      MaskInit      "% Sampling period (cfg.T_s of ObserverBasedVHzController, or T_s of\n% OpenLoopVHzController)\nif isfield(vhz_ctrl, 'cfg')\n  T_s = vhz_ctrl.cfg.T_s;\nelse\n  T_s = vhz_ctrl.T_s;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
         Variable      "vhz_ctrl"
-        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct: par, cfg"
+        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct of its arguments"
         Type          FreeText
         Value         "vhz_ctrl"
         Show          off

@@ -2,7 +2,7 @@
 2.2-kW IM, diode bridge, V/Hz control
 =====================================
 
-This example simulates pure open-loop V/Hz control of a 2.2-kW induction machine (IM)
+This example simulates open-loop V/Hz control of a 2.2-kW induction machine (IM)
 drive natively. The system is that of the *motulator* example
 :doc:`motulator:drive_examples/grid_connection/plot_2kw_im_diode_vhz`: the drive is fed
 from a six-pulse diode bridge, which is supplied from a stiff grid through an AC choke,
@@ -11,7 +11,7 @@ the load torque is quadratic, and the converter uses carrier comparison.
 """
 
 # %%
-from math import inf, pi, sqrt
+from math import pi, sqrt
 
 import matplotlib.pyplot as plt
 import motulator.drive.control.im as control
@@ -55,14 +55,9 @@ drive_sys = drive_model.Drive(machine, mechanics, converter, dc_bus=dc_bus)
 mdl = CompositeModel({"grid": grid_sys, "drive": drive_sys})
 
 # %%
-# Configure the control system. The open-loop V/Hz control is the observer-based V/Hz
-# control with the machine model `L_M = inf` and zero gains.
+# Configure the control system as open-loop V/Hz control with the linear V/Hz curve.
 
-est_par = control.InductionMachineInvGammaPars(n_p=2, R_s=0, R_R=0, L_sgm=0, L_M=inf)
-cfg = control.ObserverBasedVHzControllerCfg(
-    psi_s_nom=base.psi, i_s_max=inf, alpha_f=0, alpha_tau=0, alpha_psi=0
-)
-vhz_ctrl = control.ObserverBasedVHzController(est_par, cfg)
+vhz_ctrl = control.OpenLoopVHzController(n_p=2, u_s_ref=lambda w_s: 1j * w_s * base.psi)
 ctrl = control.VHzControlSystem(vhz_ctrl, slew_rate=2 * pi * 60)
 
 # %%

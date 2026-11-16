@@ -2,9 +2,7 @@
  * Current-vector control of synchronous machine drives, ported from motulator.
  *
  * Python counterparts:
- *   motulator/drive/control/_sm_current_vector.py  CurrentController,
- *                                                  DiscreteCurrentController,
- *                                                  CurrentVectorControllerCfg,
+ *   motulator/drive/control/_sm_current_vector.py  CurrentVectorControllerCfg,
  *                                                  CurrentVectorController
  *   motulator/drive/control/_base.py               VectorControlSystem
  *   motulator/common/control/_controllers.py       ComplexPIController,
@@ -21,10 +19,10 @@
 
 #include "sm_flux_vector.h"
 
-/* Current controller: a complex-vector PI controller of the flux linkages
- * (CurrentController) or, if discrete is nonzero, the direct discrete-time controller
- * (DiscreteCurrentController), to which the currents are mapped by the machine
- * model */
+/* Current controller (current_ctrl of CurrentVectorController): the currents are
+ * mapped to the flux linkages by the machine model, which are controlled by the 2DOF
+ * PI controller (ComplexPIController) or, if discrete is nonzero, by the direct
+ * discrete-time controller (DiscreteComplexController) */
 typedef struct {
     SynchronousMachinePars par;
     int discrete;

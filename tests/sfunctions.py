@@ -233,7 +233,7 @@ def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem
             return u
 
         if isinstance(ctrl, VHzControlSystem):
-            T_s = cast(Any, ctrl.vhz_ctrl).cfg.T_s
+            T_s = ctrl.vhz_ctrl.T_s
         else:
             T_s = cast(Any, ctrl.vector_ctrl).cfg.T_s
         sl = SFunctionControlSystem(dll, block, T_s, inputs)

@@ -119,14 +119,14 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "Observer-based VHz control (motulator)"
-      MaskDescription "Observer-based V/Hz control of an induction machine drive, or pure open-loop V/Hz control if L_M = inf (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
-      MaskInit      "T_s = vhz_ctrl.cfg.T_s;\n"
+      MaskDescription "Observer-based V/Hz control of an induction machine drive (VHzControlSystem with ObserverBasedVHzController). The speed reference is in mechanical rad/s. Each class of motulator is a block with a mask of its arguments, nested as in motulator: the arguments of VHzControlSystem are structs of the arguments of its parts, from which the blocks inside get their parameters as in the constructors of motulator. The sampling period is cfg.T_s of the inner controller. The input enable is the gate enable (ControlSystem.set_enable): while it is zero, the control system runs in standby for the blocked gates, computing its standby output without measuring the converter voltage, as in motulator."
+      MaskInit      "% Sampling period (cfg.T_s of ObserverBasedVHzController, or T_s of\n% OpenLoopVHzController)\nif isfield(vhz_ctrl, 'cfg')\n  T_s = vhz_ctrl.cfg.T_s;\nelse\n  T_s = vhz_ctrl.T_s;\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
       Parameter {
         Variable      "vhz_ctrl"
-        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct: par, cfg"
+        Prompt        "vhz_ctrl: V/Hz controller (ObserverBasedVHzController) as a struct of its arguments"
         Type          FreeText
         Value         "vhz_ctrl"
         Show          off
@@ -1216,8 +1216,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ObserverBasedVHzController (motulator)"
-      MaskDescription "Observer-based V/Hz controller (ObserverBasedVHzController), or pure open-loop V/Hz control if par.L_M = inf. The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The mask initialization passes the parameters to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
-      MaskInit      "% Pure open-loop V/Hz control with L_M = inf (ObserverBasedVHzController):\n% the unit observer gain with the weight h = 1, which disables the model-based\n% correction (create_vhz_observer), the initial flux estimate, and k_u = inf\nif isinf(par.L_M)\n  k_o = 1;\n  h = 1;\n  psi_s0 = cfg.psi_s_nom;\n  k_u = inf;\nelse\n  k_o = [];\n  h = 0;\n  psi_s0 = 0;\n  k_u = cfg.k_u;\nend\n"
+      MaskDescription "Observer-based V/Hz controller (ObserverBasedVHzController). The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default; the default observer gain k_o only). The parameters are passed to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -1426,7 +1425,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver), created by create_vhz_observer: the rotor speed w_M is the rate-limited speed reference, and the external speed error signal is zero, with the weight h (1 in pure open-loop V/Hz control, which disables the model-based correction). The initial stator flux estimate is psi_s0. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars. L_M = inf in pure open-loop V/Hz control."
+      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver), created by create_vhz_observer with the default observer gain: the rotor speed w_M is the rate-limited speed reference, without the external speed error signal. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -1436,33 +1435,6 @@ Plecs {
         Prompt        "par: Machine model (InductionMachineInvGammaPars) as a struct"
         Type          FreeText
         Value         "par"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
-        Variable      "k_o"
-        Prompt        "k_o: Observer gain k_o(w_m), [] = the default of create_vhz_observer, 1 = unity"
-        Type          FreeText
-        Value         "k_o"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
-        Variable      "h"
-        Prompt        "h: Weight of the external speed error signal"
-        Type          FreeText
-        Value         "h"
-        Show          off
-        Tunable       on
-        TabName       ""
-      }
-      Parameter {
-        Variable      "psi_s0"
-        Prompt        "psi_s0: Initial stator flux estimate (Vs)"
-        Type          FreeText
-        Value         "psi_s0"
         Show          off
         Tunable       on
         TabName       ""
@@ -1653,7 +1625,7 @@ Plecs {
       }
       Parameter {
         Variable      "Parameters"
-        Value         "k_o, h, psi_s0, T_s, par_n_p, par_R_s, par_R_R, par_L_sgm, par_L_M"
+        Value         "T_s, par_n_p, par_R_s, par_R_R, par_L_sgm, par_L_M"
         Show          off
       }
       Parameter {
@@ -1673,17 +1645,17 @@ Plecs {
       }
       Parameter {
         Variable      "Declarations"
-        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/im_current_vector.c\"\n#include \"../motulator_export/c/im_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic IMFluxObserver self;\nstatic double T_s; /* Sampling period */\nstatic double h;\nstatic IMObserverOutputs out;\n"
+        Value         "/* Generated by motulator_export: a block of the control system. The\n * parameters come from its mask. */\n#include \"../motulator_export/c/common.c\"\n#include \"../motulator_export/c/im_current_vector.c\"\n#include \"../motulator_export/c/im_flux_vector.c\"\n\n#define P(i, j) ParamRealData(i, j)\n#define PDIM(i) (ParamDim(i, 0) * ParamDim(i, 1))\n\n/* Parameter value, or NAN for an empty parameter (None in motulator) */\n#define PARAM(i) (PDIM(i) > 0 ? P(i, 0) : NAN)\n\nstatic IMFluxObserver self;\nstatic double T_s; /* Sampling period */\nstatic IMObserverOutputs out;\n"
         Show          off
       }
       Parameter {
         Variable      "StartFcn"
-        Value         "if (PDIM(1) != 1) {\n    SetErrorMessage(\"h must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"psi_s0 must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(0) > 0 && (PDIM(0) != 1 || P(0, 0) != 1.0)) {\n    SetErrorMessage(\"Only k_o = [] (the default) or 1 supported.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"par_n_p must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"par_R_s must be a scalar.\");\n    return;\n}\nif (PDIM(6) != 1) {\n    SetErrorMessage(\"par_R_R must be a scalar.\");\n    return;\n}\nif (PDIM(7) != 1) {\n    SetErrorMessage(\"par_L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(8) != 1) {\n    SetErrorMessage(\"par_L_M must be a scalar.\");\n    return;\n}\n/* Machine model (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {P(4, 0), P(5, 0), P(6, 0),\n                                    P(7, 0), P(8, 0)};\nim_flux_observer_init(&self, par, 1);\nself.unit_gain = PDIM(0) > 0;\nself.psi_s = P(2, 0);\nT_s = P(3, 0);\nh = P(1, 0);\n"
+        Value         "if (PDIM(0) != 1) {\n    SetErrorMessage(\"T_s must be a scalar.\");\n    return;\n}\nif (PDIM(1) != 1) {\n    SetErrorMessage(\"par_n_p must be a scalar.\");\n    return;\n}\nif (PDIM(2) != 1) {\n    SetErrorMessage(\"par_R_s must be a scalar.\");\n    return;\n}\nif (PDIM(3) != 1) {\n    SetErrorMessage(\"par_R_R must be a scalar.\");\n    return;\n}\nif (PDIM(4) != 1) {\n    SetErrorMessage(\"par_L_sgm must be a scalar.\");\n    return;\n}\nif (PDIM(5) != 1) {\n    SetErrorMessage(\"par_L_M must be a scalar.\");\n    return;\n}\n/* Machine model (InductionMachineInvGammaPars) */\nInductionMachineInvGammaPars par = {P(1, 0), P(2, 0), P(3, 0),\n                                    P(4, 0), P(5, 0)};\nim_flux_observer_init(&self, par, 1);\nT_s = P(0, 0);\n"
         Show          off
       }
       Parameter {
         Variable      "OutputFcn"
-        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\n/* The rotor speed is the speed reference, without the external speed\n * error signal */\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n                                InputSignal(3, 0), 0.0, h, &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n * open-circuit voltage of the observer if unknown */\ndouble complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\nout.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n                               : cexp(-I * out.theta_c) * u_s_ab;\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
+        Value         "double meas_u[VHZ_MEAS_WIDTH];\nfor (int k = 0; k < VHZ_MEAS_WIDTH; k++) {\n    meas_u[k] = InputSignal(0, k);\n}\nIMVHzMeasurements meas;\nim_vhz_measurements_unpack(meas_u, &meas);\ndouble complex u_s_zoh_ab = complex_from(InputSignal(2, 0), InputSignal(2, 1));\n/* The rotor speed is the speed reference, without the external speed\n * error signal */\nim_flux_observer_compute_output(&self, u_s_zoh_ab, meas.i_c_ab,\n                                InputSignal(3, 0), 0.0, 0.0, &out);\n/* Voltage for the control laws (DriveControlSystem.get_feedback), or the\n * open-circuit voltage of the observer if unknown */\ndouble complex u_s_ab = complex_from(InputSignal(1, 0), InputSignal(1, 1));\nout.u_s = isnan(creal(u_s_ab)) ? out.u_s_zoh\n                               : cexp(-I * out.theta_c) * u_s_ab;\ndouble y[FBK_WIDTH];\nim_observer_outputs_pack(&out, y);\nfor (int k = 0; k < FBK_WIDTH; k++) {\n    OutputSignal(0, k) = y[k];\n}\n"
         Show          off
       }
       Parameter {
@@ -1914,7 +1886,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "ReferenceGenerator (motulator)"
-      MaskDescription "Reference generator with field weakening and torque limits (ReferenceGenerator). The inputs are the DC-bus voltage, the torque reference, and the feedback signals fbk (the synchronous angular frequency fbk.w_s and the rotor flux estimate fbk.psi_R). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars. L_M = inf in pure open-loop V/Hz control."
+      MaskDescription "Reference generator with field weakening and torque limits (ReferenceGenerator). The inputs are the DC-bus voltage, the torque reference, and the feedback signals fbk (the synchronous angular frequency fbk.w_s and the rotor flux estimate fbk.psi_R). The output ref is [psi_s tau_M], the flux reference and the limited torque reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -1959,7 +1931,7 @@ Plecs {
         Variable      "k_u"
         Prompt        "k_u: Voltage utilization factor"
         Type          FreeText
-        Value         "k_u"
+        Value         "cfg.k_u"
         Show          off
         Tunable       on
         TabName       ""
@@ -2341,7 +2313,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxTorqueController (motulator)"
-      MaskDescription "Flux and torque controller (FluxTorqueController) without the integral action. The input ref is [psi_s tau_M], the flux and torque references, and the output is the stator voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars. L_M = inf in pure open-loop V/Hz control."
+      MaskDescription "Flux and torque controller (FluxTorqueController) without the integral action. The input ref is [psi_s tau_M], the flux and torque references, and the output is the stator voltage reference. The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off

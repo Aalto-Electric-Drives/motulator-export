@@ -1,29 +1,32 @@
 /*
  * Native simulation of induction machine drives with current-vector control,
- * flux-vector control, or observer-based V/Hz control: the translation unit of the
- * shared library of motulator_export.native, with its API for Python (ctypes).
+ * flux-vector control, or observer-based or open-loop V/Hz control: the translation
+ * unit of the shared library of motulator_export.native, with its API for Python
+ * (ctypes).
  *
  * The system (System) consists of the simulation (sim.h), the drive model (drive.h)
  * with an induction machine, and the control system with the speed reference:
  * VectorControlSystem with CurrentVectorController (im_current_vector.h) or
  * FluxVectorController (im_flux_vector.h) and a speed controller, or
- * VHzControlSystem with ObserverBasedVHzController (im_flux_vector.h). The API functions mirror the constructors of motulator; those
- * of the model are in sim.c and drive.c. The control system is constructed from its
- * parameters when the simulation starts (start), after which sim_run of sim.c runs
- * the simulation.
+ * VHzControlSystem with ObserverBasedVHzController (im_flux_vector.h) or
+ * OpenLoopVHzController (im_open_loop_vhz.h). The API functions mirror the
+ * constructors of motulator; those of the model are in sim.c and drive.c. The
+ * control system is constructed from its parameters when the simulation starts
+ * (start), after which sim_run of sim.c runs the simulation.
  */
 
 #include "common.c"
 #include "gradnet.c"
 #include "im_current_vector.c"
 #include "im_flux_vector.c"
+#include "im_open_loop_vhz.c"
 #include "sim.c"
 #include "drive.c"
 #include "native.c"
 
 /* Signals logged at each step (the signal groups of ControlSystem.save), see
  * log_fields_width. The control systems have the feedback signals of the flux
- * observer. */
+ * observer, except open-loop V/Hz control. */
 #define IM_FIELDS_REF "ref.T_s ref.tau_M ref.psi_s ref.i_s:c ref.u_s:c ref.u_s_lim:c "
 #define IM_FIELDS IM_FIELDS_REF "ref.w_M " IM_FIELDS_REST
 /* In torque-control mode, the speed reference is None, which is not logged */
@@ -32,18 +35,23 @@
     "ref.d_abc:3 ref.enabled:b fbk.u_dc fbk.i_s:c fbk.u_s:c fbk.u_s_zoh:c "            \
     "fbk.psi_s:c fbk.psi_R:c fbk.tau_M fbk.tau_L fbk.w_c fbk.w_s fbk.w_r fbk.w_m "     \
     "fbk.w_M fbk.theta_c fbk.e_o:c fbk.eps fbk.h"
+#define OLVHZ_FIELDS                                                                   \
+    IM_FIELDS_REF "ref.w_M ref.d_abc:3 ref.enabled:b fbk.u_dc fbk.i_s:c fbk.u_s:c "    \
+                  "fbk.u_s_zoh:c fbk.w_M fbk.w_s fbk.w_c fbk.theta_c"
 
 /* Vector control system or V/Hz control system with the speed reference (or the
  * torque reference in torque-control mode) */
 typedef struct {
     ControlSystem base;
-    int vhz; /* VHzControlSystem (else VectorControlSystem) */
+    int vhz;       /* VHzControlSystem (else VectorControlSystem) */
+    int open_loop; /* OpenLoopVHzController (else ObserverBasedVHzController) */
     int fvc; /* Flux-vector control (else current-vector control) */
     int torque_mode; /* Torque-control mode of VectorControlSystem (no speed
                       * controller): w_M_ref is the torque reference */
     IMVectorControlSystem cvc;
     IMFVCControlSystem fvc_ctrl;
     IMVHzControlSystem vhz_ctrl;
+    IMOpenLoopVHzControlSystem olvhz_ctrl;
     Signal w_M_ref;
     double t; /* Controller time */
     Signal enable; /* Gate enable (ControlSystem.set_enable) */
@@ -120,6 +128,38 @@ static int im_save(IMControlSystem *self)
     return SIM_OK;
 }
 
+/* Save the signals of the step of open-loop V/Hz control (OLVHZ_FIELDS) */
+static int im_save_open_loop(IMControlSystem *self)
+{
+    const IMOpenLoopVHzReferences *ref = &self->olvhz_ctrl.ref;
+    const IMOpenLoopVHzFeedbacks *fbk = &self->olvhz_ctrl.fbk;
+    double *p = log_append(&self->base.log);
+    if (p == NULL) {
+        return SIM_ERROR_MEMORY;
+    }
+    log_put(&p, self->t);
+    log_put(&p, ref->T_s);
+    log_put(&p, 0.0); /* Torque reference, not used */
+    log_put(&p, 0.0); /* Flux reference, not used */
+    log_put_complex(&p, 0.0); /* Current reference, not used */
+    log_put_complex(&p, ref->u_s);
+    log_put_complex(&p, ref->u_s_lim);
+    log_put(&p, ref->w_M);
+    for (int k = 0; k < 3; k++) {
+        log_put(&p, ref->d_abc[k]);
+    }
+    log_put(&p, self->enabled); /* Gate enable */
+    log_put(&p, fbk->u_dc);
+    log_put_complex(&p, fbk->i_s);
+    log_put_complex(&p, fbk->u_s);
+    log_put_complex(&p, fbk->u_s_zoh);
+    log_put(&p, fbk->w_M);
+    log_put(&p, fbk->w_s);
+    log_put(&p, fbk->w_c);
+    log_put(&p, fbk->theta_c);
+    return SIM_OK;
+}
+
 /* Gate enable at the controller time (ControlSystem.get_enable) */
 static int im_get_enable(const ControlSystem *base)
 {
@@ -142,7 +182,11 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
     }
     double complex i_c_ab = drive_meas_current(drive, x);
     double u_dc = model_dc_voltage(mdl, x);
-    if (self->vhz) {
+    if (self->open_loop) {
+        IMOpenLoopVHzMeasurements meas = {i_c_ab, u_dc};
+        im_open_loop_vhz_control_system_compute_output(&self->olvhz_ctrl, &meas,
+                                                       w_M_ref, enabled);
+    } else if (self->vhz) {
         IMVHzMeasurements meas = {i_c_ab, u_dc};
         im_vhz_control_system_compute_output(&self->vhz_ctrl, &meas, w_M_ref, enabled);
     } else {
@@ -156,12 +200,16 @@ static int im_run(ControlSystem *base, const Model *mdl, double t,
                                                     enabled);
         }
     }
-    int status = im_save(self);
+    int status = self->open_loop ? im_save_open_loop(self) : im_save(self);
     if (status != SIM_OK) {
         return status;
     }
     const double *d;
-    if (self->vhz) {
+    if (self->open_loop) {
+        im_open_loop_vhz_control_system_update(&self->olvhz_ctrl);
+        *T_s = self->olvhz_ctrl.ref.T_s;
+        d = self->olvhz_ctrl.ref.d_abc;
+    } else if (self->vhz) {
         im_vhz_control_system_update(&self->vhz_ctrl);
         *T_s = self->vhz_ctrl.ref.T_s;
         d = self->vhz_ctrl.ref.d_abc;
@@ -194,6 +242,7 @@ typedef struct {
     PIController speed_ctrl;
     double w_M0; /* Initial speed estimate of the observer */
     IMVHzControllerCfg vhz_cfg;
+    IMOpenLoopVHzController olvhz_ctrl;
     double slew_rate;
     PWM pwm; /* Settings of the PWM */
 } System;
@@ -316,6 +365,25 @@ void set_vhz_controller(System *self, double psi_s_nom, double i_s_max,
     self->ctrl.fvc = 0;
 }
 
+/* OpenLoopVHzController with the V/Hz curve u_0 + k*w_s (real and imaginary parts
+ * of u_0 and k) in VHzControlSystem with the slew rate (mechanical rad/s^2) of the
+ * speed reference */
+void set_open_loop_vhz_controller(System *self, double n_p, double u_0_re,
+                                  double u_0_im, double k_re, double k_im, double T_s,
+                                  double slew_rate)
+{
+    im_open_loop_vhz_ctrl_init(&self->olvhz_ctrl, n_p, complex_from(u_0_re, u_0_im),
+                               complex_from(k_re, k_im), T_s);
+    self->slew_rate = slew_rate;
+    IMControlSystem *ctrl = &self->ctrl;
+    ctrl->vhz = 1;
+    ctrl->open_loop = 1;
+    ctrl->fvc = 0;
+    ctrl->base.fields = OLVHZ_FIELDS;
+    log_free(&ctrl->base.log);
+    log_init(&ctrl->base.log, log_fields_width(OLVHZ_FIELDS));
+}
+
 /* PWM of the control system, see native_pwm_settings */
 void set_pwm(System *self, int mme, double t_d, double u_th, double i_0,
              int feedforward, double d_min, int single_update)
@@ -356,7 +424,11 @@ void start(System *self, double t0, const double *x0, double t_start, double t_c
            double max_step, double rtol, double atol)
 {
     IMControlSystem *ctrl = &self->ctrl;
-    if (ctrl->vhz) {
+    if (ctrl->open_loop) {
+        im_open_loop_vhz_control_system_init(&ctrl->olvhz_ctrl, &self->olvhz_ctrl,
+                                             self->slew_rate);
+        native_pwm_copy_settings(&ctrl->olvhz_ctrl.pwm, &self->pwm);
+    } else if (ctrl->vhz) {
         im_vhz_control_system_init(&ctrl->vhz_ctrl, self->par, &self->vhz_cfg,
                                    self->slew_rate);
         native_pwm_copy_settings(&ctrl->vhz_ctrl.pwm, &self->pwm);
