@@ -87,7 +87,7 @@ if __name__ == "__main__":
     tmp = write_plecs_model(path, mdl, ctrl, T_STOP)
 
     # Simulate in PLECS first (fast), at a uniform grid
-    T_s = cast(control.FluxVectorController, ctrl.vector_ctrl).cfg.T_s
+    T_s = cast(control.FluxVectorController, ctrl.inner_ctrl).cfg.T_s
     start = time.time()
     simulate_plecs(tmp, np.arange(0, T_STOP, T_s / 4), mdl, ctrl)
     print(f"PLECS: {time.time() - start:.1f} s")

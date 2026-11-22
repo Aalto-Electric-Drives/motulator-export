@@ -220,10 +220,10 @@ def drive_references(
     """
     Speed reference (`set_speed_ref`), or the torque reference in the torque-control
     mode (`set_torque_ref`), and the load torque of the mechanics
-    (`set_external_load_torque`), or the external rotor speed of `ExternalRotorSpeed`
-    (`set_external_rotor_speed`): constants or `StepSignal` objects, the reference
-    sampled to switch at the same sampling instant as in motulator (the signal of
-    the mechanics acts in continuous time).
+    (`set_external_load_torque`), or the external rotor speed `w_M` of
+    `ExternalRotorSpeed`: constants or `StepSignal` objects, the reference sampled to
+    switch at the same sampling instant as in motulator (the signal of the mechanics
+    acts in continuous time).
     """
     if torque_control(ctrl):
         ref = reference(ctrl.ext_ref.tau_M, "torque reference", T_s)

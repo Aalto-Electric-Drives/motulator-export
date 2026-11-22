@@ -40,7 +40,7 @@ static void pll_compute_output(const PLL *self, double complex i_c_ab,
     double complex rot = cexp(-I * out->theta_c);
     out->i_c = rot * i_c_ab;
     out->u_g_meas = rot * u_g_ab;
-    /* Filtered voltage magnitude */
+    /* Filtered d component of the PCC voltage */
     out->u_g = self->u_g;
 
     /* Error signal and the angular speed of the coordinate system */
@@ -77,6 +77,8 @@ static ComplexPIController gfl_current_controller(double L, double alpha_c,
 static double complex gfl_current_reference(double p_g_ref, double q_g_ref,
                                             double u_g)
 {
+    /* The voltage bounded away from zero */
+    u_g = copysign(fmax(fabs(u_g), 1e-6), u_g);
     return (p_g_ref - I * q_g_ref) / (1.5 * u_g);
 }
 

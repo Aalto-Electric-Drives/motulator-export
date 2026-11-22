@@ -45,10 +45,9 @@ par = model.InductionMachineInvGammaPars(
 def simulate(discrete: bool) -> model.SimulationResults:
     mdl = model.Drive(
         model.InductionMachine(par),
-        model.ExternalRotorSpeed(),
+        model.ExternalRotorSpeed(0.5 * base.w_M),
         model.VoltageSourceConverter(u_dc=540, modulator=model.CarrierComparison()),
     )
-    mdl.mechanics.set_external_rotor_speed(lambda t: 0.5 * base.w_M)
     cfg = control.CurrentVectorControllerCfg(
         psi_s_nom=base.psi,
         i_s_max=2 * base.i,

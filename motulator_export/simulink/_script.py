@@ -202,7 +202,9 @@ def _speed_ctrl(values: dict[str, Any]) -> str:
 def _drive_model(mdl: Drive, machine: list[str]) -> list[str]:
     """The system model of a drive, after the lines of the machine."""
     if isinstance(mdl.mechanics, ExternalRotorSpeed):
-        lines = [*machine, "mechanics = ExternalRotorSpeed();"]
+        w_M = reference(mdl.mechanics.w_M, "external rotor speed")
+        arg = "" if _equal(w_M, 0.0) else _value(w_M)
+        lines = [*machine, f"mechanics = ExternalRotorSpeed({arg});"]
     else:
         mech = cast(MechanicalSystem, mdl.mechanics)
         lines = [*machine, f"mechanics = MechanicalSystem(J={_value(mech.J)});"]
@@ -229,10 +231,7 @@ def _drive_model(mdl: Drive, machine: list[str]) -> list[str]:
 def _drive_references(
     mdl: Drive, ctrl: VectorControlSystem | VHzControlSystem
 ) -> list[str]:
-    """
-    The speed or the torque reference, and the load torque or the external rotor
-    speed of a drive.
-    """
+    """The speed or the torque reference and the load torque of a drive."""
     if torque_control(ctrl):
         tau_M_ref = reference(ctrl.ext_ref.tau_M, "torque reference")
         lines = [f"ctrl.set_torque_ref({_value(tau_M_ref)});"]
@@ -240,9 +239,6 @@ def _drive_references(
         w_M_ref = reference(ctrl.ext_ref.w_M, "speed reference")
         lines = [f"ctrl.set_speed_ref({_value(w_M_ref)});"]
     if isinstance(mdl.mechanics, ExternalRotorSpeed):
-        w_M = reference(mdl.mechanics.w_M, "external rotor speed")
-        if not _equal(w_M, 0.0):
-            lines.append(f"mdl.mechanics.set_external_rotor_speed({_value(w_M)});")
         return lines
     tau_L = reference(cast(MechanicalSystem, mdl.mechanics).inp.tau_L, "load torque")
     if not _equal(tau_L, 0.0):
@@ -258,7 +254,7 @@ def _vector_control_system(
     (with the initial speed estimate of its observer, if not zero), with the speed
     controller or in the torque-control mode.
     """
-    lines = [f"vector_ctrl = {type(ctrl.vector_ctrl).__name__}({est}, cfg);"]
+    lines = [f"vector_ctrl = {type(ctrl.inner_ctrl).__name__}({est}, cfg);"]
     if values["observer_w_M"] != 0:
         lines.append(f"vector_ctrl.observer.w_M = {_value(values['observer_w_M'])};")
     if torque_control(ctrl):
@@ -285,7 +281,7 @@ def _sm_script(
             sm_control.ObserverBasedVHzControllerCfg,
             SM_VHZ_CFG_FIELDS,
         )
-    elif isinstance(ctrl.vector_ctrl, sm_control.CurrentVectorController):
+    elif isinstance(ctrl.inner_ctrl, sm_control.CurrentVectorController):
         values, flux_map = _sm.export_values(ctrl)
         cfg_cls, cfg_fields = sm_control.CurrentVectorControllerCfg, SM_CVC_CFG_FIELDS
     else:
@@ -362,13 +358,13 @@ def _im_script(
         plant_values = list(plant.values())
     model = _drive_model(mdl, [machine, "machine = InductionMachine(par);"])
     if isinstance(ctrl, VHzControlSystem) and isinstance(
-        ctrl.vhz_ctrl, im_control.OpenLoopVHzController
+        ctrl.inner_ctrl, im_control.OpenLoopVHzController
     ):
         return model, [*_open_loop_vhz_script(ctrl), *_drive_references(mdl, ctrl)]
     if isinstance(ctrl, VHzControlSystem):
         values = _im.export_vhz_values(ctrl)
         cls, fields = im_control.ObserverBasedVHzControllerCfg, VHZ_CFG_FIELDS
-    elif isinstance(ctrl.vector_ctrl, im_control.FluxVectorController):
+    elif isinstance(ctrl.inner_ctrl, im_control.FluxVectorController):
         values = _im.export_values(ctrl)
         cls, fields = im_control.FluxVectorControllerCfg, IM_FVC_CFG_FIELDS
     else:
@@ -401,7 +397,7 @@ def _open_loop_vhz_script(ctrl: VHzControlSystem) -> list[str]:
     (`_im.vhz_curve`) is an anonymous function.
     """
     values = _im.export_vhz_values(ctrl)
-    u_0, k = _im.vhz_curve(cast(im_control.OpenLoopVHzController, ctrl.vhz_ctrl))
+    u_0, k = _im.vhz_curve(cast(im_control.OpenLoopVHzController, ctrl.inner_ctrl))
     curve = f"{_value(k)}*w_s" if u_0 == 0 else f"{_value(u_0)} + {_value(k)}*w_s"
     vhz_ctrl = _call(
         "OpenLoopVHzController",

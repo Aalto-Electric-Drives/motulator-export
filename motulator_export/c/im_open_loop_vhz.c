@@ -91,13 +91,14 @@ static void im_open_loop_vhz_control_system_compute_output(
     ref->u_s = im_open_loop_vhz_ctrl_compute_output(ctrl, fbk);
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
-     * k_comp*T_s*w_c */
+     * k_comp*T_s*w_c, and the limited voltage reference without the advance */
+    double complex advance = cexp(I * self->k_comp * T_s * fbk->w_c);
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
-    u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
+    u_s_ab_ref *= advance;
     double complex u_lim_ab;
     pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
                        ref->d_abc, &u_lim_ab);
-    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * conj(advance) * u_lim_ab;
     ref->w_M = w_M_ref;
 }
 

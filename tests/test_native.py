@@ -322,7 +322,7 @@ def torque_drive(
             )
         ctrl = control.VectorControlSystem(vector_ctrl, speed_ctrl=None)
         ctrl.set_torque_ref(lambda t: (t > 0.25) * nom.tau - (t > 1.25) * 2 * nom.tau)
-        mechanics.set_external_rotor_speed(lambda t: 0.5 * base.w_M * sin(2 * pi * t))
+        mechanics.w_M = lambda t: 0.5 * base.w_M * sin(2 * pi * t)
         return mdl, ctrl
     par = model.SynchronousMachinePars(
         n_p=3, R_s=3.6, L_d=0.036, L_q=0.051, psi_f=0.545
@@ -345,7 +345,7 @@ def torque_drive(
         vector_ctrl = control.CurrentVectorController(par, cfg)
     ctrl = control.VectorControlSystem(vector_ctrl)
     ctrl.set_torque_ref(lambda t: (t > 0.1) * 0.5 * NOM.tau)
-    mechanics.set_external_rotor_speed(lambda t: BASE.w_M * min(t / 0.2, 0.8))
+    mechanics.w_M = lambda t: BASE.w_M * min(t / 0.2, 0.8)
     return mdl, ctrl
 
 
@@ -386,11 +386,10 @@ def im_cvc_discrete_drive(
     )
     mdl = model.Drive(
         model.InductionMachine(par),
-        model.ExternalRotorSpeed(),
+        model.ExternalRotorSpeed(lambda t: 0.5 * base.w_M),
         # Fine quantization
         model.VoltageSourceConverter(u_dc=540, modulator=CarrierComparison(N=2**24)),
     )
-    cast(Any, mdl.mechanics).set_external_rotor_speed(lambda t: 0.5 * base.w_M)
     cfg = im_control.CurrentVectorControllerCfg(
         psi_s_nom=base.psi,
         i_s_max=2 * base.i,
@@ -481,9 +480,7 @@ def test_final_state(case: str) -> None:
     mdl_c, ctrl_c = build()
     native.Simulation(mdl_c, ctrl_c, show_progress=False).simulate(0.06)
     assert mdl_c.t0 == mdl_py.t0
-    np.testing.assert_allclose(
-        mdl_c.get_initial_values(), mdl_py.get_initial_values(), rtol=1e-9
-    )
+    np.testing.assert_allclose(mdl_c.get_states(), mdl_py.get_states(), rtol=1e-9)
     for name in ["q_c_ab", "s_c_ab"]:
         assert np.isclose(
             getattr(mdl_c.converter.inp, name), getattr(mdl_py.converter.inp, name)
@@ -617,14 +614,14 @@ def test_pi_speed_controller() -> None:
     check(*simulate(build, 0.3), rtol=1e-9)
 
 
-def with_dc_bus(build: Build) -> Build:
-    """The drive of `build` fed by a DC-bus model (DCBus)."""
+def with_dc_bus(build: Build, C_dc: float = 1e-3) -> Build:
+    """The drive of `build` fed by a DC bus (DCBus) with the capacitance `C_dc`."""
 
     def build_dc() -> tuple[model.Drive, Any]:
         mdl, ctrl = build()
         c = mdl.converter
         converter = model.VoltageSourceConverter(modulator=c.modulator, u_th=c.u_th)
-        dc_bus = DCBus(C_dc=1e-3, u_dc=540)
+        dc_bus = DCBus(C_dc=C_dc, u_dc=540)
         return model.Drive(mdl.machine, mdl.mechanics, converter, dc_bus=dc_bus), ctrl
 
     return build_dc
@@ -637,7 +634,8 @@ def test_dc_bus(machine: str) -> None:
         build = sm_system(sensorless=True, t_d=0.0)[0]
     else:
         build = im_system(sensorless=True, t_d=0.0, i_0=0.0)[0]
-    res_py, res_c = simulate(with_dc_bus(build), 0.3)
+    # The capacitance keeps the DC-bus voltage near its initial value over the run
+    res_py, res_c = simulate(with_dc_bus(build, C_dc=10e-3), 0.3)
     check(res_py, res_c, rtol=1e-9)
 
 

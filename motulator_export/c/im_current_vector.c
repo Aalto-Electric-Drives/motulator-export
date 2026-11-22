@@ -247,11 +247,11 @@ static void im_reference_gen_compute_output(const IMCurrentReferenceGenerator *s
     /* q-axis current reference */
     double i_sq_ref = (psi_R > 0.0) ? tau_M_ref / (1.5 * par->n_p * psi_R) : 0.0;
 
-    /* q-axis current limit: priority given to the d component, and the breakdown
-     * torque limit */
+    /* Nonnegative q-axis current limit: priority given to the d component, and the
+     * breakdown torque limit */
     double i_sq_max1 = sqrt(self->i_s_max * self->i_s_max - i_sd_ref * i_sd_ref);
     double i_sq_max2 = psi_R / par->L_sgm + i_sd_ref;
-    double i_sq_max = fmin(i_sq_max1, i_sq_max2);
+    double i_sq_max = fmax(fmin(i_sq_max1, i_sq_max2), 0.0);
     i_sq_ref = clip(i_sq_ref, -i_sq_max, i_sq_max);
 
     *i_s_ref = i_sd_ref + I * i_sq_ref;
@@ -383,7 +383,8 @@ static void im_vector_control_feedback(const IMSpeedFluxObserver *observer,
 
 /* Duty ratios for the PWM (modulate), the angle of the voltage reference u_s_ref
  * advanced by k_comp*T_s*w_c, or the zero vector (zero_vector nonzero). Returns the
- * limited voltage reference in the controller coordinates (u_s_lim). */
+ * limited voltage reference in the controller coordinates without the angle advance
+ * (u_s_lim). */
 static double complex im_vector_control_modulate(PWM *pwm, double k_comp,
                                                  int zero_vector, double T_s,
                                                  double complex u_s_ref,
@@ -391,15 +392,16 @@ static double complex im_vector_control_modulate(PWM *pwm, double k_comp,
                                                  const IMObserverOutputs *fbk,
                                                  double d_abc[3])
 {
+    double complex advance = cexp(I * k_comp * T_s * fbk->w_c);
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * u_s_ref;
-    u_s_ab_ref *= cexp(I * k_comp * T_s * fbk->w_c);
+    u_s_ab_ref *= advance;
     if (zero_vector) {
         u_s_ab_ref = 0.0;
     }
     double complex u_lim_ab;
     pwm_compute_output(pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab, d_abc,
                        &u_lim_ab);
-    return cexp(-I * fbk->theta_c) * u_lim_ab;
+    return cexp(-I * fbk->theta_c) * conj(advance) * u_lim_ab;
 }
 
 /* IMVectorControlSystem ---------------------------------------------------- */

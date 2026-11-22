@@ -131,7 +131,7 @@ def _pll() -> CBlock:
     """Phase-locked loop (PLL)."""
     mask = Mask(
         "PLL (motulator)",
-        "Phase-locked loop with the filtered PCC voltage magnitude (PLL), giving the "
+        "Phase-locked loop including the PCC voltage filtering (PLL), giving the "
         "feedback signals fbk in its coordinates from the measurements. The output "
         "fbk.u_c is the realized converter voltage u_c_ab averaged over the previous "
         "and ongoing periods (GridConverterControlSystem.get_feedback).",

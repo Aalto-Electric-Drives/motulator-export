@@ -261,7 +261,7 @@ def _check_delay(mdl: Model) -> None:
     period (one half carrier period with double update, two with single update).
     """
     modulator = mdl.converter.modulator
-    if modulator.delay.length != (2 if modulator.single_update else 1):
+    if modulator.delay != (2 if modulator.single_update else 1):
         raise NotImplementedError(
             "Only the computational delay of one sampling period (the default delay "
             "of the modulator) supported"

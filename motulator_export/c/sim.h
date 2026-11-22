@@ -4,8 +4,8 @@
  *
  * Python counterparts:
  *   motulator/common/model/_simulation.py  Simulation
- *   motulator/common/model/_base.py        Model.modulate, Delay
- *   motulator/common/model/_pwm.py         ZOH, CarrierComparison
+ *   motulator/common/model/_base.py        ControlledConverter.modulate
+ *   motulator/common/model/_pwm.py         Modulator, ZOH, CarrierComparison
  *   motulator/common/utils/_dead_time.py   averaged_gate_signals
  *   motulator/common/model/_converter.py   VoltageSourceConverter, DCBus
  *   motulator/common/model/_ac_port.py     ACPort, derivative, jacobian,
@@ -134,8 +134,8 @@ typedef struct {
     double b_abc[SIM_MAX_SWITCHING][3];
 } SwitchingSequence;
 
-/* Computational delay (Delay) and the PWM model: zero-order hold (ZOH) or carrier
- * comparison (CarrierComparison) */
+/* Computational delay (Modulator.delay) and the PWM model: zero-order hold (ZOH) or
+ * carrier comparison (CarrierComparison) */
 typedef struct {
     int carrier;       /* Carrier comparison (else ZOH) */
     double N;          /* Counter quantization levels of the carrier comparison */
@@ -157,8 +157,8 @@ typedef struct {
 static void modulator_init(Modulator *self, int carrier, double N, double t_d,
                            int delay, int single_update);
 /* Delay the duty ratios and convert them to the switching intervals of the sampling
- * period T_s (Model.modulate). Returns SIM_ERROR_SWITCHING if there are too many
- * intervals. */
+ * period T_s (ControlledConverter.modulate). Returns SIM_ERROR_SWITCHING if there are
+ * too many intervals. */
 static int modulator_modulate(Modulator *self, double T_s, const double d_abc[3],
                               SwitchingSequence *seq);
 
@@ -273,7 +273,7 @@ static void bridge_update_diodes(DCBus *self, const double complex *x, int latch
 static void dc_bus_rhs(const DCBus *self, const double complex *x, double i_dc_int,
                        double complex *dx);
 /* Keep the angle of the source of the diode bridge within [-pi, pi)
- * (ThreePhaseSource.set_states) */
+ * (ThreePhaseSource.angles) */
 static void dc_bus_set_states(const DCBus *self, double complex *x);
 
 /* Logs --------------------------------------------------------------------- */

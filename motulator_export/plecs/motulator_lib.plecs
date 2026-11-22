@@ -18555,7 +18555,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver), created by create_vhz_observer with the default observer gain: the rotor speed w_M is the rate-limited speed reference, without the external speed error signal. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
+      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver) without speed estimation, with the default observer gain: the rotor speed w_M is the rate-limited speed reference, without the external speed error signal. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -23675,7 +23675,7 @@ Plecs {
       CodeGenTarget "Generic"
       MaskType      "ObserverBasedVHzController (motulator)"
       MaskDescription "Observer-based V/Hz controller (ObserverBasedVHzController). The configuration cfg is a struct with the fields of ObserverBasedVHzControllerCfg ([] = None, i.e., the default). The mask initialization resolves the defaults and passes the parameters to the blocks inside it, as ObserverBasedVHzController. The block tau_M_lpf is the low-pass filter of the torque estimate, whose output is the torque reference. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
-      MaskInit      "% First-order angle estimation, the pole matched to the sampling period\n% (matched_pole)\nk_theta = -expm1(-cfg.alpha_o*cfg.T_s)/cfg.T_s;\n% Default observer gain of create_vhz_observer, k_o(w_m) = k0 + k1*abs(w_m)\n% (k0 = NaN: sigma0 of the machine model, see the FluxObserver)\nk_o = cfg.k_o;\nif isempty(k_o)\n  k_o = [NaN 0.2];\nend\n% Flux and torque controller without the integral action\nalpha_psi = cfg.alpha_psi;\nalpha_i = 0;\n"
+      MaskInit      "% First-order angle estimation, the pole matched to the sampling period\n% (matched_pole)\nk_theta = -expm1(-cfg.alpha_o*cfg.T_s)/cfg.T_s;\n% Default observer gain (default_sensorless_k_o), k_o(w_m) = k0 + k1*abs(w_m)\n% (k0 = NaN: sigma0 of the machine model, see the FluxObserver)\nk_o = cfg.k_o;\nif isempty(k_o)\n  k_o = [NaN 0.2];\nend\n% Flux and torque controller without the integral action\nalpha_psi = cfg.alpha_psi;\nalpha_i = 0;\n"
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on
@@ -23884,7 +23884,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Flux observer in estimated rotor coordinates (FluxObserver), created by create_vhz_observer: the rotor speed w_M is the rate-limited speed reference, and the PM-flux estimation gain is zero. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In standby, the voltages are unknown (NaN), and the flux estimate follows the current model alone, with the open-circuit voltage of the model as the voltage. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
+      MaskDescription "Flux observer in estimated rotor coordinates (FluxObserver) without speed estimation: the rotor speed w_M is the rate-limited speed reference, and the PM-flux estimation gain is zero. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). In standby, the voltages are unknown (NaN), and the flux estimate follows the current model alone, with the open-circuit voltage of the model as the voltage. The machine model par is a struct with the fields n_p, R_s, L_d, L_q, and psi_f of SynchronousMachinePars, or n_p, R_s, and psi_s_dq_fcn (a GradNet flux map) of SaturatedSynchronousMachinePars."
       MaskInit      "% Fields of the machine model par for the C-Script: SynchronousMachinePars, or\n% SaturatedSynchronousMachinePars with a GradNet flux map psi_s_dq_fcn\npar_n_p = par.n_p;\npar_R_s = par.R_s;\nif isfield(par, 'psi_s_dq_fcn') && ~isempty(par.psi_s_dq_fcn)\n  par_L_d = [];\n  par_L_q = [];\n  par_psi_f = [];\n  gn_in_dim = par.psi_s_dq_fcn.in_dim;\n  gn_mu_dim = par.psi_s_dq_fcn.mu_dim;\n  gn_W = par.psi_s_dq_fcn.W;\n  gn_b = par.psi_s_dq_fcn.b;\n  gn_mu_log = par.psi_s_dq_fcn.mu_log;\n  gn_bias = par.psi_s_dq_fcn.bias;\n  gn_activation = par.psi_s_dq_fcn.activation;\n  gn_beta_log = par.psi_s_dq_fcn.beta_log;\n  gn_p = par.psi_s_dq_fcn.p;\n  gn_in_base = par.psi_s_dq_fcn.in_base;\n  gn_out_base = par.psi_s_dq_fcn.out_base;\nelse\n  par_L_d = par.L_d;\n  par_L_q = par.L_q;\n  par_psi_f = par.psi_f;\n  gn_in_dim = [];\n  gn_mu_dim = [];\n  gn_W = [];\n  gn_b = [];\n  gn_mu_log = [];\n  gn_bias = [];\n  gn_activation = [];\n  gn_beta_log = [];\n  gn_p = [];\n  gn_in_base = [];\n  gn_out_base = [];\nend\n"
       MaskIconFrame on
       MaskIconOpaque off
@@ -27088,7 +27088,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "PLL (motulator)"
-      MaskDescription "Phase-locked loop with the filtered PCC voltage magnitude (PLL), giving the feedback signals fbk in its coordinates from the measurements. The output fbk.u_c is the realized converter voltage u_c_ab averaged over the previous and ongoing periods (GridConverterControlSystem.get_feedback)."
+      MaskDescription "Phase-locked loop including the PCC voltage filtering (PLL), giving the feedback signals fbk in its coordinates from the measurements. The output fbk.u_c is the realized converter voltage u_c_ab averaged over the previous and ongoing periods (GridConverterControlSystem.get_feedback)."
       MaskIconFrame on
       MaskIconOpaque off
       MaskIconRotates on

@@ -160,8 +160,7 @@ def test_pwm(
         i_c_ab = 5 * np.exp(1j * (theta - 0.5)) + rng.normal(0, 0.1)
         w = 2 * pi * 50
         u_dc = U_DC * (1 + 0.05 * np.sin(2 * pi * 300 * k * T_S))
-        u_py = pwm.get_realized_voltage(i_c_ab, u_dc)
-        u_zoh_py = pwm.get_realized_voltage(i_c_ab, u_dc, average=False)
+        u_zoh_py, u_py = pwm.get_realized_voltages(i_c_ab, u_dc)
         d_py, u_lim_py = pwm.compute_output(T_S, u_ref, u_dc, w)
         pwm.update(T_S, d_py)
         dll.step(
@@ -186,8 +185,7 @@ def test_pwm_discharged(dll: ctypes.CDLL, u_dc: float) -> None:
     pwm = PWM(d_err=InverterNonlinearity(T_D, U_TH))
     dll.init(d(T_D), d(U_TH), d(0.0), d(1.0), d(0.0), d(0.0))
     out = (ctypes.c_double * 11)()
-    u_py = pwm.get_realized_voltage(5.0 + 0j, u_dc)
-    u_zoh_py = pwm.get_realized_voltage(5.0 + 0j, u_dc, average=False)
+    u_zoh_py, u_py = pwm.get_realized_voltages(5.0 + 0j, u_dc)
     d_py, u_lim_py = pwm.compute_output(T_S, 100.0 + 0j, u_dc, 2 * pi * 50)
     dll.step(d(T_S), arr([100.0, 0.0]), arr([5.0, 0.0]), d(u_dc), d(2 * pi * 50), out)
     assert d_py == [0.5, 0.5, 0.5]

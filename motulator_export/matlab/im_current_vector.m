@@ -154,11 +154,11 @@ if psi_R > 0
 else
     i_sq_ref = 0;
 end
-% q-axis current limit: priority given to the d component, and the breakdown torque
-% limit
+% Nonnegative q-axis current limit: priority given to the d component, and the
+% breakdown torque limit
 i_sq_max1 = sqrt(self.i_s_max*self.i_s_max - i_sd_ref*i_sd_ref);
 i_sq_max2 = psi_R/par.L_sgm + i_sd_ref;
-i_sq_max = min(i_sq_max1, i_sq_max2);
+i_sq_max = max(min(i_sq_max1, i_sq_max2), 0);
 i_sq_ref = clip(i_sq_ref, -i_sq_max, i_sq_max);
 i_s_ref = complex(i_sd_ref, i_sq_ref);
 % Limited torque (for the speed controller)

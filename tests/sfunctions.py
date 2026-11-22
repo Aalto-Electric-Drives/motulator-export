@@ -233,9 +233,9 @@ def drive_sfun(dll: Any, block: Block) -> Callable[[Any], SFunctionControlSystem
             return u
 
         if isinstance(ctrl, VHzControlSystem):
-            T_s = ctrl.vhz_ctrl.T_s
+            T_s = ctrl.inner_ctrl.T_s
         else:
-            T_s = cast(Any, ctrl.vector_ctrl).cfg.T_s
+            T_s = cast(Any, ctrl.inner_ctrl).cfg.T_s
         sl = SFunctionControlSystem(dll, block, T_s, inputs)
         sl.set_enable(ctrl._enable)  # For blocking the gates of the system model
         return sl
@@ -288,7 +288,7 @@ def gradnet_inputs(ctrl: VectorControlSystem, n: int) -> list[tuple[Any, list[fl
     flux-torque controller approaches zero, where the rounding errors are amplified
     and the flux reduction (c_tau < 0) may start at a different sample.
     """
-    T_s = cast(Any, ctrl.vector_ctrl).cfg.T_s
+    T_s = cast(Any, ctrl.inner_ctrl).cfg.T_s
     t = np.arange(n) * T_s
     w_M = 100.0 * t / t[-1]
     theta_M = np.cumsum(w_M) * T_s

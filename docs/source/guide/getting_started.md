@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.12 or later. The package installs *motulator* 0.25.0 or a later 0.25 release.
+- Python 3.12 or later. The package installs *motulator* 0.26.1 or a later 0.26 release.
 - **PLECS**: PLECS Standalone. To simulate from Python, enable the RPC interface (File > PLECS Preferences > General > RPC interface port, 1080).
 - **Simulink**: MATLAB R2021a or later with Simulink, and a C compiler that supports `complex.h`: gcc (Linux), clang (macOS), or MinGW-w64 (Windows, selected with `mex -setup C`). MSVC does not work. The models with MATLAB Function blocks need no compiler. To simulate from Python, install the MATLAB Engine API for Python matching your MATLAB release (e.g., `pip install matlabengine==26.1.*` for R2026a).
 - **Native simulation**: a C compiler, by default gcc (or the one given by the environment variable `CC`).
@@ -123,7 +123,7 @@ plecs.write_model("ipmsm.plecs", mdl, ctrl, t_stop=1.2)
 simulink.write_model("ipmsm.slx", mdl, ctrl, t_stop=1.2)  # Writes build_ipmsm.m
 ```
 
-- The references (e.g., `ctrl.set_speed_ref`, or `ctrl.set_torque_ref` in the torque-control mode without the speed controller), the load torque (or the external rotor speed of `ExternalRotorSpeed`, `set_external_rotor_speed`), and the gate enable (`ctrl.set_enable`) can be constants or `StepSignal` objects. A function of time cannot be exported.
+- The references (e.g., `ctrl.set_speed_ref`, or `ctrl.set_torque_ref` in the torque-control mode without the speed controller), the load torque (or the external rotor speed `w_M` of `ExternalRotorSpeed`), and the gate enable (`ctrl.set_enable`) can be constants or `StepSignal` objects. A function of time cannot be exported.
 - The models start from the state of the system model, e.g., a given initial speed (`mdl.mechanics.state.w_M = 50.0`). Write the models before simulating the system in *motulator*.
 - A system that is not supported raises `NotImplementedError` before any file is written, see [](supported.md).
 

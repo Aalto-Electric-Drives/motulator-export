@@ -15,6 +15,11 @@ y = rate_limiter_compute_output(self, p.T_s, u);
 self = rate_limiter_update(self, y);
 end
 
+function y = clip(value, min_value, max_value)
+%CLIP Limit the value into the range [min_value, max_value].
+y = max(min(value, max_value), min_value);
+end
+
 function self = rate_limiter_init(rate_limit)
 %RATE_LIMITER_INIT Rate limiter (RateLimiter), the falling rate limit being the
 %   negative rising one.
@@ -24,14 +29,8 @@ end
 function y = rate_limiter_compute_output(self, T_s, u)
 %RATE_LIMITER_COMPUTE_OUTPUT Limited signal; the state is updated with it by
 %   rate_limiter_update.
-rate = (u - self.old_y)/T_s;
-if rate > self.rate_limit
-    y = self.old_y + T_s*self.rate_limit;
-elseif rate < -self.rate_limit
-    y = self.old_y - T_s*self.rate_limit;
-else
-    y = u;
-end
+du_max = T_s*self.rate_limit;
+y = clip(u, self.old_y - du_max, self.old_y + du_max);
 end
 
 function self = rate_limiter_update(self, y)

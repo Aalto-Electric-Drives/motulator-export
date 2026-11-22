@@ -11,7 +11,7 @@ import motulator.drive.utils.*
 %% System model
 par = InductionMachineInvGammaPars(n_p=2, R_s=3.7, R_R=2.1, L_sgm=0.021, L_M=0.224);
 machine = InductionMachine(par);
-mechanics = ExternalRotorSpeed();
+mechanics = ExternalRotorSpeed(2*pi*12.5);
 converter = VoltageSourceConverter(u_dc=540);
 mdl = Drive(machine, mechanics, converter);
 
@@ -21,7 +21,6 @@ vector_ctrl = CurrentVectorController(par, cfg);
 vector_ctrl.observer.w_M = 2*pi*12.5;
 ctrl = VectorControlSystem(vector_ctrl);
 ctrl.set_torque_ref(StepSignal(time=[0.3 0.32 0.34], after=[4.38 7.3 -4.38]));
-mdl.mechanics.set_external_rotor_speed(2*pi*12.5);
 
 %% Simulink model (the blocks of the control system are MATLAB Function blocks)
 simulation = Simulation(mdl, ctrl);

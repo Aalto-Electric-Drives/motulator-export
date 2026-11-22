@@ -1,7 +1,7 @@
 classdef VectorControlSystem < motulator.internal.Object
     %VECTORCONTROLSYSTEM Vector control system of a machine drive.
-    %   CTRL = VECTORCONTROLSYSTEM(VECTOR_CTRL, SPEED_CTRL, PWM) as in motulator,
-    %   with the vector controller VECTOR_CTRL (FluxVectorController or
+    %   CTRL = VECTORCONTROLSYSTEM(INNER_CTRL, SPEED_CTRL, PWM) as in motulator,
+    %   with the vector controller INNER_CTRL (FluxVectorController or
     %   CurrentVectorController of a synchronous or an induction machine), the speed
     %   controller SPEED_CTRL (SpeedController; by default [], i.e., the
     %   torque-control mode), and the PWM (by default PWM()). SET_SPEED_REF(W_M_REF)
@@ -10,7 +10,7 @@ classdef VectorControlSystem < motulator.internal.Object
     %   StepSignal.
 
     properties
-        vector_ctrl      % Vector controller
+        inner_ctrl       % Vector controller
         speed_ctrl = []  % Speed controller (SpeedController), [] in torque control
         pwm = []         % Pulse-width modulator (PWM)
         w_M_ref = []     % Speed reference (rad/s), a constant or a StepSignal
@@ -19,8 +19,8 @@ classdef VectorControlSystem < motulator.internal.Object
 
     methods
         function obj = VectorControlSystem(varargin)
-            obj.set_args(varargin, {'vector_ctrl', 'speed_ctrl', 'pwm'}, ...
-                {'vector_ctrl'});
+            obj.set_args(varargin, {'inner_ctrl', 'speed_ctrl', 'pwm'}, ...
+                {'inner_ctrl'});
             if isempty(obj.pwm)
                 obj.pwm = motulator.common.control.PWM();
             end

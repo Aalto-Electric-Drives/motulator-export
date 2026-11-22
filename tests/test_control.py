@@ -447,7 +447,7 @@ def test_vector_ctrl_without_observer(key: str) -> None:
     Simulink.
     """
     ctrl = torque_system(key, True)[0]()[1]
-    cast(Any, ctrl.vector_ctrl).observer.w_M = 0.0
+    cast(Any, ctrl.inner_ctrl).observer.w_M = 0.0
     values = _sm.export_values(ctrl)[0] if key in SM_KEYS else _im.export_values(ctrl)
     block = SYSTEMS[f"{key}_torque"][0]
     init = init_script(key, values)

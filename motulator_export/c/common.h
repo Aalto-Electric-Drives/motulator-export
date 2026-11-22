@@ -252,7 +252,7 @@ static void pwm_limit_pulses(const PWM *self, double d_abc[3], const double d_re
                              double d_realized[3]);
 /* Realized voltage from the duty ratios and the measured DC-bus voltage, corrected
  * for the duty-ratio error using the measured current and the half carrier period
- * of the previous period (get_realized_voltage): the average of the previous and the
+ * of the previous period (get_realized_voltages): the average of the previous and the
  * ongoing sampling periods if average is nonzero, else that of the ongoing sampling
  * period. With a discharged DC bus (u_dc <= 0), the voltage is zero. */
 static double complex pwm_realized_voltage(const PWM *self, double complex i_c_ab,

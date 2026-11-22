@@ -209,7 +209,7 @@ def test_modulator(
     """Computational delay and PWM models, with the dead time."""
     N, t_d = 2**6, 3e-6
     if carrier:
-        modulator = CarrierComparison(t_d, delay, single_update, N)
+        modulator = CarrierComparison(t_d, delay, single_update, N=N)
     else:
         modulator = ZOH(t_d, delay, single_update)
     dll.modulator_new(int(carrier), d(N), d(t_d), delay, int(single_update))

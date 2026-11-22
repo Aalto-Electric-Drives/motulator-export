@@ -32,15 +32,14 @@ def write_model(
 
     The references of the control system (e.g., `set_speed_ref`, or `set_torque_ref`
     in the torque-control mode without the speed controller), the external load
-    torque (`set_external_load_torque`) or the external rotor speed of
-    `ExternalRotorSpeed` (`set_external_rotor_speed`), and the gate enable
-    (`set_enable`) are read from `ctrl` and `mdl`, each a constant or a
-    `StepSignal`. The model starts from
-    the state of `mdl`, e.g., its initial speed. A system that is not supported
-    raises `NotImplementedError`, and an invalid argument `ValueError`, before any
-    file is written. A drive fed from a diode bridge is given as a composite model of
-    the diode bridge and the drive, with the control system of the drive by its name,
-    as in the simulation of motulator.
+    torque (`set_external_load_torque`) or the external rotor speed `w_M` of
+    `ExternalRotorSpeed`, and the gate enable (`set_enable`) are read from `ctrl` and
+    `mdl`, each a constant or a `StepSignal`. The model starts from the state of
+    `mdl`, e.g., its initial speed. A system that is not supported raises
+    `NotImplementedError`, and an invalid argument `ValueError`, before any file is
+    written. A drive fed from a diode bridge is given as a composite model of the
+    diode bridge and the drive, with the control system of the drive by its name, as
+    in the simulation of motulator.
 
     Parameters
     ----------

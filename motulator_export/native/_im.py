@@ -99,7 +99,7 @@ class InductionMachineDriveSystem(NativeSystem):
         # Control system
         if isinstance(ctrl, VHzControlSystem):
             v = export_vhz_values(ctrl)
-            if isinstance(ctrl.vhz_ctrl, OpenLoopVHzController):
+            if isinstance(ctrl.inner_ctrl, OpenLoopVHzController):
                 fields = ["n_p", "u_0", "k", "T_s", "slew_rate"]
                 lib.set_open_loop_vhz_controller(h, *c_args(v, fields))
             else:
@@ -107,12 +107,12 @@ class InductionMachineDriveSystem(NativeSystem):
                 lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
         else:
             ctrl = cast(VectorControlSystem, ctrl)
-            if isinstance(ctrl.vector_ctrl, FluxVectorController):
-                v = fvc_values(ctrl.vector_ctrl)
+            if isinstance(ctrl.inner_ctrl, FluxVectorController):
+                v = fvc_values(ctrl.inner_ctrl)
                 lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
                 lib.set_flux_vector_controller(h, *c_args(v, FVC_CFG_FIELDS))
             else:
-                v = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
+                v = cvc_values(cast(CurrentVectorController, ctrl.inner_ctrl))
                 lib.set_control_machine(h, *c_args(v, PAR_FIELDS))
                 lib.set_current_vector_controller(h, *c_args(v, CFG_FIELDS))
             lib.set_observer_speed(h, v["observer_w_M"])
@@ -139,9 +139,9 @@ class InductionMachineDriveSystem(NativeSystem):
         given, is not supported.
         """
         if type(ctrl) is VHzControlSystem:
-            check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+            check_supported_vhz_ctrl(ctrl.inner_ctrl)
         elif type(ctrl) is VectorControlSystem:
-            check_supported_vector_ctrl(ctrl.vector_ctrl)
+            check_supported_vector_ctrl(ctrl.inner_ctrl)
             check_supported_speed_control(ctrl)
         else:
             raise NotImplementedError(

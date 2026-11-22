@@ -61,7 +61,9 @@ par = self.par;
 psi_s_abs = abs(fbk.psi_s);
 % Auxiliary current
 i_a = fbk.psi_R/par.L_sgm;
-% Torque-production factor and directions
+% Torque-production factor and directions. If the torque cannot be controlled (e.g.,
+% at zero flux), only the flux magnitude is controlled, along the real axis of the
+% controller coordinates.
 c_tau = 1.5*par.n_p*real(i_a*conj(fbk.psi_s));
 t_psi = complex(1);
 t_tau = complex(0);

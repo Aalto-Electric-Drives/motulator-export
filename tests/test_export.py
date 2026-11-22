@@ -380,8 +380,8 @@ def test_torque_control(tmp_path: Path, sm: bool) -> None:
     ctrl.set_torque_ref(StepSignal(0.1, 5.0))  # T_s = 125 us
     mech = mdl.mechanics
     assert isinstance(mech, model.ExternalRotorSpeed)
-    mech.set_external_rotor_speed(StepSignal(0.05, 50.0))
-    cast(Any, ctrl.vector_ctrl).observer.w_M = 25.0  # Initial speed estimate
+    mech.w_M = StepSignal(0.05, 50.0)
+    cast(Any, ctrl.inner_ctrl).observer.w_M = 25.0  # Initial speed estimate
     mech.state.theta_M = 0.25 + 0j
     if sm:  # The rotor angle of the machine model, that of the mechanics
         cast(Any, mdl.machine.state).theta_m = complex(0.25 * mdl.machine.par.n_p)
@@ -401,15 +401,11 @@ def test_torque_control(tmp_path: Path, sm: bool) -> None:
     assert "speed_ctrl" not in script
     assert "ctrl = VectorControlSystem(vector_ctrl);" in script
     assert "ctrl.set_torque_ref(StepSignal(time=0.1, after=5));" in script
-    assert "mechanics = ExternalRotorSpeed();" in script
+    assert "mechanics = ExternalRotorSpeed(StepSignal(time=0.05, after=50));" in script
     assert "vector_ctrl.observer.w_M = 25;" in script
     assert "mechanics.state.theta_M = 0.25;" in script
-    assert (
-        "mdl.mechanics.set_external_rotor_speed(StepSignal(time=0.05, after=50));"
-        in script
-    )
     files = set(tmp_path.iterdir())
-    mech.set_external_rotor_speed(lambda t: 50.0)
+    mech.w_M = lambda t: 50.0
     for tool, path in TOOLS:
         with pytest.raises(NotImplementedError, match="StepSignal"):
             tool.write_model(tmp_path / f"other_{path}", mdl, ctrl, T_STOP)
@@ -521,11 +517,13 @@ def test_unsupported_induction_machine(tmp_path: Path, case: str) -> None:
         match = "resistive cage"
     else:
         linear = par
+
+        def current_map(psi_s: Any, psi_r: Any) -> Any:
+            # The linear magnetic model does not depend on the rotor angle
+            return linear.magnetic_map(psi_s, psi_r, 1.0)[:2]
+
         par = model.SaturatedInductionMachinePars(
-            n_p=linear.n_p,
-            R_s=linear.R_s,
-            R_r=linear.R_r,
-            current_map_fcn=lambda psi_s, psi_r: linear.magnetic_map(psi_s, psi_r)[:2],
+            n_p=linear.n_p, R_s=linear.R_s, R_r=linear.R_r, current_map_fcn=current_map
         )
     drive = model.Drive(model.InductionMachine(par), mdl.mechanics, mdl.converter)
     for tool, path in TOOLS:
@@ -553,7 +551,7 @@ def test_open_loop_vhz_curve(tmp_path: Path) -> None:
     def u_s_ref(w_s: float) -> complex:
         return 1j * float(np.clip(w_s * IM_BASE.psi, -IM_BASE.u, IM_BASE.u))
 
-    ctrl.vhz_ctrl = im_control.OpenLoopVHzController(2, u_s_ref)
+    ctrl.inner_ctrl = im_control.OpenLoopVHzController(2, u_s_ref)
     for tool, path in TOOLS:
         with pytest.raises(NotImplementedError, match="affine"):
             tool.write_model(tmp_path / f"limited_{path}", mdl, ctrl, T_STOP)
@@ -738,7 +736,7 @@ def test_unsupported_k_comp(tmp_path: Path) -> None:
     """Only the angle advance k_comp of the controller is supported (1.5 of the
     continuous-time designs, or 0 of the direct discrete-time current controller)."""
     mdl, ctrl = _grid(gfl=False)
-    ctrl.k_comp = 0.0
+    ctrl.inner_ctrl.k_comp = 0.0
     for tool, path in TOOLS:
         with pytest.raises(NotImplementedError, match="k_comp"):
             tool.write_model(tmp_path / path, mdl, ctrl, 0.1)

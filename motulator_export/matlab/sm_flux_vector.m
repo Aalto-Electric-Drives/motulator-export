@@ -108,7 +108,7 @@ e_s_ab = -L.L_qq*delta_i_s_ab/T_s; % Back-EMF
 % The resistive decay of a residual current (the d-axis current through L_d) must
 % not be taken for the back-EMF
 i_max = max(abs(i_s_ab), abs(i_s_ab - delta_i_s_ab));
-caught = abs(e_s_ab) > par.R_s*i_max*max(L.L_qq/L.L_dd, 1) && par.psi_f ~= 0;
+caught = abs(e_s_ab) > par.R_s*i_max*max(L.L_qq/L.L_dd, 1) && par.psi_f > 0;
 theta_m = 0;
 psi_s = complex(0);
 if ~caught
@@ -198,8 +198,12 @@ psi_s_abs_ref = min(psi_s_abs_ref, reference_gen_max_flux(self, w_m, u_dc));
 % Current limit
 tau_M_cl = lut_interp(self.tau_M_cl, psi_s_abs_ref);
 tau_M_ref = min(tau_M_cl, abs(tau_M_ref))*sign(tau_M_ref);
-% MTPV limit
-tau_M_mtpv = lut_interp(self.tau_M_mtpv, psi_s_abs_ref);
+% MTPV limit, none above the flux magnitudes of the table
+if psi_s_abs_ref > self.tau_M_mtpv.x(end)
+    tau_M_mtpv = Inf;
+else
+    tau_M_mtpv = lut_interp(self.tau_M_mtpv, psi_s_abs_ref);
+end
 if tau_M_mtpv > 0
     tau_M_ref = min(self.k_mtpv*tau_M_mtpv, abs(tau_M_ref))*sign(tau_M_ref);
 end
@@ -258,7 +262,8 @@ psi_s_abs = abs(fbk.psi_s);
 L = incr_ind_mat(par, fbk.i_s);
 i_a = aux_current(L, fbk.psi_s, fbk.i_s);
 c_tau = 1.5*par.n_p*real(i_a*conj(fbk.psi_s));
-% Directions
+% Directions. If the torque cannot be controlled (e.g., at zero flux), only the flux
+% magnitude is controlled, along the real axis of the controller coordinates.
 if c_tau > 0
     t_psi = 1.5*par.n_p*psi_s_abs*i_a/c_tau;
     t_tau = 1i*fbk.psi_s/c_tau;

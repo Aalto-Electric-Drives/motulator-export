@@ -88,13 +88,12 @@ slope = (lut.y(hi) - lut.y(lo))/(lut.x(hi) - lut.x(lo));
 y = slope*(x - lut.x(lo)) + lut.y(lo);
 end
 
-function [x, aux] = brentq(f, xa, xb, data)
+function x = brentq(f, xa, xb, data)
 %BRENTQ Brent's root finding in a bracketing interval [xa, xb].
 %   As scipy.optimize.brentq with the default tolerances (xtol = 2e-12, rtol =
 %   4*eps, maxiter = 100), used via scipy.optimize.root_scalar in motulator. The
-%   function is [y, aux] = f(x, data), and aux is that of the latest evaluation (a
-%   side effect of the function in motulator). The function values at the bracket
-%   ends must have opposite signs (or be zero), else x is NaN.
+%   function is y = f(x, data). The function values at the bracket ends must have
+%   opposite signs (or be zero), else x is NaN.
 xtol = 2e-12;
 rtol = 8.881784197001252e-16;
 xpre = xa;
@@ -103,8 +102,8 @@ xblk = 0;
 fblk = 0;
 spre = 0;
 scur = 0;
-[fpre, aux] = f(xpre, data);
-[fcur, aux] = f(xcur, data);
+fpre = f(xpre, data);
+fcur = f(xcur, data);
 if fpre == 0
     x = xpre;
     return
@@ -171,7 +170,7 @@ for i = 1:100
     else
         xcur = xcur - delta;
     end
-    [fcur, aux] = f(xcur, data);
+    fcur = f(xcur, data);
 end
 x = xcur;
 end
@@ -359,14 +358,8 @@ end
 function y = rate_limiter_compute_output(self, T_s, u)
 %RATE_LIMITER_COMPUTE_OUTPUT Limited signal; the state is updated with it by
 %   rate_limiter_update.
-rate = (u - self.old_y)/T_s;
-if rate > self.rate_limit
-    y = self.old_y + T_s*self.rate_limit;
-elseif rate < -self.rate_limit
-    y = self.old_y - T_s*self.rate_limit;
-else
-    y = u;
-end
+du_max = T_s*self.rate_limit;
+y = clip(u, self.old_y - du_max, self.old_y + du_max);
 end
 
 function self = rate_limiter_update(self, y)
@@ -498,7 +491,7 @@ end
 function u_ab = pwm_realized_voltage(self, i_c_ab, u_dc, average)
 %PWM_REALIZED_VOLTAGE Realized voltage from the duty ratios and the measured DC-bus
 %   voltage, corrected for the duty-ratio error using the measured current and the
-%   half carrier period of the previous period (get_realized_voltage): the average
+%   half carrier period of the previous period (get_realized_voltages): the average
 %   of the previous and the ongoing sampling periods if average is true, else that
 %   of the ongoing sampling period. With a discharged DC bus (u_dc <= 0), the
 %   voltage is zero.

@@ -171,10 +171,10 @@ class CControlSystem(control.VectorControlSystem):
     """Control system running the C port, for closed-loop simulations."""
 
     def __init__(self, ctrl: control.VectorControlSystem, dll: ctypes.CDLL) -> None:
-        super().__init__(ctrl.vector_ctrl, ctrl.speed_ctrl)  # For the measurements
+        super().__init__(ctrl.inner_ctrl, ctrl.speed_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
         self.set_enable(ctrl._enable)
-        cvc = cast(control.CurrentVectorController, ctrl.vector_ctrl)
+        cvc = cast(control.CurrentVectorController, ctrl.inner_ctrl)
         cfg = cvc.cfg
         self.T_s = cfg.T_s
         self.dll = dll

@@ -206,7 +206,8 @@ psi_s_abs = abs(fbk.psi_s);
 L = incr_ind_mat(par, fbk.i_s);
 i_a = aux_current(L, fbk.psi_s, fbk.i_s);
 c_tau = 1.5*par.n_p*real(i_a*conj(fbk.psi_s));
-% Directions
+% Directions. If the torque cannot be controlled (e.g., at zero flux), only the flux
+% magnitude is controlled, along the real axis of the controller coordinates.
 if c_tau > 0
     t_psi = 1.5*par.n_p*psi_s_abs*i_a/c_tau;
     t_tau = 1i*fbk.psi_s/c_tau;

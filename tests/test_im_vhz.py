@@ -179,10 +179,10 @@ class CControlSystem(control.VHzControlSystem):
     """Control system running the C port, for closed-loop simulations."""
 
     def __init__(self, ctrl: control.VHzControlSystem, dll: ctypes.CDLL) -> None:
-        super().__init__(ctrl.vhz_ctrl)  # For the measurements
+        super().__init__(ctrl.inner_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
         self.set_enable(ctrl._enable)
-        self.T_s = ctrl.vhz_ctrl.T_s
+        self.T_s = ctrl.inner_ctrl.T_s
         self.dll = dll
         pwm = ctrl.pwm
         d_err = cast(control.InverterNonlinearity | None, pwm.d_err)
@@ -191,16 +191,16 @@ class CControlSystem(control.VHzControlSystem):
         i_0 = 0.0 if d_err is None else I_0
         pwm_values = [t_d, u_th, i_0, pwm.feedforward, pwm.d_min, pwm.single_update]
         slew_rate = d(ctrl.rate_limiter.rate_limit)
-        if isinstance(ctrl.vhz_ctrl, control.OpenLoopVHzController):
+        if isinstance(ctrl.inner_ctrl, control.OpenLoopVHzController):
             self.names = OPEN_LOOP_NAMES
-            u_0, k = vhz_curve(ctrl.vhz_ctrl)
+            u_0, k = vhz_curve(ctrl.inner_ctrl)
             curve = [arr([u_0.real, u_0.imag]), arr([k.real, k.imag])]
-            n_p, T_s = d(ctrl.vhz_ctrl.n_p), d(self.T_s)
+            n_p, T_s = d(ctrl.inner_ctrl.n_p), d(self.T_s)
             self.dll.init_open_loop(n_p, *curve, T_s, slew_rate, arr(pwm_values))
         else:
             self.names = NAMES
             par = PAR
-            cfg = cast(control.ObserverBasedVHzController, ctrl.vhz_ctrl).cfg
+            cfg = cast(control.ObserverBasedVHzController, ctrl.inner_ctrl).cfg
             p = [par.n_p, par.R_s, par.R_R, par.L_sgm, par.L_M]
             c = [cfg.psi_s_nom, cfg.i_s_max, cfg.alpha_psi, cfg.alpha_tau]
             c += [cfg.alpha_f, cfg.k_u, cfg.k_b, cfg.T_s]
