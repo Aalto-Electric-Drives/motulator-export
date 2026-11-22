@@ -242,7 +242,7 @@ static void modulator_init(Modulator *self, int carrier, double N, double t_d,
     }
 }
 
-/* Computational delay (Delay.__call__): the oldest duty ratios out, d_abc in */
+/* Computational delay (Modulator.__call__): the oldest duty ratios out, d_abc in */
 static void modulator_delay(Modulator *self, const double d_abc[3], double out[3])
 {
     if (self->delay == 0) {
@@ -914,7 +914,7 @@ static int simulation_save(Simulation *self, double t, const double complex *x)
     for (int i = 0; i < mdl->n; i++) {
         x_set[i] = x[i];
     }
-    mdl->set_states(mdl, x_set); /* As Model._evaluate */
+    mdl->set_states(mdl, x_set); /* As Model.save */
     double complex u_c_ab = NAN;
     if (!converter->enabled) {
         u_c_ab = model_converter_voltage(mdl, t, x_set, NULL);
@@ -1106,6 +1106,9 @@ static int simulation_integrate(Simulation *self, double t1, int N_eval)
         if (blocked[SIM_CONVERTER]) {
             model_update_diodes(mdl, self->t0, self->x);
         }
+        if (self->t0 >= t1) { /* Transition at the end of the interval */
+            return SIM_OK;
+        }
     }
 }
 
@@ -1119,11 +1122,12 @@ static int simulation_run(Simulation *self, double t_stop, int N_eval)
             return SIM_OK;
         }
         if (due) {
-            /* The gate enable takes effect at the sampling instant, so that the
-             * control system measures the converter with blocked gates */
+            /* The gates are blocked before the measurement, so that the control
+             * system measures the blocked converter, and released after it, since the
+             * released gates follow the command computed now */
             int enabled = self->ctrl->get_enable(self->ctrl);
-            if (enabled != mdl->converter.enabled) {
-                model_set_enable(mdl, t0, self->x, enabled);
+            if (!enabled && mdl->converter.enabled) {
+                model_set_enable(mdl, t0, self->x, 0);
             }
             /* Control, computational delay, and PWM */
             double T_s, d_abc[3];
@@ -1131,6 +1135,9 @@ static int simulation_run(Simulation *self, double t_stop, int N_eval)
                 self->ctrl->run(self->ctrl, mdl, t0, self->x, enabled, &T_s, d_abc);
             if (status != SIM_OK) {
                 return status;
+            }
+            if (enabled && !mdl->converter.enabled) {
+                model_set_enable(mdl, t0, self->x, 1);
             }
             if (!(T_s > SIM_T_TOL)) {
                 return SIM_ERROR_SAMPLING;

@@ -60,8 +60,8 @@ def set_references(
     """
     if ctrl.speed_ctrl is None:
         ext = cast(model.ExternalRotorSpeed, mdl.mechanics)
-        ext.set_external_rotor_speed(lambda t: 2 * pi * (10 + 10 * min(t / 0.1, 1)))
-        cast(Any, ctrl.vector_ctrl).observer.w_M = 2 * pi * 10
+        ext.w_M = lambda t: 2 * pi * (10 + 10 * min(t / 0.1, 1))
+        cast(Any, ctrl.inner_ctrl).observer.w_M = 2 * pi * 10
         ctrl.set_torque_ref(lambda t: (t > t_ref) * tau_M - (t > 0.2) * 2 * tau_M)
     else:
         mdl.mechanics.set_external_load_torque(lambda t: (t > 0.2) * tau_M)
@@ -598,7 +598,6 @@ def example_system(name: str) -> tuple[Any, Any, float]:
         mdl.mechanics.set_external_load_torque(ex.TAU_L)
     elif hasattr(ex, "TAU_M_REF"):  # The torque-control mode
         ctrl.set_torque_ref(ex.TAU_M_REF)
-        mdl.mechanics.set_external_rotor_speed(ex.W_M_EXT)
     elif hasattr(ex, "Q_G_REF"):
         ctrl.set_power_ref(ex.P_G_REF)
         ctrl.set_reactive_power_ref(ex.Q_G_REF)

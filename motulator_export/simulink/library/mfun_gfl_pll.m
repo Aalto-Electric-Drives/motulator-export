@@ -61,7 +61,7 @@ theta = x - pi;
 end
 
 function self = pll_init(u_nom, w_nom, alpha_pll)
-%PLL_INIT Phase-locked loop with the voltage-magnitude filtering (PLL).
+%PLL_INIT Phase-locked loop including the PCC voltage filtering (PLL).
 self = struct('k_p', 2*alpha_pll, 'k_i', alpha_pll*alpha_pll, 'w_g', w_nom, ...
     'theta_c', 0, 'u_g', u_nom);
 end
@@ -76,7 +76,7 @@ w_g = self.w_g;
 rot = exp(-1i*theta_c);
 i_c = rot*i_c_ab;
 u_g_meas = rot*u_g_ab;
-% Filtered voltage magnitude
+% Filtered d component of the PCC voltage
 u_g = self.u_g;
 % Error signal and the angular speed of the coordinate system
 if self.u_g > 0
@@ -93,7 +93,7 @@ out = struct('i_c', i_c, 'u_c', complex(0), 'u_g', u_g, 'u_g_meas', u_g_meas, ..
 end
 
 function self = pll_update(self, T_s, out)
-%PLL_UPDATE Update the angle, the frequency, and the voltage-magnitude estimates.
+%PLL_UPDATE Update the angle, the frequency, and the PCC voltage estimates.
 self.theta_c = wrap(self.theta_c + T_s*out.w_c);
 self.w_g = self.w_g + T_s*self.k_i*out.eps;
 self.u_g = self.u_g + T_s*self.k_p*(real(out.u_g_meas) - self.u_g);

@@ -1425,7 +1425,7 @@ Plecs {
       CodeGenDiscretizationMethod "2"
       CodeGenTarget "Generic"
       MaskType      "FluxObserver (motulator)"
-      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver), created by create_vhz_observer with the default observer gain: the rotor speed w_M is the rate-limited speed reference, without the external speed error signal. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
+      MaskDescription "Reduced-order flux observer in synchronous coordinates (FluxObserver) without speed estimation, with the default observer gain: the rotor speed w_M is the rate-limited speed reference, without the external speed error signal. The observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing periods (DriveControlSystem.get_feedback). The machine model par is a struct with the fields n_p, R_s, R_R, L_sgm, and L_M of InductionMachineInvGammaPars."
       MaskInit      "% Fields of the machine model par (InductionMachineInvGammaPars) for the\n% C-Script\npar_n_p = par.n_p;\npar_R_s = par.R_s;\npar_R_R = par.R_R;\npar_L_sgm = par.L_sgm;\npar_L_M = par.L_M;\n"
       MaskIconFrame on
       MaskIconOpaque off

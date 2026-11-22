@@ -18,7 +18,12 @@ end
 
 function i_c_ref = gfl_current_reference(p_g_ref, q_g_ref, u_g)
 %GFL_CURRENT_REFERENCE Current reference from the power references and the filtered
-%   PCC voltage magnitude u_g (CurrentVectorController.compute_output, before the
-%   CurrentLimiter).
+%   d component u_g of the PCC voltage (CurrentVectorController.compute_output,
+%   before the CurrentLimiter), the voltage bounded away from zero.
+if u_g < 0
+    u_g = -max(-u_g, 1e-6);
+else
+    u_g = max(u_g, 1e-6);
+end
 i_c_ref = (p_g_ref - 1i*q_g_ref)/(1.5*u_g);
 end

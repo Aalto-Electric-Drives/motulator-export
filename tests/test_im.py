@@ -164,10 +164,10 @@ class CControlSystem(control.VectorControlSystem):
         u_th: float,
         i_0: float,
     ) -> None:
-        super().__init__(ctrl.vector_ctrl, ctrl.speed_ctrl)  # For the measurements
+        super().__init__(ctrl.inner_ctrl, ctrl.speed_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
         self.set_enable(ctrl._enable)
-        cfg = cast(control.CurrentVectorController, ctrl.vector_ctrl).cfg
+        cfg = cast(control.CurrentVectorController, ctrl.inner_ctrl).cfg
         self.T_s = cfg.T_s
         self.dll = dll
         # The defaults (None in motulator) are resolved in C from NaN: alpha_i,

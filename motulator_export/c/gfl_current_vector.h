@@ -46,7 +46,7 @@ typedef struct {
 typedef struct {
     double complex i_c;      /* Converter current in controller coordinates */
     double complex u_c;      /* Converter voltage (set by the control system) */
-    double u_g;              /* Filtered PCC voltage magnitude */
+    double u_g;              /* Filtered d component of the PCC voltage */
     double complex u_g_meas; /* Measured PCC voltage */
     double theta_c;          /* Angle of the coordinate system */
     double w_g;              /* Grid angular frequency estimate */
@@ -68,7 +68,7 @@ typedef struct {
     double complex u_c_ab; /* Limited converter voltage in stator coordinates */
 } GFLReferences;
 
-/* Phase-locked loop with the voltage-magnitude filtering (PLL) */
+/* Phase-locked loop including the PCC voltage filtering (PLL) */
 typedef struct {
     double k_p, k_i; /* Gains */
     double w_g, theta_c, u_g; /* States */
@@ -86,9 +86,9 @@ static void pll_update(PLL *self, double T_s, const GFLFeedbacks *out);
 static ComplexPIController gfl_current_controller(double L, double alpha_c,
                                                   double alpha_i);
 
-/* Current reference from the power references and the filtered PCC voltage
- * magnitude u_g (CurrentVectorController.compute_output, before the
- * CurrentLimiter) */
+/* Current reference from the power references and the filtered d component u_g of
+ * the PCC voltage, bounded away from zero (CurrentVectorController.compute_output,
+ * before the CurrentLimiter) */
 static double complex gfl_current_reference(double p_g_ref, double q_g_ref,
                                             double u_g);
 /* Power references corresponding to the limited current reference i_c_ref

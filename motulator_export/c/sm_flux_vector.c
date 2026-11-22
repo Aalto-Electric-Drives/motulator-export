@@ -157,7 +157,7 @@ static int flux_observer_catch(const SynchronousMachinePars *par,
      * must not be taken for the back-EMF */
     double i_max = fmax(cabs(i_s_ab), cabs(i_s_ab - delta_i_s_ab));
     if (cabs(e_s_ab) <= par->R_s * i_max * fmax(L.L_qq / L.L_dd, 1.0)
-        || par->psi_f == 0.0) {
+        || par->psi_f <= 0.0) {
         return 0;
     }
     double sign = (*w_M >= 0.0) ? 1.0 : -1.0;
@@ -342,8 +342,11 @@ static void reference_gen_compute_flux_and_torque_refs(const ReferenceGenerator 
     double tau_M_cl = lut_interp(&self->tau_M_cl, psi_s_abs_ref);
     tau_M_ref = fmin(tau_M_cl, fabs(tau_M_ref)) * sign(tau_M_ref);
 
-    /* MTPV limit */
-    double tau_M_mtpv = lut_interp(&self->tau_M_mtpv, psi_s_abs_ref);
+    /* MTPV limit, none above the flux magnitudes of the table */
+    const LUT *mtpv = &self->tau_M_mtpv;
+    double tau_M_mtpv = (psi_s_abs_ref > mtpv->x[mtpv->n - 1])
+                            ? INFINITY
+                            : lut_interp(mtpv, psi_s_abs_ref);
     if (tau_M_mtpv > 0.0) {
         tau_M_ref = fmin(self->k_mtpv * tau_M_mtpv, fabs(tau_M_ref)) * sign(tau_M_ref);
     }
@@ -422,7 +425,9 @@ static double complex flux_torque_ctrl_compute_output(FluxTorqueController *self
     double complex i_a = flux_torque_ctrl_aux_current(self, fbk->psi_s, fbk->i_s);
     double c_tau = 1.5 * par->n_p * creal(i_a * conj(fbk->psi_s));
 
-    /* Directions */
+    /* Directions. If the torque cannot be controlled (e.g., at zero flux), only the
+     * flux magnitude is controlled, along the real axis of the controller
+     * coordinates. */
     double complex t_psi = (c_tau > 0.0) ? 1.5 * par->n_p * psi_s_abs * i_a / c_tau : 1.0;
     double complex t_tau = (c_tau > 0.0) ? I * fbk->psi_s / c_tau : 0.0;
 
@@ -542,20 +547,22 @@ static void vector_control_feedback(SpeedFluxObserver *observer, int sensorless,
 
 /* Duty ratios for the PWM (modulate), the angle of the voltage reference advanced
  * by k_comp*T_s*w_c, or the zero vector (zero_vector, of a sensorless drive in
- * standby) */
+ * standby), and the limited voltage reference in the controller coordinates without
+ * the angle advance (u_s_lim) */
 static void vector_control_modulate(PWM *pwm, double k_comp, int zero_vector,
                                     const Measurements *meas, const ObserverOutputs *fbk,
                                     References *ref)
 {
+    double complex advance = cexp(I * k_comp * ref->T_s * fbk->w_c);
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
-    u_s_ab_ref *= cexp(I * k_comp * ref->T_s * fbk->w_c);
+    u_s_ab_ref *= advance;
     if (zero_vector) {
         u_s_ab_ref = 0.0;
     }
     double complex u_lim_ab;
     pwm_compute_output(pwm, ref->T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
                        ref->d_abc, &u_lim_ab);
-    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * conj(advance) * u_lim_ab;
 }
 
 static void vector_control_system_init(VectorControlSystem *self,
@@ -634,7 +641,7 @@ static SMVHzControllerCfg sm_vhz_controller_cfg(double i_s_max)
 static void sm_vhz_ctrl_init(SMVHzController *self, SynchronousMachinePars par,
                              const SMVHzControllerCfg *cfg)
 {
-    /* Default observer gain of create_vhz_observer (default_sensorless_k_o) */
+    /* Default observer gain (default_sensorless_k_o) */
     double k_o[2] = {cfg->k_o[0], cfg->k_o[1]};
     if (isnan(k_o[0]) || isnan(k_o[1])) {
         IncrIndMat L_s0 = incr_ind_mat(&par, 0.0);
@@ -713,13 +720,14 @@ static void sm_vhz_control_system_compute_output(SMVHzControlSystem *self,
                                                ref->tau_M, fbk);
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
-     * k_comp*T_s*w_c */
+     * k_comp*T_s*w_c, and the limited voltage reference without the advance */
+    double complex advance = cexp(I * self->k_comp * T_s * fbk->w_c);
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
-    u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
+    u_s_ab_ref *= advance;
     double complex u_lim_ab;
     pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
                        ref->d_abc, &u_lim_ab);
-    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * conj(advance) * u_lim_ab;
     ref->w_M = w_M_ref;
 }
 

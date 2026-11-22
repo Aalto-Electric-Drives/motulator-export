@@ -81,7 +81,9 @@ static double complex im_flux_torque_ctrl_compute_output(IMFluxTorqueController 
     /* Auxiliary current */
     double complex i_a = fbk->psi_R / par->L_sgm;
 
-    /* Torque-production factor and directions */
+    /* Torque-production factor and directions. If the torque cannot be controlled
+     * (e.g., at zero flux), only the flux magnitude is controlled, along the real axis
+     * of the controller coordinates. */
     double c_tau = 1.5 * par->n_p * creal(i_a * conj(fbk->psi_s));
     double complex t_psi = (c_tau > 0.0) ? 1.5 * par->n_p * psi_s_abs * i_a / c_tau : 1.0;
     double complex t_tau = (c_tau > 0.0) ? I * fbk->psi_s / c_tau : 0.0;
@@ -279,7 +281,7 @@ static void im_vhz_ctrl_init(IMVHzController *self, InductionMachineInvGammaPars
                                cfg->i_s_max, INFINITY, cfg->k_u, cfg->k_b);
     im_flux_torque_ctrl_init(&self->flux_torque_ctrl, par, cfg->alpha_psi,
                              cfg->alpha_tau, 0.0);
-    /* Sensorless observer with the default gain of create_vhz_observer */
+    /* Sensorless observer with the default gain (sensorless_k_o) */
     im_flux_observer_init(&self->observer, par, 1);
 }
 
@@ -341,13 +343,14 @@ static void im_vhz_control_system_compute_output(IMVHzControlSystem *self,
                                                   ref->tau_M, fbk);
 
     /* Duty ratios for the PWM, the angle of the voltage reference advanced by
-     * k_comp*T_s*w_c */
+     * k_comp*T_s*w_c, and the limited voltage reference without the advance */
+    double complex advance = cexp(I * self->k_comp * T_s * fbk->w_c);
     double complex u_s_ab_ref = cexp(I * fbk->theta_c) * ref->u_s;
-    u_s_ab_ref *= cexp(I * self->k_comp * T_s * fbk->w_c);
+    u_s_ab_ref *= advance;
     double complex u_lim_ab;
     pwm_compute_output(&self->pwm, T_s, u_s_ab_ref, fbk->u_dc, fbk->w_c, meas->i_c_ab,
                        ref->d_abc, &u_lim_ab);
-    ref->u_s_lim = cexp(-I * fbk->theta_c) * u_lim_ab;
+    ref->u_s_lim = cexp(-I * fbk->theta_c) * conj(advance) * u_lim_ab;
     ref->w_M = w_M_ref;
 }
 

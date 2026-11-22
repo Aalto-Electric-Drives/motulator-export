@@ -381,14 +381,8 @@ static void rate_limiter_init(RateLimiter *self, double rate_limit)
 static double rate_limiter_compute_output(const RateLimiter *self, double T_s,
                                           double u)
 {
-    double rate = (u - self->old_y) / T_s;
-    if (rate > self->rate_limit) {
-        return self->old_y + T_s * self->rate_limit;
-    }
-    if (rate < -self->rate_limit) {
-        return self->old_y - T_s * self->rate_limit;
-    }
-    return u;
+    double du_max = T_s * self->rate_limit;
+    return clip(u, self->old_y - du_max, self->old_y + du_max);
 }
 
 static void rate_limiter_update(RateLimiter *self, double y)

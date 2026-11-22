@@ -232,7 +232,7 @@ class NativeSystem:
             lib.set_dc_bus(h, DC_BUS_TYPES[type(dc_bus)], dc_bus.C_dc)
         modulator = cast(ZOH | CarrierComparison, converter.modulator)
         N = modulator.N if isinstance(modulator, CarrierComparison) else 0
-        delay, single_update = modulator.delay.length, modulator.single_update
+        delay, single_update = modulator.delay, modulator.single_update
         lib.set_modulator(h, N > 0, N, modulator.t_d, delay, single_update)
 
     def set_pwm(self, pwm: Any) -> None:
@@ -267,7 +267,7 @@ class NativeSystem:
             raise NotImplementedError(
                 f"The states {self.fields(control=False)} of the model expected"
             )
-        x = np.asarray(mdl.get_initial_values(), dtype=complex)
+        x = np.asarray(mdl.get_states(), dtype=complex)
         xy = array(np.column_stack((np.real(x), np.imag(x))))
         # The default maximum step (None) is resolved in C, see `Simulation`
         max_step = value(cfg.max_step)
@@ -359,11 +359,11 @@ def check_supported_converter(
     modulator = converter.modulator
     if type(modulator) not in (ZOH, CarrierComparison):
         raise NotImplementedError("Only the modulators ZOH and CarrierComparison")
-    if modulator.delay.length > DELAY_MAX_LENGTH:
+    if modulator.delay > DELAY_MAX_LENGTH:
         raise NotImplementedError(f"At most the delay {DELAY_MAX_LENGTH} supported")
     check_sampling_at_extrema(modulator)
     # The delay buffer is filled at the first call of the modulator
-    initial = not modulator.delay.data
+    initial = modulator.buffer is None
     if isinstance(modulator, CarrierComparison):
         initial &= modulator._rising_edge and modulator._gate_cmd is None
     if not initial:

@@ -139,10 +139,10 @@ class CControlSystem(control.VHzControlSystem):
     """Control system running the C port, for closed-loop simulations."""
 
     def __init__(self, ctrl: control.VHzControlSystem, dll: ctypes.CDLL) -> None:
-        super().__init__(ctrl.vhz_ctrl)  # For the measurements
+        super().__init__(ctrl.inner_ctrl)  # For the measurements
         self.ext_ref = ctrl.ext_ref
         self.set_enable(ctrl._enable)
-        cfg = cast(control.ObserverBasedVHzController, ctrl.vhz_ctrl).cfg
+        cfg = cast(control.ObserverBasedVHzController, ctrl.inner_ctrl).cfg
         self.T_s = cfg.T_s
         self.dll = dll
         p = [PAR.n_p, PAR.R_s, PAR.L_d, PAR.L_q, PAR.psi_f]

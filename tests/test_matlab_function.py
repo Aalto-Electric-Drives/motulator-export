@@ -627,7 +627,7 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
     else:
         ctrl = sm_system(True, 0.0)[0]()[1]
     values, flux_map = _sm.export_values(ctrl)
-    rg = cast(Any, ctrl.vector_ctrl).reference_gen
+    rg = cast(Any, ctrl.inner_ctrl).reference_gen
     eng = harnesses.eng
     eng.addpath(str(reference_luts_mfunction().write(tmp_path).parent), nargout=0)
     # The struct par of a previous initialization (e.g., with a flux map) is cleared
@@ -635,13 +635,25 @@ def test_reference_luts(harnesses: Harnesses, tmp_path: Path, gradnet: bool) -> 
     eng.eval(init_script("fvc", values, flux_map), nargout=0)
     luts = np.asarray(eng.eval("sm_reference_luts(par, cfg.i_s_max)"))
     assert luts.shape == (16, 6)
+    tol = RTOL if gradnet else 1e-12
     tables = [(rg.psi_s_mtpa, "psi_s_mtpa"), (rg.tau_M_cl, "tau_M_cl")]
-    tables.append((rg.tau_M_mtpv, "tau_M_mtpv"))
     for i, (f, name) in enumerate(tables):
         x, y = luts[:, 2 * i], luts[:, 2 * i + 1]
         err = np.max(np.abs(f(x) - y)) / np.max(np.abs(y))
         print(f"  {name}: max relative error {err:.3g}")
-        assert err < (RTOL if gradnet else 1e-12)
+        assert err < tol
+    # The MTPV table has no limit above its last point (right=inf), so the points are
+    # compared directly: those of motulator, padded with the last one in MATLAB
+    xp, fp = rg.tau_M_mtpv.keywords["xp"], rg.tau_M_mtpv.keywords["fp"]
+    m = len(xp)
+    x, y = luts[:, 4], luts[:, 5]
+    err = max(
+        np.max(np.abs(x[:m] - xp)) / np.max(np.abs(xp)),
+        np.max(np.abs(y[:m] - fp)) / np.max(np.abs(fp)),
+    )
+    print(f"  tau_M_mtpv: max relative error {err:.3g}")
+    assert err < tol
+    assert np.all(x[m:] == x[m - 1]) and np.all(y[m:] == y[m - 1])
 
 
 # %%

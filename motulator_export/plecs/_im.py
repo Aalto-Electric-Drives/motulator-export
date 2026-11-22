@@ -167,10 +167,10 @@ def check_supported_machine(machine: Any) -> None:
 def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the control system is not supported."""
     if isinstance(ctrl, VHzControlSystem):
-        check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        check_supported_vhz_ctrl(ctrl.inner_ctrl)
         _check_supported_vhz_control(ctrl)
         return
-    check_supported_vector_ctrl(ctrl.vector_ctrl)
+    check_supported_vector_ctrl(ctrl.inner_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
 
 
@@ -226,11 +226,11 @@ def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
     torque-control mode), or observer-based or open-loop V/Hz control.
     """
     if isinstance(ctrl, VHzControlSystem):
-        if isinstance(ctrl.vhz_ctrl, OpenLoopVHzController):
+        if isinstance(ctrl.inner_ctrl, OpenLoopVHzController):
             return OPEN_LOOP_VHZ_BLOCK
         return VHZ_BLOCK
     torque = torque_control(ctrl)
-    if isinstance(ctrl.vector_ctrl, FluxVectorController):
+    if isinstance(ctrl.inner_ctrl, FluxVectorController):
         return FVC_TORQUE_BLOCK if torque else FVC_BLOCK
     return CVC_TORQUE_BLOCK if torque else CVC_BLOCK
 
@@ -240,12 +240,12 @@ def export_vhz_values(ctrl: VHzControlSystem) -> dict[str, Any]:
     Get the parameter values of the V/Hz control system in the motulator API (see
     `_im_vhz_control.init_script` and `_im_open_loop_vhz_control.init_script`).
     """
-    if isinstance(ctrl.vhz_ctrl, OpenLoopVHzController):
-        u_0, k = vhz_curve(ctrl.vhz_ctrl)
-        values = {"n_p": ctrl.vhz_ctrl.n_p, "T_s": ctrl.vhz_ctrl.T_s}
+    if isinstance(ctrl.inner_ctrl, OpenLoopVHzController):
+        u_0, k = vhz_curve(ctrl.inner_ctrl)
+        values = {"n_p": ctrl.inner_ctrl.n_p, "T_s": ctrl.inner_ctrl.T_s}
         values |= {"u_0": [u_0.real, u_0.imag], "k": [k.real, k.imag]}
     else:
-        vhz = cast(ObserverBasedVHzController, ctrl.vhz_ctrl)
+        vhz = cast(ObserverBasedVHzController, ctrl.inner_ctrl)
         values = _fields(vhz.par, PAR_FIELDS) | _fields(vhz.cfg, VHZ_CFG_FIELDS)
     values["slew_rate"] = ctrl.rate_limiter.rate_limit
     return values | pwm_values(ctrl.pwm)
@@ -277,10 +277,10 @@ def export_values(ctrl: VectorControlSystem) -> dict[str, Any]:
     Get the parameter values of the control system in the motulator API, None for
     the defaults (see `_im_control.init_script` and `_im_fvc_control.init_script`).
     """
-    if isinstance(ctrl.vector_ctrl, FluxVectorController):
-        values = fvc_values(ctrl.vector_ctrl)
+    if isinstance(ctrl.inner_ctrl, FluxVectorController):
+        values = fvc_values(ctrl.inner_ctrl)
     else:
-        values = cvc_values(cast(CurrentVectorController, ctrl.vector_ctrl))
+        values = cvc_values(cast(CurrentVectorController, ctrl.inner_ctrl))
     return values | speed_ctrl_values(ctrl) | pwm_values(ctrl.pwm)
 
 
@@ -407,7 +407,7 @@ def write_model(
             T_s = "vhz_ctrl.T_s"
         else:
             init = vhz_init_script(variables, values, INIT_COMMENT)
-    elif isinstance(ctrl.vector_ctrl, FluxVectorController):
+    elif isinstance(ctrl.inner_ctrl, FluxVectorController):
         values = export_values(ctrl)
         init = fvc_init_script(variables, values, INIT_COMMENT)
     else:

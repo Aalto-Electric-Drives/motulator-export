@@ -13,7 +13,7 @@ import motulator.internal.*
 if isa(ctrl, 'motulator.drive.control.VectorControlSystem')
     % The blocks of the speed-control and the torque-control mode (without the
     % speed controller)
-    vc = ctrl.vector_ctrl;
+    vc = ctrl.inner_ctrl;
     if isa(vc, 'motulator.drive.control.sm.FluxVectorController')
         names = {'Flux-vector control', 'Flux-vector control (torque)'};
         plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
@@ -45,7 +45,7 @@ if isa(ctrl, 'motulator.drive.control.VectorControlSystem')
     c.T_s = vc.cfg.T_s;
     c.T_s_expr = 'vector_ctrl.cfg.T_s';
 elseif isa(ctrl, 'motulator.drive.control.VHzControlSystem')
-    vhz = ctrl.vhz_ctrl;
+    vhz = ctrl.inner_ctrl;
     if isa(vhz, 'motulator.drive.control.sm.ObserverBasedVHzController')
         c.name = 'Observer-based VHz control (SM)';
         plant = {'machine', 'motulator.drive.model.SynchronousMachine'};
@@ -103,7 +103,7 @@ end
 % Sensored vector control needs the sensor of its measured rotor angle (synchronous
 % machine) or speed (induction machine) in the drive, as in motulator
 if isa(ctrl, 'motulator.drive.control.VectorControlSystem') ...
-        && ~ctrl.vector_ctrl.cfg.sensorless
+        && ~ctrl.inner_ctrl.cfg.sensorless
     if isa(mdl.machine, 'motulator.drive.model.SynchronousMachine')
         meas = 'theta_M';
         sensor = 'position sensor';

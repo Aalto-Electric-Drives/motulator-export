@@ -229,9 +229,9 @@ def check_supported_pwm(
         raise NotImplementedError("Only space-vector PWM supported")
     # The angle-advance factor of the controller: zero with the direct discrete-time
     # current controller, which includes the delays in its design
-    cfg = getattr(getattr(ctrl, "vector_ctrl", None), "cfg", None)
+    cfg = getattr(ctrl.inner_ctrl, "cfg", None)
     k_comp = 0.0 if getattr(cfg, "discrete", False) else 1.5
-    if ctrl.k_comp != k_comp:
+    if ctrl.inner_ctrl.k_comp != k_comp:
         raise NotImplementedError(f"Only k_comp = {k_comp} of the controller supported")
     if pwm.k_pred != 1.5:
         raise NotImplementedError("Only k_pred = 1.5 supported")
@@ -270,7 +270,7 @@ def check_mechanical_sensor(mdl: Drive, ctrl: DriveControlSystem) -> None:
     the system model: the rotor angle of a synchronous machine or the rotor speed of
     an induction machine.
     """
-    if not isinstance(ctrl, VectorControlSystem) or ctrl.vector_ctrl.sensorless:
+    if not isinstance(ctrl, VectorControlSystem) or ctrl.inner_ctrl.sensorless:
         return
     if isinstance(mdl.machine, SynchronousMachine):
         if mdl.sensors.theta_M is None:
@@ -334,5 +334,5 @@ def check_supported_dc_bus(
         c not in dc_bus.converters for c in expected
     ):
         raise NotImplementedError("DC bus shared with other converters not supported")
-    if dc_bus.inp.i_dc is not None:
+    if callable(dc_bus.inp.i_dc) or dc_bus.inp.i_dc != 0.0:
         raise NotImplementedError("External DC current not supported")

@@ -8,10 +8,10 @@ with a mask of the arguments of its class (see `_control`):
   blocks of its methods (`get_measurement` and `modulate`), the monitored signals,
   the `RateLimiter` of the speed reference, the `PWM` (with the MME overmodulation by
   default), and the `ObserverBasedVHzController`
-- ObserverBasedVHzController(par, cfg), containing the `FluxObserver` (created by
-  `create_vhz_observer`, the rotor speed being the rate-limited speed reference),
-  the `ReferenceGenerator`, the `FluxTorqueController`, and the low-pass filter of
-  the torque estimate (its state `tau_M_lpf`)
+- ObserverBasedVHzController(par, cfg), containing the `FluxObserver` (without speed
+  estimation, the rotor speed being the rate-limited speed reference), the
+  `ReferenceGenerator`, the `FluxTorqueController`, and the low-pass filter of the
+  torque estimate (its state `tau_M_lpf`)
 
 The mask of the VHzControlSystem has its arguments from the model initialization
 (`init_script`): the V/Hz controller `vhz_ctrl` (the machine model `par` and the
@@ -95,13 +95,12 @@ def _flux_observer() -> CBlock:
     """Flux observer without speed estimation (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
-        "Reduced-order flux observer in synchronous coordinates (FluxObserver), "
-        "created by create_vhz_observer with the default observer gain: the rotor "
-        "speed w_M is the rate-limited speed reference, without the external speed "
-        "error signal. The observer uses the voltage u_s_zoh_ab of the ongoing "
-        "sampling period, and the output fbk.u_s is the voltage u_s_ab averaged over "
-        "the previous and ongoing periods (DriveControlSystem.get_feedback)."
-        + PAR_DESCRIPTION,
+        "Reduced-order flux observer in synchronous coordinates (FluxObserver) without "
+        "speed estimation, with the default observer gain: the rotor speed w_M is the "
+        "rate-limited speed reference, without the external speed error signal. The "
+        "observer uses the voltage u_s_zoh_ab of the ongoing sampling period, and the "
+        "output fbk.u_s is the voltage u_s_ab averaged over the previous and ongoing "
+        "periods (DriveControlSystem.get_feedback)." + PAR_DESCRIPTION,
         [
             Param("par", PAR_PROMPT, "par"),
             Param("T_s", "T_s: Sampling period (s)", "cfg.T_s"),

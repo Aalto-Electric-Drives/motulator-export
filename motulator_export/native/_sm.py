@@ -97,11 +97,11 @@ class SynchronousMachineDriveSystem(NativeSystem):
         # Control system
         if isinstance(ctrl, VHzControlSystem):
             v, flux_map = export_vhz_values(ctrl)
-        elif isinstance(ctrl.vector_ctrl, CurrentVectorController):
-            v, flux_map = cvc_values(ctrl.vector_ctrl)
+        elif isinstance(ctrl.inner_ctrl, CurrentVectorController):
+            v, flux_map = cvc_values(ctrl.inner_ctrl)
         else:
             ctrl = cast(VectorControlSystem, ctrl)
-            v, flux_map = fvc_values(cast(FluxVectorController, ctrl.vector_ctrl))
+            v, flux_map = fvc_values(cast(FluxVectorController, ctrl.inner_ctrl))
         if flux_map is not None:
             self.set_gradnet(lib.control_flux_map(h), flux_map)
             lib.set_control_machine_flux_map(h, v["n_p"], v["R_s"])
@@ -111,7 +111,7 @@ class SynchronousMachineDriveSystem(NativeSystem):
         if isinstance(ctrl, VHzControlSystem):
             lib.set_vhz_controller(h, *c_args(v, [*VHZ_CFG_FIELDS, "slew_rate"]))
         else:
-            if isinstance(ctrl.vector_ctrl, CurrentVectorController):
+            if isinstance(ctrl.inner_ctrl, CurrentVectorController):
                 lib.set_current_vector_controller(h, *c_args(v, CVC_CFG_FIELDS))
             else:
                 lib.set_flux_vector_controller(h, *c_args(v, CFG_FIELDS))
@@ -148,9 +148,9 @@ class SynchronousMachineDriveSystem(NativeSystem):
 def _check_supported_control(ctrl: Any) -> None:
     """Raise an error if the control system is not supported."""
     if type(ctrl) is VHzControlSystem:
-        check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        check_supported_vhz_ctrl(ctrl.inner_ctrl)
     elif type(ctrl) is VectorControlSystem:
-        check_supported_vector_ctrl(ctrl.vector_ctrl)
+        check_supported_vector_ctrl(ctrl.inner_ctrl)
         check_supported_speed_control(ctrl)
     else:
         raise NotImplementedError(

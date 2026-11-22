@@ -10,9 +10,9 @@
  *
  * The V/Hz curve is affine, u_s_ref(w_s) = u_0 + k*w_s, given by the voltage u_0 at
  * zero frequency and the slope k. The PWM uses the MME overmodulation (the default
- * PWM of VHzControlSystem). As in the other control
- * systems, the output function has no side effects (apart from workspace variables),
- * and all states are updated in the update function.
+ * PWM of VHzControlSystem). As in the other control systems, the output function has
+ * no side effects (apart from workspace variables), and all states are updated in the
+ * update function.
  */
 
 #ifndef MOTULATOR_IM_OPEN_LOOP_VHZ_H
@@ -62,8 +62,8 @@ typedef struct {
     double d_abc[3];
     double w_M; /* Rate-limited speed reference */
     double complex u_s;
-    double complex u_s_lim; /* Limited voltage reference, excluding the
-                             * compensation (PWM.limited_voltage) */
+    double complex u_s_lim; /* Limited voltage reference (PWM.limited_voltage),
+                             * excluding the compensation and the angle advance */
 } IMOpenLoopVHzReferences;
 
 /* Measured signals */

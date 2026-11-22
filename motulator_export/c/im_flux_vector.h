@@ -10,7 +10,7 @@
  *                                                 ObserverBasedVHzControllerCfg,
  *                                                 ObserverBasedVHzController
  *   motulator/drive/control/_im_observers.py      create_speed_flux_observer,
- *                                                 create_vhz_observer
+ *                                                 sensorless_k_o
  *   motulator/drive/control/_common.py            FluxTorqueControllerBase
  *   motulator/drive/control/_base.py              DriveControlSystem,
  *                                                 VectorControlSystem,
@@ -21,10 +21,10 @@
  * the measurements and the feedback signals of current-vector control. In V/Hz
  * control, its flux observer is used without speed estimation, the rotor speed being
  * the rate-limited speed reference. The observer gain k_o is the default of
- * motulator. The PWM of V/Hz control uses the MME
- * overmodulation (the default PWM of VHzControlSystem). As in the other control
- * systems, the output function has no side effects (apart from workspace variables),
- * and all states are updated in the update function.
+ * motulator. The PWM of V/Hz control uses the MME overmodulation (the default PWM of
+ * VHzControlSystem). As in the other control systems, the output function has no
+ * side effects (apart from workspace variables), and all states are updated in the
+ * update function.
  */
 
 #ifndef MOTULATOR_IM_FLUX_VECTOR_H
@@ -138,8 +138,8 @@ typedef struct {
     double tau_M; /* Limited torque reference */
     double psi_s; /* Stator flux reference */
     double complex u_s;
-    double complex u_s_lim; /* Limited voltage reference, excluding the
-                             * compensation (PWM.limited_voltage) */
+    double complex u_s_lim; /* Limited voltage reference (PWM.limited_voltage),
+                             * excluding the compensation and the angle advance */
 } IMVHzReferences;
 
 /* Measured signals */

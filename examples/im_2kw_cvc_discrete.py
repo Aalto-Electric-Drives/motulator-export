@@ -58,7 +58,7 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
     )
     mdl = model.Drive(
         model.InductionMachine(par),
-        model.ExternalRotorSpeed(),
+        model.ExternalRotorSpeed(W_M_EXT),
         # Fine quantization (not modeled in PLECS)
         model.VoltageSourceConverter(
             u_dc=540, modulator=model.CarrierComparison(N=2**24)
@@ -81,7 +81,6 @@ def build_system() -> tuple[model.Drive, control.VectorControlSystem]:
 if __name__ == "__main__":
     mdl, ctrl = build_system()
     ctrl.set_torque_ref(TAU_M_REF)
-    mdl.mechanics.set_external_rotor_speed(W_M_EXT)
     path = Path(__file__).with_name("im_2kw_cvc_discrete.plecs")
     tmp = write_plecs_model(path, mdl, ctrl, T_STOP)
 

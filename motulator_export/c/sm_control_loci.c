@@ -19,7 +19,6 @@ static double linspace(double start, double stop, int num, int k)
 typedef struct {
     const SynchronousMachinePars *par;
     double magnitude;
-    double complex i_s; /* Current at the latest evaluation (side effect) */
 } LocusData;
 
 static double mtpa_cond(double gamma, void *data)
@@ -36,9 +35,9 @@ static double mtpv_flux_cond(double delta, void *data)
 {
     LocusData *d = (LocusData *)data;
     double complex psi_s = d->magnitude * cexp(I * delta);
-    d->i_s = iterate_i_s_dq(d->par, psi_s);
-    IncrIndMat L = incr_ind_mat(d->par, d->i_s);
-    double complex i_a = aux_current(&L, psi_s, d->i_s);
+    double complex i_s = iterate_i_s_dq(d->par, psi_s);
+    IncrIndMat L = incr_ind_mat(d->par, i_s);
+    double complex i_a = aux_current(&L, psi_s, i_s);
     return creal(i_a * conj(psi_s));
 }
 
@@ -63,7 +62,7 @@ static void angle_range(const SynchronousMachinePars *par, double range[2])
 static double compute_mtpa_current_angle(const SynchronousMachinePars *par,
                                          double i_s_abs)
 {
-    LocusData d = {par, i_s_abs, 0.0};
+    LocusData d = {par, i_s_abs};
     double r[2];
     angle_range(par, r);
     if (mtpa_cond(r[0], &d) * mtpa_cond(r[1], &d) > 0.0) {
@@ -75,7 +74,7 @@ static double compute_mtpa_current_angle(const SynchronousMachinePars *par,
 static double compute_mtpv_flux_angle(const SynchronousMachinePars *par,
                                       double psi_s_abs, double complex *i_s)
 {
-    LocusData d = {par, psi_s_abs, NAN};
+    LocusData d = {par, psi_s_abs};
     double r[2];
     angle_range(par, r);
     if (mtpv_flux_cond(r[0], &d) * mtpv_flux_cond(r[1], &d) > 0.0) {
@@ -83,14 +82,14 @@ static double compute_mtpv_flux_angle(const SynchronousMachinePars *par,
         return NAN; /* No root in the range */
     }
     double delta = brentq(mtpv_flux_cond, r[0], r[1], &d);
-    *i_s = d.i_s; /* Current at the latest evaluation, as in motulator */
+    *i_s = iterate_i_s_dq(par, psi_s_abs * cexp(I * delta)); /* Current at the root */
     return delta;
 }
 
 static double complex compute_mtpv_current(const SynchronousMachinePars *par,
                                            double i_s_abs)
 {
-    LocusData d = {par, i_s_abs, 0.0};
+    LocusData d = {par, i_s_abs};
     double r[2];
     angle_range(par, r);
     if (mtpv_current_cond(r[0], &d) * mtpv_current_cond(r[1], &d) >= 0.0) {
@@ -127,15 +126,32 @@ static void compute_reference_luts(const SynchronousMachinePars *par, double i_s
         psi_s_mtpa_max = psi_s;
     }
 
-    /* MTPV limit */
-    luts->tau_M_mtpv.n = num;
+    /* MTPV limit at the flux magnitudes where the MTPV exists, padded with the last
+     * of these points, or no limit if the MTPV exists nowhere. Above the table, there
+     * is no limit (reference_gen_compute_flux_and_torque_refs). */
+    LUT *mtpv = &luts->tau_M_mtpv;
+    int m = 0;
     for (int k = 0; k < num; k++) {
         double psi_s_abs = linspace(0.0, cabs(psi_s_mtpa_max), num, k);
         double delta = compute_mtpv_flux_angle(par, psi_s_abs, &i_s);
+        if (isnan(delta)) {
+            continue;
+        }
         psi_s = psi_s_abs * cexp(I * delta);
-        luts->tau_M_mtpv.x[k] = cabs(psi_s);
-        luts->tau_M_mtpv.y[k] = torque(par, i_s, psi_s);
+        mtpv->x[m] = cabs(psi_s);
+        mtpv->y[m] = torque(par, i_s, psi_s);
+        m++;
     }
+    if (m == 0) {
+        mtpv->x[0] = 0.0;
+        mtpv->y[0] = INFINITY;
+        m = 1;
+    }
+    for (int k = m; k < num; k++) {
+        mtpv->x[k] = mtpv->x[m - 1];
+        mtpv->y[k] = mtpv->y[m - 1];
+    }
+    mtpv->n = num;
 
     /* Current limit, from the MTPV current angle (or, if no MTPV, from pi for PM
      * machines and pi/2 for machines without PMs) to the MTPA current angle */

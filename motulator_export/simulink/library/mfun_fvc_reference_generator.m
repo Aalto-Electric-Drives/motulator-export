@@ -239,8 +239,12 @@ psi_s_abs_ref = min(psi_s_abs_ref, reference_gen_max_flux(self, w_m, u_dc));
 % Current limit
 tau_M_cl = lut_interp(self.tau_M_cl, psi_s_abs_ref);
 tau_M_ref = min(tau_M_cl, abs(tau_M_ref))*sign(tau_M_ref);
-% MTPV limit
-tau_M_mtpv = lut_interp(self.tau_M_mtpv, psi_s_abs_ref);
+% MTPV limit, none above the flux magnitudes of the table
+if psi_s_abs_ref > self.tau_M_mtpv.x(end)
+    tau_M_mtpv = Inf;
+else
+    tau_M_mtpv = lut_interp(self.tau_M_mtpv, psi_s_abs_ref);
+end
 if tau_M_mtpv > 0
     tau_M_ref = min(self.k_mtpv*tau_M_mtpv, abs(tau_M_ref))*sign(tau_M_ref);
 end

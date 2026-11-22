@@ -4,7 +4,7 @@
  *
  * Python counterparts:
  *   motulator/drive/control/_sm_observers.py      FluxObserver, SpeedFluxObserver,
- *                                                 create_vhz_observer
+ *                                                 default_sensorless_k_o
  *   motulator/drive/control/_sm_reference_gen.py  ReferenceGenerator (LUT-based,
  *                                                 with the current reference)
  *   motulator/drive/control/_sm_flux_vector.py    FluxTorqueController,
@@ -126,8 +126,8 @@ typedef struct {
     double psi_s;
     double complex i_s; /* Current reference of current-vector control */
     double complex u_s;
-    double complex u_s_lim; /* Limited voltage reference, excluding the
-                             * compensation (PWM.limited_voltage) */
+    double complex u_s_lim; /* Limited voltage reference (PWM.limited_voltage),
+                             * excluding the compensation and the angle advance */
     int enabled;            /* Gate enable */
 } References;
 
@@ -212,7 +212,7 @@ typedef struct {
 } SMVHzControllerCfg;
 
 /* Observer-based V/Hz controller (ObserverBasedVHzController): the flux observer
- * without speed estimation (create_vhz_observer), whose rotor speed is the
+ * without speed estimation (FluxObserver), whose rotor speed is the
  * rate-limited speed reference, and the flux and torque references from the
  * low-pass-filtered torque estimate */
 typedef struct {

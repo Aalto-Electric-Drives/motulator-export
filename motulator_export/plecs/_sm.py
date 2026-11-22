@@ -244,10 +244,10 @@ def check_supported(
 def _check_supported_control(ctrl: VectorControlSystem | VHzControlSystem) -> None:
     """Raise an error if the control system is not supported."""
     if isinstance(ctrl, VHzControlSystem):
-        check_supported_vhz_ctrl(ctrl.vhz_ctrl)
+        check_supported_vhz_ctrl(ctrl.inner_ctrl)
         _check_supported_vhz_control(ctrl)
         return
-    check_supported_vector_ctrl(ctrl.vector_ctrl)
+    check_supported_vector_ctrl(ctrl.inner_ctrl)
     _check_supported_speed_control(ctrl, dead_time=True)
 
 
@@ -330,7 +330,7 @@ def control_block(ctrl: VectorControlSystem | VHzControlSystem) -> ControlBlock:
     if isinstance(ctrl, VHzControlSystem):
         return VHZ_BLOCK
     torque = torque_control(ctrl)
-    if isinstance(ctrl.vector_ctrl, CurrentVectorController):
+    if isinstance(ctrl.inner_ctrl, CurrentVectorController):
         return CVC_TORQUE_BLOCK if torque else CVC_BLOCK
     return FVC_TORQUE_BLOCK if torque else FVC_BLOCK
 
@@ -355,7 +355,7 @@ def export_values(
         GradNet flux map of the control system, None if constant inductances are used.
 
     """
-    vector_ctrl = ctrl.vector_ctrl
+    vector_ctrl = ctrl.inner_ctrl
     if isinstance(vector_ctrl, CurrentVectorController):
         values, flux_map = cvc_values(vector_ctrl)
     else:
@@ -426,7 +426,7 @@ def export_vhz_values(
     Get the parameter values of the V/Hz control system in the motulator API (see
     `_sm_vhz_control.init_script` and `export_values`).
     """
-    values, flux_map = vhz_values(cast(ObserverBasedVHzController, ctrl.vhz_ctrl))
+    values, flux_map = vhz_values(cast(ObserverBasedVHzController, ctrl.inner_ctrl))
     values["slew_rate"] = ctrl.rate_limiter.rate_limit
     return values | pwm_values(ctrl.pwm), flux_map
 
@@ -734,7 +734,7 @@ def write_model(
         script = vhz_init_script
     else:
         values, flux_map = export_values(ctrl)
-        cvc = isinstance(ctrl.vector_ctrl, CurrentVectorController)
+        cvc = isinstance(ctrl.inner_ctrl, CurrentVectorController)
         script = cvc_init_script if cvc else init_script
     ref, mech_signal = drive_references(mdl, ctrl, values["T_s"])
     variables = export_plant_variables(mdl, front)

@@ -18,8 +18,8 @@ static double complex source_voltage(const ThreePhaseSource *self, double t,
     return e_g_ab;
 }
 
-/* exp(1j*theta_g) of the angle state of the source, wrapped as by
- * ThreePhaseSource.set_states */
+/* exp(1j*theta_g) of the angle state of the source, wrapped as the angle states of
+ * ThreePhaseSource (ThreePhaseSource.angles) */
 static double complex source_rotation(double complex theta_g)
 {
     return cexp(I * wrap(creal(theta_g)));
@@ -121,7 +121,7 @@ static void grid_ac_port(const Model *base, double t, const double complex *x,
 }
 
 /* Keep the angle of the source within [-pi, pi) at the start of an integration
- * interval (ThreePhaseSource.set_states) */
+ * interval (ThreePhaseSource.angles) */
 static void grid_set_states(const Model *base, double complex *x)
 {
     const GridConverterSystem *self = (const GridConverterSystem *)base;

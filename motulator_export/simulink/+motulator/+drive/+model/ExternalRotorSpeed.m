@@ -1,8 +1,8 @@
 classdef ExternalRotorSpeed < motulator.internal.Object
     %EXTERNALROTORSPEED Rotor angle integrated from an external rotor speed.
-    %   MECHANICS = EXTERNALROTORSPEED() as in motulator. The state (state.theta_M)
-    %   is the initial rotor angle, and SET_EXTERNAL_ROTOR_SPEED(W_M) sets the rotor
-    %   speed: a constant or a StepSignal.
+    %   MECHANICS = EXTERNALROTORSPEED(W_M) as in motulator. The rotor speed W_M is a
+    %   constant or a StepSignal, defaults to 0, and it can be changed later through
+    %   the property w_M. The state (state.theta_M) is the initial rotor angle.
 
     properties
         state = struct('theta_M', 0)  % Initial rotor angle
@@ -11,12 +11,7 @@ classdef ExternalRotorSpeed < motulator.internal.Object
 
     methods
         function obj = ExternalRotorSpeed(varargin)
-            obj.set_args(varargin, {}, {});
-        end
-
-        function set_external_rotor_speed(obj, w_M)
-            %SET_EXTERNAL_ROTOR_SPEED Set the external rotor speed (rad/s).
-            obj.w_M = w_M;
+            obj.set_args(varargin, {'w_M'}, {});
         end
     end
 end

@@ -142,7 +142,7 @@ function s = ObserverBasedVHzController(par, cfg)
 % First-order angle estimation, the pole matched to the sampling period
 % (matched_pole)
 k_theta = -expm1(-cfg.alpha_o*cfg.T_s)/cfg.T_s;
-% Default observer gain of create_vhz_observer, k_o(w_m) = k0 + k1*abs(w_m)
+% Default observer gain (default_sensorless_k_o), k_o(w_m) = k0 + k1*abs(w_m)
 % (k0 = NaN: sigma0 of the machine model, see the FluxObserver)
 k_o = cfg.k_o;
 if isempty(k_o)

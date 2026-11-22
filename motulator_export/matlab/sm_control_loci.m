@@ -12,7 +12,7 @@
 % motulator_export.simulink), which the mask initialization of the block
 % ReferenceGenerator calls, so that the block does not compute them at its start.
 
-function [y, i_s] = mtpa_cond(gamma, d)
+function y = mtpa_cond(gamma, d)
 %MTPA_COND Condition of the MTPA current angle gamma, d.magnitude being the current
 %   magnitude.
 i_s = d.magnitude*exp(1i*gamma);
@@ -22,9 +22,9 @@ psi_a = aux_flux(L, i_s, psi_s);
 y = real(psi_a*conj(i_s));
 end
 
-function [y, i_s] = mtpv_flux_cond(delta, d)
+function y = mtpv_flux_cond(delta, d)
 %MTPV_FLUX_COND Condition of the MTPV flux angle delta, d.magnitude being the flux
-%   magnitude. The current is returned as the side effect of motulator.
+%   magnitude.
 psi_s = d.magnitude*exp(1i*delta);
 i_s = iterate_i_s_dq(d.par, psi_s);
 L = incr_ind_mat(d.par, i_s);
@@ -32,7 +32,7 @@ i_a = aux_current(L, psi_s, i_s);
 y = real(i_a*conj(psi_s));
 end
 
-function [y, i_s] = mtpv_current_cond(gamma, d)
+function y = mtpv_current_cond(gamma, d)
 %MTPV_CURRENT_COND Condition of the MTPV current angle gamma, d.magnitude being the
 %   current magnitude.
 i_s = d.magnitude*exp(1i*gamma);
@@ -71,8 +71,8 @@ if mtpv_flux_cond(r(1), d)*mtpv_flux_cond(r(2), d) > 0
     delta = NaN; % No root in the range
     return
 end
-% The current at the latest evaluation, as in motulator
-[delta, i_s] = brentq(@mtpv_flux_cond, r(1), r(2), d);
+delta = brentq(@mtpv_flux_cond, r(1), r(2), d);
+i_s = iterate_i_s_dq(par, psi_s_abs*exp(1i*delta)); % Current at the root
 end
 
 function i_s = compute_mtpv_current(par, i_s_abs)
@@ -110,13 +110,26 @@ for k = 1:num
     luts(k, 1:2) = [locus_torque(par, i_s, psi_s), abs(psi_s)];
 end
 i_s_mtpa_max = i_s;
-% MTPV limit
+% MTPV limit at the flux magnitudes where the MTPV exists, padded with the last of
+% these points, or no limit if the MTPV exists nowhere. Above the table, there is no
+% limit (reference_gen_compute_flux_and_torque_refs).
 psi_s_abs = linspace(0, abs(psi_s), num);
+m = 0;
 for k = 1:num
     [delta, i_s] = compute_mtpv_flux_angle(par, psi_s_abs(k));
+    if isnan(delta)
+        continue
+    end
+    m = m + 1;
     psi_s = psi_s_abs(k)*exp(1i*delta);
-    luts(k, 5:6) = [abs(psi_s), locus_torque(par, i_s, psi_s)];
+    luts(m, 5:6) = [abs(psi_s), locus_torque(par, i_s, psi_s)];
 end
+if m == 0
+    m = 1;
+    luts(1, 5:6) = [0, Inf];
+end
+luts(m+1:num, 5) = luts(m, 5);
+luts(m+1:num, 6) = luts(m, 6);
 % Current limit, from the MTPV current angle (or, if no MTPV, from pi for PM
 % machines and pi/2 for machines without PMs) to the MTPA current angle
 gamma1 = angle(compute_mtpv_current(par, i_s_max));

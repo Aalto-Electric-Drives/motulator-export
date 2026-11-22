@@ -145,7 +145,7 @@ end
 function u_ab = pwm_realized_voltage(self, i_c_ab, u_dc, average)
 %PWM_REALIZED_VOLTAGE Realized voltage from the duty ratios and the measured DC-bus
 %   voltage, corrected for the duty-ratio error using the measured current and the
-%   half carrier period of the previous period (get_realized_voltage): the average
+%   half carrier period of the previous period (get_realized_voltages): the average
 %   of the previous and the ongoing sampling periods if average is true, else that
 %   of the ongoing sampling period. With a discharged DC bus (u_dc <= 0), the
 %   voltage is zero.

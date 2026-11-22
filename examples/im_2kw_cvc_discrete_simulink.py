@@ -26,7 +26,7 @@ from _compare import (
     simulate_motulator,
     write_simulink_model,
 )
-from im_2kw_cvc_discrete import T_STOP, TAU_M_REF, W_M_EXT, build_system
+from im_2kw_cvc_discrete import T_STOP, TAU_M_REF, build_system
 
 from motulator_export import simulink
 
@@ -34,7 +34,6 @@ from motulator_export import simulink
 if __name__ == "__main__":
     mdl, ctrl = build_system()
     ctrl.set_torque_ref(TAU_M_REF)
-    mdl.mechanics.set_external_rotor_speed(W_M_EXT)
     path = write_simulink_model("im_2kw_cvc_discrete", mdl, ctrl, T_STOP)
     require_matlab_engine()
 

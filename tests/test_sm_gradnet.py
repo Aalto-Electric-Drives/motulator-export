@@ -197,7 +197,8 @@ def setup(dll: ctypes.CDLL) -> Any:
     out = (ctypes.c_double * 3)()
     dll.set_par(d(2), d(0.63), out)
     print("  psi_f, L_d0, L_q0: C", np.array(out), "Python", end=" ")
-    print(np.array([est_par.psi_f, est_par.L_d0, est_par.L_q0]))
+    L_0 = est_par.incr_ind_mat(0j)
+    print(np.array([est_par.psi_f, L_0[0, 0], L_0[1, 1]]))
     return est_par
 
 

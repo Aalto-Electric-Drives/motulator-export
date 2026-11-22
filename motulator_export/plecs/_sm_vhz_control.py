@@ -8,18 +8,18 @@ with a mask of the arguments of its class (see `_control`):
   blocks of its methods (`get_measurement` and `modulate`), the monitored signals,
   the `RateLimiter` of the speed reference, the `PWM` (with the MME overmodulation by
   default), and the `ObserverBasedVHzController`
-- ObserverBasedVHzController(par, cfg), containing the `FluxObserver` (created by
-  `create_vhz_observer`, the rotor speed being the rate-limited speed reference),
-  the `ReferenceGenerator`, the `FluxTorqueController` (without the integral
-  action), and the low-pass filter of the torque estimate (its state `tau_M_lpf`)
+- ObserverBasedVHzController(par, cfg), containing the `FluxObserver` (without speed
+  estimation, the rotor speed being the rate-limited speed reference), the
+  `ReferenceGenerator`, the `FluxTorqueController` (without the integral action), and
+  the low-pass filter of the torque estimate (its state `tau_M_lpf`)
 
 The mask initialization of the ObserverBasedVHzController resolves the defaults of
-`ObserverBasedVHzController.__init__` and `create_vhz_observer`. The mask of the
-VHzControlSystem has its arguments from the model initialization (`init_script`):
-the V/Hz controller `vhz_ctrl` (the machine model `par` and the configuration
-`cfg`), the slew rate `slew_rate` of the speed reference, and the PWM `pwm`. The
-signal vectors are those of flux-vector control (`sm_flux_vector.h`), and the
-ReferenceGenerator and the FluxTorqueController are its blocks (`_sm_control`).
+`ObserverBasedVHzController.__init__`. The mask of the VHzControlSystem has its
+arguments from the model initialization (`init_script`): the V/Hz controller
+`vhz_ctrl` (the machine model `par` and the configuration `cfg`), the slew rate
+`slew_rate` of the speed reference, and the PWM `pwm`. The signal vectors are those of
+flux-vector control (`sm_flux_vector.h`), and the ReferenceGenerator and the
+FluxTorqueController are its blocks (`_sm_control`).
 
 """
 
@@ -97,11 +97,11 @@ def _flux_observer() -> CBlock:
     """Flux observer without speed estimation (FluxObserver)."""
     mask = Mask(
         "FluxObserver (motulator)",
-        "Flux observer in estimated rotor coordinates (FluxObserver), created by "
-        "create_vhz_observer: the rotor speed w_M is the rate-limited speed "
-        "reference, and the PM-flux estimation gain is zero. The observer uses the "
-        "voltage u_s_zoh_ab of the ongoing sampling period, and the output fbk.u_s "
-        "is the voltage u_s_ab averaged over the previous and ongoing periods "
+        "Flux observer in estimated rotor coordinates (FluxObserver) without speed "
+        "estimation: the rotor speed w_M is the rate-limited speed reference, and the "
+        "PM-flux estimation gain is zero. The observer uses the voltage u_s_zoh_ab of "
+        "the ongoing sampling period, and the output fbk.u_s is the voltage u_s_ab "
+        "averaged over the previous and ongoing periods "
         "(DriveControlSystem.get_feedback). In standby, the voltages are unknown "
         "(NaN), and the flux estimate follows the current model alone, with the "
         "open-circuit voltage of the model as the voltage." + PAR_DESCRIPTION,
@@ -193,12 +193,12 @@ def _flux_observer() -> CBlock:
 
 
 # Mask initialization of the ObserverBasedVHzController:
-# ObserverBasedVHzController.__init__ and create_vhz_observer
+# ObserverBasedVHzController.__init__
 VHZ_INIT = (
     "% First-order angle estimation, the pole matched to the sampling period\n"
     "% (matched_pole)\n"
     "k_theta = -expm1(-cfg.alpha_o*cfg.T_s)/cfg.T_s;\n"
-    "% Default observer gain of create_vhz_observer, k_o(w_m) = k0 + k1*abs(w_m)\n"
+    "% Default observer gain (default_sensorless_k_o), k_o(w_m) = k0 + k1*abs(w_m)\n"
     "% (k0 = NaN: sigma0 of the machine model, see the FluxObserver)\n"
     "k_o = cfg.k_o;\n"
     "if isempty(k_o)\n"

@@ -357,7 +357,7 @@ e_s_ab = -L.L_qq*delta_i_s_ab/T_s; % Back-EMF
 % The resistive decay of a residual current (the d-axis current through L_d) must
 % not be taken for the back-EMF
 i_max = max(abs(i_s_ab), abs(i_s_ab - delta_i_s_ab));
-caught = abs(e_s_ab) > par.R_s*i_max*max(L.L_qq/L.L_dd, 1) && par.psi_f ~= 0;
+caught = abs(e_s_ab) > par.R_s*i_max*max(L.L_qq/L.L_dd, 1) && par.psi_f > 0;
 theta_m = 0;
 psi_s = complex(0);
 if ~caught

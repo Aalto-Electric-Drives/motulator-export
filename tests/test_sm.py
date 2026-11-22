@@ -152,12 +152,20 @@ def test_luts(dll: ctypes.CDLL) -> None:
     dll.test_luts(arr(list(PAR.values())), d(CFG["i_s_max"]), out)
     luts = np.array(out).reshape(3, 2, 16)
     for i, (f, name) in enumerate(
-        [(rg.psi_s_mtpa, "psi_s_mtpa"), (rg.tau_M_cl, "tau_M_cl"), (rg.tau_M_mtpv, "")]
+        [(rg.psi_s_mtpa, "psi_s_mtpa"), (rg.tau_M_cl, "tau_M_cl")]
     ):
         # Evaluating the Python LUT at the C sample points must give the C values
         err = np.max(np.abs(f(luts[i, 0]) - luts[i, 1]))
-        assert err < 1e-12, (name or "tau_M_mtpv", err)
-        print(f"  {name or 'tau_M_mtpv'}: max error {err:.3g}")
+        assert err < 1e-12, (name, err)
+        print(f"  {name}: max error {err:.3g}")
+    # The MTPV table has no limit above its last point (right=inf), so the points are
+    # compared directly: those of motulator, padded with the last one in C
+    xp, fp = rg.tau_M_mtpv.keywords["xp"], rg.tau_M_mtpv.keywords["fp"]
+    m = len(xp)
+    err = max(np.max(np.abs(luts[2, 0, :m] - xp)), np.max(np.abs(luts[2, 1, :m] - fp)))
+    assert err < 1e-12, ("tau_M_mtpv", err)
+    assert np.all(luts[2, :, m:] == luts[2, :, m - 1 : m])
+    print(f"  tau_M_mtpv: max error {err:.3g}")
 
 
 @pytest.mark.parametrize("J", [None, 0.015], ids=["without_J", "with_J"])

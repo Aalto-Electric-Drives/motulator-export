@@ -138,8 +138,8 @@ typedef struct {
     double tau_M;
     double complex i_s;
     double complex u_s;
-    double complex u_s_lim; /* Limited voltage reference, excluding the
-                             * compensation (PWM.limited_voltage) */
+    double complex u_s_lim; /* Limited voltage reference (PWM.limited_voltage),
+                             * excluding the compensation and the angle advance */
     int enabled;            /* Gate enable */
 } IMReferences;
 

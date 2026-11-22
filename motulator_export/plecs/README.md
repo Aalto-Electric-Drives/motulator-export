@@ -62,7 +62,7 @@ The library `motulator_lib.plecs` has the blocks of the control systems (`CONTRO
 
 ## Agreement with *motulator*
 
-Maximum differences (PLECS − *motulator*) printed by the example scripts, with *motulator* 0.25.0 and PLECS 5.0 (2026-11-15).
+Maximum differences (PLECS − *motulator*) printed by the example scripts, with *motulator* 0.26.1 and PLECS 5.0 (2026-11-22).
 *motulator* uses the tolerances of 1e-9, and PLECS the variable-step Dormand–Prince solver with the relative tolerance of 1e-6 and the maximum step `T_s`.
 After a change in the writers or the C port, regenerate the models by running the scripts and check that the differences stay at this level.
 
@@ -72,7 +72,7 @@ After a change in the writers or the C port, regenerate the models by running th
 | `ipmsm_2kw_fvc.py --diode`       | w_M 8.7e-6, tau_M 5.8e-6, i_s_ab 2.6e-6    | w_M 6.9e-6, tau_M 5.9e-6, tau_M_ref 5.9e-6, psi_s_ref 1.7e-8 |
 | `ipmsm_2kw_fvc.py --blocked`     | w_M 2.6e-6, tau_M 2.7e-4, i_s_ab 1.1e-4    | w_M 3.9e-6, tau_M 1.6e-4, tau_M_ref 2.7e-6, psi_s_ref 1.6e-8 |
 | `ipmsm_2kw_cvc.py`               | w_M 1.8e-5, tau_M 1.2e-5, i_s_ab 5.1e-6    | w_M 1.5e-5, tau_M 1.2e-5, tau_M_ref 1.3e-5, i_q_ref 5.0e-6   |
-| `ipmsm_2kw_cvc.py --blocked`     | w_M 1.8e-6, tau_M 2.4e-4, i_s_ab 1.0e-4    | w_M 3.0e-6, tau_M 8.2e-5, tau_M_ref 2.0e-6, i_q_ref 6.9e-7   |
+| `ipmsm_2kw_cvc.py --blocked`     | w_M 1.8e-6, tau_M 2.4e-4, i_s_ab 1.0e-4    | w_M 3.1e-6, tau_M 8.2e-5, tau_M_ref 2.0e-6, i_q_ref 6.9e-7   |
 | `ipmsm_2kw_cvc.py --discrete`    | w_M 1.8e-5, tau_M 1.3e-5, i_s_ab 5.5e-6    | w_M 1.5e-5, tau_M 1.3e-5, tau_M_ref 1.3e-5, i_q_ref 5.2e-6   |
 | `ipmsm_2kw_vhz.py`               | w_M 2.1e-5, tau_M 1.1e-5, i_s_ab 1.0e-5    | w_c 6.6e-5, tau_M 1.1e-5, tau_M_ref 1.8e-6, psi_s 1.2e-8     |
 | `pmsyrm_6kw_gn_fvc.py`           | w_M 5.4e-5, tau_M 2.4e-4, i_s_ab 9.6e-5    |                                                              |
